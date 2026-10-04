@@ -7,10 +7,16 @@ import kotlinx.serialization.Serializable
 @Serializable
 sealed interface Change
 
+@Serializable
+sealed interface ChapterChange : Change {
+    val manga: MangaKey
+    val chapterUrl: String
+}
+
 @Serializable @SerialName("createCategory")
 data class CreateCategory(val name: String) : Change
 
-/** The desktop has never seen this manga, so it comes in through a restore, chapters and read state included. */
+/** The desktop has never seen this manga, so it comes in whole through a restore, chapters and read state included. */
 @Serializable @SerialName("importManga")
 data class ImportManga(val manga: MangaKey, val title: String) : Change
 
@@ -24,19 +30,19 @@ data class RemoveFromLibrary(val manga: MangaKey, val title: String) : Change
 data class SetCategories(val manga: MangaKey, val categories: Set<String>) : Change
 
 @Serializable @SerialName("markRead")
-data class MarkRead(val manga: MangaKey, val chapterUrl: String) : Change
+data class MarkRead(override val manga: MangaKey, override val chapterUrl: String) : ChapterChange
 
 @Serializable @SerialName("markUnread")
-data class MarkUnread(val manga: MangaKey, val chapterUrl: String) : Change
+data class MarkUnread(override val manga: MangaKey, override val chapterUrl: String) : ChapterChange
 
 @Serializable @SerialName("addBookmark")
-data class AddBookmark(val manga: MangaKey, val chapterUrl: String) : Change
+data class AddBookmark(override val manga: MangaKey, override val chapterUrl: String) : ChapterChange
 
 @Serializable @SerialName("removeBookmark")
-data class RemoveBookmark(val manga: MangaKey, val chapterUrl: String) : Change
+data class RemoveBookmark(override val manga: MangaKey, override val chapterUrl: String) : ChapterChange
 
 @Serializable @SerialName("setLastPage")
-data class SetLastPage(val manga: MangaKey, val chapterUrl: String, val page: Long) : Change
+data class SetLastPage(override val manga: MangaKey, override val chapterUrl: String, val page: Long) : ChapterChange
 
 private val ABSENT = MangaState(title = "", inLibrary = false, categories = emptySet(), chapters = emptyMap())
 

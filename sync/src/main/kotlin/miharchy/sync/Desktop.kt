@@ -40,13 +40,8 @@ class Snapshot(
     val library: Library,
     val mangaIds: Map<MangaKey, Int>,
     val chapterIds: Map<Pair<MangaKey, String>, Int>,
-    val pageCounts: Map<Int, Int>,
     val categoryIds: Map<String, Int>,
 )
-
-/** A chapter change that could not be applied because the source no longer lists the chapter. */
-@Serializable
-data class Skipped(val change: Change, val reason: String)
 
 class Desktop(private val config: ServerConfig) {
     private val http = HttpClient.newHttpClient()
@@ -63,7 +58,7 @@ class Desktop(private val config: ServerConfig) {
                 nodes {
                   id sourceId url title inLibrary
                   categories { nodes { name } }
-                  chapters { nodes { id url isRead isBookmarked lastPageRead pageCount } }
+                  chapters { nodes { id url isRead isBookmarked lastPageRead } }
                 }
               }
             }
@@ -74,13 +69,11 @@ class Desktop(private val config: ServerConfig) {
         val categoryIds = data.nodes("categories").map { it.str("name") to it.int("id") }.filter { it.second != 0 }.toMap()
         val mangaIds = mutableMapOf<MangaKey, Int>()
         val chapterIds = mutableMapOf<Pair<MangaKey, String>, Int>()
-        val pageCounts = mutableMapOf<Int, Int>()
         val manga = data.nodes("mangas").associate { m ->
             val key = MangaKey(m.str("sourceId").toLong(), m.str("url"))
             mangaIds[key] = m.int("id")
             val chapters = m.nodes("chapters").associate { c ->
                 chapterIds[key to c.str("url")] = c.int("id")
-                pageCounts[c.int("id")] = c.int("pageCount")
                 c.str("url") to ChapterState(c.bool("isRead"), c.bool("isBookmarked"), c.int("lastPageRead").toLong())
             }
             key to MangaState(
@@ -90,14 +83,14 @@ class Desktop(private val config: ServerConfig) {
                 chapters = chapters,
             )
         }
-        return Snapshot(Library(manga, categoryIds.keys.toList()), mangaIds, chapterIds, pageCounts, categoryIds)
+        return Snapshot(Library(manga, categoryIds.keys.toList()), mangaIds, chapterIds, categoryIds)
     }
 
     /**
-     * Applies [changes] in dependency order and returns the chapter changes it had to skip.
-     * Throws on any server error, so the caller keeps the old phone baseline and the next sync retries.
+     * Applies [changes] without contacting any source, then checks that every change landed.
+     * Throws on any server error or miss, so the caller keeps the old phone baseline and the next sync retries.
      */
-    fun apply(changes: List<Change>, phoneBackup: ByteArray, phoneUrls: Collection<String>): List<Skipped> {
+    fun apply(changes: List<Change>, phoneBackup: ByteArray, phoneUrls: Collection<String>) {
         val categoryIds = snapshot(phoneUrls).categoryIds.toMutableMap()
         for (c in changes.filterIsInstance<CreateCategory>()) {
             categoryIds[c.name] = query(
@@ -106,10 +99,30 @@ class Desktop(private val config: ServerConfig) {
             ).obj("createCategory").obj("category").int("id")
         }
 
-        val imports = changes.filterIsInstance<ImportManga>().map { it.manga }.toSet()
-        if (imports.isNotEmpty()) restore(importBackup(phoneBackup, imports))
-
+        // Restore can only raise read state, so whatever must go down is reset first. A lower page resets to 0,
+        // because updateChapters caps lastPageRead at the page count, unknown (-1) until the pages are fetched.
         var snap = snapshot(phoneUrls)
+        val resets = changes.filterIsInstance<ChapterChange>().mapNotNull { c ->
+            val id = snap.chapterIds[c.manga to c.chapterUrl] ?: return@mapNotNull null
+            when (c) {
+                is MarkUnread -> buildJsonObject { put("isRead", false) }
+                is RemoveBookmark -> buildJsonObject { put("isBookmarked", false) }
+                is SetLastPage -> buildJsonObject { put("lastPageRead", 0) }
+                    .takeIf { c.page < snap.library.manga.getValue(c.manga).chapter(c.chapterUrl).lastPageRead }
+                else -> null
+            }?.let { it to id }
+        }.groupBy({ it.first }, { it.second })
+        for ((patch, ids) in resets) {
+            query(
+                "mutation(\$ids: [Int!]!, \$patch: UpdateChapterPatchInput!) { updateChapters(input: { ids: \$ids, patch: \$patch }) { clientMutationId } }",
+                buildJsonObject { putJsonArray("ids") { ids.forEach { add(it) } }; put("patch", patch) },
+            )
+        }
+
+        val backup = restoreBackup(phoneBackup, changes, snap.library)
+        if (backup.backupManga.isNotEmpty()) restore(backup)
+
+        snap = snapshot(phoneUrls)
         for ((inLibrary, keys) in listOf(
             true to changes.filterIsInstance<AddToLibrary>().map { it.manga },
             false to changes.filterIsInstance<RemoveFromLibrary>().map { it.manga },
@@ -127,51 +140,13 @@ class Desktop(private val config: ServerConfig) {
             )
         }
 
-        val chapterChanges = changes.filter { it is MarkRead || it is MarkUnread || it is AddBookmark || it is RemoveBookmark || it is SetLastPage }
-        val missing = chapterChanges.map { it.chapterKey() }.filter { it !in snap.chapterIds }.map { it.first }.toSet()
-        for (key in missing) {
-            query(
-                "mutation(\$id: Int!) { fetchMangaAndChapters(input: { id: \$id, fetchManga: false, fetchChapters: true }) { clientMutationId } }",
-                buildJsonObject { put("id", snap.mangaId(key)) },
-            )
-        }
-        if (missing.isNotEmpty()) snap = snapshot(phoneUrls)
-        val (known, unknown) = chapterChanges.partition { it.chapterKey() in snap.chapterIds }
-
-        // Suwayomi caps lastPageRead at the chapter's page count, which stays unknown until its pages are fetched.
-        for (c in known.filterIsInstance<SetLastPage>()) {
-            val id = snap.chapterIds.getValue(c.chapterKey())
-            if (c.page > 0 && snap.pageCounts.getValue(id) < c.page) {
-                query(
-                    "mutation(\$id: Int!) { fetchChapterPages(input: { chapterId: \$id }) { clientMutationId } }",
-                    buildJsonObject { put("id", id) },
-                )
-            }
-        }
-
-        val patches = known.groupBy(
-            { c ->
-                when (c) {
-                    is MarkRead -> buildJsonObject { put("isRead", true) }
-                    is MarkUnread -> buildJsonObject { put("isRead", false) }
-                    is AddBookmark -> buildJsonObject { put("isBookmarked", true) }
-                    is RemoveBookmark -> buildJsonObject { put("isBookmarked", false) }
-                    is SetLastPage -> buildJsonObject { put("lastPageRead", c.page.toInt()) }
-                    else -> error("not a chapter change: $c")
-                }
-            },
-            { snap.chapterIds.getValue(it.chapterKey()) },
-        )
-        for ((patch, ids) in patches) {
-            query(
-                "mutation(\$ids: [Int!]!, \$patch: UpdateChapterPatchInput!) { updateChapters(input: { ids: \$ids, patch: \$patch }) { clientMutationId } }",
-                buildJsonObject { putJsonArray("ids") { ids.forEach { add(it) } }; put("patch", patch) },
-            )
-        }
-        return unknown.map { Skipped(it, "the source no longer lists this chapter") }
+        // Suwayomi's restore logs a failed manga and still reports success.
+        val result = snapshot(phoneUrls).library
+        val missed = changes.filterNot { it.isAppliedTo(result) }
+        check(missed.isEmpty()) { "Suwayomi did not apply: $missed" }
     }
 
-    /** Suwayomi's restore creates the manga rows. Categories stay out: restore would replace them. */
+    /** Categories stay out: Suwayomi's restore would replace them. */
     private fun restore(backup: Backup) {
         val operations = buildJsonObject {
             put(
@@ -209,7 +184,7 @@ class Desktop(private val config: ServerConfig) {
             val status = query("query(\$id: String!) { restoreStatus(id: \$id) { state } }", buildJsonObject { put("id", id) })
             when (status.obj("restoreStatus").str("state")) {
                 "SUCCESS" -> return
-                "FAILURE" -> error("Suwayomi failed to restore the new manga")
+                "FAILURE" -> error("Suwayomi failed to restore the phone backup")
             }
             Thread.sleep(250)
         }
@@ -230,22 +205,58 @@ class Desktop(private val config: ServerConfig) {
     }
 }
 
-/** A backup holding only the never-seen manga, in the library and without categories or tracking. */
-fun importBackup(phone: ByteArray, keys: Set<MangaKey>) = Backup(
-    backupManga = decodeBackup(phone).backupManga.filter { MangaKey(it.source, it.url) in keys }.onEach {
-        it.favorite = true
-        it.categories = emptyList()
-        it.tracking = emptyList()
-    },
-)
+/**
+ * What Suwayomi's restore merges in: a never-seen manga whole, in the library; any other manga with only its
+ * changed chapters, outside the library so the restore leaves that flag alone. Restore inserts missing chapters
+ * and keeps `read || db`, `bookmark || db` and `max(lastPageRead, db)`, so each chapter carries its raised values
+ * and false or 0 (no change) elsewhere. Lowered values were reset before the restore.
+ */
+fun restoreBackup(phone: ByteArray, changes: List<Change>, desktop: Library): Backup {
+    val imports = changes.filterIsInstance<ImportManga>().map { it.manga }.toSet()
+    val chapterChanges = changes.filterIsInstance<ChapterChange>().groupBy { it.manga }
+    return Backup(
+        backupManga = decodeBackup(phone).backupManga.mapNotNull { m ->
+            val key = MangaKey(m.source, m.url)
+            if (key !in imports) {
+                val byUrl = chapterChanges[key]?.groupBy { it.chapterUrl } ?: return@mapNotNull null
+                val known = desktop.manga[key]?.chapters.orEmpty()
+                val chapters = m.chapters.filter { it.url in byUrl }
+                val inserted = chapters.count { it.url !in known }
+                for (c in chapters) {
+                    val cs = byUrl.getValue(c.url)
+                    c.read = cs.any { it is MarkRead }
+                    c.bookmark = cs.any { it is AddBookmark }
+                    c.lastPageRead = cs.filterIsInstance<SetLastPage>().firstOrNull()?.page ?: 0
+                    // Restore numbers inserted chapters `inserted - sourceOrder`. This makes that `total - sourceOrder`,
+                    // the number a source refresh gives (oldest 1, newest total), so the chapter list stays in order.
+                    if (c.url !in known) c.sourceOrder = inserted - (m.chapters.size - c.sourceOrder)
+                }
+                m.chapters = chapters
+            }
+            m.apply {
+                favorite = key in imports
+                categories = emptyList()
+                tracking = emptyList()
+            }
+        },
+    )
+}
 
-private fun Change.chapterKey(): Pair<MangaKey, String> = when (this) {
-    is MarkRead -> manga to chapterUrl
-    is MarkUnread -> manga to chapterUrl
-    is AddBookmark -> manga to chapterUrl
-    is RemoveBookmark -> manga to chapterUrl
-    is SetLastPage -> manga to chapterUrl
-    else -> error("not a chapter change: $this")
+/** Whether [library] shows this change, so apply can tell what landed. */
+fun Change.isAppliedTo(library: Library): Boolean {
+    fun chapter(c: ChapterChange) = library.manga[c.manga]?.chapters?.get(c.chapterUrl)
+    return when (this) {
+        is CreateCategory -> name in library.categories
+        is ImportManga -> library.manga[manga]?.inLibrary == true
+        is AddToLibrary -> library.manga[manga]?.inLibrary == true
+        is RemoveFromLibrary -> library.manga[manga]?.inLibrary == false
+        is SetCategories -> library.manga[manga]?.categories == categories
+        is MarkRead -> chapter(this)?.read == true
+        is MarkUnread -> chapter(this)?.read == false
+        is AddBookmark -> chapter(this)?.bookmark == true
+        is RemoveBookmark -> chapter(this)?.bookmark == false
+        is SetLastPage -> chapter(this)?.lastPageRead == page
+    }
 }
 
 private fun Snapshot.mangaId(key: MangaKey) = mangaIds[key] ?: error("Suwayomi has no manga $key")

@@ -162,7 +162,7 @@ class MergeTest {
         assertEquals(emptyList(), merge(base, removed, removed, base))
     }
 
-    @Test fun `a chapter the desktop lacks still gets its change, for the apply layer to fetch`() {
+    @Test fun `a chapter the desktop lacks still gets its change, for the restore to insert`() {
         val base = library(manga(M, chapter("/c1")))
         val phone = library(manga(M, chapter("/c1"), chapter("/c2", read = true, page = 3)))
         assertEquals(listOf(MarkRead(M, "/c2"), SetLastPage(M, "/c2", 3)), merge(base, phone, base, null))
