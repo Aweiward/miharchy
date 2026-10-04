@@ -157,10 +157,18 @@ function parseProbe(text) {
   return f
 }
 
-// A GraphQL reply (Model.reply) to SERVER_QUERY -> { flare, syncFolder }.
+var OFFERED_META = Settings.META_PREFIX + "setupOffered"
+
+// A GraphQL reply (Model.reply) to SERVER_QUERY -> { flare, syncFolder,
+// offered }.
 function parseServer(data) {
-  var meta = ((data.metas && data.metas.nodes) || []).filter(function(m) { return m.key === Settings.META_PREFIX + "syncFolder" })[0]
-  return { flare: data.settings || {}, syncFolder: meta ? String(meta.value) : "" }
+  var metas = (data.metas && data.metas.nodes) || []
+  var value = function(key) {
+    var m = metas.filter(function(n) { return n.key === key })[0]
+    return m ? String(m.value) : ""
+  }
+  var offered = value(OFFERED_META)
+  return { flare: data.settings || {}, syncFolder: value(Settings.META_PREFIX + "syncFolder"), offered: offered ? offered.split(",") : [] }
 }
 
 // setup.probe: parseProbe() facts, null before the first check.
@@ -272,6 +280,37 @@ function incomplete(s) {
   return STEPS.some(function(st) { return st.required && status(s, st.id).state !== "done" })
 }
 
+// The optional steps that are due, one key each: "launcher:todo", or for
+// an out-of-date helper its source fingerprint, so each plugin update that
+// changes sync/ is offered once. Empty until the probe and the server reply
+// are both in, since some steps depend on the server.
+function offers(s) {
+  if (!s.probe || !s.server) return []
+  var keys = []
+  STEPS.forEach(function(st) {
+    if (st.required) return
+    var state = status(s, st.id).state
+    if (state === "todo") keys.push(st.id + ":todo")
+    if (state === "outdated") keys.push(st.id + ":outdated:" + s.probe.helperSource.slice(0, 12))
+  })
+  return keys
+}
+
+// Due steps the user has not been shown yet; Setup opens once for these.
+function unoffered(s) {
+  var seen = s.server ? s.server.offered : []
+  return offers(s).filter(function(k) { return seen.indexOf(k) === -1 })
+}
+
+// Records what is due now as offered, so a step the user skips stays quiet
+// until it changes.
+function offerPayload(s) {
+  return {
+    query: "mutation($key: String!, $value: String!) { setGlobalMeta(input: { meta: { key: $key, value: $value } }) { meta { key } } }",
+    variables: { key: OFFERED_META, value: offers(s).join(",") }
+  }
+}
+
 // The step the cursor starts on: the first one not done, or the first.
 function next(s) {
   for (var i = 0; i < STEPS.length; i++) if (status(s, STEPS[i].id).state !== "done") return i
@@ -310,6 +349,9 @@ if (typeof module !== "undefined") {
     status: status,
     action: action,
     incomplete: incomplete,
+    offers: offers,
+    unoffered: unoffered,
+    offerPayload: offerPayload,
     next: next,
     savePayload: savePayload
   }

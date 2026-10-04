@@ -252,3 +252,28 @@ test("the launcher entry opens window/miharchy and a rerun or a moved plugin is 
 test("the launcher Exec line survives spaces, quotes, $ and backslashes", () => {
   assert.ok(S.desktopEntry('/a b/"q"/$x/b\\s').includes(String.raw`Exec="/a b/\\"q\\"/\\$x/b\\\\s/miharchy"` + "\n"));
 });
+
+const MACHINE = READY.replace("docker \n", "docker \njavac\nhelperSource new1234567890abcdef\nhelperInstalled old1234567890abcdef\n");
+const serverWith = (s, offered) => server(s, { settings: FLARE_OFF, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/sync" }].concat(offered === undefined ? [] : [{ key: "miharchy.setupOffered", value: offered }]) } });
+
+test("optional steps that are due get offered once, keyed by state", () => {
+  const s = serverWith(finish(S.initial(), "probe", MACHINE));
+  assert.equal(S.incomplete(s), false, "every required step is done");
+  const due = ["flaresolverr:todo", "helper:outdated:new123456789", "launcher:todo"];
+  assert.deepEqual(S.offers(s), due);
+  assert.deepEqual(S.unoffered(s), due);
+  assert.deepEqual(S.offerPayload(s).variables, { key: "miharchy.setupOffered", value: due.join(",") });
+});
+
+test("a step already offered does not reopen Setup, a newly due one does", () => {
+  const seen = serverWith(finish(S.initial(), "probe", MACHINE), "flaresolverr:todo,helper:outdated:new123456789,launcher:todo");
+  assert.deepEqual(S.unoffered(seen), []);
+  const updated = serverWith(finish(S.initial(), "probe", MACHINE.replace("helperSource new1234567890abcdef", "helperSource zzz9876543210fedcb")), "flaresolverr:todo,helper:outdated:new123456789,launcher:todo");
+  assert.deepEqual(S.unoffered(updated), ["helper:outdated:zzz987654321"], "a plugin update that changes sync/ is offered once more");
+});
+
+test("nothing is offered before the server answers, and waiting or unavailable steps are never offered", () => {
+  assert.deepEqual(S.unoffered(finish(S.initial(), "probe", MACHINE)), [], "no server reply yet");
+  const s = serverWith(finish(S.initial(), "probe", READY.replace("docker \n", "")));
+  assert.deepEqual(S.offers(s), ["launcher:todo"], "no javac means the helper waits; no docker means FlareSolverr is unavailable");
+});

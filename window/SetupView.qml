@@ -27,6 +27,7 @@ Item {
   // The folder waiting on its existence check.
   property string folder: ""
   property bool checked: false
+  property bool offered: false
   // The window runs from the repo's window/, beside server/ and sync/.
   readonly property string serverScript: Quickshell.shellPath("../server/miharchy-server")
   readonly property string syncDir: Quickshell.shellPath("../sync")
@@ -68,7 +69,19 @@ Item {
   }
 
   function readServer() {
-    if (config) post({ query: Setup.SERVER_QUERY }, function(reply) { view.setup = Setup.reduce(view.setup, { type: "server", reply: reply }) })
+    if (config) post({ query: Setup.SERVER_QUERY }, function(reply) {
+      view.setup = Setup.reduce(view.setup, { type: "server", reply: reply })
+      view.offer()
+    })
+  }
+
+  // Once a session: open on optional steps the user has not been shown, then
+  // record them so a skipped step stays quiet until it changes.
+  function offer() {
+    if (offered || !Setup.unoffered(setup).length) return
+    offered = true
+    needed()
+    post(Setup.offerPayload(setup), function() {})
   }
 
   function finished(id, text) {
