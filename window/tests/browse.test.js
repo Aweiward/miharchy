@@ -175,3 +175,15 @@ test("retry only restarts a failed list, so r during a load cannot skip a page",
   l = B.reduceListing(l, { type: "reply", reply: page([1], true), config });
   assert.equal(B.reduceListing(l, { type: "retry" }), l, "a healthy list ignores retry");
 });
+
+test("a reread after reading shows the read flags from the cache, never refetching the source", () => {
+  let d = B.reduceDetail(B.detail(5, true), { type: "reply", reply: ok({ manga: mangaNode() }), config });
+  d = B.reduceDetail(d, { type: "reply", reply: ok({ fetchMangaAndChapters: { manga: mangaNode({ chapters: undefined }), chapters: mangaNode().chapters.nodes } }), config });
+  d = B.reduceDetail(d, { type: "reread" });
+  assert.match(B.detailPayload(d).query, /manga\(id: \$id\)/);
+  const read = mangaNode().chapters.nodes.map((c) => Object.assign({}, c, { isRead: true }));
+  d = B.reduceDetail(d, { type: "reply", reply: ok({ manga: mangaNode({ chapters: { nodes: read } }) }), config });
+  assert.deepEqual(d.chapters.map((c) => c.read), [true, true]);
+  assert.equal(d.state, "ok");
+  assert.equal(B.detailPayload(d), null);
+});

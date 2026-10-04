@@ -165,11 +165,14 @@ function toChapters(nodes) {
 }
 
 // event.type: "reply" { reply, config } for the step in flight | "refresh"
-// | "library-request" | "library-reply" { reply }
+// | "reread" the cache, as after reading | "library-request"
+// | "library-reply" { reply }
 function reduceDetail(d, event) {
   switch (event.type) {
     case "refresh":
       return copy(d, { step: "fetch", state: "loading", message: "", flare: false })
+    case "reread":
+      return copy(d, { step: "read", fetched: true })
     case "reply":
       if (event.reply.state !== "ok") return copy(copy(d, failed(event.reply)), { step: null })
       if (d.step === "read") {

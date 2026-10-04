@@ -6,6 +6,7 @@ import Quickshell.Io
 import "Model.js" as Model
 import "Commands.js" as Commands
 import "Settings.js" as Settings
+import "Reader.js" as Reader
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -19,6 +20,7 @@ ShellRoot {
   property var config: null
   property var connection: Model.initial()
   property bool paletteOpen: false
+  property int libraryCursor: 0
   property var settingsState: Settings.initial()
   property int settingsCursor: 0
   property bool settingsEditing: false
@@ -105,8 +107,9 @@ ShellRoot {
   // Returns whether a command took the key.
   function handleKey(event) {
     var editing = settingsEditing ? "settings" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : browseView.editing
-    // On Browse, the screen decides which keys apply.
-    var scope = view === "browse" ? browseView.screen : view
+    // An open reader or manga detail decides which keys apply; on Browse,
+    // the screen does.
+    var scope = reader.open ? "reader" : mangaDetail.open ? "manga" : view === "browse" ? browseView.screen : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
     if (id !== null) run(id)
     return id !== null
@@ -119,6 +122,8 @@ ShellRoot {
 
   function run(id) {
     if (id.indexOf("view.") === 0) {
+      if (reader.open) reader.close()
+      mangaDetail.close()
       view = id.slice(5)
       return
     }
@@ -126,8 +131,16 @@ ShellRoot {
       extensionsView.run(id)
       return
     }
-    if (/^(browse|sources|source|manga)\./.test(id)) {
+    if (/^(browse|sources|source)\./.test(id)) {
       browseView.run(id)
+      return
+    }
+    if (id.indexOf("manga.") === 0) {
+      mangaDetail.run(id)
+      return
+    }
+    if (id.indexOf("reader.") === 0) {
+      reader.run(id)
       return
     }
     if (id.indexOf("setup.") === 0) {
@@ -177,6 +190,17 @@ ShellRoot {
         break
       case "settings.cancel":
         endEdit()
+        break
+      case "library.left":
+      case "library.right":
+      case "library.up":
+      case "library.down":
+        var step = ({ "library.left": -1, "library.right": 1, "library.up": -libraryView.columns, "library.down": libraryView.columns })[id]
+        libraryCursor = Math.max(0, Math.min(connection.manga.length - 1, libraryCursor + step))
+        break
+      case "library.open":
+        var m = connection.manga[libraryCursor]
+        if (m) mangaDetail.openManga(m.id, false)
         break
       case "library.reload":
         if (config) {
@@ -256,10 +280,12 @@ ShellRoot {
         anchors.right: parent.right
 
         LibraryView {
+          id: libraryView
           anchors.fill: parent
           visible: root.view === "library"
           theme: theme
           manga: root.connection.manga
+          cursor: root.libraryCursor
           notice: Model.notice(root.connection, root.configPath)
         }
 
@@ -300,7 +326,7 @@ ShellRoot {
           showNsfw: root.settingsState.values.showNsfw
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          onLibraryChanged: if (root.config) root.fetchLibrary()
+          onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, true) }
         }
 
         SetupView {
@@ -325,6 +351,19 @@ ShellRoot {
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSize
         }
+
+        MangaDetail {
+          id: mangaDetail
+          anchors.fill: parent
+          theme: theme
+          config: root.config
+          configPath: root.configPath
+          onLibraryChanged: function(mangaId, inLibrary) {
+            browseView.markInLibrary(mangaId, inLibrary)
+            if (root.config) root.fetchLibrary()
+          }
+          onRead: function(chapters, chapterId) { reader.start(chapters, chapterId, Reader.mode(root.settingsState.values.defaultReadingMode)) }
+        }
       }
 
       Item {
@@ -348,11 +387,20 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.settingsEditing || extensionsView.editing || setupView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : (({ settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: root.settingsEditing || extensionsView.editing || setupView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: "hjkl move   enter open   ", settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
         }
+      }
+
+      ReaderView {
+        id: reader
+        anchors.fill: parent
+        theme: theme
+        config: root.config
+        configPath: root.configPath
+        onClosed: function(chapterId) { mangaDetail.reread(chapterId) }
       }
 
       CommandPalette {
