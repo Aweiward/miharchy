@@ -54,7 +54,7 @@ A manga reader for Omarchy (Arch + Hyprland). It reads Mihon's extension ecosyst
 
 v1 is built: every v1 ticket (#1 to #17, plus #21 to #23 and #35) is merged. The open GitHub issues are the follow-ups: trackers and local manga (v1.1), the AUR package, credential-free image URLs, window focus on IPC, the reader's save on quit, and the global search timeout. Work them through `ready-for-agent` issues.
 
-Still unverified, because it needs the user's machine or phone: a Mihon restore of a `miharchy-*.tachibk` export, the Setup keys pressed for real, and the FlareSolverr step.
+Verified on the user's phone (2026-10-04): stock Mihon restores a `miharchy-*.tachibk` export from a real 216-manga library without issues. Still unverified: the FlareSolverr Setup step on a real machine.
 
 ## Git
 
