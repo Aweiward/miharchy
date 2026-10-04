@@ -129,8 +129,15 @@ function reply(status, body) {
   } catch (e) {
     return fail("error", "The server sent a reply that is not JSON.")
   }
-  if (json.errors && json.errors.length) return fail("error", String(json.errors[0].message || "GraphQL error"))
+  if (json.errors && json.errors.length) return fail("error", errorText(json.errors[0].message))
   return { state: "ok", message: "", data: json.data || {} }
+}
+
+// Suwayomi wraps an exception as "Exception while fetching data (/path) :
+// message" followed by its stack trace; only the message is for people.
+function errorText(message) {
+  var first = String(message || "GraphQL error").split(/\r?\n/)[0]
+  return first.replace(/^Exception while fetching data \([^)]*\) : /, "").trim() || "GraphQL error"
 }
 
 function fromResponse(status, body, config) {
