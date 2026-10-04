@@ -211,6 +211,13 @@ function problem(connection, configPath) {
   return null
 }
 
+// "<mangaId> <chapterId>", as the launcher's open-chapter passes it in
+// MIHARCHY_OPEN_CHAPTER -> { mangaId, chapterId }, or null.
+function chapterTarget(text) {
+  var m = /^\s*(\d+)\s+(\d+)\s*$/.exec(text || "")
+  return m ? { mangaId: Number(m[1]), chapterId: Number(m[2]) } : null
+}
+
 function viewIndex(id) {
   for (var i = 0; i < VIEWS.length; i++) if (VIEWS[i].id === id) return i
   return -1
@@ -232,6 +239,7 @@ if (typeof module !== "undefined") {
     switcherIndex: switcherIndex,
     notice: notice,
     problem: problem,
+    chapterTarget: chapterTarget,
     viewIndex: viewIndex
   }
 }
