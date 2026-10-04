@@ -23,9 +23,9 @@ test("an update is an unread chapter fetched after its manga joined the library"
     chapter(3, other, at(2026, 10, 4, 9), { name: "fetched in the second it joined: the backlog" }),
     chapter(4, other, at(2026, 10, 4, 10), { isRead: true })
   ]).data;
-  assert.deepEqual(U.updates(data).map((c) => c.id), [1]);
-  assert.equal(U.count(data), 1, "the mark's count is the list's length");
-  assert.equal(U.count({}), 0, "a reply with no chapters counts none");
+  assert.deepEqual(U.updates(data, now).map((c) => c.id), [1]);
+  assert.equal(U.count(data, now), 1, "the mark's count is the list's length");
+  assert.equal(U.count({}, now), 0, "a reply with no chapters counts none");
 });
 
 test("updates run newest fetched first, a manga's chapters newest first within one fetch", () => {
@@ -110,4 +110,15 @@ test("a failed poll ends the check and keeps the last known status", () => {
   assert.equal(lost.checking, false);
   assert.equal(U.progress(lost, now), "Last checked 2026-10-01 08:00");
   assert.equal(U.progress(U.initial(), now), "Never checked");
+});
+
+test("only chapters uploaded in the last 3 months are updates, as in Mihon", () => {
+  const data = list([
+    chapter(1, manga, at(2026, 10, 3, 20), { uploadDate: String(at(2026, 7, 5, 15)) }),
+    chapter(2, manga, at(2026, 10, 3, 20), { uploadDate: String(at(2026, 7, 3, 15)), name: "uploaded more than 3 months ago" }),
+    chapter(3, manga, at(2026, 10, 3, 20), { uploadDate: "0", name: "no upload date" })
+  ]).data;
+  assert.deepEqual(U.updates(data, now).map((c) => c.id), [1]);
+  assert.equal(U.count(data, now), 1);
+  assert.deepEqual(U.rows(data, config, now).map((r) => r.id), [1], "the list and the bar mark use the same rule");
 });
