@@ -1,0 +1,3 @@
+#!/bin/sh
+# Opens the Miharchy window. -n: a second launch does nothing while one runs.
+exec quickshell -n -p "$(dirname "$(readlink -f "$0")")" "$@"
