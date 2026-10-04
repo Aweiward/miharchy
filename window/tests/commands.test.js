@@ -57,3 +57,37 @@ test("the palette cursor wraps and stays in range", () => {
   assert.equal(C.moveCursor(1, 1, 3), 2);
   assert.equal(C.moveCursor(5, 1, 0), 0);
 });
+
+const settings = { palette: false, view: "settings" };
+const editing = { palette: false, view: "settings", editing: true };
+
+test("in the Settings view, j/k/arrows move and Enter/Space change a row", () => {
+  assert.equal(C.dispatch(settings, text("j")), "settings.down");
+  assert.equal(C.dispatch(settings, key(C.KEY.Down)), "settings.down");
+  assert.equal(C.dispatch(settings, text("k")), "settings.up");
+  assert.equal(C.dispatch(settings, key(C.KEY.Up)), "settings.up");
+  assert.equal(C.dispatch(settings, key(C.KEY.Return)), "settings.activate");
+  assert.equal(C.dispatch(settings, key(C.KEY.Enter)), "settings.activate");
+  assert.equal(C.dispatch(settings, C.keyEvent(C.KEY.Space, " ", 0)), "settings.activate");
+  assert.equal(C.dispatch(settings, text("q")), "window.quit");
+  assert.equal(C.dispatch(settings, key(C.KEY.Escape)), "window.quit");
+  assert.equal(C.dispatch(settings, text("1")), "view.library");
+});
+
+test("settings keys do nothing in other views", () => {
+  for (const v of ["library", "updates", undefined]) {
+    const s = { palette: false, view: v };
+    assert.equal(C.dispatch(s, text("j")), null);
+    assert.equal(C.dispatch(s, key(C.KEY.Return)), null);
+  }
+});
+
+test("while editing a row, Esc cancels, Enter commits and the rest types", () => {
+  assert.equal(C.dispatch(editing, key(C.KEY.Escape)), "settings.cancel");
+  assert.equal(C.dispatch(editing, key(C.KEY.Return)), "settings.commit");
+  for (const t of ["q", "1", ":", "j", "r"]) assert.equal(C.dispatch(editing, text(t)), null, t);
+});
+
+test("the palette lists no view-scoped command", () => {
+  assert.ok(C.paletteRows("").every((c) => !c.view));
+});

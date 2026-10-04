@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import "Model.js" as Model
 import "Commands.js" as Commands
+import "Settings.js" as Settings
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -18,6 +19,10 @@ ShellRoot {
   property var config: null
   property var connection: Model.initial()
   property bool paletteOpen: false
+  property var settingsState: Settings.initial()
+  property int settingsCursor: 0
+  property bool settingsEditing: false
+  property string settingsError: ""
   // Only the latest library request may update the connection.
   property int requestSeq: 0
 
@@ -38,9 +43,36 @@ ShellRoot {
     if (!config) {
       requestSeq++
       connection = Model.reduce(connection, { type: "config-missing" })
+      settingsState = Settings.reduce(settingsState, { type: "config-missing" })
       return
     }
     fetchLibrary()
+    sendSettings(Settings.loadPayload())
+  }
+
+  // Loads and saves alike: every reply carries the values it touched.
+  function sendSettings(payload) {
+    var req = Model.request(config, payload)
+    settingsState = Settings.reduce(settingsState, { type: "request" })
+    var xhr = new XMLHttpRequest()
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== XMLHttpRequest.DONE) return
+      root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: Model.reply(xhr.status, xhr.responseText) })
+    }
+    xhr.open("POST", req.url)
+    xhr.setRequestHeader("Content-Type", "application/json")
+    xhr.setRequestHeader("Authorization", req.authorization)
+    xhr.send(req.body)
+  }
+
+  function saveSetting(row, value) {
+    if (config) sendSettings(Settings.savePayload(row, value))
+  }
+
+  function endEdit() {
+    settingsEditing = false
+    settingsError = ""
+    keyRoot.forceActiveFocus()
   }
 
   function fetchLibrary() {
@@ -62,7 +94,7 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var id = Commands.dispatch({ palette: paletteOpen }, Commands.keyEvent(event.key, event.text, event.modifiers))
+    var id = Commands.dispatch({ palette: paletteOpen, view: view, editing: settingsEditing }, Commands.keyEvent(event.key, event.text, event.modifiers))
     if (id !== null) run(id)
     return id !== null
   }
@@ -93,6 +125,33 @@ ShellRoot {
         var row = palette.currentRow()
         closePalette()
         if (row) run(row.id)
+        break
+      case "settings.up":
+      case "settings.down":
+        settingsCursor = Commands.moveCursor(settingsCursor, id === "settings.up" ? -1 : 1, Settings.ROWS.length)
+        break
+      case "settings.activate":
+        var srow = Settings.ROWS[settingsCursor]
+        var act = Settings.activate(srow, settingsState.values[srow.key])
+        if ("save" in act) {
+          saveSetting(srow, act.save)
+        } else {
+          settingsView.editStart = act.edit
+          settingsEditing = true
+        }
+        break
+      case "settings.commit":
+        var erow = Settings.ROWS[settingsCursor]
+        var done = Settings.commit(erow, settingsView.editValue)
+        if ("error" in done) {
+          settingsError = done.error
+        } else {
+          endEdit()
+          saveSetting(erow, done.save)
+        }
+        break
+      case "settings.cancel":
+        endEdit()
         break
       case "library.reload":
         configFile.reload()
@@ -175,9 +234,22 @@ ShellRoot {
           notice: Model.notice(root.connection, root.configPath)
         }
 
+        SettingsView {
+          id: settingsView
+          anchors.fill: parent
+          visible: root.view === "settings"
+          theme: theme
+          values: root.settingsState.values
+          cursor: root.settingsCursor
+          editing: root.settingsEditing
+          problem: Model.problem(root.settingsState, root.configPath)
+          editError: root.settingsError
+          onKey: function(event) { event.accepted = root.handleKey(event) }
+        }
+
         Text {
           anchors.centerIn: parent
-          visible: root.view !== "library"
+          visible: root.view !== "library" && root.view !== "settings"
           text: Model.VIEWS[Model.viewIndex(root.view)].title + " comes in a later version"
           color: theme.muted
           font.family: theme.fontFamily
@@ -206,7 +278,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: ": commands   r reload   q quit"
+          text: root.settingsEditing ? "enter save   esc cancel" : (root.view === "settings" ? "j k move   enter change   " : "") + ": commands   r reload   q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
