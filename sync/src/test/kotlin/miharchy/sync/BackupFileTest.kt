@@ -1,5 +1,7 @@
 package miharchy.sync
 
+import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import java.nio.file.Files
 import java.nio.file.attribute.FileTime
 import java.nio.file.attribute.PosixFilePermissions
@@ -29,6 +31,11 @@ class BackupFileTest {
 
     @Test fun `re-encoding a real backup keeps its library`() {
         assertEquals(decodeBackup(real).toLibrary(), decodeBackup(encodeBackup(decodeBackup(real))).toLibrary())
+    }
+
+    @Test fun `categories come out in the phone's display order`() {
+        val backup = Backup(emptyList(), listOf(BackupCategory("B", order = 2), BackupCategory("C", order = 0), BackupCategory("A", order = 1)))
+        assertEquals(listOf("C", "A", "B"), backup.toLibrary().categories)
     }
 
     @Test fun `the newest phone backup wins and Miharchy's own backups are ignored`() {

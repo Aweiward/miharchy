@@ -18,8 +18,8 @@ private fun manga(key: MangaKey, vararg chapters: BackupChapter, favorite: Boole
     key to Triple(chapters.toList(), favorite, categories)
 
 /** Builds a backup the way Mihon does (categories referenced by order) and reads it back through the real codec. */
-private fun library(vararg manga: Pair<MangaKey, Triple<List<BackupChapter>, Boolean, List<String>>>): Library {
-    val names = manga.flatMap { it.second.third }.distinct()
+private fun library(vararg manga: Pair<MangaKey, Triple<List<BackupChapter>, Boolean, List<String>>>, categories: List<String> = emptyList()): Library {
+    val names = (categories + manga.flatMap { it.second.third }).distinct()
     val backup = Backup(
         backupManga = manga.map { (key, m) ->
             BackupManga(
@@ -65,7 +65,7 @@ class MergeTest {
 
     @Test fun `a change on the desktop only is kept`() {
         val base = library(manga(M, chapter("/c1"), categories = listOf("A")))
-        val desktop = library(manga(M, chapter("/c1", read = true, page = 3), categories = listOf("B")))
+        val desktop = library(manga(M, chapter("/c1", read = true, page = 3), categories = listOf("B")), categories = listOf("A"))
         assertEquals(emptyList(), merge(base, base, desktop, base))
     }
 
@@ -114,6 +114,12 @@ class MergeTest {
             listOf(CreateCategory("B"), SetCategories(M, setOf("A", "B", "C"))),
             merge(base, phone, desktop, base),
         )
+    }
+
+    @Test fun `every phone category reaches the desktop, empty ones too, in the phone's order`() {
+        val phone = library(manga(M, categories = listOf("A")), categories = listOf("C", "A", "B"))
+        val desktop = library(manga(M, categories = listOf("A")))
+        assertEquals(listOf(CreateCategory("C"), CreateCategory("B")), merge(null, phone, desktop, null))
     }
 
     @Test fun `a category the desktop already has is not created again`() {

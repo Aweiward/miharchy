@@ -79,7 +79,8 @@ fun merge(phoneBaseline: Library?, phoneNow: Library, desktopNow: Library, deskt
         }
     }
 
-    val newCategories = changes.filterIsInstance<SetCategories>().flatMap { it.categories } - desktopNow.categories
+    // Every phone category, even an empty one, as Mihon's restore does. New ones append in the phone's order.
+    val newCategories = phoneNow.categories + changes.filterIsInstance<SetCategories>().flatMap { it.categories } - desktopNow.categories.toSet()
     return newCategories.distinct().map(::CreateCategory) + changes
 }
 

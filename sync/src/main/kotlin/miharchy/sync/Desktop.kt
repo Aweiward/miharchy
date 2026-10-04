@@ -90,7 +90,7 @@ class Desktop(private val config: ServerConfig) {
                 chapters = chapters,
             )
         }
-        return Snapshot(Library(manga, categoryIds.keys), mangaIds, chapterIds, pageCounts, categoryIds)
+        return Snapshot(Library(manga, categoryIds.keys.toList()), mangaIds, chapterIds, pageCounts, categoryIds)
     }
 
     /**
