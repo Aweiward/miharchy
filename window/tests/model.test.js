@@ -1,0 +1,95 @@
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const M = require("./load")("Model.js");
+
+const config = { url: "http://127.0.0.1:4590", username: "miharchy", password: "s3cret" };
+const respond = (status, body) => ({ type: "response", status, body: typeof body === "string" ? body : JSON.stringify(body), config });
+
+test("five views in glossary order, keyed 1-5", () => {
+  assert.deepEqual(M.VIEWS.map((v) => v.title), ["Library", "Updates", "History", "Browse", "Settings"]);
+  assert.deepEqual(M.VIEWS.map((v) => v.key), ["1", "2", "3", "4", "5"]);
+  assert.equal(M.viewIndex("browse"), 3);
+  assert.equal(M.viewIndex("nope"), -1);
+});
+
+test("parseConfig accepts server.json and drops a trailing slash", () => {
+  assert.deepEqual(M.parseConfig(JSON.stringify({ ...config, url: "http://127.0.0.1:4590/" })), config);
+});
+
+test("parseConfig rejects missing, broken or incomplete config", () => {
+  for (const text of ["", "{", "null", "[]", JSON.stringify({ url: "x", username: "u" }), JSON.stringify({ ...config, url: "" })]) {
+    assert.equal(M.parseConfig(text), null, text);
+  }
+});
+
+test("libraryRequest targets the GraphQL endpoint with user:password", () => {
+  const r = M.libraryRequest(config);
+  assert.equal(r.url, "http://127.0.0.1:4590/api/graphql");
+  assert.equal(r.credentials, "miharchy:s3cret");
+  assert.match(JSON.parse(r.body).query, /inLibrary: true/);
+});
+
+test("the connection starts loading", () => {
+  assert.equal(M.initial().state, "loading");
+});
+
+test("transitions: missing config, request, and each kind of answer", () => {
+  const s0 = M.initial();
+  assert.equal(M.reduce(s0, { type: "config-missing" }).state, "no-config");
+  assert.equal(M.reduce(s0, respond(0, "")).state, "down");
+  assert.equal(M.reduce(s0, respond(401, "Unauthorized")).state, "unauthorized");
+  assert.equal(M.reduce(s0, respond(200, { data: { mangas: { nodes: [] } } })).state, "ok");
+
+  const e500 = M.reduce(s0, respond(500, "boom"));
+  assert.equal(e500.state, "error");
+  assert.match(e500.message, /500/);
+  assert.equal(M.reduce(s0, respond(200, "<html>")).state, "error");
+  assert.equal(M.reduce(s0, respond(200, { data: {} })).state, "error");
+
+  const gql = M.reduce(s0, respond(200, { errors: [{ message: "Bad field" }] }));
+  assert.equal(gql.state, "error");
+  assert.equal(gql.message, "Bad field");
+
+  assert.equal(M.reduce(M.reduce(s0, respond(401, "")), { type: "request" }).state, "loading");
+  assert.equal(M.reduce(s0, { type: "unknown" }), s0);
+});
+
+test("a reload keeps the shown library; a failed one drops it", () => {
+  const ok = M.reduce(M.initial(), respond(200, { data: { mangas: { nodes: [{ id: 1, title: "A", thumbnailUrl: null }] } } }));
+  const reloading = M.reduce(ok, { type: "request" });
+  assert.equal(reloading.state, "loading");
+  assert.equal(reloading.manga.length, 1);
+  assert.equal(M.notice(reloading, "p"), null, "no loading notice over a shown library");
+  assert.deepEqual(M.reduce(reloading, respond(0, "")).manga, []);
+  assert.deepEqual(M.reduce(M.reduce(M.initial(), respond(401, "")), { type: "request" }).manga, []);
+});
+
+test("the library answer becomes manga with authenticated cover URLs", () => {
+  const body = { data: { mangas: { nodes: [
+    { id: 7, title: "Yotsuba&!", thumbnailUrl: "/api/v1/manga/7/thumbnail" },
+    { id: 8, title: "No cover", thumbnailUrl: null },
+    { id: 9, title: "Remote", thumbnailUrl: "https://cdn.example/9.jpg" }
+  ] } } };
+  assert.deepEqual(M.reduce(M.initial(), respond(200, body)).manga, [
+    { id: 7, title: "Yotsuba&!", cover: "http://miharchy:s3cret@127.0.0.1:4590/api/v1/manga/7/thumbnail" },
+    { id: 8, title: "No cover", cover: "" },
+    { id: 9, title: "Remote", cover: "https://cdn.example/9.jpg" }
+  ]);
+});
+
+test("coverUrl percent-encodes credentials", () => {
+  assert.equal(M.coverUrl({ ...config, password: "a@b:c" }, "/x"), "http://miharchy:a%40b%3Ac@127.0.0.1:4590/x");
+});
+
+test("notice: a clear message per state, none over a filled library", () => {
+  const path = "~/.config/miharchy/server.json";
+  const n = (c) => M.notice(c, path);
+  assert.equal(n(M.initial()).title, "Loading the library");
+  assert.equal(n(M.reduce(M.initial(), { type: "config-missing" })).title, "No server config");
+  assert.match(n(M.reduce(M.initial(), { type: "config-missing" })).detail, /server\.json/);
+  assert.equal(n(M.reduce(M.initial(), respond(0, ""))).title, "The server is not running");
+  assert.equal(n(M.reduce(M.initial(), respond(401, ""))).title, "The server rejected the credentials");
+  assert.match(n(M.reduce(M.initial(), respond(500, ""))).detail, /HTTP 500/);
+  assert.equal(n(M.reduce(M.initial(), respond(200, { data: { mangas: { nodes: [] } } }))).title, "Your library is empty");
+  assert.equal(n(M.reduce(M.initial(), respond(200, { data: { mangas: { nodes: [{ id: 1, title: "A" }] } } }))), null);
+});
