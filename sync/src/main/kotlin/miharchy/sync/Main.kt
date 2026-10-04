@@ -80,6 +80,8 @@ fun describe(summary: Summary): String {
         c.count { it is SetCategories } to "set categories on %d manga",
         c.count { it is MarkRead } to "marked %d chapters read",
         c.count { it is MarkUnread } to "marked %d chapters unread",
+        c.count { it is AddBookmark } to "bookmarked %d chapters",
+        c.count { it is RemoveBookmark } to "removed %d bookmarks",
         c.count { it is SetLastPage } to "set the last page read on %d chapters",
         summary.skipped.size to "skipped %d chapters the source no longer lists",
     ).filter { it.first > 0 }.map { (n, text) -> text.format(n) }

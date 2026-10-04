@@ -11,8 +11,8 @@ private const val SOURCE = 2499283573021220255L
 private val M = MangaKey(SOURCE, "/manga/m")
 private val N = MangaKey(SOURCE, "/manga/n")
 
-private fun chapter(url: String, read: Boolean = false, page: Long = 0) =
-    BackupChapter(url = url, name = url, read = read, lastPageRead = page)
+private fun chapter(url: String, read: Boolean = false, page: Long = 0, bookmark: Boolean = false) =
+    BackupChapter(url = url, name = url, read = read, lastPageRead = page, bookmark = bookmark)
 
 private fun manga(key: MangaKey, vararg chapters: BackupChapter, favorite: Boolean = true, categories: List<String> = emptyList()) =
     key to Triple(chapters.toList(), favorite, categories)
@@ -83,6 +83,20 @@ class MergeTest {
         val desktop = library(manga(M, chapter("/c1", read = true)))
         assertEquals(emptyList(), merge(phoneBase, phone, desktop, desktopBase))
         assertEquals(listOf(MarkRead(M, "/c1")), merge(desktopBase, desktop, phone, phoneBase))
+    }
+
+    @Test fun `a bookmark changed on the phone only wins, added or removed`() {
+        val plain = library(manga(M, chapter("/c1")))
+        val marked = library(manga(M, chapter("/c1", bookmark = true)))
+        assertEquals(listOf(AddBookmark(M, "/c1")), merge(plain, marked, plain, plain))
+        assertEquals(listOf(RemoveBookmark(M, "/c1")), merge(marked, plain, marked, marked))
+    }
+
+    @Test fun `both sides changed the bookmark - bookmarked wins`() {
+        val plain = library(manga(M, chapter("/c1")))
+        val marked = library(manga(M, chapter("/c1", bookmark = true)))
+        assertEquals(emptyList(), merge(marked, plain, marked, plain))
+        assertEquals(listOf(AddBookmark(M, "/c1")), merge(plain, marked, plain, marked))
     }
 
     @Test fun `both sides changed the last page - the higher value wins`() {

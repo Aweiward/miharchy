@@ -63,7 +63,7 @@ class Desktop(private val config: ServerConfig) {
                 nodes {
                   id sourceId url title inLibrary
                   categories { nodes { name } }
-                  chapters { nodes { id url isRead lastPageRead pageCount } }
+                  chapters { nodes { id url isRead isBookmarked lastPageRead pageCount } }
                 }
               }
             }
@@ -81,7 +81,7 @@ class Desktop(private val config: ServerConfig) {
             val chapters = m.nodes("chapters").associate { c ->
                 chapterIds[key to c.str("url")] = c.int("id")
                 pageCounts[c.int("id")] = c.int("pageCount")
-                c.str("url") to ChapterState(c.bool("isRead"), c.int("lastPageRead").toLong())
+                c.str("url") to ChapterState(c.bool("isRead"), c.bool("isBookmarked"), c.int("lastPageRead").toLong())
             }
             key to MangaState(
                 title = m.str("title"),
@@ -127,7 +127,7 @@ class Desktop(private val config: ServerConfig) {
             )
         }
 
-        val chapterChanges = changes.filter { it is MarkRead || it is MarkUnread || it is SetLastPage }
+        val chapterChanges = changes.filter { it is MarkRead || it is MarkUnread || it is AddBookmark || it is RemoveBookmark || it is SetLastPage }
         val missing = chapterChanges.map { it.chapterKey() }.filter { it !in snap.chapterIds }.map { it.first }.toSet()
         for (key in missing) {
             query(
@@ -154,6 +154,8 @@ class Desktop(private val config: ServerConfig) {
                 when (c) {
                     is MarkRead -> buildJsonObject { put("isRead", true) }
                     is MarkUnread -> buildJsonObject { put("isRead", false) }
+                    is AddBookmark -> buildJsonObject { put("isBookmarked", true) }
+                    is RemoveBookmark -> buildJsonObject { put("isBookmarked", false) }
                     is SetLastPage -> buildJsonObject { put("lastPageRead", c.page.toInt()) }
                     else -> error("not a chapter change: $c")
                 }
@@ -240,6 +242,8 @@ fun importBackup(phone: ByteArray, keys: Set<MangaKey>) = Backup(
 private fun Change.chapterKey(): Pair<MangaKey, String> = when (this) {
     is MarkRead -> manga to chapterUrl
     is MarkUnread -> manga to chapterUrl
+    is AddBookmark -> manga to chapterUrl
+    is RemoveBookmark -> manga to chapterUrl
     is SetLastPage -> manga to chapterUrl
     else -> error("not a chapter change: $this")
 }

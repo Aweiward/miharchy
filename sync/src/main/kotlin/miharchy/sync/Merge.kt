@@ -29,6 +29,12 @@ data class MarkRead(val manga: MangaKey, val chapterUrl: String) : Change
 @Serializable @SerialName("markUnread")
 data class MarkUnread(val manga: MangaKey, val chapterUrl: String) : Change
 
+@Serializable @SerialName("addBookmark")
+data class AddBookmark(val manga: MangaKey, val chapterUrl: String) : Change
+
+@Serializable @SerialName("removeBookmark")
+data class RemoveBookmark(val manga: MangaKey, val chapterUrl: String) : Change
+
 @Serializable @SerialName("setLastPage")
 data class SetLastPage(val manga: MangaKey, val chapterUrl: String, val page: Long) : Change
 
@@ -68,6 +74,7 @@ fun merge(phoneBaseline: Library?, phoneNow: Library, desktopNow: Library, deskt
         for ((url, c) in merged.chapters) {
             val d = dN.chapter(url)
             if (c.read != d.read) changes += if (c.read) MarkRead(key, url) else MarkUnread(key, url)
+            if (c.bookmark != d.bookmark) changes += if (c.bookmark) AddBookmark(key, url) else RemoveBookmark(key, url)
             if (c.lastPageRead != d.lastPageRead) changes += SetLastPage(key, url, c.lastPageRead)
         }
     }
@@ -99,6 +106,7 @@ private fun mergeManga(pB: MangaState, pN: MangaState, dB: MangaState, dN: Manga
         val (cpB, cpN, cdB, cdN) = listOf(pB, pN, dB, dN).map { it.chapter(url) }
         ChapterState(
             read = pick(cpB.read, cpN.read, cdB.read, cdN.read) { p, d -> p || d },
+            bookmark = pick(cpB.bookmark, cpN.bookmark, cdB.bookmark, cdN.bookmark) { p, d -> p || d },
             lastPageRead = pick(cpB.lastPageRead, cpN.lastPageRead, cdB.lastPageRead, cdN.lastPageRead, ::maxOf),
         )
     }

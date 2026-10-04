@@ -16,7 +16,7 @@ data class MangaKey(
     val url: String,
 )
 
-data class ChapterState(val read: Boolean = false, val lastPageRead: Long = 0)
+data class ChapterState(val read: Boolean = false, val bookmark: Boolean = false, val lastPageRead: Long = 0)
 
 data class MangaState(
     val title: String,
@@ -52,7 +52,7 @@ fun Backup.toLibrary(): Library {
                 title = m.title,
                 inLibrary = m.favorite,
                 categories = m.categories.mapNotNull { nameByOrder[it] }.toSet(),
-                chapters = m.chapters.associate { it.url to ChapterState(it.read, it.lastPageRead) },
+                chapters = m.chapters.associate { it.url to ChapterState(it.read, it.bookmark, it.lastPageRead) },
             )
         },
         categories = backupCategories.map { it.name }.toSet(),
