@@ -88,6 +88,10 @@ _Avoid_: panel, client, app
 One screen of the window: Library, Updates, History, Browse or Settings. Exactly one view shows at a time.
 _Avoid_: tab, page, mode
 
+**Setup**:
+The window screen that checks and prepares what Miharchy needs, one confirmed step at a time. It is not one of the views.
+_Avoid_: onboarding, wizard, installer
+
 **Reader**:
 The surface that shows a chapter's pages over the window.
 _Avoid_: viewer
