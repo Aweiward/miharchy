@@ -28,11 +28,28 @@ function parseConfig(text) {
   return { url: c.url.replace(/\/+$/, ""), username: c.username, password: c.password }
 }
 
-// The library request for config; QML base64-encodes `credentials`.
+var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+// Standard base64 of a string's UTF-8 bytes. Qt.btoa(string) is deprecated
+// and encodes differently from the Web API.
+function base64(text) {
+  var bytes = []
+  var utf8 = unescape(encodeURIComponent(text))
+  for (var i = 0; i < utf8.length; i++) bytes.push(utf8.charCodeAt(i))
+  var out = ""
+  for (var j = 0; j < bytes.length; j += 3) {
+    var n = (bytes[j] << 16) | ((bytes[j + 1] || 0) << 8) | (bytes[j + 2] || 0)
+    out += B64.charAt(n >> 18 & 63) + B64.charAt(n >> 12 & 63)
+    out += j + 1 < bytes.length ? B64.charAt(n >> 6 & 63) : "="
+    out += j + 2 < bytes.length ? B64.charAt(n & 63) : "="
+  }
+  return out
+}
+
 function libraryRequest(config) {
   return {
     url: config.url + "/api/graphql",
-    credentials: config.username + ":" + config.password,
+    authorization: "Basic " + base64(config.username + ":" + config.password),
     body: JSON.stringify({ query: LIBRARY_QUERY })
   }
 }
@@ -143,6 +160,7 @@ if (typeof module !== "undefined") {
     VIEWS: VIEWS,
     LIBRARY_QUERY: LIBRARY_QUERY,
     parseConfig: parseConfig,
+    base64: base64,
     libraryRequest: libraryRequest,
     coverUrl: coverUrl,
     initial: initial,

@@ -25,8 +25,14 @@ test("parseConfig rejects missing, broken or incomplete config", () => {
 test("libraryRequest targets the GraphQL endpoint with user:password", () => {
   const r = M.libraryRequest(config);
   assert.equal(r.url, "http://127.0.0.1:4590/api/graphql");
-  assert.equal(r.credentials, "miharchy:s3cret");
+  assert.equal(r.authorization, "Basic " + Buffer.from("miharchy:s3cret").toString("base64"));
   assert.match(JSON.parse(r.body).query, /inLibrary: true/);
+});
+
+test("base64 matches node's encoder for every padding length and UTF-8", () => {
+  for (const s of ["", "a", "ab", "abc", "abcd", "miharchy:" + "f".repeat(48), "ünï:cødé"]) {
+    assert.equal(M.base64(s), Buffer.from(s, "utf8").toString("base64"), s);
+  }
 });
 
 test("the connection starts loading", () => {
