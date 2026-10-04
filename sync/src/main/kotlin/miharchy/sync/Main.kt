@@ -76,6 +76,11 @@ private fun sync(folderArg: String?, dryRun: Boolean): Summary {
     }
     if (dryRun) return Summary(config.url, folder.toString(), phoneFile?.toString(), true, changes, null, emptyList())
 
+    // The baseline too, so a library imported before names were kept gets them on its next sync.
+    val storedNames = desktop.sourceNames()
+    val names = mergeSourceNames(storedNames, listOfNotNull(phoneBaseline, phoneNow).flatMap { it.backupSources })
+    if (names != storedNames) desktop.setSourceNames(names)
+
     val exported = forMihon(desktop.export())
     val exportFile = writeExport(folder, exportName(Instant.now()), exported)
     writePrivately(stateDir.resolve("desktop-baseline.tachibk"), exported)

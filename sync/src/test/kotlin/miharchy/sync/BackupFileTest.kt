@@ -2,6 +2,7 @@ package miharchy.sync
 
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
+import eu.kanade.tachiyomi.data.backup.models.BackupSource
 import java.nio.file.Files
 import java.nio.file.attribute.FileTime
 import java.nio.file.attribute.PosixFilePermissions
@@ -56,5 +57,19 @@ class BackupFileTest {
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(target)))
         assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(target.parent)))
         assertEquals(listOf("phone-baseline.tachibk"), target.parent.toFile().list()!!.toList())
+    }
+
+    @Test fun `source names merge into the stored ones, newest backup last`() {
+        val stored = mapOf("1" to "Old Name", "2" to "Kept")
+        val sources = listOf(
+            BackupSource("Asura Scans", 6247824327199706550L),
+            BackupSource("New Name", 1),
+            BackupSource("", 3),
+            BackupSource("4", 4),
+        )
+        assertEquals(
+            mapOf("1" to "New Name", "2" to "Kept", "6247824327199706550" to "Asura Scans"),
+            mergeSourceNames(stored, sources),
+        )
     }
 }

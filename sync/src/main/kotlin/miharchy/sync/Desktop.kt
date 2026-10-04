@@ -39,6 +39,8 @@ data class ServerConfig(val url: String, val username: String, val password: Str
     }
 }
 
+const val SOURCE_NAMES_KEY = "miharchy.sourceNames"
+
 /** The desktop library plus the Suwayomi ids needed to change it. */
 class Snapshot(
     val library: Library,
@@ -57,6 +59,26 @@ class Desktop(private val config: ServerConfig) {
         "query(\$key: String!) { metas(filter: { key: { equalTo: \$key } }) { nodes { value } } }",
         buildJsonObject { put("key", "miharchy.syncFolder") },
     ).nodes("metas").firstOrNull()?.str("value")?.takeIf { it.isNotBlank() }
+
+    /** Meta `miharchy.sourceNames`, source id to name; unreadable JSON counts as none. */
+    fun sourceNames(): Map<String, String> {
+        val value = query(
+            "query(\$key: String!) { metas(filter: { key: { equalTo: \$key } }) { nodes { value } } }",
+            buildJsonObject { put("key", SOURCE_NAMES_KEY) },
+        ).nodes("metas").firstOrNull()?.str("value") ?: return emptyMap()
+        val names = runCatching { Json.parseToJsonElement(value).jsonObject }.getOrNull() ?: return emptyMap()
+        return names.mapNotNull { (id, name) -> (name as? JsonPrimitive)?.takeIf { it.isString }?.let { id to it.content } }.toMap()
+    }
+
+    fun setSourceNames(names: Map<String, String>) {
+        query(
+            "mutation(\$key: String!, \$value: String!) { setGlobalMeta(input: { meta: { key: \$key, value: \$value } }) { meta { key } } }",
+            buildJsonObject {
+                put("key", SOURCE_NAMES_KEY)
+                put("value", buildJsonObject { names.forEach { (id, name) -> put(id, name) } }.toString())
+            },
+        )
+    }
 
     /**
      * The desktop library as a Mihon backup. Client data and server settings stay out: the file lands in a

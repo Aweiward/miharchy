@@ -1,6 +1,7 @@
 package miharchy.sync
 
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupSource
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.LongAsStringSerializer
 import kotlinx.serialization.protobuf.ProtoBuf
@@ -58,3 +59,8 @@ fun Backup.toLibrary(): Library {
         categories = backupCategories.sortedBy { it.order }.map { it.name },
     )
 }
+
+/** Source names by id from `backupSources`, kept so the window can name a source that is not installed. */
+fun mergeSourceNames(stored: Map<String, String>, sources: List<BackupSource>): Map<String, String> =
+    // Mihon names a source it never knew by its id, which says nothing.
+    stored + sources.filter { it.name.isNotBlank() && it.name != it.sourceId.toString() }.associate { it.sourceId.toString() to it.name }
