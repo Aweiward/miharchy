@@ -59,7 +59,7 @@ test("the palette cursor wraps and stays in range", () => {
 });
 
 const settings = { palette: false, view: "settings" };
-const editing = { palette: false, view: "settings", editing: true };
+const editing = { palette: false, view: "settings", editing: "settings" };
 
 test("in the Settings view, j/k/arrows move and Enter/Space change a row", () => {
   assert.equal(C.dispatch(settings, text("j")), "settings.down");
@@ -90,4 +90,32 @@ test("while editing a row, Esc cancels, Enter commits and the rest types", () =>
 
 test("the palette lists no view-scoped command", () => {
   assert.ok(C.paletteRows("").every((c) => !c.view));
+});
+
+const browse = { palette: false, view: "browse" };
+
+test("in the Browse view, keys drive the extension list", () => {
+  assert.equal(C.dispatch(browse, text("j")), "extensions.down");
+  assert.equal(C.dispatch(browse, key(C.KEY.Down)), "extensions.down");
+  assert.equal(C.dispatch(browse, text("k")), "extensions.up");
+  assert.equal(C.dispatch(browse, key(C.KEY.Return)), "extensions.activate");
+  assert.equal(C.dispatch(browse, text("x")), "extensions.remove");
+  assert.equal(C.dispatch(browse, text("a")), "extensions.addRepo");
+  assert.equal(C.dispatch(browse, text("/")), "extensions.filter");
+  assert.equal(C.dispatch(browse, text("l")), "extensions.languages");
+  assert.equal(C.dispatch(browse, text("q")), "window.quit");
+  assert.equal(C.dispatch(browse, text("1")), "view.library");
+});
+
+test("r refreshes extensions on Browse and reloads the library elsewhere", () => {
+  assert.equal(C.dispatch(browse, text("r")), "extensions.refresh");
+  for (const v of ["library", "settings"]) assert.equal(C.dispatch({ palette: false, view: v }, text("r")), "library.reload", v);
+  for (const t of ["x", "a", "/", "l"]) assert.equal(C.dispatch({ palette: false, view: "library" }, text(t)), null, t);
+});
+
+test("an open edit field gets its own commit and cancel", () => {
+  const filtering = { palette: false, view: "browse", editing: "extensions" };
+  assert.equal(C.dispatch(filtering, key(C.KEY.Escape)), "extensions.cancel");
+  assert.equal(C.dispatch(filtering, key(C.KEY.Enter)), "extensions.commit");
+  for (const t of ["x", "j", "/", "q"]) assert.equal(C.dispatch(filtering, text(t)), null, t);
 });

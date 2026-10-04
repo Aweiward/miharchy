@@ -26,12 +26,21 @@ var commands = [
   { id: "view.history", title: "History", keys: ["3"] },
   { id: "view.browse", title: "Browse", keys: ["4"] },
   { id: "view.settings", title: "Settings", keys: ["5"] },
+  // Before library.reload: on Browse, r refreshes the extension list.
+  { id: "extensions.refresh", title: "Refresh extensions", keys: ["r"], view: "browse", hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },
   { id: "window.quit", title: "Quit", keys: ["q", "Esc"] },
   { id: "palette.open", title: "Command palette", keys: [":"], hidden: true },
   { id: "settings.up", title: "Previous setting", keys: ["k", "Up"], view: "settings", hidden: true },
   { id: "settings.down", title: "Next setting", keys: ["j", "Down"], view: "settings", hidden: true },
-  { id: "settings.activate", title: "Change setting", keys: ["Enter", "Space"], view: "settings", hidden: true }
+  { id: "settings.activate", title: "Change setting", keys: ["Enter", "Space"], view: "settings", hidden: true },
+  { id: "extensions.up", title: "Previous row", keys: ["k", "Up"], view: "browse", hidden: true },
+  { id: "extensions.down", title: "Next row", keys: ["j", "Down"], view: "browse", hidden: true },
+  { id: "extensions.activate", title: "Install or update extension", keys: ["Enter"], view: "browse", hidden: true },
+  { id: "extensions.remove", title: "Uninstall extension or remove repo", keys: ["x"], view: "browse", hidden: true },
+  { id: "extensions.addRepo", title: "Add extension repo", keys: ["a"], view: "browse", hidden: true },
+  { id: "extensions.filter", title: "Filter extensions", keys: ["/"], view: "browse", hidden: true },
+  { id: "extensions.languages", title: "English or every language", keys: ["l"], view: "browse", hidden: true }
 ]
 
 // ev: { key, text, ctrl }. Returns { key, text, ctrl } with defaults so
@@ -47,13 +56,13 @@ function matches(label, ev) {
   return !ev.ctrl && ev.text === label
 }
 
-// state: { palette: bool, view: view id, editing: bool }. Returns a command
-// id, or null for no command (in the palette or an edit, null lets the
-// field type the key).
+// state: { palette: bool, view: view id, editing: "" or the command prefix
+// of the open edit field, as "settings" }. Returns a command id, or null for
+// no command (in the palette or an edit, null lets the field type the key).
 function dispatch(state, ev) {
   if (state.editing) {
-    if (ev.key === KEY.Escape) return "settings.cancel"
-    if (ev.key === KEY.Return || ev.key === KEY.Enter) return "settings.commit"
+    if (ev.key === KEY.Escape) return state.editing + ".cancel"
+    if (ev.key === KEY.Return || ev.key === KEY.Enter) return state.editing + ".commit"
     return null
   }
   if (state.palette) {

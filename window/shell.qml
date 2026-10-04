@@ -94,7 +94,8 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var id = Commands.dispatch({ palette: paletteOpen, view: view, editing: settingsEditing }, Commands.keyEvent(event.key, event.text, event.modifiers))
+    var editing = settingsEditing ? "settings" : (extensionsView.editing ? "extensions" : "")
+    var id = Commands.dispatch({ palette: paletteOpen, view: view, editing: editing }, Commands.keyEvent(event.key, event.text, event.modifiers))
     if (id !== null) run(id)
     return id !== null
   }
@@ -107,6 +108,10 @@ ShellRoot {
   function run(id) {
     if (id.indexOf("view.") === 0) {
       view = id.slice(5)
+      return
+    }
+    if (id.indexOf("extensions.") === 0) {
+      extensionsView.run(id)
       return
     }
     switch (id) {
@@ -247,9 +252,22 @@ ShellRoot {
           onKey: function(event) { event.accepted = root.handleKey(event) }
         }
 
+        ExtensionsView {
+          id: extensionsView
+          anchors.fill: parent
+          visible: root.view === "browse"
+          theme: theme
+          config: root.config
+          configPath: root.configPath
+          active: root.view === "browse"
+          showNsfw: root.settingsState.values.showNsfw
+          onKey: function(event) { event.accepted = root.handleKey(event) }
+          onEditEnded: keyRoot.forceActiveFocus()
+        }
+
         Text {
           anchors.centerIn: parent
-          visible: root.view !== "library" && root.view !== "settings"
+          visible: ["library", "settings", "browse"].indexOf(root.view) === -1
           text: Model.VIEWS[Model.viewIndex(root.view)].title + " comes in a later version"
           color: theme.muted
           font.family: theme.fontFamily
@@ -278,7 +296,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.settingsEditing ? "enter save   esc cancel" : (root.view === "settings" ? "j k move   enter change   " : "") + ": commands   r reload   q quit"
+          text: root.settingsEditing || extensionsView.editing ? "enter save   esc cancel" : (({ settings: "j k move   enter change   ", browse: extensionsView.hint })[root.view] || "") + ": commands   r reload   q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
