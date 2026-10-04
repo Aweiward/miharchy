@@ -14,6 +14,7 @@ Rectangle {
   property var config: null
   property string configPath: ""
   property var reader: null
+  property bool deleteAfterRead: false
   // Only the latest page fetch may update the reader.
   property int pagesSeq: 0
 
@@ -23,6 +24,8 @@ Rectangle {
 
   // The chapter the reader showed last, when it closed.
   signal closed(int chapterId)
+  // A chapter it finished left the disk, after delete after read.
+  signal deleted()
 
   visible: open
   color: theme.background
@@ -56,6 +59,7 @@ Rectangle {
 
   function close() {
     save()
+    leave()
     pagesSeq++
     var id = Reader.chapterId(reader)
     reader = null
@@ -89,6 +93,11 @@ Rectangle {
     })
   }
 
+  function leave() {
+    var payload = Reader.deletePayload(reader, deleteAfterRead)
+    if (payload) send(payload, function() { view.deleted() })
+  }
+
   // A page turn saves after a pause; leaving the chapter saves it first.
   function turn(delta, chapter) {
     var next = Reader.reduce(reader, { type: "turn", delta: delta, chapter: chapter === true })
@@ -98,6 +107,7 @@ Rectangle {
       return
     }
     save()
+    leave()
     reader = next
     layoutStrip()
     loadPages()

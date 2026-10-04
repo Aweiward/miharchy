@@ -81,7 +81,7 @@ const mangaNode = (o) => Object.assign({
   status: "ONGOING", thumbnailUrl: "/api/v1/manga/5/thumbnail", inLibrary: false, initialized: true,
   source: { displayName: "MangaDex (EN)" },
   chapters: { nodes: [
-    { id: 11, name: "Ch. 1", chapterNumber: 1, uploadDate: "1700000000000", isRead: true, scanlator: "G", sourceOrder: 0 },
+    { id: 11, name: "Ch. 1", chapterNumber: 1, uploadDate: "1700000000000", isRead: true, isDownloaded: true, scanlator: "G", sourceOrder: 0 },
     { id: 12, name: "Ch. 2", chapterNumber: 2, uploadDate: "1700049600000", isRead: false, scanlator: null, sourceOrder: 1 }
   ] }
 }, o);
@@ -232,4 +232,17 @@ test("a manga's own reading mode comes from its miharchy.readingMode meta", () =
   assert.equal(mode(undefined), "");
   assert.equal(mode([{ key: "other", value: "x" }, { key: "miharchy.readingMode", value: "webtoon" }]), "webtoon");
   assert.match(B.detailPayload(B.detail(5)).query, /meta \{ key value \}/);
+});
+
+test("a chapter knows whether it is downloaded, and a delete reply updates it", () => {
+  assert.match(B.detailPayload(B.detail(5)).query, /isDownloaded/);
+  let d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode() }), config });
+  assert.deepEqual(d.chapters.map((c) => c.downloaded), [false, true]);
+  d = B.reduceDetail(d, { type: "downloads-reply", reply: ok({ deleteDownloadedChapters: { chapters: [{ id: 11, isDownloaded: false }] } }) });
+  assert.deepEqual(d.chapters.map((c) => c.downloaded), [false, false]);
+  const failed = B.reduceDetail(d, { type: "downloads-reply", reply: fail("Timed out") });
+  assert.equal(failed.libraryError, "Timed out");
+  assert.deepEqual(failed.chapters, d.chapters);
+  const queued = B.reduceDetail(d, { type: "downloads-reply", reply: ok({ enqueueChapterDownloads: { downloadStatus: { state: "STARTED", queue: [] } } }) });
+  assert.deepEqual(queued.chapters, d.chapters, "a reply without deletes changes no chapter");
 });

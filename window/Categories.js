@@ -6,7 +6,14 @@
 
 var CREATE_MUTATION = "mutation($name: String!) { createCategory(input: { name: $name }) { category { id } } }"
 var RENAME_MUTATION = "mutation($id: Int!, $name: String!) { updateCategory(input: { id: $id, patch: { name: $name } }) { category { id } } }"
-var DELETE_MUTATION = "mutation($id: Int!) { deleteCategory(input: { categoryId: $id }) { category { id } } }"
+// Suwayomi downloads new chapters of every unflagged category once none is
+// flagged, so its autoDownloadNewChapters follows "some category is
+// flagged" after every change. It skips a manga with unread chapters by
+// default, which would make the flag look broken.
+var AUTO_SETTING = "setSettings(input: { settings: { autoDownloadNewChapters: $on, excludeEntryWithUnreadChapters: false } }) { settings { autoDownloadNewChapters } }"
+var DELETE_MUTATION = "mutation($id: Int!, $on: Boolean!) { deleteCategory(input: { categoryId: $id }) { category { id } } " + AUTO_SETTING + " }"
+var AUTO_DOWNLOAD_MUTATION = "mutation($id: Int!, $include: IncludeOrExclude!, $on: Boolean!) {"
+  + " updateCategory(input: { id: $id, patch: { includeInDownload: $include } }) { category { id } } " + AUTO_SETTING + " }"
 var MOVE_MUTATION = "mutation($id: Int!, $position: Int!) { updateCategoryOrder(input: { id: $id, position: $position }) { categories { id } } }"
 
 // -> { name } or { error }. The sync helper matches categories by name, and
@@ -30,8 +37,18 @@ function renamePayload(id, name) {
   return { query: RENAME_MUTATION, variables: { id: id, name: name } }
 }
 
-function deletePayload(id) {
-  return { query: DELETE_MUTATION, variables: { id: id } }
+// categories: the library's, each with download: flagged for auto-download.
+function deletePayload(categories, id) {
+  return { query: DELETE_MUTATION, variables: { id: id, on: anyFlagged(categories, id, false) } }
+}
+
+function anyFlagged(categories, id, flag) {
+  return categories.some(function(c) { return c.id === id ? flag : c.download })
+}
+
+function autoDownloadPayload(categories, id) {
+  var flag = !categories.filter(function(c) { return c.id === id })[0].download
+  return { query: AUTO_DOWNLOAD_MUTATION, variables: { id: id, include: flag ? "INCLUDE" : "UNSET", on: anyFlagged(categories, id, flag) } }
 }
 
 // Moves categories[index] by delta (-1 or 1), or null past either end.
@@ -42,10 +59,11 @@ function movePayload(categories, index, delta) {
   return { query: MOVE_MUTATION, variables: { id: categories[index].id, position: to + 1 } }
 }
 
-// Each category as { id, name, count } with its number of library manga.
+// Each category as { id, name, download, count } with its number of
+// library manga.
 function rows(categories, manga) {
   return categories.map(function(c) {
-    return { id: c.id, name: c.name, count: manga.filter(function(m) { return m.categories.indexOf(c.id) !== -1 }).length }
+    return { id: c.id, name: c.name, download: c.download === true, count: manga.filter(function(m) { return m.categories.indexOf(c.id) !== -1 }).length }
   })
 }
 
@@ -55,6 +73,7 @@ if (typeof module !== "undefined") {
     createPayload: createPayload,
     renamePayload: renamePayload,
     deletePayload: deletePayload,
+    autoDownloadPayload: autoDownloadPayload,
     movePayload: movePayload,
     rows: rows
   }

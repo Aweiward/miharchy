@@ -176,3 +176,15 @@ test("keys: paged turns by page, webtoon scrolls by part of the view", () => {
   assert.deepEqual(R.action(web, "reader.next"), { scroll: 0.9 });
   assert.equal(R.action(web, "reader.left"), null, "a strip has no sides");
 });
+
+test("with delete after read on, leaving a chapter this reading finished deletes its download", () => {
+  const done = turn(turn(loaded(12, 3), 1), 1);
+  assert.equal(done.read, true);
+  const p = R.deletePayload(done, true);
+  assert.match(p.query, /deleteDownloadedChapters/);
+  assert.deepEqual(p.variables, { ids: [12] });
+  assert.equal(R.deletePayload(done, false), null, "off by default");
+  assert.equal(R.deletePayload(turn(loaded(12, 3), 1), true), null, "an unfinished chapter stays");
+  assert.equal(R.deletePayload(loaded(12, 3, { isRead: true }), true), null, "a chapter read before stays when read again");
+  assert.equal(R.deletePayload(R.open(5, chapters, 12, "paged-rtl"), true), null, "nothing before the pages load");
+});

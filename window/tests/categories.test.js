@@ -26,8 +26,8 @@ test("create, rename and delete send the category mutations", () => {
   assert.match(K.createPayload("Drama").query, /createCategory/);
   assert.deepEqual(K.renamePayload(4, "Fights").variables, { id: 4, name: "Fights" });
   assert.match(K.renamePayload(4, "Fights").query, /updateCategory\(/);
-  assert.deepEqual(K.deletePayload(2).variables, { id: 2 });
-  assert.match(K.deletePayload(2).query, /deleteCategory/);
+  assert.equal(K.deletePayload(cats, 2).variables.id, 2);
+  assert.match(K.deletePayload(cats, 2).query, /deleteCategory/);
 });
 
 test("a move goes one place up or down, as a 1-based position after Default; none past either end", () => {
@@ -42,8 +42,33 @@ test("a move goes one place up or down, as a 1-based position after Default; non
 test("rows count the library manga in each category", () => {
   const manga = [{ id: 1, categories: [4, 2] }, { id: 3, categories: [4] }, { id: 5, categories: [] }];
   assert.deepEqual(K.rows(cats, manga), [
-    { id: 4, name: "Action", count: 2 },
-    { id: 2, name: "Romance", count: 1 },
-    { id: 7, name: "Later", count: 0 }
+    { id: 4, name: "Action", download: false, count: 2 },
+    { id: 2, name: "Romance", download: false, count: 1 },
+    { id: 7, name: "Later", download: false, count: 0 }
   ]);
+});
+
+const flagged = [{ id: 4, name: "Action", download: true }, { id: 2, name: "Romance", download: false }];
+
+test("d flags a category for auto-download and turns the server's auto-download on with it", () => {
+  const p = K.autoDownloadPayload(flagged, 2);
+  assert.match(p.query, /updateCategory\(input: \{ id: \$id, patch: \{ includeInDownload: \$include \} \}\)/);
+  assert.match(p.query, /setSettings/);
+  assert.deepEqual(p.variables, { id: 2, include: "INCLUDE", on: true });
+});
+
+test("the server downloads every unflagged category once none is flagged, so the last flag off turns auto-download off", () => {
+  assert.deepEqual(K.autoDownloadPayload(flagged, 4).variables, { id: 4, include: "UNSET", on: false });
+  const both = flagged.map((c) => Object.assign({}, c, { download: true }));
+  assert.deepEqual(K.autoDownloadPayload(both, 4).variables, { id: 4, include: "UNSET", on: true });
+});
+
+test("deleting the last flagged category turns auto-download off too", () => {
+  assert.deepEqual(K.deletePayload(flagged, 4).variables, { id: 4, on: false });
+  assert.deepEqual(K.deletePayload(flagged, 2).variables, { id: 2, on: true });
+  assert.match(K.deletePayload(flagged, 4).query, /setSettings/);
+});
+
+test("auto-download skips no manga for its unread chapters: the flag means every new chapter", () => {
+  assert.match(K.autoDownloadPayload(flagged, 2).query, /excludeEntryWithUnreadChapters: false/);
 });

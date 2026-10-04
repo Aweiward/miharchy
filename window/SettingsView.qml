@@ -54,6 +54,7 @@ Item {
           color: current ? view.theme.selected : "transparent"
 
           Text {
+            id: label
             anchors.left: parent.left
             anchors.leftMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
@@ -64,9 +65,13 @@ Item {
           }
 
           Text {
+            anchors.left: label.right
+            anchors.leftMargin: view.theme.fontSize * 2
             anchors.right: parent.right
             anchors.rightMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
+            horizontalAlignment: Text.AlignRight
+            elide: Text.ElideLeft
             visible: !row.editingThis
             text: Settings.display(row.modelData, view.values[row.modelData.key])
             color: row.current ? view.theme.selectedText : view.theme.muted

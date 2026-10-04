@@ -333,3 +333,42 @@ test("on Updates, j/k move, Enter reads the chapter, u checks for updates and r 
   assert.equal(C.dispatch(screen("reader"), text("u")), "reader.halfUp", "u still goes half a view up in the reader");
   assert.equal(C.dispatch(screen("library"), text("u")), null);
 });
+
+test("on a manga, d downloads, U downloads every unread chapter, x deletes downloads and v starts a selection", () => {
+  const m = screen("manga");
+  assert.equal(C.dispatch(m, text("d")), "manga.download");
+  assert.equal(C.dispatch(m, text("U")), "manga.downloadUnread");
+  assert.equal(C.dispatch(m, text("x")), "manga.deleteDownload");
+  assert.equal(C.dispatch(m, text("v")), "manga.select");
+  assert.equal(C.dispatch(m, text("D")), "downloads.open");
+});
+
+test("in a selection, j/k extend it, d and x act on it, and v or Esc ends it without leaving the manga", () => {
+  const s = screen("manga-select");
+  assert.equal(C.dispatch(s, text("j")), "manga.down");
+  assert.equal(C.dispatch(s, key(C.KEY.Up)), "manga.up");
+  assert.equal(C.dispatch(s, text("d")), "manga.download");
+  assert.equal(C.dispatch(s, text("x")), "manga.deleteDownload");
+  assert.equal(C.dispatch(s, text("v")), "manga.selectEnd");
+  assert.equal(C.dispatch(s, key(C.KEY.Escape)), "manga.selectEnd");
+  for (const t of ["a", "c", "U"]) assert.equal(C.dispatch(s, text(t)), null, t);
+  assert.equal(C.dispatch(s, key(C.KEY.Return)), null, "Enter does not read a range");
+});
+
+test("the download queue opens from the palette or D on the Library and a manga; there j/k move, x dequeues, Space starts or stops, Esc or D closes", () => {
+  assert.ok(C.paletteRows("download").some((c) => c.id === "downloads.open"));
+  assert.equal(C.dispatch(screen("library"), text("D")), "downloads.open");
+  assert.equal(C.dispatch(screen("settings"), text("D")), null);
+  const q = screen("downloads");
+  assert.equal(C.dispatch(q, text("j")), "downloads.down");
+  assert.equal(C.dispatch(q, text("k")), "downloads.up");
+  assert.equal(C.dispatch(q, text("x")), "downloads.dequeue");
+  assert.equal(C.dispatch(q, C.keyEvent(C.KEY.Space, " ", 0)), "downloads.toggle");
+  assert.equal(C.dispatch(q, key(C.KEY.Escape)), "downloads.close");
+  assert.equal(C.dispatch(q, text("D")), "downloads.close");
+  assert.equal(C.dispatch(q, text("q")), "window.quit");
+});
+
+test("d on the categories screen flags a category for auto-download", () => {
+  assert.equal(C.dispatch(screen("categories"), text("d")), "categories.autoDownload");
+});

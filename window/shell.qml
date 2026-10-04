@@ -115,9 +115,10 @@ ShellRoot {
   // Returns whether a command took the key.
   function handleKey(event) {
     var editing = settingsEditing ? "settings" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
-    // An open reader or manga detail decides which keys apply; on Browse,
-    // the screen does.
-    var scope = reader.open ? "reader" : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : "manga")
+    // An open download queue, reader or manga detail decides which keys
+    // apply, in that order; on Browse, the screen does.
+    var scope = downloadsView.open ? "downloads" : reader.open ? "reader"
+      : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.selecting ? "manga-select" : "manga")
       : view === "browse" ? browseView.screen : view === "library" && libraryScreen === "categories" ? "categories" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
     if (id !== null) run(id)
@@ -133,6 +134,7 @@ ShellRoot {
     if (id.indexOf("view.") === 0) {
       if (reader.open) reader.close()
       mangaDetail.close()
+      downloadsView.open = false
       view = id.slice(5)
       return
     }
@@ -154,6 +156,10 @@ ShellRoot {
     }
     if (id.indexOf("manga.") === 0) {
       mangaDetail.run(id)
+      return
+    }
+    if (id.indexOf("downloads.") === 0) {
+      downloadsView.run(id)
       return
     }
     if (id.indexOf("reader.") === 0) {
@@ -440,6 +446,8 @@ ShellRoot {
             browseView.markInLibrary(mangaId, inLibrary)
             if (root.config) root.fetchLibrary()
           }
+          queue: downloadsView.queue.items
+          onDownloads: function(reply) { downloadsView.apply(reply) }
           onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
         }
       }
@@ -465,7 +473,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : "hjkl move   enter open   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   ", updates: "j k move   enter read   u check   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : "hjkl move   enter open   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   D downloads   ", updates: "j k move   enter read   u check   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
@@ -478,10 +486,21 @@ ShellRoot {
         theme: theme
         config: root.config
         configPath: root.configPath
+        deleteAfterRead: root.settingsState.values.deleteAfterRead
         onClosed: function(chapterId) {
           mangaDetail.reread(chapterId)
           updatesView.load()
         }
+        onDeleted: mangaDetail.reload()
+      }
+
+      DownloadsView {
+        id: downloadsView
+        anchors.fill: parent
+        theme: theme
+        config: root.config
+        configPath: root.configPath
+        onLeftQueue: function(items) { mangaDetail.downloadsLeft(items) }
       }
 
       CommandPalette {

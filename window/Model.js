@@ -12,7 +12,7 @@ var VIEWS = [
   { id: "settings", title: "Settings", key: "5" }
 ]
 
-var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name } }"
+var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDownload } }"
   + " mangas(condition: {inLibrary: true}, orderBy: TITLE) { nodes { id title thumbnailUrl categories { nodes { id } } } } }"
 
 // Suwayomi's built-in "Default" category holds the manga in no category, as
@@ -158,7 +158,7 @@ function fromResponse(status, body, config) {
     }),
     categories: ((r.data.categories && r.data.categories.nodes) || [])
       .filter(function(c) { return c.id !== DEFAULT_CATEGORY })
-      .map(function(c) { return { id: c.id, name: String(c.name) } })
+      .map(function(c) { return { id: c.id, name: String(c.name), download: c.includeInDownload === "INCLUDE" } })
   })
 }
 
