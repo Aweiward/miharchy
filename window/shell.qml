@@ -94,8 +94,10 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var editing = settingsEditing ? "settings" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : ""
-    var id = Commands.dispatch({ palette: paletteOpen, view: view, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
+    var editing = settingsEditing ? "settings" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : browseView.editing
+    // On Browse, the screen decides which keys apply.
+    var scope = view === "browse" ? browseView.screen : view
+    var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
     if (id !== null) run(id)
     return id !== null
   }
@@ -112,6 +114,10 @@ ShellRoot {
     }
     if (id.indexOf("extensions.") === 0) {
       extensionsView.run(id)
+      return
+    }
+    if (/^(browse|sources|source|manga)\./.test(id)) {
+      browseView.run(id)
       return
     }
     if (id.indexOf("setup.") === 0) {
@@ -259,7 +265,20 @@ ShellRoot {
         ExtensionsView {
           id: extensionsView
           anchors.fill: parent
-          visible: root.view === "browse"
+          visible: root.view === "browse" && browseView.screen === "extensions"
+          theme: theme
+          config: root.config
+          configPath: root.configPath
+          active: visible
+          showNsfw: root.settingsState.values.showNsfw
+          onKey: function(event) { event.accepted = root.handleKey(event) }
+          onEditEnded: keyRoot.forceActiveFocus()
+        }
+
+        BrowseView {
+          id: browseView
+          anchors.fill: parent
+          visible: root.view === "browse" && screen !== "extensions"
           theme: theme
           config: root.config
           configPath: root.configPath
@@ -267,6 +286,7 @@ ShellRoot {
           showNsfw: root.settingsState.values.showNsfw
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
+          onLibraryChanged: if (root.config) root.fetchLibrary()
         }
 
         SetupView {
@@ -314,7 +334,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.settingsEditing || extensionsView.editing || setupView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : (({ settings: "j k move   enter change   ", browse: extensionsView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   r reload   q quit"
+          text: root.settingsEditing || extensionsView.editing || setupView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : (({ settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall

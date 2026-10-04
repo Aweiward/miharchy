@@ -92,9 +92,9 @@ test("the palette lists no view-scoped command", () => {
   assert.ok(C.paletteRows("").every((c) => !c.view));
 });
 
-const browse = { palette: false, view: "browse" };
+const browse = { palette: false, view: "extensions" };
 
-test("in the Browse view, keys drive the extension list", () => {
+test("on the extensions screen, keys drive the extension list", () => {
   assert.equal(C.dispatch(browse, text("j")), "extensions.down");
   assert.equal(C.dispatch(browse, key(C.KEY.Down)), "extensions.down");
   assert.equal(C.dispatch(browse, text("k")), "extensions.up");
@@ -107,14 +107,14 @@ test("in the Browse view, keys drive the extension list", () => {
   assert.equal(C.dispatch(browse, text("1")), "view.library");
 });
 
-test("r refreshes extensions on Browse and reloads the library elsewhere", () => {
+test("r refreshes extensions on that screen and reloads the library elsewhere", () => {
   assert.equal(C.dispatch(browse, text("r")), "extensions.refresh");
   for (const v of ["library", "settings"]) assert.equal(C.dispatch({ palette: false, view: v }, text("r")), "library.reload", v);
   for (const t of ["x", "a", "/", "l"]) assert.equal(C.dispatch({ palette: false, view: "library" }, text(t)), null, t);
 });
 
 test("an open edit field gets its own commit and cancel", () => {
-  const filtering = { palette: false, view: "browse", editing: "extensions" };
+  const filtering = { palette: false, view: "extensions", editing: "extensions" };
   assert.equal(C.dispatch(filtering, key(C.KEY.Escape)), "extensions.cancel");
   assert.equal(C.dispatch(filtering, key(C.KEY.Enter)), "extensions.commit");
   for (const t of ["x", "j", "/", "q"]) assert.equal(C.dispatch(filtering, text(t)), null, t);
@@ -138,4 +138,56 @@ test("a setup question takes only y, n or Esc", () => {
   for (const t of ["q", "Y", "1", ":", "j"]) assert.equal(C.dispatch(asking, text(t)), null, t);
   assert.equal(C.dispatch(asking, key(C.KEY.Return)), null, "Enter does not consent");
   assert.equal(C.dispatch(asking, C.keyEvent(0x59, "y", CTRL)), null, "Ctrl-y does not consent");
+});
+
+const screen = (view) => ({ palette: false, view });
+
+test("Tab switches between sources and extensions, and only there", () => {
+  assert.equal(C.dispatch(screen("sources"), key(C.KEY.Tab)), "browse.tab");
+  assert.equal(C.dispatch(screen("extensions"), key(C.KEY.Tab)), "browse.tab");
+  assert.equal(C.dispatch(screen("library"), key(C.KEY.Tab)), null);
+});
+
+test("on the sources screen, j/k move, Enter opens and r refreshes", () => {
+  assert.equal(C.dispatch(screen("sources"), text("j")), "sources.down");
+  assert.equal(C.dispatch(screen("sources"), text("k")), "sources.up");
+  assert.equal(C.dispatch(screen("sources"), key(C.KEY.Return)), "sources.open");
+  assert.equal(C.dispatch(screen("sources"), text("r")), "sources.refresh");
+  assert.equal(C.dispatch(screen("sources"), key(C.KEY.Escape)), "window.quit", "the root of Browse has nothing to go back to");
+});
+
+test("on a source, hjkl move the grid, p n / switch lists, Enter opens and Esc goes back", () => {
+  const s = screen("source");
+  assert.equal(C.dispatch(s, text("h")), "source.left");
+  assert.equal(C.dispatch(s, text("l")), "source.right");
+  assert.equal(C.dispatch(s, text("j")), "source.down");
+  assert.equal(C.dispatch(s, text("k")), "source.up");
+  assert.equal(C.dispatch(s, text("p")), "source.popular");
+  assert.equal(C.dispatch(s, text("n")), "source.latest");
+  assert.equal(C.dispatch(s, text("/")), "source.search");
+  assert.equal(C.dispatch(s, text("r")), "source.retry");
+  assert.equal(C.dispatch(s, key(C.KEY.Return)), "source.open");
+  assert.equal(C.dispatch(s, key(C.KEY.Escape)), "browse.back");
+  assert.equal(C.dispatch(s, key(C.KEY.Backspace)), "browse.back");
+  assert.equal(C.dispatch(s, text("q")), "window.quit");
+});
+
+test("on a manga, j/k move the chapters, a toggles the library, r refreshes and Esc goes back", () => {
+  const m = screen("manga");
+  assert.equal(C.dispatch(m, text("j")), "manga.down");
+  assert.equal(C.dispatch(m, text("k")), "manga.up");
+  assert.equal(C.dispatch(m, text("a")), "manga.library");
+  assert.equal(C.dispatch(m, text("r")), "manga.refresh");
+  assert.equal(C.dispatch(m, key(C.KEY.Escape)), "browse.back");
+});
+
+test("a source search field commits and cancels as source.*", () => {
+  const searching = { palette: false, view: "source", editing: "source" };
+  assert.equal(C.dispatch(searching, key(C.KEY.Enter)), "source.commit");
+  assert.equal(C.dispatch(searching, key(C.KEY.Escape)), "source.cancel");
+  assert.equal(C.dispatch(searching, text("n")), null);
+});
+
+test("l on the sources screen toggles every language", () => {
+  assert.equal(C.dispatch(screen("sources"), text("l")), "sources.languages");
 });
