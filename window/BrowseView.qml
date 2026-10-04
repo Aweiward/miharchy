@@ -5,10 +5,11 @@ import "Commands.js" as Commands
 import "Model.js" as Model
 import "Browse.js" as Browse
 
-// The Browse view past its extensions: the source list, a source's manga
-// and a manga's detail. It talks to the server itself; Browse.js decides.
-// shell.qml forwards every "browse.", "sources.", "source." and "manga."
-// command to run(), and shows ExtensionsView while screen is "extensions".
+// The Browse view past its extensions: the source list and a source's
+// manga. It talks to the server itself; Browse.js decides. shell.qml
+// forwards every "browse.", "sources." and "source." command to run(),
+// shows ExtensionsView while screen is "extensions", and opens a manga's
+// detail on openManga.
 Item {
   id: view
 
@@ -19,41 +20,35 @@ Item {
   property bool showNsfw: false
   property bool allLanguages: false
 
-  // "sources" | "extensions" | "source" | "manga"
+  // "sources" | "extensions" | "source"
   property string screen: "sources"
   property var src: ({ state: "idle", message: "", sources: [] })
   property int sourceCursor: 0
   property var listing: null
   property int gridCursor: 0
-  property var detail: null
-  property int chapterCursor: 0
   // "" | "source": the search field is open.
   property string editing: ""
   // Only the latest request of each kind may update its state.
   property int sourcesSeq: 0
   property int listingSeq: 0
-  property int detailSeq: 0
 
   readonly property var hint: ({
     sources: "j k move   enter open   l languages   r refresh   tab extensions   ",
     extensions: "r refresh   tab sources   ",
-    source: "hjkl move   enter open   p popular   n latest   / search   r retry   esc back   ",
-    manga: "j k chapters   a library   r refresh   esc back   "
+    source: "hjkl move   enter open   p popular   n latest   / search   r retry   esc back   "
   })[screen]
 
   signal key(var event)
   signal editEnded()
-  signal libraryChanged()
+  signal openManga(int mangaId)
 
   onActiveChanged: if (active && screen === "sources" && src.state === "idle") loadSources()
   onConfigChanged: {
     if (editing) closeSearch()
     sourcesSeq++
     listingSeq++
-    detailSeq++
     screen = "sources"
     listing = null
-    detail = null
     src = config ? { state: "idle", message: "", sources: [] } : { state: "no-config", message: "", sources: [] }
     if (active && config) loadSources()
   }
@@ -105,39 +100,8 @@ Item {
     })
   }
 
-  function openDetail(mangaId) {
-    detail = Browse.detail(mangaId, true)
-    chapterCursor = 0
-    screen = "manga"
-    detailSeq++
-    advanceDetail()
-  }
-
-  function advanceDetail() {
-    var payload = Browse.detailPayload(detail)
-    if (!payload) return
-    var seq = detailSeq
-    var cfg = config
-    send(payload, function(reply) {
-      if (seq !== view.detailSeq) return
-      view.detail = Browse.reduceDetail(view.detail, { type: "reply", reply: reply, config: cfg })
-      view.advanceDetail()
-    })
-  }
-
-  // Matched by manga, not by request number: a refresh or Back while the
-  // toggle is in flight must not strand it, since the server applies it.
-  function toggleLibrary() {
-    var payload = Browse.libraryPayload(detail)
-    if (!payload) return
-    var mangaId = detail.mangaId
-    detail = Browse.reduceDetail(detail, { type: "library-request" })
-    send(payload, function(reply) {
-      if (view.detail && view.detail.mangaId === mangaId) view.detail = Browse.reduceDetail(view.detail, { type: "library-reply", reply: reply })
-      if (reply.state !== "ok") return
-      if (view.listing) view.listing = Browse.markInLibrary(view.listing, mangaId, reply.data.updateManga.manga.inLibrary === true)
-      view.libraryChanged()
-    })
+  function markInLibrary(mangaId, inLibrary) {
+    if (listing) listing = Browse.markInLibrary(listing, mangaId, inLibrary)
   }
 
   function moveGrid(delta) {
@@ -158,10 +122,7 @@ Item {
         if (screen === "sources") loadSources()
         break
       case "browse.back":
-        if (screen === "manga") {
-          detailSeq++
-          screen = listing ? "source" : "sources"
-        } else if (screen === "source") {
+        if (screen === "source") {
           listingSeq++
           screen = "sources"
         }
@@ -222,20 +183,7 @@ Item {
         break
       case "source.open":
         var m = listing && listing.items[gridCursor]
-        if (m) openDetail(m.id)
-        break
-      case "manga.up":
-      case "manga.down":
-        if (detail && detail.chapters.length) chapterCursor = Math.max(0, Math.min(detail.chapters.length - 1, chapterCursor + (id === "manga.up" ? -1 : 1)))
-        break
-      case "manga.library":
-        toggleLibrary()
-        break
-      case "manga.refresh":
-        if (!detail) break
-        detailSeq++
-        detail = Browse.reduceDetail(detail, { type: "refresh" })
-        advanceDetail()
+        if (m) openManga(m.id)
         break
     }
   }
@@ -335,14 +283,5 @@ Item {
     notice: view.listing ? Browse.notice(view.listing, view.configPath) : null
     onKey: function(event) { view.key(event) }
     onNearEnd: view.moreManga()
-  }
-
-  MangaDetail {
-    anchors.fill: parent
-    visible: view.screen === "manga"
-    theme: view.theme
-    detail: view.detail
-    cursor: view.chapterCursor
-    notice: view.detail ? Browse.notice(view.detail, view.configPath) : null
   }
 }

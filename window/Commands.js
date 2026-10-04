@@ -11,7 +11,9 @@ var KEY = {
   Backspace: 0x01000003,
   Return: 0x01000004,
   Enter: 0x01000005,
+  Left: 0x01000012,
   Up: 0x01000013,
+  Right: 0x01000014,
   Down: 0x01000015,
   Space: 0x20,
   N: 0x4e,
@@ -19,10 +21,11 @@ var KEY = {
 }
 
 // keys: printable characters match event.text; "Esc", "Enter", "Space",
-// "Tab", "Backspace", "Up" and "Down" match the key code.
+// "Tab", "Backspace" and the arrows match the key code.
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
-// sources, extensions, source, manga) shows; an array allows several.
+// sources, extensions, source; or overlay: manga, reader) shows; an array
+// allows several.
 var commands = [
   { id: "view.library", title: "Library", keys: ["1"] },
   { id: "view.updates", title: "Updates", keys: ["2"] },
@@ -36,7 +39,10 @@ var commands = [
   { id: "sources.refresh", title: "Refresh sources", keys: ["r"], view: "sources", hidden: true },
   { id: "source.retry", title: "Load again", keys: ["r"], view: "source", hidden: true },
   { id: "manga.refresh", title: "Refresh from the source", keys: ["r"], view: "manga", hidden: true },
-  { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: ["source", "manga"], hidden: true },
+  { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: "source", hidden: true },
+  { id: "manga.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga", hidden: true },
+  { id: "reader.close", title: "Close the reader", keys: ["Esc", "q"], view: "reader", hidden: true },
+  { id: "reader.retry", title: "Load again", keys: ["r"], view: "reader", hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },
   { id: "window.quit", title: "Quit", keys: ["q", "Esc"] },
   { id: "palette.open", title: "Command palette", keys: [":"], hidden: true },
@@ -66,6 +72,15 @@ var commands = [
   { id: "manga.up", title: "Previous chapter", keys: ["k", "Up"], view: "manga", hidden: true },
   { id: "manga.down", title: "Next chapter", keys: ["j", "Down"], view: "manga", hidden: true },
   { id: "manga.library", title: "Add to or remove from library", keys: ["a"], view: "manga", hidden: true },
+  { id: "manga.read", title: "Read chapter", keys: ["Enter"], view: "manga", hidden: true },
+  { id: "reader.left", title: "Page to the left", keys: ["h", "Left"], view: "reader", hidden: true },
+  { id: "reader.right", title: "Page to the right", keys: ["l", "Right"], view: "reader", hidden: true },
+  { id: "reader.next", title: "Next page", keys: ["Space"], view: "reader", hidden: true },
+  { id: "library.left", title: "Previous manga", keys: ["h", "Left"], view: "library", hidden: true },
+  { id: "library.right", title: "Next manga", keys: ["l", "Right"], view: "library", hidden: true },
+  { id: "library.up", title: "Row up", keys: ["k", "Up"], view: "library", hidden: true },
+  { id: "library.down", title: "Row down", keys: ["j", "Down"], view: "library", hidden: true },
+  { id: "library.open", title: "Open manga", keys: ["Enter"], view: "library", hidden: true },
   { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
   { id: "setup.down", title: "Next step", keys: ["j", "Down"], view: "setup", hidden: true },
   { id: "setup.activate", title: "Run step", keys: ["Enter", "Space"], view: "setup", hidden: true }
@@ -80,7 +95,7 @@ function keyEvent(key, text, modifiers) {
 function matches(label, ev) {
   if (label === "Esc") return ev.key === KEY.Escape
   if (label === "Enter") return ev.key === KEY.Return || ev.key === KEY.Enter
-  if (label === "Space" || label === "Tab" || label === "Backspace" || label === "Up" || label === "Down") return ev.key === KEY[label]
+  if (["Space", "Tab", "Backspace", "Left", "Up", "Right", "Down"].indexOf(label) !== -1) return ev.key === KEY[label]
   return !ev.ctrl && ev.text === label
 }
 

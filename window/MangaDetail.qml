@@ -1,20 +1,120 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Model.js" as Model
+import "Browse.js" as Browse
 
-// A manga's detail: cover and metadata beside the chapter list, newest
-// first. BrowseView owns the state; this file only draws it.
-Item {
+// A manga's detail over the view that opened it, Library or Browse: cover
+// and metadata beside the chapter list, newest first. It talks to the
+// server itself; Browse.js decides. shell.qml forwards every "manga."
+// command to run().
+Rectangle {
   id: view
 
   required property Theme theme
+  property var config: null
+  property string configPath: ""
   property var detail: null
   property int cursor: 0
-  property var notice: null
+  // Only the latest detail request may update it.
+  property int detailSeq: 0
 
+  readonly property bool open: detail !== null
   readonly property var manga: detail ? detail.manga : null
+  readonly property var notice: detail ? Browse.notice(detail, configPath) : null
+  readonly property string hint: "j k chapters   enter read   a library   r refresh   esc back   "
+
+  signal libraryChanged(int mangaId, bool inLibrary)
+  signal read(var chapters, int chapterId)
+
+  visible: open
+  color: theme.background
 
   onCursorChanged: chapters.positionViewAtIndex(cursor, ListView.Contain)
+  onConfigChanged: close()
+
+  function send(payload, done) {
+    var req = Model.request(config, payload)
+    var xhr = new XMLHttpRequest()
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === XMLHttpRequest.DONE) done(Model.reply(xhr.status, xhr.responseText))
+    }
+    xhr.open("POST", req.url)
+    xhr.setRequestHeader("Content-Type", "application/json")
+    xhr.setRequestHeader("Authorization", req.authorization)
+    xhr.send(req.body)
+  }
+
+  // fromSource: opened while browsing a source, so it refreshes once.
+  function openManga(mangaId, fromSource) {
+    detail = Browse.detail(mangaId, fromSource)
+    cursor = 0
+    detailSeq++
+    advance()
+  }
+
+  function close() {
+    detailSeq++
+    detail = null
+  }
+
+  // After the reader: show what it marked read, on the chapter it left.
+  function reread(chapterId) {
+    if (!detail) return
+    for (var i = 0; i < detail.chapters.length; i++) if (detail.chapters[i].id === chapterId) cursor = i
+    detailSeq++
+    detail = Browse.reduceDetail(detail, { type: "reread" })
+    advance()
+  }
+
+  function advance() {
+    var payload = Browse.detailPayload(detail)
+    if (!payload) return
+    var seq = detailSeq
+    var cfg = config
+    send(payload, function(reply) {
+      if (seq !== view.detailSeq) return
+      view.detail = Browse.reduceDetail(view.detail, { type: "reply", reply: reply, config: cfg })
+      view.advance()
+    })
+  }
+
+  // Matched by manga, not by request number: a refresh or Back while the
+  // toggle is in flight must not strand it, since the server applies it.
+  function toggleLibrary() {
+    var payload = Browse.libraryPayload(detail)
+    if (!payload) return
+    var mangaId = detail.mangaId
+    detail = Browse.reduceDetail(detail, { type: "library-request" })
+    send(payload, function(reply) {
+      if (view.detail && view.detail.mangaId === mangaId) view.detail = Browse.reduceDetail(view.detail, { type: "library-reply", reply: reply })
+      if (reply.state === "ok") view.libraryChanged(mangaId, reply.data.updateManga.manga.inLibrary === true)
+    })
+  }
+
+  function run(id) {
+    switch (id) {
+      case "manga.back":
+        close()
+        break
+      case "manga.up":
+      case "manga.down":
+        if (detail.chapters.length) cursor = Math.max(0, Math.min(detail.chapters.length - 1, cursor + (id === "manga.up" ? -1 : 1)))
+        break
+      case "manga.read":
+        var c = detail.chapters[cursor]
+        if (c) read(detail.chapters, c.id)
+        break
+      case "manga.library":
+        toggleLibrary()
+        break
+      case "manga.refresh":
+        detailSeq++
+        detail = Browse.reduceDetail(detail, { type: "refresh" })
+        advance()
+        break
+    }
+  }
 
   Rectangle {
     id: coverBox

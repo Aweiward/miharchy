@@ -2,14 +2,20 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 
-// The Library view: the cover grid, or a notice in its place.
+// The Library view: the cover grid with its cursor, or a notice in its
+// place. shell.qml owns the cursor.
 Item {
   id: view
 
   required property Theme theme
   property var manga: []
+  property int cursor: 0
   // Model.notice(): null for the grid, otherwise { title, detail }.
   property var notice: null
+
+  readonly property int columns: Math.max(1, Math.floor(grid.width / grid.cellWidth))
+
+  onCursorChanged: grid.positionViewAtIndex(cursor, GridView.Contain)
 
   GridView {
     id: grid
@@ -24,6 +30,8 @@ Item {
     delegate: Item {
       id: cell
       required property var modelData
+      required property int index
+      readonly property bool current: index === view.cursor
       width: grid.cellWidth
       height: grid.cellHeight
 
@@ -33,9 +41,12 @@ Item {
         width: cell.width - view.theme.fontSize
         height: width * 1.5
         color: Qt.alpha(view.theme.foreground, 0.06)
+        border.width: cell.current ? 2 : 0
+        border.color: view.theme.accent
 
         Image {
           anchors.fill: parent
+          anchors.margins: cell.current ? 2 : 0
           source: cell.modelData.cover
           fillMode: Image.PreserveAspectCrop
           asynchronous: true
@@ -49,7 +60,7 @@ Item {
         anchors.left: coverBox.left
         anchors.right: coverBox.right
         text: cell.modelData.title
-        color: view.theme.foreground
+        color: cell.current ? view.theme.selectedText : view.theme.foreground
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
         elide: Text.ElideRight

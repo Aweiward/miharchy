@@ -75,7 +75,7 @@ test("in the Settings view, j/k/arrows move and Enter/Space change a row", () =>
 });
 
 test("settings keys do nothing in other views", () => {
-  for (const v of ["library", "updates", undefined]) {
+  for (const v of ["updates", undefined]) {
     const s = { palette: false, view: v };
     assert.equal(C.dispatch(s, text("j")), null);
     assert.equal(C.dispatch(s, key(C.KEY.Return)), null);
@@ -110,7 +110,7 @@ test("on the extensions screen, keys drive the extension list", () => {
 test("r refreshes extensions on that screen and reloads the library elsewhere", () => {
   assert.equal(C.dispatch(browse, text("r")), "extensions.refresh");
   for (const v of ["library", "settings"]) assert.equal(C.dispatch({ palette: false, view: v }, text("r")), "library.reload", v);
-  for (const t of ["x", "a", "/", "l"]) assert.equal(C.dispatch({ palette: false, view: "library" }, text(t)), null, t);
+  for (const t of ["x", "a", "/"]) assert.equal(C.dispatch({ palette: false, view: "library" }, text(t)), null, t);
 });
 
 test("an open edit field gets its own commit and cancel", () => {
@@ -172,13 +172,39 @@ test("on a source, hjkl move the grid, p n / switch lists, Enter opens and Esc g
   assert.equal(C.dispatch(s, text("q")), "window.quit");
 });
 
-test("on a manga, j/k move the chapters, a toggles the library, r refreshes and Esc goes back", () => {
+test("on a manga, j/k move the chapters, a toggles the library, r refreshes, Enter reads and Esc goes back", () => {
   const m = screen("manga");
   assert.equal(C.dispatch(m, text("j")), "manga.down");
   assert.equal(C.dispatch(m, text("k")), "manga.up");
   assert.equal(C.dispatch(m, text("a")), "manga.library");
   assert.equal(C.dispatch(m, text("r")), "manga.refresh");
-  assert.equal(C.dispatch(m, key(C.KEY.Escape)), "browse.back");
+  assert.equal(C.dispatch(m, key(C.KEY.Return)), "manga.read");
+  assert.equal(C.dispatch(m, key(C.KEY.Escape)), "manga.back");
+  assert.equal(C.dispatch(m, key(C.KEY.Backspace)), "manga.back");
+});
+
+test("in the reader, h/l and the arrows turn by side, Space goes on, and Esc or q closes it", () => {
+  const r = screen("reader");
+  assert.equal(C.dispatch(r, text("h")), "reader.left");
+  assert.equal(C.dispatch(r, key(C.KEY.Left)), "reader.left");
+  assert.equal(C.dispatch(r, text("l")), "reader.right");
+  assert.equal(C.dispatch(r, key(C.KEY.Right)), "reader.right");
+  assert.equal(C.dispatch(r, C.keyEvent(C.KEY.Space, " ", 0)), "reader.next");
+  assert.equal(C.dispatch(r, text("r")), "reader.retry");
+  assert.equal(C.dispatch(r, key(C.KEY.Escape)), "reader.close");
+  assert.equal(C.dispatch(r, text("q")), "reader.close", "q leaves the reader, not the window");
+});
+
+test("on the library, hjkl move the grid and Enter opens the manga", () => {
+  const l = screen("library");
+  assert.equal(C.dispatch(l, text("h")), "library.left");
+  assert.equal(C.dispatch(l, text("l")), "library.right");
+  assert.equal(C.dispatch(l, text("j")), "library.down");
+  assert.equal(C.dispatch(l, text("k")), "library.up");
+  assert.equal(C.dispatch(l, key(C.KEY.Down)), "library.down");
+  assert.equal(C.dispatch(l, key(C.KEY.Return)), "library.open");
+  assert.equal(C.dispatch(l, text("r")), "library.reload");
+  assert.equal(C.dispatch(l, key(C.KEY.Escape)), "window.quit");
 });
 
 test("a source search field commits and cancels as source.*", () => {
