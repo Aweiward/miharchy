@@ -18,6 +18,7 @@ Rectangle {
   property int pagesSeq: 0
 
   readonly property bool open: reader !== null
+  readonly property bool webtoon: open && reader.mode === "webtoon"
   readonly property var problem: reader ? Model.problem(reader, configPath) : null
 
   // The chapter the reader showed last, when it closed.
@@ -31,6 +32,7 @@ Rectangle {
     saveTimer.stop()
     pagesSeq++
     reader = null
+    layoutStrip()
   }
 
   function send(payload, done) {
@@ -45,9 +47,10 @@ Rectangle {
     xhr.send(req.body)
   }
 
-  // chapters: newest first, as the manga detail lists them.
-  function start(chapters, chapterId, mode) {
-    reader = Reader.open(chapters, chapterId, mode)
+  // manga: the manga detail's; chapters: newest first, as it lists them;
+  // setting: miharchy.defaultReadingMode.
+  function start(manga, chapters, chapterId, setting) {
+    reader = Reader.open(manga.id, chapters, chapterId, Reader.mode(manga, setting))
     loadPages()
   }
 
@@ -56,6 +59,7 @@ Rectangle {
     pagesSeq++
     var id = Reader.chapterId(reader)
     reader = null
+    layoutStrip()
     closed(id)
   }
 
@@ -69,6 +73,7 @@ Rectangle {
     send(payload, function(reply) {
       if (seq !== view.pagesSeq) return
       view.reader = Reader.reduce(view.reader, { type: "pages", reply: reply, config: cfg })
+      view.layoutStrip()
       view.save()
     })
   }
@@ -85,8 +90,8 @@ Rectangle {
   }
 
   // A page turn saves after a pause; leaving the chapter saves it first.
-  function turn(delta) {
-    var next = Reader.reduce(reader, { type: "turn", delta: delta })
+  function turn(delta, chapter) {
+    var next = Reader.reduce(reader, { type: "turn", delta: delta, chapter: chapter === true })
     if (next.index === reader.index) {
       reader = next
       saveTimer.restart()
@@ -94,28 +99,66 @@ Rectangle {
     }
     save()
     reader = next
+    layoutStrip()
     loadPages()
+  }
+
+  // The strip holds the chapter's pages only while webtoon shows them. Set
+  // here, not bound: rebinding the model on every read state change would
+  // rebuild the strip and lose the scroll position.
+  function layoutStrip() {
+    scrollAnimation.stop()
+    strip.positioned = false
+    strip.model = webtoon && reader.state === "ok" ? reader.pages : []
+    strip.pinToEnd = strip.count > 0 && reader.toEnd
+    if (!strip.count) return
+    if (reader.toEnd) strip.positionViewAtEnd()
+    else strip.positionViewAtIndex(reader.page, ListView.Beginning)
+    strip.positioned = true
+  }
+
+  // Positioning moves the strip before it settles; those moves are not
+  // reading.
+  function track() {
+    if (!strip.positioned || !webtoon || reader.state !== "ok") return
+    var page = strip.indexAt(strip.width / 2, strip.contentY + strip.height / 2)
+    if (page === -1 && !strip.atYBeginning && !strip.atYEnd) return
+    var next = Reader.reduce(reader, { type: "scroll", page: page, start: strip.atYBeginning, end: strip.atYEnd })
+    if (next === reader) return
+    reader = next
+    saveTimer.restart()
+  }
+
+  function scroll(part) {
+    var from = scrollAnimation.running ? scrollAnimation.to : strip.contentY
+    var top = strip.originY
+    var bottom = strip.originY + strip.contentHeight - strip.height
+    scrollAnimation.stop()
+    strip.pinToEnd = false
+    scrollAnimation.to =Math.max(top, Math.min(bottom, from + part * strip.height))
+    scrollAnimation.start()
   }
 
   function run(id) {
     switch (id) {
-      case "reader.left":
-        turn(Reader.delta(reader.mode, "left"))
-        break
-      case "reader.right":
-        turn(Reader.delta(reader.mode, "right"))
-        break
-      case "reader.next":
-        turn(1)
-        break
       case "reader.retry":
         reader = Reader.reduce(reader, { type: "retry" })
         loadPages()
-        break
+        return
       case "reader.close":
         close()
-        break
+        return
+      case "reader.mode":
+        reader = Reader.reduce(reader, { type: "mode" })
+        send(Reader.modePayload(reader), function() {})
+        layoutStrip()
+        return
     }
+    if (webtoon) track()
+    var act = Reader.action(reader, id, strip.atYEnd, strip.atYBeginning)
+    if (!act) return
+    if ("scroll" in act) scroll(act.scroll)
+    else turn(act.turn, act.chapter)
   }
 
   Timer {
@@ -133,15 +176,61 @@ Rectangle {
     Image {
       id: slot
       required property int index
-      readonly property var held: view.reader && view.reader.state === "ok" ? Reader.slots(view.reader)[index] : null
+      readonly property var held: view.reader && view.reader.state === "ok" && !view.webtoon ? Reader.slots(view.reader)[index] : null
       anchors.fill: parent
       visible: held !== null && held.page === view.reader.page
       source: held ? held.url : ""
+      // Decoded at the size shown, not the scan's: six full-size scans
+      // would hold hundreds of megabytes.
+      sourceSize: Qt.size(width, height)
       fillMode: Image.PreserveAspectFit
       asynchronous: true
       cache: true
       smooth: true
       mipmap: true
+    }
+  }
+
+  // One vertical strip, no wider than the view is tall. A ListView creates
+  // only the pages in view plus a view's height either side and destroys
+  // the rest, so a long chapter keeps a few pages decoded, each at the
+  // strip's width.
+  ListView {
+    id: strip
+    property bool positioned: false
+    // Entered backwards: the pages near the end load after the strip
+    // moves there and push the end down, so it follows until the reader
+    // scrolls.
+    property bool pinToEnd: false
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.horizontalCenter: parent.horizontalCenter
+    width: Math.min(parent.width, parent.height)
+    visible: view.webtoon
+    cacheBuffer: height
+    boundsBehavior: Flickable.StopAtBounds
+    onContentYChanged: view.track()
+    onContentHeightChanged: if (pinToEnd) positionViewAtEnd()
+    onMovementStarted: pinToEnd = false
+
+    delegate: Image {
+      required property string modelData
+      width: strip.width
+      // A page still loading takes room, so the strip never asks for every
+      // page at once.
+      height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : width * 1.4
+      source: modelData
+      sourceSize.width: width
+      fillMode: Image.PreserveAspectFit
+      asynchronous: true
+      smooth: true
+    }
+
+    NumberAnimation on contentY {
+      id: scrollAnimation
+      running: false
+      duration: 120
+      easing.type: Easing.OutQuad
     }
   }
 

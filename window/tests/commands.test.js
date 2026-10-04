@@ -268,3 +268,22 @@ test("/ on the sources screen searches every source; on its results hjkl move, E
 test("l on the sources screen toggles every language", () => {
   assert.equal(C.dispatch(screen("sources"), text("l")), "sources.languages");
 });
+
+test("in the reader, j/k and the arrows scroll, d/u go half a view, and m changes the reading mode", () => {
+  const r = screen("reader");
+  assert.equal(C.dispatch(r, text("j")), "reader.down");
+  assert.equal(C.dispatch(r, key(C.KEY.Down)), "reader.down");
+  assert.equal(C.dispatch(r, text("k")), "reader.up");
+  assert.equal(C.dispatch(r, key(C.KEY.Up)), "reader.up");
+  assert.equal(C.dispatch(r, text("d")), "reader.halfDown");
+  assert.equal(C.dispatch(r, text("u")), "reader.halfUp");
+  assert.equal(C.dispatch(r, text("m")), "reader.mode");
+  assert.equal(C.dispatch(screen("manga"), text("m")), null);
+});
+
+test("f toggles fullscreen everywhere, but types in an edit field or the palette", () => {
+  for (const v of ["library", "settings", "sources", "source", "global", "manga", "reader"]) assert.equal(C.dispatch(screen(v), text("f")), "window.fullscreen", v);
+  assert.equal(C.dispatch(palette, text("f")), null);
+  assert.equal(C.dispatch({ palette: false, view: "source", editing: "browse" }, text("f")), null);
+  assert.ok(C.paletteRows("full").some((c) => c.id === "window.fullscreen"));
+});

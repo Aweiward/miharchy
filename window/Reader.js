@@ -20,10 +20,23 @@ function copy(o, changes) {
   return c
 }
 
-// The miharchy.defaultReadingMode setting -> a paged mode. Webtoon is not
-// built yet, so it reads paged right-to-left.
-function mode(setting) {
-  return setting === "paged-ltr" ? "paged-ltr" : "paged-rtl"
+var MODE_MUTATION = "mutation($meta: MangaMetaTypeInput!) { setMangaMeta(input: { meta: $meta }) { meta { key value } } }"
+var MODE_KEY = "miharchy.readingMode"
+// The order m cycles through.
+var MODES = ["paged-rtl", "paged-ltr", "webtoon"]
+var MODE_LABELS = { "paged-rtl": "right to left", "paged-ltr": "left to right", "webtoon": "webtoon" }
+
+// Webtoon keys scroll by these parts of the view height; paged keys turn
+// one page their way.
+var SCROLL = { "reader.down": 0.25, "reader.up": -0.25, "reader.halfDown": 0.5, "reader.halfUp": -0.5, "reader.next": 0.9 }
+
+// manga: Browse's { readingMode, longStrip }; setting: the
+// miharchy.defaultReadingMode value. The manga's own choice wins, then a
+// long strip reads as webtoon, then the setting.
+function mode(manga, setting) {
+  if (MODES.indexOf(manga.readingMode) !== -1) return manga.readingMode
+  if (manga.longStrip) return "webtoon"
+  return MODES.indexOf(setting) !== -1 ? setting : "paged-rtl"
 }
 
 // The keys follow the screen: in right-to-left the next page lies to the
@@ -43,11 +56,11 @@ function at(r, index, toEnd) {
 }
 
 // chapters: newest first, as Browse.detail holds them.
-function open(chapters, chapterId, readingMode) {
+function open(mangaId, chapters, chapterId, readingMode) {
   var list = chapters.slice().reverse().map(function(c) { return { id: c.id, name: c.name } })
   var index = 0
   for (var i = 0; i < list.length; i++) if (list[i].id === chapterId) index = i
-  return at({ chapters: list, mode: readingMode }, index, false)
+  return at({ mangaId: mangaId, chapters: list, mode: readingMode }, index, false)
 }
 
 function chapterId(r) {
@@ -68,8 +81,11 @@ function last(r) {
 
 // event.type:
 //   "pages"        { reply, config } for the chapter open
-//   "turn"         { delta } by one page; past either end, to the next or
-//                  previous chapter
+//   "turn"         { delta, chapter? } by one page; past either end, or
+//                  at once with chapter, to the next or previous chapter
+//   "scroll"       { page, start, end } in webtoon: the page at the middle
+//                  of the view, and whether the strip is at its top or end
+//   "mode"         the next reading mode
 //   "saving"       savePayload() went out
 //   "save-failed"  { chapterId }
 //   "retry"        fetch the pages again after a failure
@@ -85,10 +101,17 @@ function reduce(r, event) {
       return copy(r, { state: "ok", pages: pages, page: page, read: c.isRead === true || page === pages.length - 1 })
     case "turn":
       if (r.state === "loading") return r
-      var p = r.page + event.delta
+      var p = event.chapter ? -1 : r.page + event.delta
       if (r.state === "ok" && p >= 0 && p <= last(r)) return copy(r, { page: p, read: r.read || p === last(r), edge: "" })
       if (event.delta > 0) return r.index + 1 < r.chapters.length ? at(r, r.index + 1, false) : copy(r, { edge: "last" })
       return r.index > 0 ? at(r, r.index - 1, true) : copy(r, { edge: "first" })
+    case "scroll":
+      if (r.state !== "ok") return r
+      // A last page shorter than half the view never reaches the middle.
+      var shown = event.end ? last(r) : event.start ? 0 : Math.max(0, Math.min(last(r), event.page))
+      return shown === r.page ? r : copy(r, { page: shown, read: r.read || shown === last(r), edge: "" })
+    case "mode":
+      return copy(r, { mode: MODES[(MODES.indexOf(r.mode) + 1) % MODES.length] })
     case "saving":
       return copy(r, { saved: { page: r.page, read: r.read } })
     case "save-failed":
@@ -110,6 +133,21 @@ function savePayload(r) {
   return { query: SAVE_MUTATION, variables: { id: chapterId(r), patch: patch } }
 }
 
+function modePayload(r) {
+  return { query: MODE_MUTATION, variables: { meta: { mangaId: r.mangaId, key: MODE_KEY, value: r.mode } } }
+}
+
+// What a reader key does: { turn: delta } | { scroll: part of the view } |
+// null. In webtoon a key past the top or end of the strip turns, which
+// leaves the chapter, since the page there is the first or the last.
+function action(r, id, atEnd, atStart) {
+  var side = { "reader.left": "left", "reader.right": "right" }[id]
+  if (r.mode !== "webtoon") return side ? { turn: delta(r.mode, side) } : SCROLL[id] ? { turn: SCROLL[id] > 0 ? 1 : -1 } : null
+  if (side || !SCROLL[id]) return null
+  if (SCROLL[id] > 0 ? atEnd : atStart) return { turn: SCROLL[id] > 0 ? 1 : -1, chapter: true }
+  return { scroll: SCROLL[id] }
+}
+
 function slotOf(page) {
   return (page % SLOTS + SLOTS) % SLOTS
 }
@@ -124,7 +162,7 @@ function slots(r) {
 }
 
 function indicator(r) {
-  return r.state === "ok" ? (r.page + 1) + " / " + r.pages.length : ""
+  return r.state === "ok" ? (r.page + 1) + " / " + r.pages.length + "   " + MODE_LABELS[r.mode] : ""
 }
 
 if (typeof module !== "undefined") {
@@ -138,6 +176,8 @@ if (typeof module !== "undefined") {
     pagesPayload: pagesPayload,
     reduce: reduce,
     savePayload: savePayload,
+    modePayload: modePayload,
+    action: action,
     slotOf: slotOf,
     slots: slots,
     indicator: indicator

@@ -16,14 +16,16 @@ const pages = (id, n, o) => ok({ fetchChapterPages: {
   pages: Array.from({ length: n }, (_, i) => "/api/v1/manga/5/chapter/" + id + "/page/" + i),
   chapter: Object.assign({ id, isRead: false, lastPageRead: 0 }, o)
 } });
-const loaded = (id, n, o, mode) => R.reduce(R.open(chapters, id, mode || "paged-rtl"), { type: "pages", reply: pages(id, n, o), config });
+const loaded = (id, n, o, mode) => R.reduce(R.open(5, chapters, id, mode || "paged-rtl"), { type: "pages", reply: pages(id, n, o), config });
 const turn = (r, delta) => R.reduce(r, { type: "turn", delta });
 
-test("webtoon and unknown settings fall back to paged right-to-left until webtoon lands", () => {
-  assert.equal(R.mode("paged-ltr"), "paged-ltr");
-  assert.equal(R.mode("paged-rtl"), "paged-rtl");
-  assert.equal(R.mode("webtoon"), "paged-rtl");
-  assert.equal(R.mode(undefined), "paged-rtl");
+test("the manga's own reading mode wins, then a long strip reads as webtoon, then the setting", () => {
+  const manga = (o) => Object.assign({ id: 5, readingMode: "", longStrip: false }, o);
+  assert.equal(R.mode(manga({ readingMode: "paged-ltr", longStrip: true }), "webtoon"), "paged-ltr");
+  assert.equal(R.mode(manga({ longStrip: true }), "paged-ltr"), "webtoon");
+  assert.equal(R.mode(manga(), "paged-ltr"), "paged-ltr");
+  assert.equal(R.mode(manga(), "webtoon"), "webtoon");
+  assert.equal(R.mode(manga({ readingMode: "sideways" }), undefined), "paged-rtl", "unknown values fall through to paged right-to-left");
 });
 
 test("h and l follow the screen: in right-to-left, left is the next page", () => {
@@ -34,7 +36,7 @@ test("h and l follow the screen: in right-to-left, left is the next page", () =>
 });
 
 test("opening a chapter asks for its pages, which load with credentials", () => {
-  const r = R.open(chapters, 12, "paged-rtl");
+  const r = R.open(5, chapters, 12, "paged-rtl");
   assert.equal(r.state, "loading");
   assert.equal(R.chapterName(r), "Ch. 2");
   assert.deepEqual(R.pagesPayload(r).variables, { id: 12 });
@@ -42,7 +44,7 @@ test("opening a chapter asks for its pages, which load with credentials", () => 
   const l = loaded(12, 3);
   assert.equal(l.state, "ok");
   assert.equal(l.pages[0], "http://u:p@127.0.0.1:4590/api/v1/manga/5/chapter/12/page/0");
-  assert.equal(R.indicator(l), "1 / 3");
+  assert.equal(R.indicator(l), "1 / 3   right to left");
   assert.equal(R.pagesPayload(l), null);
 });
 
@@ -98,12 +100,12 @@ test("the first and last chapters stop at their edge and say so", () => {
 });
 
 test("turns wait while pages load", () => {
-  const r = R.open(chapters, 12, "paged-rtl");
+  const r = R.open(5, chapters, 12, "paged-rtl");
   assert.equal(turn(r, 1), r);
 });
 
 test("a failed page fetch shows the problem and r fetches again", () => {
-  const r = R.reduce(R.open(chapters, 12, "paged-rtl"), { type: "pages", reply: M.reply(0, ""), config });
+  const r = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "pages", reply: M.reply(0, ""), config });
   assert.equal(r.state, "down");
   assert.equal(R.pagesPayload(r), null);
   assert.deepEqual(R.pagesPayload(R.reduce(r, { type: "retry" })).variables, { id: 12 });
@@ -120,4 +122,57 @@ test("six image slots hold the page shown, the next three and the previous two",
   assert.deepEqual(next.map((x, i) => x.page === s[i].page), next.map((x) => x.page !== 11), "a turn reloads one slot only");
   const start = R.slots(Object.assign({}, r, { page: 0 }));
   assert.deepEqual(start.filter((x) => x.url).map((x) => x.page).sort((a, b) => a - b), [0, 1, 2, 3], "no slot outside the chapter");
+});
+
+test("m cycles the reading mode and saves it for the manga, keeping the page", () => {
+  let r = Object.assign(loaded(12, 10), { page: 4 });
+  r = R.reduce(r, { type: "mode" });
+  assert.equal(r.mode, "paged-ltr");
+  assert.equal(r.page, 4);
+  assert.deepEqual(R.modePayload(r).variables, { meta: { mangaId: 5, key: "miharchy.readingMode", value: "paged-ltr" } });
+  r = R.reduce(r, { type: "mode" });
+  assert.equal(r.mode, "webtoon");
+  assert.equal(R.indicator(r), "5 / 10   webtoon");
+  assert.equal(R.reduce(r, { type: "mode" }).mode, "paged-rtl");
+});
+
+test("in webtoon the page is the one at the middle of the view, the last at the end of the strip", () => {
+  const r = loaded(12, 10, { lastPageRead: 3 }, "webtoon");
+  const scroll = (x, page, start, end) => R.reduce(x, { type: "scroll", page, start: !!start, end: !!end });
+  assert.equal(scroll(r, 3), r, "an unchanged page changes nothing");
+  const s = scroll(R.reduce(r, { type: "saving" }), 5);
+  assert.equal(s.page, 5);
+  assert.deepEqual(R.savePayload(s).variables, { id: 12, patch: { lastPageRead: 5 } });
+  const end = scroll(s, 8, false, true);
+  assert.equal(end.page, 9, "a short last page never reaches the middle");
+  assert.deepEqual(R.savePayload(end).variables, { id: 12, patch: { lastPageRead: 9, isRead: true } });
+  assert.equal(scroll(s, 1, true).page, 0);
+  assert.equal(scroll(R.open(5, chapters, 12, "webtoon"), 2).page, 0, "no scroll counts before the pages load");
+});
+
+test("in webtoon, scrolling past the end of the strip opens the next chapter", () => {
+  const web = loaded(12, 4, {}, "webtoon");
+  const down = R.action(web, "reader.down", true, false);
+  assert.deepEqual(down, { turn: 1, chapter: true });
+  const next = R.reduce(web, Object.assign({ type: "turn", delta: 1 }, down));
+  assert.equal(R.chapterName(next), "Ch. 3", "a strip that fits the view leaves from its first page");
+  assert.equal(next.toEnd, false);
+  const up = R.action(web, "reader.up", false, true);
+  assert.deepEqual(up, { turn: -1, chapter: true });
+  const back = R.reduce(Object.assign({}, web, { page: 2 }), Object.assign({ type: "turn", delta: -1 }, up));
+  assert.equal(R.chapterName(back), "Ch. 1");
+  assert.equal(back.toEnd, true, "the previous chapter opens at its end");
+});
+
+test("keys: paged turns by page, webtoon scrolls by part of the view", () => {
+  const paged = loaded(12, 4);
+  const web = loaded(12, 4, {}, "webtoon");
+  assert.deepEqual(R.action(paged, "reader.down"), { turn: 1 });
+  assert.deepEqual(R.action(paged, "reader.halfUp"), { turn: -1 });
+  assert.deepEqual(R.action(paged, "reader.next"), { turn: 1 });
+  assert.deepEqual(R.action(paged, "reader.left"), { turn: 1 }, "right-to-left: left is next");
+  assert.deepEqual(R.action(web, "reader.down"), { scroll: 0.25 });
+  assert.deepEqual(R.action(web, "reader.halfUp"), { scroll: -0.5 });
+  assert.deepEqual(R.action(web, "reader.next"), { scroll: 0.9 });
+  assert.equal(R.action(web, "reader.left"), null, "a strip has no sides");
 });
