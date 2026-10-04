@@ -1,0 +1,103 @@
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const S = require("./load")("Settings.js");
+const M = require("./load")("Model.js");
+
+const row = (key) => S.ROWS.find((r) => r.key === key);
+const ok = (data) => ({ type: "response", reply: M.reply(200, JSON.stringify({ data })) });
+
+test("every row is complete, and a choice's default is one of its options", () => {
+  const keys = new Set();
+  for (const r of S.ROWS) {
+    assert.ok(r.key && r.label && ["bool", "choice", "text"].includes(r.type) && ["server", "meta"].includes(r.store), r.key);
+    assert.ok("default" in r, r.key);
+    assert.ok(!keys.has(r.key), "unique key " + r.key);
+    keys.add(r.key);
+    if (r.type === "choice") assert.ok(r.options.some((o) => o.value === r.default), r.key);
+  }
+});
+
+test("the first rows and their defaults", () => {
+  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "FlareSolverr", "FlareSolverr URL"]);
+  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191" });
+  assert.deepEqual(row("defaultReadingMode").options.map((o) => o.label), ["Paged right-to-left", "Paged left-to-right", "Webtoon"]);
+});
+
+test("the load query asks for every server row and the global meta", () => {
+  const q = S.loadPayload().query;
+  for (const r of S.ROWS.filter((r) => r.store === "server")) assert.match(q, new RegExp("settings \\{[^}]*\\b" + r.key + "\\b"));
+  assert.match(q, /metas \{ nodes \{ key value \} \}/);
+});
+
+test("a load reply sets server values and namespaced meta, defaults fill the rest", () => {
+  const s = S.reduce(S.initial(), ok({
+    settings: { flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191" },
+    metas: { nodes: [
+      { key: "miharchy.showNsfw", value: "true" },
+      { key: "showNsfw", value: "false" },
+      { key: "webUI_theme", value: "dark" }
+    ] }
+  }));
+  assert.equal(s.state, "ok");
+  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191" });
+});
+
+test("an unknown stored reading mode falls back to the default", () => {
+  const s = S.reduce(S.initial(), ok({ settings: {}, metas: { nodes: [{ key: "miharchy.defaultReadingMode", value: "scroll" }] } }));
+  assert.equal(s.values.defaultReadingMode, "paged-rtl");
+});
+
+test("a meta save goes to setGlobalMeta as a string and its reply updates the row", () => {
+  const p = S.savePayload(row("showNsfw"), true);
+  assert.match(p.query, /setGlobalMeta/);
+  assert.deepEqual(p.variables, { key: "miharchy.showNsfw", value: "true" });
+  const s = S.reduce(S.initial(), ok({ setGlobalMeta: { meta: { key: "miharchy.showNsfw", value: "true" } } }));
+  assert.equal(s.values.showNsfw, true);
+  assert.equal(s.values.flareSolverrUrl, "http://127.0.0.1:8191", "other rows keep their values");
+});
+
+test("turning FlareSolverr on also turns on the response fallback; off leaves it", () => {
+  const on = S.savePayload(row("flareSolverrEnabled"), true);
+  assert.match(on.query, /setSettings/);
+  assert.deepEqual(on.variables.s, { flareSolverrEnabled: true, flareSolverrAsResponseFallback: true });
+  assert.deepEqual(S.savePayload(row("flareSolverrEnabled"), false).variables.s, { flareSolverrEnabled: false });
+  assert.deepEqual(S.savePayload(row("flareSolverrUrl"), "http://x:1").variables.s, { flareSolverrUrl: "http://x:1" });
+  const s = S.reduce(S.initial(), ok({ setSettings: { settings: { flareSolverrEnabled: true } } }));
+  assert.equal(s.values.flareSolverrEnabled, true);
+});
+
+test("a failed request keeps the shown values and carries the error state", () => {
+  const loaded = S.reduce(S.initial(), ok({ settings: { flareSolverrEnabled: true }, metas: { nodes: [] } }));
+  for (const [status, state] of [[0, "down"], [401, "unauthorized"], [500, "error"]]) {
+    const s = S.reduce(S.reduce(loaded, { type: "request" }), { type: "response", reply: M.reply(status, "") });
+    assert.equal(s.state, state);
+    assert.equal(s.values.flareSolverrEnabled, true);
+    assert.ok(M.problem(s, "p"), state + " has an inline message");
+  }
+  const gql = S.reduce(loaded, { type: "response", reply: M.reply(200, JSON.stringify({ errors: [{ message: "nope" }] })) });
+  assert.equal(gql.message, "nope");
+  assert.equal(S.reduce(loaded, { type: "config-missing" }).state, "no-config");
+  assert.equal(M.problem(S.initial(), "p"), null, "loading is not a problem");
+});
+
+test("activate toggles bools, cycles choices and edits text", () => {
+  assert.deepEqual(S.activate(row("showNsfw"), false), { save: true });
+  assert.deepEqual(S.activate(row("showNsfw"), true), { save: false });
+  const mode = row("defaultReadingMode");
+  assert.deepEqual(S.activate(mode, "paged-rtl"), { save: "paged-ltr" });
+  assert.deepEqual(S.activate(mode, "webtoon"), { save: "paged-rtl" });
+  assert.deepEqual(S.activate(row("flareSolverrUrl"), "http://a"), { edit: "http://a" });
+});
+
+test("commit trims and checks the URL", () => {
+  const url = row("flareSolverrUrl");
+  assert.deepEqual(S.commit(url, "  http://127.0.0.1:8191 "), { save: "http://127.0.0.1:8191" });
+  for (const bad of ["", "127.0.0.1:8191", "ftp://x", "http://a b"]) assert.ok(S.commit(url, bad).error, bad);
+});
+
+test("display words each type", () => {
+  assert.equal(S.display(row("showNsfw"), true), "on");
+  assert.equal(S.display(row("showNsfw"), false), "off");
+  assert.equal(S.display(row("defaultReadingMode"), "webtoon"), "Webtoon");
+  assert.equal(S.display(row("flareSolverrUrl"), "http://x"), "http://x");
+});
