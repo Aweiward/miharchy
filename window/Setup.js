@@ -8,26 +8,58 @@
 
 var FLARE_URL = "http://127.0.0.1:8191"
 var CONTAINER = "miharchy-flaresolverr"
+// Under $HOME. The shell reloads a plugin on any write inside its folder,
+// so the helper builds and installs here, never in the plugin's sync/.
+var HELPER_DIR = ".local/share/miharchy/helper"
+var DESKTOP_FILE = ".local/share/applications/miharchy.desktop"
 
 // kind "install": the user runs command in a terminal; Enter checks again.
-// kind "run":     Miharchy runs the step after the user confirms with y.
+// kind "run":     Miharchy runs the step after the user confirms with y;
+//                 prompt is the question it asks.
 // kind "folder":  the user types a path.
 // required: the window opens on setup while one of these is not done.
 var STEPS = [
-  { id: "java", title: "Java 21 or newer", kind: "install", required: true, command: "sudo pacman -S jre-openjdk" },
+  { id: "java", title: "Java 21 or newer", kind: "install", required: true, command: "sudo pacman -S jdk-openjdk" },
   { id: "suwayomi", title: "Suwayomi-Server", kind: "install", required: true, command: "yay -S suwayomi-server-bin" },
-  { id: "server", title: "Server service and credentials", kind: "run", required: true },
-  { id: "flaresolverr", title: "FlareSolverr (optional)", kind: "run" },
-  { id: "syncFolder", title: "Sync folder", kind: "folder" }
+  { id: "server", title: "Server service and credentials", kind: "run", required: true, prompt: "Run server/miharchy-server now?" },
+  { id: "flaresolverr", title: "FlareSolverr (optional)", kind: "run", prompt: "Start the FlareSolverr container and turn it on in Suwayomi?" },
+  { id: "syncFolder", title: "Sync folder", kind: "folder" },
+  { id: "helper", title: "Sync helper", kind: "run", prompt: "Build the sync helper now? It takes a few minutes." },
+  { id: "launcher", title: "App launcher entry", kind: "run", prompt: "Add Miharchy to the app launcher?" }
 ]
 
-// $1 is the server.json path. Each line prints one fact; parseProbe reads them.
+// sha256 over every file in a sync/ folder except build output, so a
+// rebuild is due exactly when the sources or build files change.
+var FINGERPRINT = "fingerprint() { (cd \"$1\" && find . -path ./build -prune -o -path ./.gradle -prune -o -path ./.kotlin -prune -o -type f -print | LC_ALL=C sort | xargs -d '\\n' sha256sum | sha256sum | cut -c1-64); }"
+
+// $1 is the server.json path, $2 the plugin's sync/, $3 desktopEntry().
+// Each line prints one fact; parseProbe reads them.
 var PROBE = [
+  FINGERPRINT,
   "echo \"java $(java -version 2>&1 | head -n 1)\"",
   "test -x /usr/bin/suwayomi-server && echo suwayomi",
   "test -s \"$1\" && echo config",
   "echo \"unit $(systemctl --user is-enabled miharchy-server 2>/dev/null) $(systemctl --user is-active miharchy-server 2>/dev/null)\"",
-  "command -v docker >/dev/null && echo \"docker $(docker inspect -f '{{.State.Running}}' " + CONTAINER + " 2>/dev/null)\""
+  "command -v docker >/dev/null && echo \"docker $(docker inspect -f '{{.State.Running}}' " + CONTAINER + " 2>/dev/null)\"",
+  "command -v javac >/dev/null && echo javac",
+  "echo \"helperSource $(fingerprint \"$2\")\"",
+  "echo \"helperInstalled $(test -x \"$HOME/" + HELPER_DIR + "/bin/miharchy-sync\" && cat \"$HOME/" + HELPER_DIR + "/source.sha256\")\"",
+  "printf '%s' \"$3\" | cmp -s - \"$HOME/" + DESKTOP_FILE + "\" && echo launcher"
+].join("\n")
+
+// $1 is the plugin's sync/. Gradle writes build/, .gradle/ and .kotlin/
+// into the folder it builds, so it builds a copy. The old helper stays
+// until the new one is complete.
+var BUILD_SCRIPT = [
+  FINGERPRINT,
+  "work=$HOME/.local/share/miharchy/sync-src",
+  "helper=$HOME/" + HELPER_DIR,
+  "rm -rf \"$work\" \"$helper.new\" && mkdir -p \"$work\" || exit",
+  "tar -C \"$1\" --exclude=./build --exclude=./.gradle --exclude=./.kotlin -cf - . | tar -C \"$work\" -xf - || exit",
+  "cd \"$work\" && sh ./gradlew --no-daemon --console=plain installDist || exit",
+  "cp -r build/install/miharchy-sync \"$helper.new\" && fingerprint \"$work\" > \"$helper.new/source.sha256\" || exit",
+  "rm -rf \"$helper\" && mv \"$helper.new\" \"$helper\" || exit",
+  "echo \"Installed the sync helper in $helper.\""
 ].join("\n")
 
 // docker start makes a rerun reuse the container; the loop waits for the
@@ -48,16 +80,38 @@ function command(script, args) {
   return ["/bin/sh", "-c", "(\n" + script + "\n) 2>&1\nprintf '\\n%s\\n' \"$?\"", "sh"].concat(args || [])
 }
 
-function probeCommand(configPath) {
-  return command(PROBE, [configPath])
+// The launcher entry for the plugin's window/. Exec quotes its path as the
+// desktop entry spec says: \ " ` $ escaped, then \ escaped again for the
+// key file. A % in the path stays unsupported: GLib, which gtk-launch uses,
+// refuses an entry whose program path holds the spec's %% escape.
+function desktopEntry(windowDir) {
+  var exec = String(windowDir + "/miharchy").replace(/["`$\\]/g, "\\$&").replace(/\\/g, "\\\\")
+  return [
+    "[Desktop Entry]",
+    "Type=Application",
+    "Name=Miharchy",
+    "Comment=Read manga",
+    "Exec=\"" + exec + "\"",
+    "Icon=" + windowDir + "/miharchy.svg",
+    "Terminal=false",
+    "Categories=Graphics;Viewer;",
+    ""
+  ].join("\n")
 }
 
-// The job a confirmed or committed step runs. ctx: { serverScript, folder }.
+function probeCommand(configPath, syncDir, windowDir) {
+  return command(PROBE, [configPath, syncDir, desktopEntry(windowDir)])
+}
+
+// The job a confirmed or committed step runs.
+// ctx: { serverScript, folder, syncDir, windowDir }.
 function runCommand(id, ctx) {
   switch (id) {
     case "server": return command("\"$1\"", [ctx.serverScript])
     case "flaresolverr": return command(FLARE_SCRIPT)
     case "syncFolder": return command("test -d \"$1\" || { echo \"$1 is not a folder.\"; exit 1; }", [ctx.folder])
+    case "helper": return command(BUILD_SCRIPT, [ctx.syncDir])
+    case "launcher": return command("file=$HOME/" + DESKTOP_FILE + "\nmkdir -p \"$(dirname \"$file\")\" && printf '%s' \"$1\" > \"$file\" && echo \"Wrote $file.\"", [desktopEntry(ctx.windowDir)])
   }
   return null
 }
@@ -78,7 +132,7 @@ function javaMajor(line) {
 
 // The probe's output -> facts. docker is false when the command is absent.
 function parseProbe(text) {
-  var f = { java: 0, suwayomi: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false }
+  var f = { java: 0, suwayomi: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", launcher: false }
   String(text).split("\n").forEach(function(line) {
     var sp = line.indexOf(" ")
     var key = sp === -1 ? line : line.slice(0, sp)
@@ -95,6 +149,10 @@ function parseProbe(text) {
       f.docker = true
       f.container = rest.trim() === "true"
     }
+    if (key === "javac") f.javac = true
+    if (key === "launcher") f.launcher = true
+    if (key === "helperSource") f.helperSource = rest.trim()
+    if (key === "helperInstalled") f.helperInstalled = rest.trim()
   })
   return f
 }
@@ -159,7 +217,7 @@ function flareDone(s) {
 }
 
 // A step's status: { state, detail } with state
-// "checking" | "running" | "done" | "todo" | "waiting" | "unavailable".
+// "checking" | "running" | "done" | "todo" | "outdated" | "waiting" | "unavailable".
 function status(s, id) {
   var is = function(state, detail) { return { state: state, detail: detail } }
   if (s.job === id) return is("running", "")
@@ -185,6 +243,14 @@ function status(s, id) {
       if (status(s, "server").state !== "done" || !s.server) return is("waiting", "Needs the server running first.")
       if (s.server.syncFolder) return is("done", s.server.syncFolder)
       return is("todo", "Press Enter to choose the folder Mihon and Miharchy exchange backups through.")
+    case "helper":
+      if (!p.javac) return is("waiting", "Building needs a JDK. Install it with: sudo pacman -S jdk-openjdk. Then press Enter to check again.")
+      if (p.helperInstalled && p.helperInstalled === p.helperSource) return is("done", "Installed in ~/" + HELPER_DIR + ".")
+      if (p.helperInstalled) return is("outdated", "The plugin's sync/ changed since the last build. Press Enter to build it again.")
+      return is("todo", "Press Enter to build the sync helper into ~/" + HELPER_DIR + ". The first build downloads Gradle and libraries.")
+    case "launcher":
+      if (p.launcher) return is("done", "Miharchy is in the app launcher.")
+      return is("todo", "Press Enter to add Miharchy to the app launcher: ~/" + DESKTOP_FILE + ".")
   }
   return is("checking", "")
 }
@@ -230,10 +296,12 @@ if (typeof module !== "undefined") {
   module.exports = {
     FLARE_URL: FLARE_URL,
     CONTAINER: CONTAINER,
+    HELPER_DIR: HELPER_DIR,
     STEPS: STEPS,
     SERVER_QUERY: SERVER_QUERY,
     command: command,
     probeCommand: probeCommand,
+    desktopEntry: desktopEntry,
     runCommand: runCommand,
     parseJob: parseJob,
     parseProbe: parseProbe,

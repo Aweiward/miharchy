@@ -14,7 +14,7 @@ Rectangle {
   required property Theme theme
   property bool open: false
   property var sync: Sync.initial()
-  readonly property string helper: Quickshell.shellPath(Sync.HELPER)
+  readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
   readonly property var report: sync.state === "done" ? Sync.report(sync) : []
 
   // A sync finished and changed the desktop library.
@@ -29,7 +29,7 @@ Rectangle {
         open = true
         if (sync.state === "running") return
         sync = Sync.reduce(sync, { type: "start" })
-        proc.command = Sync.command(helper)
+        proc.command = Sync.command(devHelper)
         proc.running = true
         break
       case "sync.close":
@@ -42,7 +42,7 @@ Rectangle {
     id: proc
     stdout: StdioCollector {
       onStreamFinished: {
-        view.sync = Sync.reduce(view.sync, { type: "finish", text: text, helper: view.helper })
+        view.sync = Sync.reduce(view.sync, { type: "finish", text: text })
         if (view.sync.state === "done") view.synced()
       }
     }

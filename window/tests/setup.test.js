@@ -31,7 +31,7 @@ test("the probe script reports each fact, with stubs standing in for the system"
   });
   const config = path.join(bin, "server.json");
   fs.writeFileSync(config, "{}");
-  const f = S.parseProbe(S.parseJob(run(S.probeCommand(config), { PATH: bin })).output);
+  const f = S.parseProbe(S.parseJob(run(S.probeCommand(config, bin, bin), { PATH: bin, HOME: bin })).output);
   assert.equal(f.java, 17);
   assert.equal(f.config, true);
   assert.equal(f.unitEnabled, true);
@@ -39,7 +39,7 @@ test("the probe script reports each fact, with stubs standing in for the system"
   assert.equal(f.docker, true);
   assert.equal(f.container, false);
 
-  const bare = S.parseProbe(S.parseJob(run(S.probeCommand(path.join(bin, "none.json")), { PATH: path.join(bin, "empty") })).output);
+  const bare = S.parseProbe(S.parseJob(run(S.probeCommand(path.join(bin, "none.json"), bin, bin), { PATH: path.join(bin, "empty"), HOME: bin })).output);
   assert.deepEqual([bare.java, bare.config, bare.unitEnabled, bare.docker], [0, false, false, false], "no java, config, systemctl or docker");
 });
 
@@ -59,11 +59,11 @@ test("java versions parse, old and missing ones are not enough", () => {
 });
 
 test("install commands are shown, never run, and no step uses sudo", () => {
-  assert.equal(S.STEPS.find((st) => st.id === "java").command, "sudo pacman -S jre-openjdk");
+  assert.equal(S.STEPS.find((st) => st.id === "java").command, "sudo pacman -S jdk-openjdk");
   assert.equal(S.STEPS.find((st) => st.id === "suwayomi").command, "yay -S suwayomi-server-bin");
   assert.equal(S.runCommand("java", {}), null);
   assert.equal(S.runCommand("suwayomi", {}), null);
-  for (const id of ["server", "flaresolverr", "syncFolder"]) assert.doesNotMatch(S.runCommand(id, { serverScript: "x", folder: "/" }).join(" "), /sudo|pacman|yay/, id);
+  for (const id of ["server", "flaresolverr", "syncFolder", "helper", "launcher"]) assert.doesNotMatch(S.runCommand(id, { serverScript: "x", folder: "/", syncDir: "/s", windowDir: "/w" }).join(" "), /sudo|pacman|yay/, id);
 });
 
 test("FlareSolverr runs as a restarting container bound to localhost", () => {
@@ -81,16 +81,16 @@ test("nothing is decided before the first check", () => {
 
 test("a set-up machine shows steps 1-3 done and is complete", () => {
   const s = finish(S.initial(), "probe", READY);
-  assert.deepEqual(states(s), { java: "done", suwayomi: "done", server: "done", flaresolverr: "waiting", syncFolder: "waiting" });
+  assert.deepEqual(states(s), { java: "done", suwayomi: "done", server: "done", flaresolverr: "waiting", syncFolder: "waiting", helper: "waiting", launcher: "todo" });
   assert.equal(S.incomplete(s), false);
   const loaded = server(s, { settings: FLARE_OFF, metas: { nodes: [] } });
-  assert.deepEqual(states(loaded), { java: "done", suwayomi: "done", server: "done", flaresolverr: "todo", syncFolder: "todo" });
+  assert.deepEqual(states(loaded), { java: "done", suwayomi: "done", server: "done", flaresolverr: "todo", syncFolder: "todo", helper: "waiting", launcher: "todo" });
   assert.equal(S.next(loaded), 3);
 });
 
 test("missing pieces: each step says what to do, later steps wait", () => {
   const s = finish(S.initial(), "probe", "java sh: java: not found\nunit  \n");
-  assert.deepEqual(states(s), { java: "todo", suwayomi: "todo", server: "waiting", flaresolverr: "unavailable", syncFolder: "waiting" });
+  assert.deepEqual(states(s), { java: "todo", suwayomi: "todo", server: "waiting", flaresolverr: "unavailable", syncFolder: "waiting", helper: "waiting", launcher: "todo" });
   assert.match(S.status(s, "flaresolverr").detail, /needs FlareSolverr/);
   assert.equal(S.incomplete(s), true);
   assert.equal(S.next(s), 0);
@@ -150,11 +150,11 @@ test("the sync folder is stored as miharchy.syncFolder meta and read back", () =
 });
 
 test("running setup twice changes nothing: a done machine stays done after another check", () => {
-  const done = READY.replace("docker \n", "docker true\n");
+  const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\n");
   const data = { settings: FLARE_ON, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/s" }] } };
   const once = server(finish(S.initial(), "probe", done), data);
   const twice = server(finish(once, "probe", done), data);
-  assert.deepEqual(states(twice), { java: "done", suwayomi: "done", server: "done", flaresolverr: "done", syncFolder: "done" });
+  assert.deepEqual(states(twice), { java: "done", suwayomi: "done", server: "done", flaresolverr: "done", syncFolder: "done", helper: "done", launcher: "done" });
   assert.deepEqual(states(twice), states(once));
 });
 
@@ -162,4 +162,93 @@ test("a server that does not answer keeps the server-backed steps waiting", () =
   const s = S.reduce(finish(S.initial(), "probe", READY), { type: "server", reply: M.reply(0, "") });
   assert.equal(s.server, null);
   assert.equal(S.status(s, "syncFolder").state, "waiting");
+});
+
+// A plugin sync/ folder whose gradlew stands in for the real build: it
+// installs a helper that prints its own name.
+function fakeSync(gradlew) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-sync-"));
+  const src = path.join(dir, "sync");
+  fs.mkdirSync(path.join(src, "src"), { recursive: true });
+  fs.mkdirSync(path.join(src, "build", "old"), { recursive: true });
+  fs.writeFileSync(path.join(src, "src", "Main.kt"), "fun main() {}\n");
+  fs.writeFileSync(path.join(src, "build", "old", "junk"), "stale\n");
+  fs.writeFileSync(path.join(src, "gradlew"), gradlew || [
+    "[ \"$*\" = '--no-daemon --console=plain installDist' ] || exit 2",
+    "test -e build/old && { echo 'build/ was copied'; exit 3; }",
+    "mkdir -p build/install/miharchy-sync/bin build/install/miharchy-sync/lib",
+    "printf '#!/bin/sh\\necho helper\\n' > build/install/miharchy-sync/bin/miharchy-sync",
+    "chmod +x build/install/miharchy-sync/bin/miharchy-sync",
+    "echo BUILD SUCCESSFUL"
+  ].join("\n"));
+  const home = path.join(dir, "home");
+  fs.mkdirSync(home);
+  const bin = stubs({ javac: "true" });
+  const env = { ...process.env, HOME: home, PATH: bin + ":" + process.env.PATH };
+  const probe = (s) => finish(s || S.initial(), "probe", run(S.probeCommand(path.join(home, "none.json"), src, "/w"), env));
+  const build = () => S.parseJob(run(S.runCommand("helper", { syncDir: src }), env));
+  return { src, home, env, probe, build, helper: path.join(home, ".local/share/miharchy/helper/bin/miharchy-sync") };
+}
+
+const tree = (dir) => fs.readdirSync(dir, { recursive: true }).sort().map((f) => f + " " + fs.statSync(path.join(dir, f)).mtimeMs);
+
+test("the helper builds from a copy of sync/ and installs outside the plugin folder", () => {
+  const t = fakeSync();
+  assert.equal(S.status(t.probe(), "helper").state, "todo");
+  const before = tree(t.src);
+  const r = t.build();
+  assert.equal(r.code, 0, r.output);
+  assert.match(r.output, /BUILD SUCCESSFUL[\s\S]*Installed the sync helper in .+\/\.local\/share\/miharchy\/helper\./);
+  assert.equal(execFileSync(t.helper, { encoding: "utf8" }), "helper\n");
+  assert.deepEqual(tree(t.src), before, "nothing written inside the plugin's sync/");
+  const s = t.probe();
+  assert.equal(S.status(s, "helper").state, "done");
+  assert.equal(S.status(s, "helper").detail, "Installed in ~/.local/share/miharchy/helper.");
+});
+
+test("a changed sync/ marks the helper out of date until it is built again", () => {
+  const t = fakeSync();
+  t.build();
+  fs.writeFileSync(path.join(t.src, "build", "old", "junk"), "build output does not count\n");
+  assert.equal(S.status(t.probe(), "helper").state, "done");
+  fs.writeFileSync(path.join(t.src, "src", "Main.kt"), "fun main() { println() }\n");
+  const s = t.probe();
+  assert.equal(S.status(s, "helper").state, "outdated");
+  assert.equal(S.action(s, "helper"), "confirm");
+  assert.equal(t.build().code, 0);
+  assert.equal(S.status(t.probe(), "helper").state, "done");
+});
+
+test("a failed build keeps the helper that was installed", () => {
+  const t = fakeSync();
+  t.build();
+  fs.writeFileSync(path.join(t.src, "gradlew"), "echo 'Could not resolve dependencies.'\nexit 1");
+  const r = t.build();
+  assert.deepEqual([r.code, r.output], [1, "Could not resolve dependencies."]);
+  assert.equal(execFileSync(t.helper, { encoding: "utf8" }), "helper\n");
+  assert.equal(S.status(t.probe(), "helper").state, "outdated");
+});
+
+test("without javac the helper step waits and names the JDK package", () => {
+  const s = finish(S.initial(), "probe", READY + "helperSource abc\n");
+  assert.equal(S.status(s, "helper").state, "waiting");
+  assert.match(S.status(s, "helper").detail, /sudo pacman -S jdk-openjdk/);
+  assert.equal(S.action(s, "helper"), "check");
+});
+
+test("the launcher entry opens window/miharchy and a rerun or a moved plugin is detected", () => {
+  const t = fakeSync();
+  const file = path.join(t.home, ".local/share/applications/miharchy.desktop");
+  const probe = (windowDir) => finish(S.initial(), "probe", run(S.probeCommand("/none", t.src, windowDir), t.env));
+  assert.equal(S.status(probe("/p/window"), "launcher").state, "todo");
+  const r = S.parseJob(run(S.runCommand("launcher", { windowDir: "/p/window" }), t.env));
+  assert.equal(r.code, 0, r.output);
+  assert.equal(fs.readFileSync(file, "utf8"), S.desktopEntry("/p/window"));
+  assert.match(S.desktopEntry("/p/window"), /^\[Desktop Entry\]\nType=Application\nName=Miharchy\n[\s\S]*Exec="\/p\/window\/miharchy"\nIcon=\/p\/window\/miharchy\.svg\n/);
+  assert.equal(S.status(probe("/p/window"), "launcher").state, "done");
+  assert.equal(S.status(probe("/q/window"), "launcher").state, "todo", "a plugin in another folder needs a new entry");
+});
+
+test("the launcher Exec line survives spaces, quotes, $ and backslashes", () => {
+  assert.ok(S.desktopEntry('/a b/"q"/$x/b\\s').includes(String.raw`Exec="/a b/\\"q\\"/\\$x/b\\\\s/miharchy"` + "\n"));
 });

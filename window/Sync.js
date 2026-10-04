@@ -5,20 +5,17 @@
 // Pure, so tests/sync.test.js pins it; SyncView.qml and the mark's popup
 // run the command built here and feed the output back.
 
-// From window/ and from plugin/ alike: both sit beside sync/.
-var HELPER = "../sync/build/install/miharchy-sync/bin/miharchy-sync"
+// A checkout's own build, from window/ and plugin/ alike: both sit beside
+// sync/. The helper Setup installs under $HOME comes first.
+var DEV_HELPER = "../sync/build/install/miharchy-sync/bin/miharchy-sync"
+var HELPER_DIR = Setup.HELPER_DIR
 // The helper's exit status when it is not built: the shell's "not found".
 var NOT_BUILT = 127
 
 // The helper takes the sync folder from meta miharchy.syncFolder and holds
 // a lock, so the window and the popup start it the same way.
-function command(helper) {
-  return Setup.command("test -x \"$1\" || exit " + NOT_BUILT + "\nexec \"$1\" sync --json", [helper])
-}
-
-// helper: .../sync/build/install/miharchy-sync/bin/miharchy-sync
-function buildCommand(helper) {
-  return "cd " + String(helper).replace(/\/build\/install\/.*$/, "") + " && ./gradlew installDist"
+function command(devHelper) {
+  return Setup.command("for h in \"$HOME/" + HELPER_DIR + "/bin/miharchy-sync\" \"$1\"; do test -x \"$h\" && exec \"$h\" sync --json; done\nexit " + NOT_BUILT, [devHelper])
 }
 
 // The helper's "type" for each change, as Main.kt counts them.
@@ -58,19 +55,19 @@ function initial() {
 
 // event.type:
 //   "start"   the job started
-//   "finish"  { text, helper } the job's collected output
+//   "finish"  { text } the job's collected output
 function reduce(s, event) {
   switch (event.type) {
     case "start":
       return { state: "running" }
     case "finish":
-      return result(Setup.parseJob(event.text), event.helper)
+      return result(Setup.parseJob(event.text))
   }
   return s
 }
 
-function result(job, helper) {
-  if (job.code === NOT_BUILT) return { state: "failed", message: "The sync helper is not built. Build it with: " + buildCommand(helper) }
+function result(job) {
+  if (job.code === NOT_BUILT) return { state: "failed", message: "The sync helper is not built. Build it in the window: press : and choose Setup." }
   var lines = job.output.split("\n")
   var summary = null
   // JVM warnings may come before the one JSON line.
@@ -115,10 +112,10 @@ function oneLine(s) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    HELPER: HELPER,
+    DEV_HELPER: DEV_HELPER,
+    HELPER_DIR: HELPER_DIR,
     NOT_BUILT: NOT_BUILT,
     command: command,
-    buildCommand: buildCommand,
     initial: initial,
     reduce: reduce,
     report: report,
