@@ -1,11 +1,28 @@
 #!/bin/sh
-# Opens the Miharchy window. -n: a second launch does nothing while one runs.
+# Opens the Miharchy window, or focuses it when one already runs.
 # miharchy open-chapter <mangaId> <chapterId>: opens the reader on that
 # chapter, in the running window or else in a new one.
 dir="$(dirname "$(readlink -f "$0")")"
+
+# Every Quickshell window has class org.quickshell, so the pid of this config's
+# instance is what singles out the Miharchy window. The dispatch is the one
+# omarchy-launch-or-focus uses.
+focus() {
+  pid=$(quickshell list -j -p "$dir" 2>/dev/null | jq -r '.[0].pid // empty' 2>/dev/null)
+  [ -n "$pid" ] || return 1
+  addr=$(hyprctl clients -j 2>/dev/null | jq -r --argjson pid "$pid" 'first(.[] | select(.pid == $pid)).address // empty' 2>/dev/null)
+  [ -n "$addr" ] || return 1
+  hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null 2>&1 ||
+    hyprctl dispatch focuswindow "address:$addr" >/dev/null
+}
+
 if [ "$1" = open-chapter ]; then
-  quickshell ipc -p "$dir" call miharchy openChapter "$2" "$3" >/dev/null 2>&1 && exit 0
+  if quickshell ipc -p "$dir" call miharchy openChapter "$2" "$3" >/dev/null 2>&1; then
+    focus
+    exit 0
+  fi
   export MIHARCHY_OPEN_CHAPTER="$2 $3"
   shift 3
 fi
+focus && exit 0
 exec quickshell -n -p "$dir" "$@"
