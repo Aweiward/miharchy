@@ -147,6 +147,37 @@ test("a failed library toggle keeps the old flag and shows the error", () => {
   assert.equal(d.libraryError, "boom");
 });
 
+const inLibrary = (categories) => B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode({ inLibrary: true, categories: { nodes: categories.map((id) => ({ id })) } }) }), config });
+const categoriesReply = (ids) => ok({ updateMangaCategories: { manga: { id: 5, categories: { nodes: ids.map((id) => ({ id })) } } } });
+
+test("the detail knows the manga's categories", () => {
+  assert.deepEqual(inLibrary([4, 2]).manga.categories, [4, 2]);
+  assert.deepEqual(B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode() }), config }).manga.categories, []);
+});
+
+test("a category toggle adds the manga to a category it is not in and removes it from one it is in", () => {
+  const d = inLibrary([4]);
+  assert.deepEqual(B.categoryPayload(d, 2).variables, { id: 5, add: [2], remove: [] });
+  assert.deepEqual(B.categoryPayload(d, 4).variables, { id: 5, add: [], remove: [4] });
+  assert.match(B.categoryPayload(d, 2).query, /updateMangaCategories/);
+});
+
+test("the server's answer sets the categories; one toggle at a time; a failure says why", () => {
+  let d = B.reduceDetail(inLibrary([4]), { type: "library-request" });
+  assert.equal(B.categoryPayload(d, 2), null, "no second toggle while one is in flight");
+  d = B.reduceDetail(d, { type: "categories-reply", reply: categoriesReply([4, 2]) });
+  assert.deepEqual(d.manga.categories, [4, 2]);
+  assert.equal(d.busy, false);
+  d = B.reduceDetail(B.reduceDetail(d, { type: "library-request" }), { type: "categories-reply", reply: fail("boom") });
+  assert.deepEqual(d.manga.categories, [4, 2]);
+  assert.equal(d.libraryError, "boom");
+});
+
+test("only a manga in the library goes into categories", () => {
+  assert.equal(B.categoryPayload(B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode() }), config }), 2), null);
+  assert.equal(B.categoryPayload(B.detail(5), 2), null, "nor one still loading");
+});
+
 test("a library change shows on the source grid without a reload", () => {
   let l = B.reduceListing(B.reduceListing(B.listing({ id: "9", name: "S" }, "popular", ""), { type: "request" }), { type: "reply", reply: page([1, 2], false), config });
   l = B.markInLibrary(l, 1, true);

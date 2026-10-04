@@ -21,12 +21,21 @@ ShellRoot {
   property var connection: Model.initial()
   property bool paletteOpen: false
   property int libraryCursor: 0
+  // The shown category's id in Model.switcher(); a deleted one falls back to All.
+  property int libraryCategory: -1
+  // "grid" | "categories"
+  property string libraryScreen: "grid"
+  readonly property var switcher: Model.switcher(connection)
+  readonly property int switcherIndex: Model.switcherIndex(switcher, libraryCategory)
+  readonly property var shown: switcher[switcherIndex]
   property var settingsState: Settings.initial()
   property int settingsCursor: 0
   property bool settingsEditing: false
   property string settingsError: ""
   // Only the latest library request may update the connection.
   property int requestSeq: 0
+
+  onSwitcherIndexChanged: libraryCursor = 0
 
   Theme { id: theme }
 
@@ -106,10 +115,11 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var editing = settingsEditing ? "settings" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : browseView.editing
+    var editing = settingsEditing ? "settings" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
     // An open reader or manga detail decides which keys apply; on Browse,
     // the screen does.
-    var scope = reader.open ? "reader" : mangaDetail.open ? "manga" : view === "browse" ? browseView.screen : view
+    var scope = reader.open ? "reader" : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : "manga")
+      : view === "browse" ? browseView.screen : view === "library" && libraryScreen === "categories" ? "categories" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
     if (id !== null) run(id)
     return id !== null
@@ -133,6 +143,14 @@ ShellRoot {
     }
     if (/^(browse|sources|source|global)\./.test(id)) {
       browseView.run(id)
+      return
+    }
+    if (id === "categories.back") {
+      libraryScreen = "grid"
+      return
+    }
+    if (id.indexOf("categories.") === 0) {
+      categoriesView.run(id)
       return
     }
     if (id.indexOf("manga.") === 0) {
@@ -196,10 +214,17 @@ ShellRoot {
       case "library.up":
       case "library.down":
         var step = ({ "library.left": -1, "library.right": 1, "library.up": -libraryView.columns, "library.down": libraryView.columns })[id]
-        libraryCursor = Math.max(0, Math.min(connection.manga.length - 1, libraryCursor + step))
+        libraryCursor = Math.max(0, Math.min(shown.manga.length - 1, libraryCursor + step))
+        break
+      case "library.nextCategory":
+      case "library.previousCategory":
+        libraryCategory = switcher[Commands.moveCursor(switcherIndex, id === "library.nextCategory" ? 1 : -1, switcher.length)].id
+        break
+      case "library.categories":
+        libraryScreen = "categories"
         break
       case "library.open":
-        var m = connection.manga[libraryCursor]
+        var m = shown.manga[libraryCursor]
         if (m) mangaDetail.openManga(m.id, false)
         break
       case "library.reload":
@@ -282,11 +307,26 @@ ShellRoot {
         LibraryView {
           id: libraryView
           anchors.fill: parent
-          visible: root.view === "library"
+          visible: root.view === "library" && root.libraryScreen === "grid"
           theme: theme
-          manga: root.connection.manga
+          switcher: root.switcher
+          switcherIndex: root.switcherIndex
           cursor: root.libraryCursor
-          notice: Model.notice(root.connection, root.configPath)
+          notice: Model.notice(root.connection, root.configPath, root.shown)
+        }
+
+        CategoriesView {
+          id: categoriesView
+          anchors.fill: parent
+          visible: root.view === "library" && root.libraryScreen === "categories"
+          theme: theme
+          config: root.config
+          categories: root.connection.categories
+          manga: root.connection.manga
+          loading: root.connection.state === "loading"
+          onKey: function(event) { event.accepted = root.handleKey(event) }
+          onEditEnded: keyRoot.forceActiveFocus()
+          onEdited: if (root.config) root.fetchLibrary()
         }
 
         SettingsView {
@@ -358,6 +398,8 @@ ShellRoot {
           theme: theme
           config: root.config
           configPath: root.configPath
+          categories: root.connection.categories
+          onCategorized: if (root.config) root.fetchLibrary()
           onLibraryChanged: function(mangaId, inLibrary) {
             browseView.markInLibrary(mangaId, inLibrary)
             if (root.config) root.fetchLibrary()
@@ -387,7 +429,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.settingsEditing || extensionsView.editing || setupView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: "hjkl move   enter open   ", settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : "hjkl move   enter open   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   ", settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall

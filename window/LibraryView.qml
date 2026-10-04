@@ -2,13 +2,18 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 
-// The Library view: the cover grid with its cursor, or a notice in its
-// place. shell.qml owns the cursor.
+// The Library view: the category switcher, then the shown category's cover
+// grid with its cursor, or a notice in its place. shell.qml owns the cursor
+// and the shown category.
 Item {
   id: view
 
   required property Theme theme
-  property var manga: []
+  // Model.switcher(); one entry means no categories, so it hides.
+  property var switcher: []
+  property int switcherIndex: 0
+  // switcher and switcherIndex update one after the other.
+  readonly property var manga: switcher[switcherIndex] ? switcher[switcherIndex].manga : []
   property int cursor: 0
   // Model.notice(): null for the grid, otherwise { title, detail }.
   property var notice: null
@@ -17,10 +22,37 @@ Item {
 
   onCursorChanged: grid.positionViewAtIndex(cursor, GridView.Contain)
 
+  Row {
+    id: names
+    x: view.theme.fontSize * 2.5
+    height: view.switcher.length > 1 ? view.theme.fontSize * 2.5 : 0
+    spacing: view.theme.fontSize * 1.5
+    visible: view.switcher.length > 1
+
+    Repeater {
+      model: view.switcher
+
+      Text {
+        required property var modelData
+        required property int index
+        anchors.bottom: parent.bottom
+        text: modelData.name
+        color: index === view.switcherIndex ? view.theme.foreground : view.theme.muted
+        font.underline: index === view.switcherIndex
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+    }
+  }
+
   GridView {
     id: grid
-    anchors.fill: parent
+    anchors.top: names.bottom
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
     anchors.margins: view.theme.fontSize * 2
+    anchors.topMargin: names.visible ? view.theme.fontSize : view.theme.fontSize * 2
     visible: view.notice === null
     clip: true
     model: view.manga

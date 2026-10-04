@@ -12,7 +12,13 @@ var VIEWS = [
   { id: "settings", title: "Settings", key: "5" }
 ]
 
-var LIBRARY_QUERY = "{ mangas(condition: {inLibrary: true}, orderBy: TITLE) { nodes { id title thumbnailUrl } } }"
+var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name } }"
+  + " mangas(condition: {inLibrary: true}, orderBy: TITLE) { nodes { id title thumbnailUrl categories { nodes { id } } } } }"
+
+// Suwayomi's built-in "Default" category holds the manga in no category, as
+// in Mihon. It is never a user category, the same rule as the sync helper.
+var DEFAULT_CATEGORY = 0
+var ALL = -1
 
 // server.json text -> { url, username, password } with the url's trailing
 // slash dropped, or null when the text is missing, not JSON, or lacks a key.
@@ -88,13 +94,13 @@ function coverUrl(config, thumbnailUrl) {
 }
 
 // connection.state: "loading" | "ok" | "no-config" | "down" | "unauthorized" | "error"
-// manga is set only in "ok"; message only in "error".
+// manga and categories are set only in "ok"; message only in "error".
 function initial() {
-  return { state: "loading", manga: [], message: "" }
+  return { state: "loading", manga: [], categories: [], message: "" }
 }
 
 function conn(state, extra) {
-  var c = { state: state, manga: [], message: "" }
+  var c = { state: state, manga: [], categories: [], message: "" }
   for (var k in extra) c[k] = extra[k]
   return c
 }
@@ -109,7 +115,7 @@ function reduce(connection, event) {
       return conn("no-config")
     case "request":
       // Keep the shown library while a reload is in flight.
-      return conn("loading", { manga: connection.state === "ok" ? connection.manga : [] })
+      return conn("loading", connection.state === "ok" ? { manga: connection.manga, categories: connection.categories } : {})
     case "response":
       return fromResponse(event.status, event.body, event.config)
   }
@@ -145,20 +151,47 @@ function fromResponse(status, body, config) {
   if (r.state !== "ok") return conn(r.state, { message: r.message })
   var nodes = r.data.mangas && r.data.mangas.nodes
   if (!Array.isArray(nodes)) return conn("error", { message: "The server's reply has no library." })
+  var ids = function(list) { return ((list && list.nodes) || []).map(function(c) { return c.id }) }
   return conn("ok", {
     manga: nodes.map(function(n) {
-      return { id: n.id, title: String(n.title || ""), cover: coverUrl(config, n.thumbnailUrl) }
-    })
+      return { id: n.id, title: String(n.title || ""), cover: coverUrl(config, n.thumbnailUrl), categories: ids(n.categories) }
+    }),
+    categories: ((r.data.categories && r.data.categories.nodes) || [])
+      .filter(function(c) { return c.id !== DEFAULT_CATEGORY })
+      .map(function(c) { return { id: c.id, name: String(c.name) } })
   })
 }
 
-// What the library view shows for a connection: null for the cover grid,
-// otherwise { title, detail }.
-function notice(connection, configPath) {
+// The Library's category switcher, each entry { id, name, manga }: All, and
+// once the user has categories, Default (manga in none) and one per
+// category. A manga in several categories shows under each of them.
+function switcher(connection) {
+  var all = { id: ALL, name: "All", manga: connection.manga }
+  if (!connection.categories.length) return [all]
+  var on = function(id) {
+    return connection.manga.filter(function(m) {
+      return id === DEFAULT_CATEGORY ? m.categories.length === 0 : m.categories.indexOf(id) !== -1
+    })
+  }
+  return [all, { id: DEFAULT_CATEGORY, name: "Default", manga: on(DEFAULT_CATEGORY) }].concat(connection.categories.map(function(c) {
+    return { id: c.id, name: c.name, manga: on(c.id) }
+  }))
+}
+
+// The index of the entry with this id, or 0 (All) once it is gone.
+function switcherIndex(list, id) {
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return i
+  return 0
+}
+
+// What the library view shows for a connection and its shown category: null
+// for the cover grid, otherwise { title, detail }.
+function notice(connection, configPath, shown) {
   if (connection.state === "loading") return connection.manga.length ? null : { title: "Loading the library", detail: "" }
   var p = problem(connection, configPath)
   if (p) return p
   if (!connection.manga.length) return { title: "Your library is empty", detail: "Manga you follow show up here." }
+  if (shown && !shown.manga.length) return { title: shown.name + " is empty", detail: "Press c on a manga's detail to put it in a category." }
   return null
 }
 
@@ -195,6 +228,8 @@ if (typeof module !== "undefined") {
     coverUrl: coverUrl,
     initial: initial,
     reduce: reduce,
+    switcher: switcher,
+    switcherIndex: switcherIndex,
     notice: notice,
     problem: problem,
     viewIndex: viewIndex
