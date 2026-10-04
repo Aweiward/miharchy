@@ -12,7 +12,7 @@ const finish = (s, id, text) => S.reduce(S.reduce(s, { type: "start", id }), { t
 const server = (s, data) => S.reduce(s, { type: "server", reply: M.reply(200, JSON.stringify({ data })) });
 const states = (s) => Object.fromEntries(S.STEPS.map((st) => [st.id, S.status(s, st.id).state]));
 
-const READY = "java openjdk version \"26.0.2.1\" 2026-08-18\nsuwayomi\nconfig\nunit enabled active\ndocker \n";
+const READY = "java openjdk version \"26.0.2.1\" 2026-08-18\nsuwayomi\nconfig\nunit enabled active\nunitCurrent\ndocker \n";
 const FLARE_ON = { flareSolverrEnabled: true, flareSolverrUrl: "http://127.0.0.1:8191", flareSolverrAsResponseFallback: true };
 const FLARE_OFF = { flareSolverrEnabled: false, flareSolverrUrl: "http://localhost:8191", flareSolverrAsResponseFallback: false };
 
@@ -276,4 +276,28 @@ test("nothing is offered before the server answers, and waiting or unavailable s
   assert.deepEqual(S.unoffered(finish(S.initial(), "probe", MACHINE)), [], "no server reply yet");
   const s = serverWith(finish(S.initial(), "probe", READY.replace("docker \n", "")));
   assert.deepEqual(S.offers(s), ["launcher:todo"], "no javac means the helper waits; no docker means FlareSolverr is unavailable");
+});
+
+test("the probe reports whether the installed server unit matches the plugin's copy", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-unit-"));
+  const home = path.join(root, "home");
+  fs.mkdirSync(path.join(root, "window"));
+  fs.mkdirSync(path.join(root, "server"));
+  fs.mkdirSync(path.join(home, ".config/systemd/user"), { recursive: true });
+  fs.writeFileSync(path.join(root, "server/miharchy-server.service"), "[Service]\nExecStart=new\n");
+  const probe = () => S.parseProbe(S.parseJob(run(S.probeCommand("/none", root, path.join(root, "window")), { PATH: process.env.PATH, HOME: home })).output);
+  assert.equal(probe().unitCurrent, false, "no unit installed");
+  fs.writeFileSync(path.join(home, ".config/systemd/user/miharchy-server.service"), "[Service]\nExecStart=old\n");
+  assert.equal(probe().unitCurrent, false, "an older unit");
+  fs.copyFileSync(path.join(root, "server/miharchy-server.service"), path.join(home, ".config/systemd/user/miharchy-server.service"));
+  assert.equal(probe().unitCurrent, true);
+});
+
+test("a running server with an outdated unit is due again, and keeps Setup open", () => {
+  const stale = finish(S.initial(), "probe", READY.replace("unitCurrent\n", ""));
+  assert.equal(S.status(stale, "server").state, "outdated");
+  assert.match(S.status(stale, "server").detail, /changed/);
+  assert.equal(S.action(stale, "server"), "confirm");
+  assert.equal(S.incomplete(stale), true);
+  assert.equal(S.status(finish(S.initial(), "probe", READY), "server").state, "done");
 });

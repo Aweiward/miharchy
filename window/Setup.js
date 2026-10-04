@@ -11,6 +11,7 @@ var CONTAINER = "miharchy-flaresolverr"
 // Under $HOME. The shell reloads a plugin on any write inside its folder,
 // so the helper builds and installs here, never in the plugin's sync/.
 var HELPER_DIR = ".local/share/miharchy/helper"
+var UNIT_FILE = ".config/systemd/user/miharchy-server.service"
 var DESKTOP_FILE = ".local/share/applications/miharchy.desktop"
 
 // kind "install": the user runs command in a terminal; Enter checks again.
@@ -32,7 +33,8 @@ var STEPS = [
 // rebuild is due exactly when the sources or build files change.
 var FINGERPRINT = "fingerprint() { (cd \"$1\" && find . -path ./build -prune -o -path ./.gradle -prune -o -path ./.kotlin -prune -o -type f -print | LC_ALL=C sort | xargs -d '\\n' sha256sum | sha256sum | cut -c1-64); }"
 
-// $1 is the server.json path, $2 the plugin's sync/, $3 desktopEntry().
+// $1 is the server.json path, $2 the plugin's sync/, $3 desktopEntry(),
+// $4 the plugin's server unit.
 // Each line prints one fact; parseProbe reads them.
 var PROBE = [
   FINGERPRINT,
@@ -40,6 +42,7 @@ var PROBE = [
   "test -x /usr/bin/suwayomi-server && echo suwayomi",
   "test -s \"$1\" && echo config",
   "echo \"unit $(systemctl --user is-enabled miharchy-server 2>/dev/null) $(systemctl --user is-active miharchy-server 2>/dev/null)\"",
+  "cmp -s \"$4\" \"$HOME/" + UNIT_FILE + "\" && echo unitCurrent",
   "command -v docker >/dev/null && echo \"docker $(docker inspect -f '{{.State.Running}}' " + CONTAINER + " 2>/dev/null)\"",
   "command -v javac >/dev/null && echo javac",
   "echo \"helperSource $(fingerprint \"$2\")\"",
@@ -100,7 +103,7 @@ function desktopEntry(windowDir) {
 }
 
 function probeCommand(configPath, syncDir, windowDir) {
-  return command(PROBE, [configPath, syncDir, desktopEntry(windowDir)])
+  return command(PROBE, [configPath, syncDir, desktopEntry(windowDir), windowDir.replace(/\/window$/, "") + "/server/miharchy-server.service"])
 }
 
 // The job a confirmed or committed step runs.
@@ -132,7 +135,7 @@ function javaMajor(line) {
 
 // The probe's output -> facts. docker is false when the command is absent.
 function parseProbe(text) {
-  var f = { java: 0, suwayomi: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", launcher: false }
+  var f = { java: 0, suwayomi: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", launcher: false, unitCurrent: false }
   String(text).split("\n").forEach(function(line) {
     var sp = line.indexOf(" ")
     var key = sp === -1 ? line : line.slice(0, sp)
@@ -151,6 +154,7 @@ function parseProbe(text) {
     }
     if (key === "javac") f.javac = true
     if (key === "launcher") f.launcher = true
+    if (key === "unitCurrent") f.unitCurrent = true
     if (key === "helperSource") f.helperSource = rest.trim()
     if (key === "helperInstalled") f.helperInstalled = rest.trim()
   })
@@ -240,6 +244,7 @@ function status(s, id) {
       return is("todo", "Suwayomi-Server is not installed. Install it in a terminal, then press Enter to check again.")
     case "server":
       if (status(s, "java").state !== "done" || !p.suwayomi) return is("waiting", "Needs Java and Suwayomi-Server first.")
+      if (p.config && p.unitEnabled && p.unitActive && !p.unitCurrent) return is("outdated", "The plugin's server unit changed. Press Enter to run server/miharchy-server again; it keeps your credentials.")
       if (p.config && p.unitEnabled && p.unitActive) return is("done", "miharchy-server is enabled and running.")
       return is("todo", "Press Enter to run server/miharchy-server. It creates the credentials and enables the user service.")
     case "flaresolverr":
