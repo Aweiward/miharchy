@@ -34,7 +34,7 @@ Rectangle {
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
   readonly property string hint: picking ? "j k move   space in or out   esc close   "
     : selecting ? "j k extend   d download   x delete download   esc end   "
-    : "j k chapters   enter read   d download   v select   U unread   x delete   D queue   a library   c categories   r refresh   esc back   "
+    : "j k chapters   enter read   d download   v select   U unread   x delete   D queue   " + (manga && manga.inLibrary ? "a remove from library" : "a add to library") + "   c categories   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
@@ -194,22 +194,16 @@ Rectangle {
     }
   }
 
-  Rectangle {
+  Cover {
     id: coverBox
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.margins: view.theme.fontSize * 2
     width: view.theme.fontSize * 16
     height: width * 1.5
-    color: Qt.alpha(view.theme.foreground, 0.06)
-
-    Image {
-      anchors.fill: parent
-      source: view.manga ? view.manga.cover : ""
-      fillMode: Image.PreserveAspectCrop
-      asynchronous: true
-      sourceSize.width: width
-    }
+    theme: view.theme
+    source: view.manga ? view.manga.cover : ""
+    title: view.manga ? view.manga.title : ""
   }
 
   Column {
@@ -256,6 +250,16 @@ Rectangle {
       width: parent.width
       wrapMode: Text.Wrap
       visible: text !== ""
+      text: view.detail ? Browse.sourceHelp(view.manga, view.detail.extension) : ""
+      color: view.theme.urgent
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
+    }
+
+    Text {
+      width: parent.width
+      wrapMode: Text.Wrap
+      visible: text !== ""
       text: view.manga ? view.manga.genres : ""
       color: view.theme.muted
       font.family: view.theme.fontFamily
@@ -263,7 +267,7 @@ Rectangle {
     }
 
     Text {
-      text: !view.manga ? "" : view.detail.busy ? "saving" : view.manga.inLibrary ? "In library   a remove" : "a add to library"
+      text: !view.manga ? "" : view.detail.busy ? "saving" : view.manga.inLibrary ? "In library   a remove from library" : "a add to library"
       color: view.manga && view.manga.inLibrary ? view.theme.accent : view.theme.foreground
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSize

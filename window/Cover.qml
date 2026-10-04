@@ -1,0 +1,46 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import "Model.js" as Model
+
+// A manga cover. With no cover URL, or one that fails to load, it shows
+// the title on a themed tile instead.
+Rectangle {
+  id: cover
+
+  required property Theme theme
+  property string source: ""
+  property string title: ""
+  property bool current: false
+
+  color: Qt.alpha(theme.foreground, 0.06)
+  border.width: current ? 2 : 0
+  border.color: theme.accent
+  clip: true
+
+  Image {
+    id: image
+    anchors.fill: parent
+    anchors.margins: cover.border.width
+    visible: !placeholder.visible
+    source: cover.source
+    fillMode: Image.PreserveAspectCrop
+    asynchronous: true
+    sourceSize.width: width
+  }
+
+  Text {
+    id: placeholder
+    anchors.fill: parent
+    anchors.margins: Math.min(cover.theme.fontSize * 0.5, cover.width / 10)
+    visible: Model.placeholder(cover.source, image.status === Image.Error)
+    text: cover.title
+    color: cover.theme.muted
+    font.family: cover.theme.fontFamily
+    font.pixelSize: cover.width < cover.theme.fontSize * 6 ? cover.theme.fontSmall * 0.7 : cover.theme.fontSmall
+    horizontalAlignment: Text.AlignHCenter
+    verticalAlignment: Text.AlignVCenter
+    wrapMode: Text.Wrap
+    elide: Text.ElideRight
+  }
+}

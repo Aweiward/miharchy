@@ -15,6 +15,8 @@ Item {
   // switcher and switcherIndex update one after the other.
   readonly property var manga: switcher[switcherIndex] ? switcher[switcherIndex].manga : []
   property int cursor: 0
+  // The id of the manga a second x removes, or -1.
+  property int armed: -1
   // Model.notice(): null for the grid, otherwise { title, detail }.
   property var notice: null
 
@@ -67,32 +69,25 @@ Item {
       width: grid.cellWidth
       height: grid.cellHeight
 
-      Rectangle {
+      Cover {
         id: coverBox
         x: view.theme.fontSize / 2
         width: cell.width - view.theme.fontSize
         height: width * 1.5
-        color: Qt.alpha(view.theme.foreground, 0.06)
-        border.width: cell.current ? 2 : 0
-        border.color: view.theme.accent
-
-        Image {
-          anchors.fill: parent
-          anchors.margins: cell.current ? 2 : 0
-          source: cell.modelData.cover
-          fillMode: Image.PreserveAspectCrop
-          asynchronous: true
-          sourceSize.width: width
-        }
+        theme: view.theme
+        source: cell.modelData.cover
+        title: cell.modelData.title
+        current: cell.current
       }
 
       Text {
+        readonly property bool armed: view.armed === cell.modelData.id
         anchors.top: coverBox.bottom
         anchors.topMargin: view.theme.fontSize / 2
         anchors.left: coverBox.left
         anchors.right: coverBox.right
-        text: cell.modelData.title
-        color: cell.current ? view.theme.selectedText : view.theme.foreground
+        text: armed ? "x again to remove from library" : cell.modelData.title
+        color: armed ? view.theme.urgent : cell.current ? view.theme.selectedText : view.theme.foreground
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
         elide: Text.ElideRight

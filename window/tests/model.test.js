@@ -77,15 +77,29 @@ test("a reload keeps the shown library; a failed one drops it", () => {
 
 test("the library answer becomes manga with authenticated cover URLs", () => {
   const body = { data: { mangas: { nodes: [
-    { id: 7, title: "Yotsuba&!", thumbnailUrl: "/api/v1/manga/7/thumbnail" },
-    { id: 8, title: "No cover", thumbnailUrl: null },
-    { id: 9, title: "Remote", thumbnailUrl: "https://cdn.example/9.jpg" }
+    { id: 7, title: "Yotsuba&!", thumbnailUrl: "/api/v1/manga/7/thumbnail", source: { id: "1" } },
+    { id: 8, title: "No cover", thumbnailUrl: null, source: { id: "1" } },
+    { id: 9, title: "Remote", thumbnailUrl: "https://cdn.example/9.jpg", source: { id: "1" } },
+    { id: 10, title: "Missing source", thumbnailUrl: "/api/v1/manga/10/thumbnail", source: null }
   ] } } };
   assert.deepEqual(M.reduce(M.initial(), respond(200, body)).manga, [
     { id: 7, title: "Yotsuba&!", cover: "http://miharchy:s3cret@127.0.0.1:4590/api/v1/manga/7/thumbnail", categories: [] },
     { id: 8, title: "No cover", cover: "", categories: [] },
-    { id: 9, title: "Remote", cover: "https://cdn.example/9.jpg", categories: [] }
+    { id: 9, title: "Remote", cover: "https://cdn.example/9.jpg", categories: [] },
+    { id: 10, title: "Missing source", cover: "", categories: [] }
   ]);
+});
+
+test("a cover shows the placeholder when it has no URL or fails to load", () => {
+  assert.equal(M.placeholder("", false), true);
+  assert.equal(M.placeholder("http://x/1.jpg", true), true);
+  assert.equal(M.placeholder("http://x/1.jpg", false), false);
+});
+
+test("the library payload sets inLibrary and nothing else", () => {
+  const p = M.inLibraryPayload(7, false);
+  assert.match(p.query, /updateManga\(input: \{ id: \$id, patch: \{ inLibrary: \$inLibrary \} \}\)/);
+  assert.deepEqual(p.variables, { id: 7, inLibrary: false });
 });
 
 test("coverUrl gives credentials to the server's own origin only", () => {

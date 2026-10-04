@@ -37,7 +37,13 @@ ShellRoot {
   // { mangaId, chapterId } to read once the config loads, or null.
   property var pendingChapter: Model.chapterTarget(Quickshell.env("MIHARCHY_OPEN_CHAPTER"))
 
+  // The id of the manga a second x removes from the library, or -1.
+  property int libraryArmed: -1
+  property string libraryError: ""
+
   onSwitcherIndexChanged: libraryCursor = 0
+  // A removed manga leaves the grid, so the cursor may point past its end.
+  onShownChanged: libraryCursor = Math.max(0, Math.min(shown.manga.length - 1, libraryCursor))
 
   Theme { id: theme }
 
@@ -145,6 +151,22 @@ ShellRoot {
     keyRoot.forceActiveFocus()
   }
 
+  function removeFromLibrary(mangaId) {
+    var req = Model.request(config, Model.inLibraryPayload(mangaId, false))
+    libraryError = ""
+    var xhr = new XMLHttpRequest()
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== XMLHttpRequest.DONE) return
+      var reply = Model.reply(xhr.status, xhr.responseText)
+      if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
+      root.fetchLibrary()
+    }
+    xhr.open("POST", req.url)
+    xhr.setRequestHeader("Content-Type", "application/json")
+    xhr.setRequestHeader("Authorization", req.authorization)
+    xhr.send(req.body)
+  }
+
   function fetchLibrary() {
     var cfg = config
     var req = Model.libraryRequest(cfg)
@@ -171,6 +193,11 @@ ShellRoot {
       : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.selecting ? "manga-select" : "manga")
       : view === "browse" ? browseView.screen : view === "library" && libraryScreen === "categories" ? "categories" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
+    // Any other key disarms a remove, even one no command takes.
+    if (id !== "library.remove") {
+      libraryArmed = -1
+      libraryError = ""
+    }
     if (id !== null) run(id)
     return id !== null
   }
@@ -293,6 +320,16 @@ ShellRoot {
       case "library.categories":
         libraryScreen = "categories"
         break
+      case "library.remove":
+        var r = shown.manga[libraryCursor]
+        if (!r || !config) break
+        if (libraryArmed === r.id) {
+          libraryArmed = -1
+          removeFromLibrary(r.id)
+        } else {
+          libraryArmed = r.id
+        }
+        break
       case "library.open":
         var m = shown.manga[libraryCursor]
         if (m) mangaDetail.openManga(m.id, false)
@@ -388,6 +425,7 @@ ShellRoot {
           switcher: root.switcher
           switcherIndex: root.switcherIndex
           cursor: root.libraryCursor
+          armed: root.libraryArmed
           notice: Model.notice(root.connection, root.configPath, root.shown)
         }
 
@@ -530,7 +568,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: syncView.open ? "" : root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : "hjkl move   enter open   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: syncView.open ? "" : root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall

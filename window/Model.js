@@ -13,7 +13,9 @@ var VIEWS = [
 ]
 
 var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDownload } }"
-  + " mangas(condition: {inLibrary: true}, orderBy: TITLE) { nodes { id title thumbnailUrl categories { nodes { id } } } } }"
+  + " mangas(condition: {inLibrary: true}, orderBy: TITLE) { nodes { id title thumbnailUrl source { id } categories { nodes { id } } } } }"
+
+var LIBRARY_MUTATION = "mutation($id: Int!, $inLibrary: Boolean!) { updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) { manga { id inLibrary } } }"
 
 // Suwayomi's built-in "Default" category holds the manga in no category, as
 // in Mihon. It is never a user category, the same rule as the sync helper.
@@ -65,6 +67,12 @@ function libraryRequest(config) {
   return request(config, { query: LIBRARY_QUERY })
 }
 
+// Puts a manga in the library or takes it out. Its chapters, read state
+// and downloads stay, as in Mihon.
+function inLibraryPayload(mangaId, inLibrary) {
+  return { query: LIBRARY_MUTATION, variables: { id: mangaId, inLibrary: inLibrary } }
+}
+
 // "http://host:port/path" -> { origin: "http://host:port", rest: "/path" },
 // null for anything else. origin is lowercased for comparison.
 function splitUrl(url) {
@@ -91,6 +99,11 @@ function coverUrl(config, thumbnailUrl) {
   if (!server || server.authority.indexOf("@") !== -1) return config.url + path
   var userinfo = encodeURIComponent(config.username) + ":" + encodeURIComponent(config.password) + "@"
   return config.url.replace(/^(https?:\/\/)/i, "$1" + userinfo) + path
+}
+
+// Whether a cover shows the title tile instead of the image.
+function placeholder(cover, failed) {
+  return !cover || failed
 }
 
 // connection.state: "loading" | "ok" | "no-config" | "down" | "unauthorized" | "error"
@@ -154,7 +167,8 @@ function fromResponse(status, body, config) {
   var ids = function(list) { return ((list && list.nodes) || []).map(function(c) { return c.id }) }
   return conn("ok", {
     manga: nodes.map(function(n) {
-      return { id: n.id, title: String(n.title || ""), cover: coverUrl(config, n.thumbnailUrl), categories: ids(n.categories) }
+      // The server fetches a cover through its source, so without one it only fails.
+      return { id: n.id, title: String(n.title || ""), cover: n.source ? coverUrl(config, n.thumbnailUrl) : "", categories: ids(n.categories) }
     }),
     categories: ((r.data.categories && r.data.categories.nodes) || [])
       .filter(function(c) { return c.id !== DEFAULT_CATEGORY })
@@ -231,6 +245,8 @@ if (typeof module !== "undefined") {
     base64: base64,
     request: request,
     libraryRequest: libraryRequest,
+    inLibraryPayload: inLibraryPayload,
+    placeholder: placeholder,
     reply: reply,
     coverUrl: coverUrl,
     initial: initial,
