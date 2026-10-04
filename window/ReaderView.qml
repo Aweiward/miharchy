@@ -110,6 +110,7 @@ Rectangle {
     scrollAnimation.stop()
     strip.positioned = false
     strip.model = webtoon && reader.state === "ok" ? reader.pages : []
+    strip.pinToEnd = strip.count > 0 && reader.toEnd
     if (!strip.count) return
     if (reader.toEnd) strip.positionViewAtEnd()
     else strip.positionViewAtIndex(reader.page, ListView.Beginning)
@@ -133,7 +134,8 @@ Rectangle {
     var top = strip.originY
     var bottom = strip.originY + strip.contentHeight - strip.height
     scrollAnimation.stop()
-    scrollAnimation.to = Math.max(top, Math.min(bottom, from + part * strip.height))
+    strip.pinToEnd = false
+    scrollAnimation.to =Math.max(top, Math.min(bottom, from + part * strip.height))
     scrollAnimation.start()
   }
 
@@ -196,6 +198,10 @@ Rectangle {
   ListView {
     id: strip
     property bool positioned: false
+    // Entered backwards: the pages near the end load after the strip
+    // moves there and push the end down, so it follows until the reader
+    // scrolls.
+    property bool pinToEnd: false
     anchors.top: parent.top
     anchors.bottom: parent.bottom
     anchors.horizontalCenter: parent.horizontalCenter
@@ -204,6 +210,8 @@ Rectangle {
     cacheBuffer: height
     boundsBehavior: Flickable.StopAtBounds
     onContentYChanged: view.track()
+    onContentHeightChanged: if (pinToEnd) positionViewAtEnd()
+    onMovementStarted: pinToEnd = false
 
     delegate: Image {
       required property string modelData
