@@ -244,7 +244,7 @@ test("the launcher entry opens window/miharchy and a rerun or a moved plugin is 
   const r = S.parseJob(run(S.runCommand("launcher", { windowDir: "/p/window" }), t.env));
   assert.equal(r.code, 0, r.output);
   assert.equal(fs.readFileSync(file, "utf8"), S.desktopEntry("/p/window"));
-  assert.match(S.desktopEntry("/p/window"), /^\[Desktop Entry\]\nType=Application\nName=Miharchy\n[\s\S]*Exec="\/p\/window\/miharchy"\nIcon=\/p\/window\/miharchy\.svg\n/);
+  assert.match(S.desktopEntry("/p/window"), /^\[Desktop Entry\]\nType=Application\nName=Miharchy\n[\s\S]*Exec="\/p\/window\/miharchy"\nIcon=\/p\/icons\/miharchy\.svg\n/);
   assert.equal(S.status(probe("/p/window"), "launcher").state, "done");
   assert.equal(S.status(probe("/q/window"), "launcher").state, "todo", "a plugin in another folder needs a new entry");
 });

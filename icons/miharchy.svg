@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <rect width="48" height="48" fill="#1a1b26"/>
+  <path id="rays" fill="#f7768e" d="M 1 5 H 13 V 9 H 1 Z M 1 11 H 13 V 15 H 1 Z M 1 33 H 13 V 37 H 1 Z M 1 39 H 13 V 43 H 1 Z M 35 5 H 47 V 9 H 35 Z M 35 11 H 47 V 15 H 35 Z M 35 33 H 47 V 37 H 35 Z M 35 39 H 47 V 43 H 35 Z"/>
+  <path id="stem" fill="#c0caf5" d="M 15 3 H 33 V 45 H 15 Z"/>
+  <path id="bar" fill="#c0caf5" d="M 2 18 H 46 V 30 H 2 Z"/>
+</svg>
