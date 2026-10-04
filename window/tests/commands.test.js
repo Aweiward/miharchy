@@ -214,6 +214,23 @@ test("a source search field commits and cancels as source.*", () => {
   assert.equal(C.dispatch(searching, text("n")), null);
 });
 
+test("/ on the sources screen searches every source; on its results hjkl move, Enter opens, r retries, Esc goes back", () => {
+  assert.equal(C.dispatch(screen("sources"), text("/")), "global.search");
+  const g = screen("global");
+  assert.equal(C.dispatch(g, text("/")), "global.search");
+  assert.equal(C.dispatch(g, text("h")), "global.left");
+  assert.equal(C.dispatch(g, text("l")), "global.right");
+  assert.equal(C.dispatch(g, text("j")), "global.down");
+  assert.equal(C.dispatch(g, text("k")), "global.up");
+  assert.equal(C.dispatch(g, key(C.KEY.Return)), "global.open");
+  assert.equal(C.dispatch(g, text("r")), "global.retry");
+  assert.equal(C.dispatch(g, key(C.KEY.Escape)), "browse.back");
+  const typing = { palette: false, view: "global", editing: "global" };
+  assert.equal(C.dispatch(typing, key(C.KEY.Return)), "global.commit");
+  assert.equal(C.dispatch(typing, key(C.KEY.Escape)), "global.cancel");
+  assert.equal(C.dispatch(typing, text("j")), null);
+});
+
 test("l on the sources screen toggles every language", () => {
   assert.equal(C.dispatch(screen("sources"), text("l")), "sources.languages");
 });

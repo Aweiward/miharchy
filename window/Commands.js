@@ -24,7 +24,7 @@ var KEY = {
 // "Tab", "Backspace" and the arrows match the key code.
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
-// sources, extensions, source; or overlay: manga, reader) shows; an array
+// sources, extensions, source, global; or overlay: manga, reader) shows; an array
 // allows several.
 var commands = [
   { id: "view.library", title: "Library", keys: ["1"] },
@@ -39,7 +39,8 @@ var commands = [
   { id: "sources.refresh", title: "Refresh sources", keys: ["r"], view: "sources", hidden: true },
   { id: "source.retry", title: "Load again", keys: ["r"], view: "source", hidden: true },
   { id: "manga.refresh", title: "Refresh from the source", keys: ["r"], view: "manga", hidden: true },
-  { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: "source", hidden: true },
+  { id: "global.retry", title: "Search failed sources again", keys: ["r"], view: "global", hidden: true },
+  { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: ["source", "global"], hidden: true },
   { id: "manga.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga", hidden: true },
   { id: "reader.close", title: "Close the reader", keys: ["Esc", "q"], view: "reader", hidden: true },
   { id: "reader.retry", title: "Load again", keys: ["r"], view: "reader", hidden: true },
@@ -69,6 +70,13 @@ var commands = [
   { id: "source.latest", title: "Latest", keys: ["n"], view: "source", hidden: true },
   { id: "source.search", title: "Search this source", keys: ["/"], view: "source", hidden: true },
   { id: "source.open", title: "Open manga", keys: ["Enter"], view: "source", hidden: true },
+  // / searches what the screen shows: one source there, every source here.
+  { id: "global.search", title: "Search every source", keys: ["/"], view: ["sources", "global"], hidden: true },
+  { id: "global.left", title: "Previous result", keys: ["h"], view: "global", hidden: true },
+  { id: "global.right", title: "Next result", keys: ["l"], view: "global", hidden: true },
+  { id: "global.up", title: "Previous source", keys: ["k", "Up"], view: "global", hidden: true },
+  { id: "global.down", title: "Next source", keys: ["j", "Down"], view: "global", hidden: true },
+  { id: "global.open", title: "Open manga", keys: ["Enter"], view: "global", hidden: true },
   { id: "manga.up", title: "Previous chapter", keys: ["k", "Up"], view: "manga", hidden: true },
   { id: "manga.down", title: "Next chapter", keys: ["j", "Down"], view: "manga", hidden: true },
   { id: "manga.library", title: "Add to or remove from library", keys: ["a"], view: "manga", hidden: true },

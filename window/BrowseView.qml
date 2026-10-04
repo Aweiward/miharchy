@@ -4,10 +4,12 @@ import QtQuick
 import "Commands.js" as Commands
 import "Model.js" as Model
 import "Browse.js" as Browse
+import "GlobalSearch.js" as GlobalSearch
 
-// The Browse view past its extensions: the source list and a source's
-// manga. It talks to the server itself; Browse.js decides. shell.qml
-// forwards every "browse.", "sources." and "source." command to run(),
+// The Browse view past its extensions: the source list, a source's manga
+// and a search across every source. It talks to the server itself;
+// Browse.js and GlobalSearch.js decide. shell.qml forwards every
+// "browse.", "sources.", "source." and "global." command to run(),
 // shows ExtensionsView while screen is "extensions", and opens a manga's
 // detail on openManga.
 Item {
@@ -20,22 +22,26 @@ Item {
   property bool showNsfw: false
   property bool allLanguages: false
 
-  // "sources" | "extensions" | "source"
+  // "sources" | "extensions" | "source" | "global"
   property string screen: "sources"
   property var src: ({ state: "idle", message: "", sources: [] })
   property int sourceCursor: 0
   property var listing: null
   property int gridCursor: 0
-  // "" | "source": the search field is open.
+  property var global: null
+  property var globalCursor: ({ row: 0, col: 0 })
+  // "" | "source" | "global": the search field is open.
   property string editing: ""
   // Only the latest request of each kind may update its state.
   property int sourcesSeq: 0
   property int listingSeq: 0
+  property int globalSeq: 0
 
   readonly property var hint: ({
-    sources: "j k move   enter open   l languages   r refresh   tab extensions   ",
+    sources: "j k move   enter open   / search all   l languages   r refresh   tab extensions   ",
     extensions: "r refresh   tab sources   ",
-    source: "hjkl move   enter open   p popular   n latest   / search   r retry   esc back   "
+    source: "hjkl move   enter open   p popular   n latest   / search   r retry   esc back   ",
+    global: "hjkl move   enter open   / search   r retry   esc back   "
   })[screen]
 
   signal key(var event)
@@ -47,8 +53,10 @@ Item {
     if (editing) closeSearch()
     sourcesSeq++
     listingSeq++
+    globalSeq++
     screen = "sources"
     listing = null
+    global = null
     src = config ? { state: "idle", message: "", sources: [] } : { state: "no-config", message: "", sources: [] }
     if (active && config) loadSources()
   }
@@ -102,6 +110,25 @@ Item {
 
   function markInLibrary(mangaId, inLibrary) {
     if (listing) listing = Browse.markInLibrary(listing, mangaId, inLibrary)
+    if (global) global = GlobalSearch.markInLibrary(global, mangaId, inLibrary)
+  }
+
+  // Starts every group with a free slot; each reply starts the next.
+  // ponytail: QML's XHR ignores timeout, so a hung source holds its slot
+  // until Suwayomi's own HTTP timeouts fail it; abort from a Timer if that
+  // proves too slow.
+  function pumpGlobal() {
+    var seq = globalSeq
+    var cfg = config
+    GlobalSearch.due(global).forEach(function(i) {
+      var payload = GlobalSearch.payload(view.global.groups[i])
+      view.global = GlobalSearch.reduce(view.global, i, { type: "request" })
+      send(payload, function(reply) {
+        if (seq !== view.globalSeq) return
+        view.global = GlobalSearch.reduce(view.global, i, { type: "reply", reply: reply, config: cfg })
+        view.pumpGlobal()
+      })
+    })
   }
 
   function moveGrid(delta) {
@@ -122,7 +149,11 @@ Item {
         if (screen === "sources") loadSources()
         break
       case "browse.back":
-        if (screen === "source") {
+        if (screen === "global") {
+          globalSeq++
+          global = null
+          screen = "sources"
+        } else if (screen === "source") {
           listingSeq++
           screen = "sources"
         }
@@ -184,6 +215,44 @@ Item {
       case "source.open":
         var m = listing && listing.items[gridCursor]
         if (m) openManga(m.id)
+        break
+      case "global.search":
+        screen = "global"
+        editing = "global"
+        globalView.searchField.text = global ? global.query : ""
+        globalView.searchField.selectAll()
+        globalView.searchField.forceActiveFocus()
+        break
+      case "global.commit":
+        var gq = globalView.searchField.text.trim()
+        closeSearch()
+        if (gq) {
+          globalSeq++
+          global = GlobalSearch.search(src.sources, gq)
+          globalCursor = { row: 0, col: 0 }
+          pumpGlobal()
+        } else if (!global) {
+          screen = "sources"
+        }
+        break
+      case "global.cancel":
+        closeSearch()
+        if (!global) screen = "sources"
+        break
+      case "global.left":
+      case "global.right":
+      case "global.up":
+      case "global.down":
+        if (global) globalCursor = GlobalSearch.move(global, globalCursor, id === "global.up" ? -1 : id === "global.down" ? 1 : 0, id === "global.left" ? -1 : id === "global.right" ? 1 : 0)
+        break
+      case "global.retry":
+        if (!global) break
+        global = GlobalSearch.retry(global)
+        pumpGlobal()
+        break
+      case "global.open":
+        var gm = global && GlobalSearch.current(global, globalCursor)
+        if (gm) openManga(gm.id)
         break
     }
   }
@@ -283,5 +352,17 @@ Item {
     notice: view.listing ? Browse.notice(view.listing, view.configPath) : null
     onKey: function(event) { view.key(event) }
     onNearEnd: view.moreManga()
+  }
+
+  GlobalSearchView {
+    id: globalView
+    anchors.fill: parent
+    visible: view.screen === "global"
+    theme: view.theme
+    search: view.global
+    cursor: view.globalCursor
+    editing: view.editing === "global"
+    configPath: view.configPath
+    onKey: function(event) { view.key(event) }
   }
 }
