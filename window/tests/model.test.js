@@ -77,6 +77,26 @@ test("the library answer becomes manga with authenticated cover URLs", () => {
   ]);
 });
 
+test("coverUrl gives credentials to the server's own origin only", () => {
+  const creds = "miharchy:s3cret@";
+  assert.equal(M.coverUrl(config, "http://127.0.0.1:4590/api/v1/manga/1/thumbnail"), "http://" + creds + "127.0.0.1:4590/api/v1/manga/1/thumbnail");
+  for (const hostile of [
+    "http://127.0.0.1:4590.evil.com/x",
+    "http://127.0.0.1:45901/x",
+    "http://127.0.0.1:4590@evil.com/x",
+    "http://other:pw@127.0.0.1:4590/x",
+    "https://cdn.example/9.jpg",
+    "https://127.0.0.1:4590/x",
+    "//evil.com/x",
+    "evil.com/x",
+    "javascript:alert(1)"
+  ]) {
+    const out = M.coverUrl(config, hostile);
+    assert.equal(out, hostile, hostile);
+    assert.ok(!out.includes("s3cret"), hostile);
+  }
+});
+
 test("coverUrl percent-encodes credentials", () => {
   assert.equal(M.coverUrl({ ...config, password: "a@b:c" }, "/x"), "http://miharchy:a%40b%3Ac@127.0.0.1:4590/x");
 });

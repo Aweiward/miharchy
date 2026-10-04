@@ -37,14 +37,32 @@ function libraryRequest(config) {
   }
 }
 
+// "http://host:port/path" -> { origin: "http://host:port", rest: "/path" },
+// null for anything else. origin is lowercased for comparison.
+function splitUrl(url) {
+  var m = /^(https?):\/\/([^\/?#]*)(.*)$/i.exec(url)
+  return m ? { origin: (m[1] + "://" + m[2]).toLowerCase(), authority: m[2], rest: m[3] } : null
+}
+
 // QML Image can't send an Authorization header, so covers carry the
-// credentials in the URL's userinfo.
+// credentials in the URL's userinfo. Thumbnail URLs come from sources, so
+// only a server-relative path or an exact match of the server's scheme,
+// host and port gets them; anything else passes through untouched.
 function coverUrl(config, thumbnailUrl) {
   if (!thumbnailUrl) return ""
-  var abs = /^https?:\/\//.test(thumbnailUrl) ? thumbnailUrl : config.url + (thumbnailUrl.charAt(0) === "/" ? "" : "/") + thumbnailUrl
-  if (abs.indexOf(config.url) !== 0) return abs
+  var server = splitUrl(config.url)
+  var url = String(thumbnailUrl)
+  var path
+  if (url.charAt(0) === "/" && url.charAt(1) !== "/") {
+    path = url
+  } else {
+    var u = splitUrl(url)
+    if (!server || !u || u.authority.indexOf("@") !== -1 || u.origin !== server.origin) return url
+    path = u.rest
+  }
+  if (!server || server.authority.indexOf("@") !== -1) return config.url + path
   var userinfo = encodeURIComponent(config.username) + ":" + encodeURIComponent(config.password) + "@"
-  return abs.replace(/^(https?:\/\/)/, "$1" + userinfo)
+  return config.url.replace(/^(https?:\/\/)/i, "$1" + userinfo) + path
 }
 
 // connection.state: "loading" | "ok" | "no-config" | "down" | "unauthorized" | "error"
