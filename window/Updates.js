@@ -151,6 +151,7 @@ if (typeof module !== "undefined") {
     updates: updates,
     count: count,
     initial: initial,
+    rows: rows,
     listPayload: listPayload,
     statusPayload: statusPayload,
     checkPayload: checkPayload,

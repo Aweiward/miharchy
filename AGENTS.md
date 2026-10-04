@@ -24,6 +24,10 @@ A manga reader for Omarchy (Arch + Hyprland). It reads Mihon's extension ecosyst
 ```
 
 - `plugin/` stays thin: the mark, the popup, a launcher. The reader never runs inside the shell process (ADR 0003).
+- The repo root is the Omarchy plugin folder. `omarchy plugin add <git-url>` clones the whole repo into `~/.config/omarchy/plugins/<id>/` and validates the `manifest.json` at its root. So `manifest.json` stays at the root and its entry points name files in `plugin/`: a subfolder is allowed, `..` and an absolute path are not. The id is `aweiward.miharchy`; an id matches `[A-Za-z0-9][A-Za-z0-9._-]*` and never starts with `omarchy.`. Check with `omarchy plugin validate .`, which also refuses any symlink in the repo.
+- Because the clone is the plugin folder, `plugin/` imports `../window/Model.js` and `../window/Updates.js` directly. The shell loads only the entry point. It watches the plugin folder with inotify and reloads the plugin on any write there, so never build `sync/` inside an installed clone.
+- The mark polls `Updates.UPDATES_QUERY` once a minute and when the popup opens. Choosing an update runs `window/miharchy open-chapter <mangaId> <chapterId>`. The launcher calls the running window's `miharchy` IpcHandler (`quickshell ipc -p window call miharchy openChapter ...`); with no window running, it starts one with `MIHARCHY_OPEN_CHAPTER` set.
+- `npm test` in `window/` also runs `plugin/tests/`. `lint:qml` leaves out `plugin/Mark.qml`: qmllint cannot resolve the shell's `qs.Commons` and `qs.Ui`.
 - `window/` keeps decisions in pure JS modules, tested with node. QML files only wire those modules to the UI, the same split as the `aweiward.omaqbt` plugin in `~/.config/omarchy/plugins/`.
 - `sync/` copies Mihon's backup model classes as the schema (ADR 0004). Keep them identical to upstream.
 - Build and test `sync/` with `./gradlew test installDist` inside it (JDK 21+, nothing else). The CLI lands in `build/install/miharchy-sync/bin/`.
