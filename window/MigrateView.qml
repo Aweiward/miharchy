@@ -37,7 +37,7 @@ Rectangle {
   property var to: null
   property var batch: null
   property int cursor: 0
-  // Each { old: { id, title }, target: { id, title, source }, result }, and
+  // Each { old: { id, title }, target: { id, title, source }, result, ok }, and
   // once read: oldNode, chapters and plan.
   property var jobs: []
   property bool deleteDownloads: true
@@ -226,8 +226,8 @@ Rectangle {
     if (i >= jobs.length) return finish()
     var j = jobs[i]
     busyText = (replace ? "Migrating " : "Copying ") + (i + 1) + " of " + jobs.length + ": " + j.old.title
-    var next = function(result) {
-      view.setJob(i, { result: result })
+    var next = function(result, ok) {
+      view.setJob(i, { result: result, ok: ok === true })
       view.runJob(i + 1, replace)
     }
     var write = function() {
@@ -236,9 +236,10 @@ Rectangle {
         if (reply.state !== "ok") return next("Failed: " + view.errorText(reply))
         var done = (replace ? "Migrated. " : "Copied. ") + Migrate.planText(p.plan, p.chapters.length)
         var after = Migrate.oldPayload(p.oldNode, replace, view.deleteDownloads)
-        if (!after) return next(done)
+        if (!after) return next(done, true)
         view.send(after, function(r) {
-          next(r.state === "ok" ? done : done + " The old manga: " + view.errorText(r))
+          if (r.state === "ok") next(done, true)
+          else next(done + " Failed on the old manga: " + view.errorText(r))
         })
       })
     }
@@ -253,7 +254,7 @@ Rectangle {
     running = false
     libraryChanged()
     var j = jobs[0]
-    if (!batchMode && step === "busy" && j && j.result.indexOf("Failed") !== 0) {
+    if (!batchMode && step === "busy" && j && j.ok) {
       close()
       migrated(j.target.id)
       return
@@ -275,6 +276,10 @@ Rectangle {
     switch (id) {
       case "migrate.back":
         if (step === "busy" && running) break
+        if (step === "busy" && !batchMode && search) {
+          step = "search"
+          break
+        }
         // The searches keep running under the confirm, so going back to
         // them drops nothing.
         if (step === "confirm") {
@@ -446,7 +451,7 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         elide: Text.ElideRight
         text: row.modelData.right
-        color: /^Failed|^skip|^No manga|needs|error|not running|rejected/.test(row.modelData.right) ? view.theme.urgent : row.current ? view.theme.selectedText : view.theme.muted
+        color: /Failed|^skip|^No manga|needs|error|not running|rejected/.test(row.modelData.right) ? view.theme.urgent : row.current ? view.theme.selectedText : view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
       }
