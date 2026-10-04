@@ -46,12 +46,17 @@ function base64(text) {
   return out
 }
 
-function libraryRequest(config) {
+// payload: { query, variables? } -> what an XHR to the server needs.
+function request(config, payload) {
   return {
     url: config.url + "/api/graphql",
     authorization: "Basic " + base64(config.username + ":" + config.password),
-    body: JSON.stringify({ query: LIBRARY_QUERY })
+    body: JSON.stringify(payload)
   }
+}
+
+function libraryRequest(config) {
+  return request(config, { query: LIBRARY_QUERY })
 }
 
 // "http://host:port/path" -> { origin: "http://host:port", rest: "/path" },
@@ -111,18 +116,27 @@ function reduce(connection, event) {
   return connection
 }
 
-function fromResponse(status, body, config) {
-  if (status === 0) return conn("down")
-  if (status === 401) return conn("unauthorized")
-  if (status !== 200) return conn("error", { message: "The server answered HTTP " + status + "." })
+// Any GraphQL answer -> { state, message, data } with state "ok" (and the
+// reply's data), "down", "unauthorized" or "error" (and a message).
+function reply(status, body) {
+  var fail = function(state, message) { return { state: state, message: message || "", data: null } }
+  if (status === 0) return fail("down")
+  if (status === 401) return fail("unauthorized")
+  if (status !== 200) return fail("error", "The server answered HTTP " + status + ".")
   var json
   try {
     json = JSON.parse(body)
   } catch (e) {
-    return conn("error", { message: "The server sent a reply that is not JSON." })
+    return fail("error", "The server sent a reply that is not JSON.")
   }
-  if (json.errors && json.errors.length) return conn("error", { message: String(json.errors[0].message || "GraphQL error") })
-  var nodes = json.data && json.data.mangas && json.data.mangas.nodes
+  if (json.errors && json.errors.length) return fail("error", String(json.errors[0].message || "GraphQL error"))
+  return { state: "ok", message: "", data: json.data || {} }
+}
+
+function fromResponse(status, body, config) {
+  var r = reply(status, body)
+  if (r.state !== "ok") return conn(r.state, { message: r.message })
+  var nodes = r.data.mangas && r.data.mangas.nodes
   if (!Array.isArray(nodes)) return conn("error", { message: "The server's reply has no library." })
   return conn("ok", {
     manga: nodes.map(function(n) {
@@ -134,9 +148,17 @@ function fromResponse(status, body, config) {
 // What the library view shows for a connection: null for the cover grid,
 // otherwise { title, detail }.
 function notice(connection, configPath) {
+  if (connection.state === "loading") return connection.manga.length ? null : { title: "Loading the library", detail: "" }
+  var p = problem(connection, configPath)
+  if (p) return p
+  if (!connection.manga.length) return { title: "Your library is empty", detail: "Manga you follow show up here." }
+  return null
+}
+
+// { title, detail } for a failed connection, null for "loading" and "ok".
+// Any { state, message } works, so other views reuse it.
+function problem(connection, configPath) {
   switch (connection.state) {
-    case "loading":
-      return connection.manga.length ? null : { title: "Loading the library", detail: "" }
     case "no-config":
       return { title: "No server config", detail: configPath + " is missing or invalid. Run server/miharchy-server to create it." }
     case "down":
@@ -146,7 +168,6 @@ function notice(connection, configPath) {
     case "error":
       return { title: "The server sent an error", detail: connection.message + " Press r to retry." }
   }
-  if (!connection.manga.length) return { title: "Your library is empty", detail: "Manga you follow show up here." }
   return null
 }
 
@@ -161,11 +182,14 @@ if (typeof module !== "undefined") {
     LIBRARY_QUERY: LIBRARY_QUERY,
     parseConfig: parseConfig,
     base64: base64,
+    request: request,
     libraryRequest: libraryRequest,
+    reply: reply,
     coverUrl: coverUrl,
     initial: initial,
     reduce: reduce,
     notice: notice,
+    problem: problem,
     viewIndex: viewIndex
   }
 }
