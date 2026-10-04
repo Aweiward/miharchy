@@ -92,7 +92,7 @@ function desktopEntry(windowDir) {
     "Name=Miharchy",
     "Comment=Read manga",
     "Exec=\"" + exec + "\"",
-    "Icon=" + windowDir + "/miharchy.svg",
+    "Icon=" + windowDir.replace(/\/window$/, "") + "/icons/miharchy-knockout.svg",
     "Terminal=false",
     "Categories=Graphics;Viewer;",
     ""

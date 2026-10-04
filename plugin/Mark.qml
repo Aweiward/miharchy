@@ -126,21 +126,17 @@ Panel {
     anchors.top: parent.top
     anchors.bottom: parent.bottom
     bar: root.bar
-    // nf-fa-book
-    text: ""
     tooltipText: Mark.tooltip(root.mark)
     onPressed: function(button) { root.pressed(button) }
-
-    Rectangle {
-      visible: Mark.down(root.mark)
-      width: Style.space(6)
-      height: width
-      radius: width / 2
-      color: root.bar ? root.bar.urgent : Color.urgent
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.rightMargin: Style.space(3)
-      anchors.topMargin: (parent.height - Style.bar.iconCanvas) / 2
+    // The legs turn green while a sync runs (icons/README.md).
+    iconComponent: Component {
+      MiharchyIcon {
+        iconSize: icon.opticalSize
+        color: icon.foreground
+        legColor: root.sync.state === "running" ? "#9ece6a" : color
+        badgeColor: root.bar ? root.bar.urgent : Color.urgent
+        warning: Mark.down(root.mark)
+      }
     }
   }
 
