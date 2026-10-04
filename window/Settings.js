@@ -3,12 +3,14 @@
 // The Settings view's rows and state. Pure, so tests/settings.test.js pins
 // it; shell.qml sends the payloads built here and feeds replies back.
 //
-// A row: { key, label, type: "bool" | "choice" | "text", default, store }.
+// A row: { key, label, type: "bool" | "choice" | "text" | "folder", default, store }.
 //   store "server": a Suwayomi server setting named key (settings/setSettings).
 //   store "meta":   a Miharchy preference in Suwayomi global meta under
 //                   META_PREFIX + key, stored as a string.
 //   choice rows add options: [{ value, label }]; text rows add pattern and
 //   hint for validation, and may add blank, the text an empty value shows;
+//   a folder row is a text row that takes an absolute path or ~ (see
+//   commitFolder) and saves only once the folder exists;
 //   bool rows may add whenOn, extra server settings sent along when the
 //   row turns on.
 // A later setting is one more entry here.
@@ -51,7 +53,9 @@ var ROWS = [
   { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
   // Suwayomi has no such setting, so the reader deletes a chapter it
   // finished as it leaves it.
-  { key: "deleteAfterRead", label: "Delete after read", type: "bool", default: false, store: "meta" }
+  { key: "deleteAfterRead", label: "Delete after read", type: "bool", default: false, store: "meta" },
+  // Setup sets it too; the sync helper reads it from the server.
+  { key: "syncFolder", label: "Sync folder", type: "folder", default: "", store: "meta", blank: "not set" }
 ]
 
 function defaults() {
@@ -149,8 +153,17 @@ function activate(row, value) {
   return { edit: String(value) }
 }
 
-// An edited text -> { save: value } or { error: message }.
-function commit(row, text) {
+// A typed folder -> { folder } or { error }. "~" means home.
+function commitFolder(text, home) {
+  var t = String(text).trim().replace(/^~(?=\/|$)/, home)
+  if (t.charAt(0) !== "/") return { error: "Enter an absolute path, such as ~/Sync/Mihon." }
+  return { folder: t.length > 1 ? t.replace(/\/+$/, "") : t }
+}
+
+// An edited text -> { save: value } or { error: message }. A folder row
+// gives { folder } instead: the caller checks that it exists, then saves.
+function commit(row, text, home) {
+  if (row.type === "folder") return commitFolder(text, home)
   var t = String(text).trim()
   if (row.pattern && !row.pattern.test(t)) return { error: row.hint }
   return { save: t }
@@ -174,6 +187,7 @@ if (typeof module !== "undefined") {
     savePayload: savePayload,
     reduce: reduce,
     activate: activate,
+    commitFolder: commitFolder,
     commit: commit,
     display: display
   }

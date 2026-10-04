@@ -9,7 +9,7 @@ const ok = (data) => ({ type: "response", reply: M.reply(200, JSON.stringify({ d
 test("every row is complete, and a choice's default is one of its options", () => {
   const keys = new Set();
   for (const r of S.ROWS) {
-    assert.ok(r.key && r.label && ["bool", "choice", "text"].includes(r.type) && ["server", "meta"].includes(r.store), r.key);
+    assert.ok(r.key && r.label && ["bool", "choice", "text", "folder"].includes(r.type) && ["server", "meta"].includes(r.store), r.key);
     assert.ok("default" in r, r.key);
     assert.ok(!keys.has(r.key), "unique key " + r.key);
     keys.add(r.key);
@@ -18,8 +18,8 @@ test("every row is complete, and a choice's default is one of its options", () =
 });
 
 test("the first rows and their defaults", () => {
-  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Download folder", "Delete after read"]);
-  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, downloadsPath: "", deleteAfterRead: false });
+  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Download folder", "Delete after read", "Sync folder"]);
+  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, downloadsPath: "", deleteAfterRead: false, syncFolder: "" });
   assert.deepEqual(row("defaultReadingMode").options.map((o) => o.label), ["Paged right-to-left", "Paged left-to-right", "Webtoon"]);
 });
 
@@ -39,7 +39,7 @@ test("a load reply sets server values and namespaced meta, defaults fill the res
     ] }
   }));
   assert.equal(s.state, "ok");
-  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, downloadsPath: "", deleteAfterRead: false });
+  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, downloadsPath: "", deleteAfterRead: false, syncFolder: "" });
 });
 
 test("an unknown stored reading mode falls back to the default", () => {
@@ -123,4 +123,19 @@ test("the library update skip filters are the server's own settings, on meaning 
     const s = S.reduce(S.initial(), ok({ setSettings: { settings: { [key]: false } } }));
     assert.equal(s.values[key], false, key + " reads back from the save reply");
   }
+});
+
+test("a typed folder must be absolute; ~ means home; trailing slashes go", () => {
+  const folder = row("syncFolder");
+  assert.deepEqual(S.commit(folder, "  ~/Sync/Mihon/ ", "/home/u"), { folder: "/home/u/Sync/Mihon" });
+  assert.deepEqual(S.commitFolder("~", "/home/u"), { folder: "/home/u" });
+  assert.deepEqual(S.commitFolder("/", "/home/u"), { folder: "/" });
+  for (const bad of ["", "Sync", "~user/x"]) assert.ok(S.commit(folder, bad, "/home/u").error, bad);
+});
+
+test("the sync folder is the meta Setup writes, shown as not set until then", () => {
+  const folder = row("syncFolder");
+  assert.deepEqual(S.savePayload(folder, "/home/u/Sync").variables, { key: "miharchy.syncFolder", value: "/home/u/Sync" });
+  assert.equal(S.display(folder, ""), "not set");
+  assert.deepEqual(S.activate(folder, "/home/u/Sync"), { edit: "/home/u/Sync" });
 });

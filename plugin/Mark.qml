@@ -5,10 +5,12 @@ import qs.Commons
 import qs.Ui
 import "Mark.js" as Mark
 import "../window/Model.js" as Model
+import "../window/Sync.js" as Sync
 
 // The mark in the Omarchy bar and its popup of recent updates. It stays thin
 // (ADR 0003): it polls the server and starts the window, which runs as its
-// own process through window/miharchy. Mark.js decides what shows.
+// own process through window/miharchy. Mark.js decides what shows; Sync now
+// runs the same sync helper the window runs.
 Panel {
   id: root
   moduleName: "aweiward.miharchy"
@@ -17,6 +19,8 @@ Panel {
   readonly property string launcher: decodeURIComponent(Qt.resolvedUrl("../window/miharchy").toString().replace(/^file:\/\//, ""))
   property var config: null
   property var mark: Mark.initial()
+  readonly property string helper: decodeURIComponent(Qt.resolvedUrl(Sync.HELPER).toString().replace(/^file:\/\//, ""))
+  property var sync: Sync.initial()
   property int cursor: 0
   // Only the latest poll may land.
   property int pollSeq: 0
@@ -94,6 +98,23 @@ Panel {
     close()
   }
 
+  function startSync() {
+    if (sync.state === "running") return
+    sync = Sync.reduce(sync, { type: "start" })
+    syncJob.command = Sync.command(helper)
+    syncJob.running = true
+  }
+
+  Process {
+    id: syncJob
+    stdout: StdioCollector {
+      onStreamFinished: {
+        root.sync = Sync.reduce(root.sync, { type: "finish", text: text, helper: root.helper })
+        root.poll()
+      }
+    }
+  }
+
   function pressed(button) {
     if (button === Qt.MiddleButton) openWindow()
     else toggle()
@@ -159,6 +180,7 @@ Panel {
       onTextKey: function(t) {
         if (t === "w") root.openWindow()
         else if (t === "r") root.poll()
+        else if (t === "s") root.startSync()
       }
 
       Column {
@@ -171,6 +193,16 @@ Panel {
           color: Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.title
+        }
+
+        Text {
+          width: parent.width
+          visible: root.sync.state !== "idle"
+          wrapMode: Text.Wrap
+          text: Sync.oneLine(root.sync)
+          color: root.sync.state === "failed" ? Color.urgent : Color.muted
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
         }
 
         Text {
@@ -268,7 +300,7 @@ Panel {
         }
 
         Text {
-          text: "enter read   w window   r refresh"
+          text: "enter read   w window   s sync   r refresh"
           color: Color.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.caption

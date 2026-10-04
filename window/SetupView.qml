@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "Setup.js" as Setup
+import "Settings.js" as Settings
 import "Model.js" as Model
 import "Commands.js" as Commands
 
@@ -122,7 +123,7 @@ Item {
         else setup = Setup.reduce(setup, { type: "cancel" })
         break
       case "setup.commit":
-        var c = Setup.commitFolder(field.text, home)
+        var c = Settings.commitFolder(field.text, home)
         if ("error" in c) {
           message = c.error
         } else {

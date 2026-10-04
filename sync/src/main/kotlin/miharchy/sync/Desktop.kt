@@ -24,14 +24,18 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Path
 import java.util.Base64
+import kotlin.io.path.exists
 import kotlin.io.path.readText
 
 @Serializable
 data class ServerConfig(val url: String, val username: String, val password: String) {
     companion object {
-        fun load() = Json { ignoreUnknownKeys = true }.decodeFromString<ServerConfig>(
-            Path.of(System.getProperty("user.home"), ".config/miharchy/server.json").readText(),
-        )
+        /** The window and the mark honor MIHARCHY_SERVER_JSON, so the helper they start does too. */
+        fun load(): ServerConfig {
+            val path = System.getenv("MIHARCHY_SERVER_JSON")?.let(Path::of) ?: Path.of(System.getProperty("user.home"), ".config/miharchy/server.json")
+            check(path.exists()) { "No server config at $path. Run Setup in the window." }
+            return Json { ignoreUnknownKeys = true }.decodeFromString<ServerConfig>(path.readText())
+        }
     }
 }
 
@@ -47,6 +51,36 @@ class Desktop(private val config: ServerConfig) {
     private val http = HttpClient.newHttpClient()
     private val auth = "Basic " + Base64.getEncoder().encodeToString("${config.username}:${config.password}".toByteArray())
     private val endpoint = URI.create(config.url.trimEnd('/') + "/api/graphql")
+
+    /** The folder Setup or Settings stored in meta `miharchy.syncFolder`, or null when none is set. */
+    fun syncFolder(): String? = query(
+        "query(\$key: String!) { metas(filter: { key: { equalTo: \$key } }) { nodes { value } } }",
+        buildJsonObject { put("key", "miharchy.syncFolder") },
+    ).nodes("metas").firstOrNull()?.str("value")?.takeIf { it.isNotBlank() }
+
+    /**
+     * The desktop library as a Mihon backup. Client data and server settings stay out: the file lands in a
+     * shared folder, and the server settings hold the server password.
+     */
+    fun export(): ByteArray {
+        val url = query(
+            """
+            mutation {
+              createBackup(input: { flags: {
+                includeManga: true, includeChapters: true, includeCategories: true, includeHistory: true,
+                includeTracking: true, includeClientData: false, includeServerSettings: false
+              } }) { url }
+            }
+            """,
+            buildJsonObject {},
+        ).obj("createBackup").str("url")
+        val response = http.send(
+            HttpRequest.newBuilder(endpoint.resolve(url)).header("Authorization", auth).GET().build(),
+            HttpResponse.BodyHandlers.ofByteArray(),
+        )
+        check(response.statusCode() == 200) { "Suwayomi answered HTTP ${response.statusCode()} for the backup" }
+        return response.body()
+    }
 
     /** Library manga plus any manga the phone backup names, so phone changes find their desktop rows. */
     fun snapshot(phoneUrls: Collection<String>): Snapshot {

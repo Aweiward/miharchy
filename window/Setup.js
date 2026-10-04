@@ -212,13 +212,6 @@ function next(s) {
   return 0
 }
 
-// A typed folder -> { folder } or { error }. "~" means home.
-function commitFolder(text, home) {
-  var t = String(text).trim().replace(/^~(?=\/|$)/, home)
-  if (t.charAt(0) !== "/") return { error: "Enter an absolute path, such as ~/Sync/Mihon." }
-  return { folder: t.length > 1 ? t.replace(/\/+$/, "") : t }
-}
-
 // The server write a successful run calls for, or null. FlareSolverr goes
 // through the Settings row so its whenOn fallback rides along.
 function savePayload(id, result, folder) {
@@ -239,6 +232,7 @@ if (typeof module !== "undefined") {
     CONTAINER: CONTAINER,
     STEPS: STEPS,
     SERVER_QUERY: SERVER_QUERY,
+    command: command,
     probeCommand: probeCommand,
     runCommand: runCommand,
     parseJob: parseJob,
@@ -249,7 +243,6 @@ if (typeof module !== "undefined") {
     action: action,
     incomplete: incomplete,
     next: next,
-    commitFolder: commitFolder,
     savePayload: savePayload
   }
 }
