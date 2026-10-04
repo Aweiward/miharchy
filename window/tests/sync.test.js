@@ -6,7 +6,6 @@ const os = require("node:os");
 const path = require("node:path");
 const S = require("./load")("Sync.js");
 
-const helper = "/repo/sync/build/install/miharchy-sync/bin/miharchy-sync";
 const summary = {
   server: "http://127.0.0.1:4590",
   folder: "/home/u/Sync",
@@ -24,16 +23,23 @@ const summary = {
     { change: "markedUnread", manga: "Kept", chapter: "Ch 3" }
   ]
 };
-const finish = (output, code) => S.reduce({ state: "running" }, { type: "finish", text: output + "\n" + code + "\n", helper });
+const finish = (output, code) => S.reduce({ state: "running" }, { type: "finish", text: output + "\n" + code + "\n" });
 
-// Runs the real command with a stand-in helper script.
-async function run(script) {
+function stub(file, script) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, "#!/bin/sh\n" + script, { mode: 0o755 });
+}
+
+// Runs the real command with stand-in helper scripts: dev is the one in a
+// checkout's sync/build, installed the one Setup builds under HOME.
+async function run(dev, installed) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
   const file = path.join(dir, "miharchy-sync");
-  if (script !== null) fs.writeFileSync(file, "#!/bin/sh\n" + script, { mode: 0o755 });
+  if (dev !== null) stub(file, dev);
+  if (installed) stub(path.join(dir, "home", S.HELPER_DIR, "bin", "miharchy-sync"), installed);
   const argv = S.command(file);
-  const { stdout } = await execFile(argv[0], argv.slice(1));
-  return S.reduce({ state: "running" }, { type: "finish", text: stdout, helper: file });
+  const { stdout } = await execFile(argv[0], argv.slice(1), { env: { ...process.env, HOME: path.join(dir, "home") } });
+  return S.reduce({ state: "running" }, { type: "finish", text: stdout });
 }
 
 test("a sync reports what came from the phone, the file for Mihon and what Mihon cannot apply", () => {
@@ -73,9 +79,13 @@ test("the real command passes --json and the helper's output through", async () 
   assert.deepEqual(failed, { state: "failed", message: "No sync folder is set. Choose one in Setup or Settings." });
 });
 
-test("a helper that is not built says how to build it", async () => {
+test("the helper Setup installed runs before a checkout's build", async () => {
+  const s = await run("echo 'dev build'; exit 1", "echo '" + JSON.stringify(summary) + "'");
+  assert.equal(s.state, "done");
+  assert.deepEqual(await run("echo 'dev build'; exit 1"), { state: "failed", message: "dev build" });
+});
+
+test("a helper that is not built points at Setup, never at a build in the plugin folder", async () => {
   const s = await run(null);
-  assert.equal(s.state, "failed");
-  assert.match(s.message, /^The sync helper is not built\. Build it with: cd \/.+ && \.\/gradlew installDist$/);
-  assert.equal(S.buildCommand(helper), "cd /repo/sync && ./gradlew installDist");
+  assert.deepEqual(s, { state: "failed", message: "The sync helper is not built. Build it in the window: press : and choose Setup." });
 });

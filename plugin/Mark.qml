@@ -19,7 +19,7 @@ Panel {
   readonly property string launcher: decodeURIComponent(Qt.resolvedUrl("../window/miharchy").toString().replace(/^file:\/\//, ""))
   property var config: null
   property var mark: Mark.initial()
-  readonly property string helper: decodeURIComponent(Qt.resolvedUrl(Sync.HELPER).toString().replace(/^file:\/\//, ""))
+  readonly property string devHelper: decodeURIComponent(Qt.resolvedUrl(Sync.DEV_HELPER).toString().replace(/^file:\/\//, ""))
   property var sync: Sync.initial()
   property int cursor: 0
   // Only the latest poll may land.
@@ -101,7 +101,7 @@ Panel {
   function startSync() {
     if (sync.state === "running") return
     sync = Sync.reduce(sync, { type: "start" })
-    syncJob.command = Sync.command(helper)
+    syncJob.command = Sync.command(devHelper)
     syncJob.running = true
   }
 
@@ -109,7 +109,7 @@ Panel {
     id: syncJob
     stdout: StdioCollector {
       onStreamFinished: {
-        root.sync = Sync.reduce(root.sync, { type: "finish", text: text, helper: root.helper })
+        root.sync = Sync.reduce(root.sync, { type: "finish", text: text })
         root.poll()
       }
     }

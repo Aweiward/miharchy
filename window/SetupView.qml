@@ -27,8 +27,9 @@ Item {
   // The folder waiting on its existence check.
   property string folder: ""
   property bool checked: false
-  // The window runs from the repo's window/, beside server/.
+  // The window runs from the repo's window/, beside server/ and sync/.
   readonly property string serverScript: Quickshell.shellPath("../server/miharchy-server")
+  readonly property string syncDir: Quickshell.shellPath("../sync")
   readonly property var current: Setup.STEPS[cursor]
   readonly property var currentStatus: Setup.status(setup, current.id)
 
@@ -51,7 +52,7 @@ Item {
   }
 
   function check() {
-    if (!setup.job) start("probe", Setup.probeCommand(configPath))
+    if (!setup.job) start("probe", Setup.probeCommand(configPath, syncDir, Quickshell.shellDir))
   }
 
   function post(payload, done) {
@@ -116,7 +117,7 @@ Item {
         }
         break
       case "setup.confirm":
-        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript }))
+        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir }))
         break
       case "setup.cancel":
         if (editing) endEdit()
@@ -139,6 +140,9 @@ Item {
     id: proc
     property string job: ""
     stdout: StdioCollector {
+      id: output
+      // Live text, so a long step such as the helper build shows progress.
+      waitForEnd: false
       onStreamFinished: view.finished(proc.job, text)
     }
   }
@@ -186,8 +190,8 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
-            text: row.status === "todo" ? "to do" : row.status === "unavailable" ? "no docker" : row.status
-            color: row.status === "todo" ? view.theme.urgent : row.status === "done" ? view.theme.accent : view.theme.muted
+            text: ({ todo: "to do", outdated: "out of date", unavailable: "no docker" })[row.status] || row.status
+            color: row.status === "todo" || row.status === "outdated" ? view.theme.urgent : row.status === "done" ? view.theme.accent : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
           }
@@ -219,7 +223,7 @@ Item {
 
       Text {
         visible: view.confirming
-        text: view.current.id === "server" ? "Run server/miharchy-server now?  y run   n cancel" : "Start the FlareSolverr container and turn it on in Suwayomi?  y run   n cancel"
+        text: (view.current.prompt || "") + "  y run   n cancel"
         color: view.theme.accent
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSize
@@ -243,6 +247,15 @@ Item {
         wrapMode: Text.Wrap
         text: view.message
         color: view.theme.urgent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      Text {
+        width: parent.width
+        visible: view.currentStatus.state === "running" && text !== ""
+        text: output.text.replace(/\s+$/, "").split("\n").slice(-12).join("\n")
+        color: view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
       }
