@@ -29,7 +29,6 @@ data class Summary(
     val backup: String,
     val dryRun: Boolean,
     val changes: List<Change>,
-    val skipped: List<Skipped>,
 )
 
 fun main(args: Array<String>) {
@@ -47,10 +46,12 @@ fun main(args: Array<String>) {
 
     val desktop = Desktop(ServerConfig.load())
     val changes = merge(phoneBaseline?.toLibrary(), phoneNow.toLibrary(), desktop.snapshot(phoneUrls).library, desktopBaseline?.toLibrary())
-    val skipped = if (dryRun) emptyList() else desktop.apply(changes, phoneBytes, phoneUrls)
-    if (!dryRun) writePrivately(stateDir.resolve("phone-baseline.tachibk"), phoneBytes)
+    if (!dryRun) {
+        desktop.apply(changes, phoneBytes, phoneUrls)
+        writePrivately(stateDir.resolve("phone-baseline.tachibk"), phoneBytes)
+    }
 
-    val summary = Summary(phoneFile.toString(), dryRun, changes, skipped)
+    val summary = Summary(phoneFile.toString(), dryRun, changes)
     println(if (asJson) Json.encodeToString(summary) else describe(summary))
 }
 
@@ -80,8 +81,9 @@ fun describe(summary: Summary): String {
         c.count { it is SetCategories } to "set categories on %d manga",
         c.count { it is MarkRead } to "marked %d chapters read",
         c.count { it is MarkUnread } to "marked %d chapters unread",
+        c.count { it is AddBookmark } to "bookmarked %d chapters",
+        c.count { it is RemoveBookmark } to "removed %d bookmarks",
         c.count { it is SetLastPage } to "set the last page read on %d chapters",
-        summary.skipped.size to "skipped %d chapters the source no longer lists",
     ).filter { it.first > 0 }.map { (n, text) -> text.format(n) }
     val verb = if (summary.dryRun) "Would apply" else "Applied"
     return "$verb phone backup ${summary.backup}\n" +

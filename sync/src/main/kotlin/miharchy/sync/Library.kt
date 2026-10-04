@@ -16,7 +16,7 @@ data class MangaKey(
     val url: String,
 )
 
-data class ChapterState(val read: Boolean = false, val lastPageRead: Long = 0)
+data class ChapterState(val read: Boolean = false, val bookmark: Boolean = false, val lastPageRead: Long = 0)
 
 data class MangaState(
     val title: String,
@@ -27,8 +27,8 @@ data class MangaState(
     fun chapter(url: String) = chapters[url] ?: ChapterState()
 }
 
-/** One side's library as the merge sees it: categories by name, chapters by url. */
-data class Library(val manga: Map<MangaKey, MangaState>, val categories: Set<String> = emptySet()) {
+/** One side's library as the merge sees it: categories by name in display order, chapters by url. */
+data class Library(val manga: Map<MangaKey, MangaState>, val categories: List<String> = emptyList()) {
     companion object {
         val EMPTY = Library(emptyMap())
     }
@@ -52,9 +52,9 @@ fun Backup.toLibrary(): Library {
                 title = m.title,
                 inLibrary = m.favorite,
                 categories = m.categories.mapNotNull { nameByOrder[it] }.toSet(),
-                chapters = m.chapters.associate { it.url to ChapterState(it.read, it.lastPageRead) },
+                chapters = m.chapters.associate { it.url to ChapterState(it.read, it.bookmark, it.lastPageRead) },
             )
         },
-        categories = backupCategories.map { it.name }.toSet(),
+        categories = backupCategories.sortedBy { it.order }.map { it.name },
     )
 }

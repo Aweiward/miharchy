@@ -11,15 +11,15 @@ private const val SOURCE = 2499283573021220255L
 private val M = MangaKey(SOURCE, "/manga/m")
 private val N = MangaKey(SOURCE, "/manga/n")
 
-private fun chapter(url: String, read: Boolean = false, page: Long = 0) =
-    BackupChapter(url = url, name = url, read = read, lastPageRead = page)
+private fun chapter(url: String, read: Boolean = false, page: Long = 0, bookmark: Boolean = false) =
+    BackupChapter(url = url, name = url, read = read, lastPageRead = page, bookmark = bookmark)
 
 private fun manga(key: MangaKey, vararg chapters: BackupChapter, favorite: Boolean = true, categories: List<String> = emptyList()) =
     key to Triple(chapters.toList(), favorite, categories)
 
 /** Builds a backup the way Mihon does (categories referenced by order) and reads it back through the real codec. */
-private fun library(vararg manga: Pair<MangaKey, Triple<List<BackupChapter>, Boolean, List<String>>>): Library {
-    val names = manga.flatMap { it.second.third }.distinct()
+private fun library(vararg manga: Pair<MangaKey, Triple<List<BackupChapter>, Boolean, List<String>>>, categories: List<String> = emptyList()): Library {
+    val names = (categories + manga.flatMap { it.second.third }).distinct()
     val backup = Backup(
         backupManga = manga.map { (key, m) ->
             BackupManga(
@@ -65,7 +65,7 @@ class MergeTest {
 
     @Test fun `a change on the desktop only is kept`() {
         val base = library(manga(M, chapter("/c1"), categories = listOf("A")))
-        val desktop = library(manga(M, chapter("/c1", read = true, page = 3), categories = listOf("B")))
+        val desktop = library(manga(M, chapter("/c1", read = true, page = 3), categories = listOf("B")), categories = listOf("A"))
         assertEquals(emptyList(), merge(base, base, desktop, base))
     }
 
@@ -85,6 +85,20 @@ class MergeTest {
         assertEquals(listOf(MarkRead(M, "/c1")), merge(desktopBase, desktop, phone, phoneBase))
     }
 
+    @Test fun `a bookmark changed on the phone only wins, added or removed`() {
+        val plain = library(manga(M, chapter("/c1")))
+        val marked = library(manga(M, chapter("/c1", bookmark = true)))
+        assertEquals(listOf(AddBookmark(M, "/c1")), merge(plain, marked, plain, plain))
+        assertEquals(listOf(RemoveBookmark(M, "/c1")), merge(marked, plain, marked, marked))
+    }
+
+    @Test fun `both sides changed the bookmark - bookmarked wins`() {
+        val plain = library(manga(M, chapter("/c1")))
+        val marked = library(manga(M, chapter("/c1", bookmark = true)))
+        assertEquals(emptyList(), merge(marked, plain, marked, plain))
+        assertEquals(listOf(AddBookmark(M, "/c1")), merge(plain, marked, plain, marked))
+    }
+
     @Test fun `both sides changed the last page - the higher value wins`() {
         val base = library(manga(M, chapter("/c1", page = 2)))
         val phone = library(manga(M, chapter("/c1", page = 5)))
@@ -100,6 +114,12 @@ class MergeTest {
             listOf(CreateCategory("B"), SetCategories(M, setOf("A", "B", "C"))),
             merge(base, phone, desktop, base),
         )
+    }
+
+    @Test fun `every phone category reaches the desktop, empty ones too, in the phone's order`() {
+        val phone = library(manga(M, categories = listOf("A")), categories = listOf("C", "A", "B"))
+        val desktop = library(manga(M, categories = listOf("A")))
+        assertEquals(listOf(CreateCategory("C"), CreateCategory("B")), merge(null, phone, desktop, null))
     }
 
     @Test fun `a category the desktop already has is not created again`() {
@@ -142,7 +162,7 @@ class MergeTest {
         assertEquals(emptyList(), merge(base, removed, removed, base))
     }
 
-    @Test fun `a chapter the desktop lacks still gets its change, for the apply layer to fetch`() {
+    @Test fun `a chapter the desktop lacks still gets its change, for the restore to insert`() {
         val base = library(manga(M, chapter("/c1")))
         val phone = library(manga(M, chapter("/c1"), chapter("/c2", read = true, page = 3)))
         assertEquals(listOf(MarkRead(M, "/c2"), SetLastPage(M, "/c2", 3)), merge(base, phone, base, null))

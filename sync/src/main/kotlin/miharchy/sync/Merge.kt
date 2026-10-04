@@ -7,10 +7,16 @@ import kotlinx.serialization.Serializable
 @Serializable
 sealed interface Change
 
+@Serializable
+sealed interface ChapterChange : Change {
+    val manga: MangaKey
+    val chapterUrl: String
+}
+
 @Serializable @SerialName("createCategory")
 data class CreateCategory(val name: String) : Change
 
-/** The desktop has never seen this manga, so it comes in through a restore, chapters and read state included. */
+/** The desktop has never seen this manga, so it comes in whole through a restore, chapters and read state included. */
 @Serializable @SerialName("importManga")
 data class ImportManga(val manga: MangaKey, val title: String) : Change
 
@@ -24,13 +30,19 @@ data class RemoveFromLibrary(val manga: MangaKey, val title: String) : Change
 data class SetCategories(val manga: MangaKey, val categories: Set<String>) : Change
 
 @Serializable @SerialName("markRead")
-data class MarkRead(val manga: MangaKey, val chapterUrl: String) : Change
+data class MarkRead(override val manga: MangaKey, override val chapterUrl: String) : ChapterChange
 
 @Serializable @SerialName("markUnread")
-data class MarkUnread(val manga: MangaKey, val chapterUrl: String) : Change
+data class MarkUnread(override val manga: MangaKey, override val chapterUrl: String) : ChapterChange
+
+@Serializable @SerialName("addBookmark")
+data class AddBookmark(override val manga: MangaKey, override val chapterUrl: String) : ChapterChange
+
+@Serializable @SerialName("removeBookmark")
+data class RemoveBookmark(override val manga: MangaKey, override val chapterUrl: String) : ChapterChange
 
 @Serializable @SerialName("setLastPage")
-data class SetLastPage(val manga: MangaKey, val chapterUrl: String, val page: Long) : Change
+data class SetLastPage(override val manga: MangaKey, override val chapterUrl: String, val page: Long) : ChapterChange
 
 private val ABSENT = MangaState(title = "", inLibrary = false, categories = emptySet(), chapters = emptyMap())
 
@@ -68,11 +80,13 @@ fun merge(phoneBaseline: Library?, phoneNow: Library, desktopNow: Library, deskt
         for ((url, c) in merged.chapters) {
             val d = dN.chapter(url)
             if (c.read != d.read) changes += if (c.read) MarkRead(key, url) else MarkUnread(key, url)
+            if (c.bookmark != d.bookmark) changes += if (c.bookmark) AddBookmark(key, url) else RemoveBookmark(key, url)
             if (c.lastPageRead != d.lastPageRead) changes += SetLastPage(key, url, c.lastPageRead)
         }
     }
 
-    val newCategories = changes.filterIsInstance<SetCategories>().flatMap { it.categories } - desktopNow.categories
+    // Every phone category, even an empty one, as Mihon's restore does. New ones append in the phone's order.
+    val newCategories = phoneNow.categories + changes.filterIsInstance<SetCategories>().flatMap { it.categories } - desktopNow.categories.toSet()
     return newCategories.distinct().map(::CreateCategory) + changes
 }
 
@@ -99,6 +113,7 @@ private fun mergeManga(pB: MangaState, pN: MangaState, dB: MangaState, dN: Manga
         val (cpB, cpN, cdB, cdN) = listOf(pB, pN, dB, dN).map { it.chapter(url) }
         ChapterState(
             read = pick(cpB.read, cpN.read, cdB.read, cdN.read) { p, d -> p || d },
+            bookmark = pick(cpB.bookmark, cpN.bookmark, cdB.bookmark, cdN.bookmark) { p, d -> p || d },
             lastPageRead = pick(cpB.lastPageRead, cpN.lastPageRead, cdB.lastPageRead, cdN.lastPageRead, ::maxOf),
         )
     }
