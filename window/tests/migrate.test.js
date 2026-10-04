@@ -142,8 +142,11 @@ test("in a batch, h/l pick another result or skip, and only picked rows migrate"
   b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "request" }), 0, { type: "reply", reply: ok({ fetchSourceManga: { hasNextPage: false, mangas: [{ id: 11, title: "X" }, { id: 12, title: "X2" }] } }), config });
   b = Mi.pick(b, 0, 1);
   assert.equal(Mi.chosen(b, 0).id, 12);
+  assert.equal(Mi.matchStatus(b, 0, "/c"), "X2   2 of 2");
   b = Mi.pick(b, 0, 1);
   assert.equal(Mi.chosen(b, 0), null, "past the last result is skip");
+  assert.equal(Mi.matchStatus(b, 0, "/c"), "skip   2 results");
+  assert.equal(Mi.matchStatus(b, 1, "/c"), "waiting");
   b = Mi.pick(b, 0, -1);
   assert.equal(Mi.chosen(b, 0).id, 12);
   assert.deepEqual(Mi.jobs(b).map((j) => [j.old.id, j.target.id]), [[1, 12]], "the row still searching has nothing to migrate");

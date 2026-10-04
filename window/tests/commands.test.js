@@ -383,3 +383,38 @@ test("Sync now runs from the palette or s on the Library and Updates; its result
   for (const k of [key(C.KEY.Escape), text("q"), key(C.KEY.Return)]) assert.equal(C.dispatch(result, k), "sync.close");
   assert.equal(C.dispatch(result, text("s")), null, "a second s does not start another sync over the result");
 });
+
+test("M on a manga migrates it; M on the sources screen or the palette migrates a whole source", () => {
+  assert.equal(C.dispatch(screen("manga"), text("M")), "manga.migrate");
+  assert.equal(C.dispatch(screen("manga"), text("m")), null);
+  assert.equal(C.dispatch(screen("sources"), text("M")), "migrate.batch");
+  assert.ok(C.paletteRows("migrate").some((c) => c.id === "migrate.batch"));
+  assert.equal(C.dispatch(screen("library"), text("M")), null);
+});
+
+test("every migration step takes Esc as back, never quit, even while it runs", () => {
+  for (const step of ["search", "from", "to", "match", "confirm", "busy", "done"]) {
+    assert.equal(C.dispatch(screen("migrate-" + step), key(C.KEY.Escape)), "migrate.back", step);
+  }
+  assert.equal(C.dispatch(screen("migrate-busy"), key(C.KEY.Return)), null, "Enter does not start a second run");
+});
+
+test("migrating: hjkl pick a result, / searches another title, Enter chooses; the confirm takes Enter to migrate, c to copy, d for downloads", () => {
+  const s = screen("migrate-search");
+  assert.equal(C.dispatch(s, text("l")), "migrate.right");
+  assert.equal(C.dispatch(s, text("j")), "migrate.down");
+  assert.equal(C.dispatch(s, text("/")), "migrate.search");
+  assert.equal(C.dispatch(s, text("r")), "migrate.retry");
+  assert.equal(C.dispatch(s, key(C.KEY.Return)), "migrate.open");
+  const m = screen("migrate-match");
+  assert.equal(C.dispatch(m, text("h")), "migrate.left", "h/l pick another result for the row");
+  assert.equal(C.dispatch(m, key(C.KEY.Return)), "migrate.open");
+  const c = screen("migrate-confirm");
+  assert.equal(C.dispatch(c, key(C.KEY.Return)), "migrate.open");
+  assert.equal(C.dispatch(c, text("c")), "migrate.copy");
+  assert.equal(C.dispatch(c, text("d")), "migrate.downloads");
+  assert.equal(C.dispatch(c, text("j")), null);
+  const typing = { palette: false, view: "migrate-search", editing: "migrate" };
+  assert.equal(C.dispatch(typing, key(C.KEY.Return)), "migrate.commit");
+  assert.equal(C.dispatch(typing, key(C.KEY.Escape)), "migrate.cancel");
+});

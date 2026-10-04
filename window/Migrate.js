@@ -203,6 +203,25 @@ function chosen(b, index) {
   return b.picks[index] === -1 ? null : b.search.groups[index].items[b.picks[index]]
 }
 
+function retry(b) {
+  return copy(b, { search: GlobalSearch.retry(b.search) })
+}
+
+// A batch row's right side: the pick and where it sits among the results,
+// "skip", or the search's own status.
+function matchStatus(b, index, configPath) {
+  var g = b.search.groups[index]
+  var t = chosen(b, index)
+  if (t) return t.title + "   " + (b.picks[index] + 1) + " of " + g.items.length
+  if (g.state === "ok" && g.items.length) return "skip   " + g.items.length + (g.items.length === 1 ? " result" : " results")
+  return GlobalSearch.status(g, configPath)
+}
+
+// plan: the plan for one migration; total: the target's chapter count.
+function planText(p, total) {
+  return "Marks " + p.read.length + " of " + total + " chapters read and " + p.bookmark.length + " bookmarked."
+}
+
 // What the batch migrates: { old: { id, title }, target: { id, title } }.
 function jobs(b) {
   var out = []
@@ -231,6 +250,9 @@ if (typeof module !== "undefined") {
     reduceBatch: reduceBatch,
     pick: pick,
     chosen: chosen,
+    retry: retry,
+    matchStatus: matchStatus,
+    planText: planText,
     jobs: jobs
   }
 }

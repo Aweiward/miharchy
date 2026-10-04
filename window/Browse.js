@@ -173,10 +173,10 @@ function sourceLabel(n, names) {
 function sourceHelp(manga, extension) {
   if (!manga || !manga.missing) return ""
   var name = manga.sourceName
-  if (!name) return "Migrate this manga to another source (coming soon)."
-  if (extension && extension.installed) return "The installed " + name + " extension serves a different source now. Migrate this manga to it (coming soon)."
-  if (extension) return "Install the " + name + " extension in Browse. If the manga still shows not installed, the source changed: migrate it (coming soon)."
-  return "No extension in your repos is named " + name + ". Migrate this manga to another source (coming soon)."
+  if (!name) return "Migrate this manga to another source: M."
+  if (extension && extension.installed) return "The installed " + name + " extension serves a different source now. Migrate this manga to it: M."
+  if (extension) return "Install the " + name + " extension in Browse. If the manga still shows not installed, the source changed: migrate it with M."
+  return "No extension in your repos is named " + name + ". Migrate this manga to another source: M."
 }
 
 function parseNames(data) {
