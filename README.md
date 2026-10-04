@@ -10,7 +10,7 @@ Status: early. See `CONTEXT.md` and `docs/adr/`.
 omarchy plugin add https://github.com/Aweiward/miharchy --enable
 ```
 
-This clones the plugin into `~/.config/omarchy/plugins/aweiward.miharchy` and puts the Miharchy mark in the bar. Middle click the mark to open the window. The first time, the window opens on Setup.
+This clones the plugin into `~/.config/omarchy/plugins/miharchy` and puts the Miharchy mark in the bar. Middle click the mark to open the window. The first time, the window opens on Setup.
 
 ## Setup
 
@@ -36,7 +36,7 @@ A Mihon restore only adds: it cannot remove a manga from the library, take it ou
 ## Uninstall
 
 ```sh
-omarchy plugin remove aweiward.miharchy
+omarchy plugin remove miharchy
 systemctl --user disable --now miharchy-server
 rm ~/.config/systemd/user/miharchy-server.service ~/.local/share/applications/miharchy.desktop
 rm -rf ~/.config/miharchy ~/.local/share/miharchy
