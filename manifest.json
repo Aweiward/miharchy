@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "aweiward.miharchy",
+  "name": "Miharchy",
+  "version": "0.1.0",
+  "author": "Aweiward",
+  "license": "MIT",
+  "description": "Miharchy: a manga reader for Omarchy. The mark shows new chapters; the window reads them.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "plugin/Mark.qml"
+  },
+  "barWidget": {
+    "displayName": "Miharchy",
+    "description": "New chapters in the bar. Left click lists them, middle click opens the window.",
+    "category": "Media",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

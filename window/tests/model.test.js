@@ -166,3 +166,11 @@ test("an empty category has its own notice; a filled library with an empty categ
   const empty = library([], []);
   assert.equal(M.notice(empty, "p", M.switcher(empty)[0]).title, "Your library is empty");
 });
+
+test("a chapter to open at launch is two ids, else nothing", () => {
+  assert.deepEqual(M.chapterTarget("12 345"), { mangaId: 12, chapterId: 345 });
+  assert.equal(M.chapterTarget(""), null);
+  assert.equal(M.chapterTarget("12"), null);
+  assert.equal(M.chapterTarget("12 x"), null);
+  assert.equal(M.chapterTarget("12 3.5"), null);
+});

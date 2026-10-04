@@ -94,15 +94,21 @@ Item {
   // manga detail's first read brings; no source fetch.
   function open() {
     var row = rows[cursor]
-    if (!row || !config) return
+    if (row) openChapter(row.mangaId, row.id)
+  }
+
+  // Also the mark's way in: shell.qml calls it for the launcher's
+  // open-chapter.
+  function openChapter(mangaId, chapterId) {
+    if (!config) return
     var seq = ++openSeq
     var cfg = config
-    var d = Browse.detail(row.mangaId, false)
+    var d = Browse.detail(mangaId, false)
     error = ""
     send(Browse.detailPayload(d), function(reply) {
       if (seq !== view.openSeq) return
       d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
-      if (d.manga) view.read(d.manga, d.chapters, row.id)
+      if (d.manga) view.read(d.manga, d.chapters, chapterId)
       else view.error = Browse.notice(d, view.configPath).title
     })
   }

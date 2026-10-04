@@ -1,3 +1,11 @@
 #!/bin/sh
 # Opens the Miharchy window. -n: a second launch does nothing while one runs.
-exec quickshell -n -p "$(dirname "$(readlink -f "$0")")" "$@"
+# miharchy open-chapter <mangaId> <chapterId>: opens the reader on that
+# chapter, in the running window or else in a new one.
+dir="$(dirname "$(readlink -f "$0")")"
+if [ "$1" = open-chapter ]; then
+  quickshell ipc -p "$dir" call miharchy openChapter "$2" "$3" >/dev/null 2>&1 && exit 0
+  export MIHARCHY_OPEN_CHAPTER="$2 $3"
+  shift 3
+fi
+exec quickshell -n -p "$dir" "$@"

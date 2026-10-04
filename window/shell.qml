@@ -33,6 +33,8 @@ ShellRoot {
   property string settingsError: ""
   // Only the latest library request may update the connection.
   property int requestSeq: 0
+  // { mangaId, chapterId } to read once the config loads, or null.
+  property var pendingChapter: Model.chapterTarget(Quickshell.env("MIHARCHY_OPEN_CHAPTER"))
 
   onSwitcherIndexChanged: libraryCursor = 0
 
@@ -68,6 +70,27 @@ ShellRoot {
     }
     fetchLibrary()
     sendSettings(Settings.loadPayload())
+    if (pendingChapter) openChapter(pendingChapter)
+  }
+
+  // The mark's update rows land here, through the launcher's open-chapter.
+  function openChapter(target) {
+    pendingChapter = target
+    if (!config) return
+    pendingChapter = null
+    if (reader.open) reader.close()
+    mangaDetail.close()
+    downloadsView.open = false
+    view = "updates"
+    updatesView.openChapter(target.mangaId, target.chapterId)
+  }
+
+  IpcHandler {
+    target: "miharchy"
+
+    function openChapter(mangaId: int, chapterId: int): void {
+      root.openChapter({ mangaId: mangaId, chapterId: chapterId })
+    }
   }
 
   // Loads and saves alike: every reply carries the values it touched.
