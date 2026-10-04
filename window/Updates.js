@@ -32,19 +32,24 @@ function copy(o, changes) {
 }
 
 // Reply data from UPDATES_QUERY -> its updates, newest fetched first. An
-// update is an unread chapter fetched after its manga joined the library,
-// as in Mihon; the chapters fetched when it joined are its backlog.
-// fetchedAt and inLibraryAt are seconds.
-function updates(data) {
+// update is an unread chapter fetched after its manga joined the library
+// and uploaded in the last 3 months, as in Mihon (updatesView.sq and
+// UpdatesViewModel); older ones are history, not news. fetchedAt and
+// inLibraryAt are seconds, uploadDate and now milliseconds.
+function updates(data, now) {
   var nodes = (data.chapters && data.chapters.nodes) || []
+  var since = new Date(now)
+  since.setMonth(since.getMonth() - 3)
   return nodes
-    .filter(function(c) { return !c.isRead && c.manga && Number(c.fetchedAt) > Number(c.manga.inLibraryAt) })
+    .filter(function(c) {
+      return !c.isRead && c.manga && Number(c.fetchedAt) > Number(c.manga.inLibraryAt) && Number(c.uploadDate) > since.getTime()
+    })
     .sort(function(a, b) { return Number(b.fetchedAt) - Number(a.fetchedAt) || b.sourceOrder - a.sourceOrder })
 }
 
 // The unread update count, for the bar mark: it runs UPDATES_QUERY too.
-function count(data) {
-  return updates(data).length
+function count(data, now) {
+  return updates(data, now).length
 }
 
 // updates.state: "loading" | "ok" | a failed connection state.
@@ -82,7 +87,7 @@ function dayLabel(ms, now) {
 
 function rows(data, config, now) {
   var last = ""
-  return updates(data).map(function(c) {
+  return updates(data, now).map(function(c) {
     var day = dayLabel(Number(c.fetchedAt) * 1000, now)
     var row = {
       id: c.id,
