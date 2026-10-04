@@ -60,6 +60,11 @@ test("transitions: missing config, request, and each kind of answer", () => {
   assert.equal(M.reduce(s0, { type: "unknown" }), s0);
 });
 
+test("a Suwayomi exception reads as its message, without the wrapper or stack", () => {
+  const body = { errors: [{ message: "Exception while fetching data (/addExtensionStore) : HTTP error 404\r\n\r\nHttpException: HTTP error 404\n\tat x.y(Z.kt:50)\n" }] };
+  assert.equal(M.reply(200, JSON.stringify(body)).message, "HTTP error 404");
+});
+
 test("a reload keeps the shown library; a failed one drops it", () => {
   const ok = M.reduce(M.initial(), respond(200, { data: { mangas: { nodes: [{ id: 1, title: "A", thumbnailUrl: null }] } } }));
   const reloading = M.reduce(ok, { type: "request" });
