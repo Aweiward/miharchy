@@ -17,6 +17,7 @@ Rectangle {
   property bool deleteAfterRead: false
   // Only the latest page fetch may update the reader.
   property int pagesSeq: 0
+  property var exit: Reader.EXIT
 
   readonly property bool open: reader !== null
   readonly property bool webtoon: open && reader.mode === "webtoon"
@@ -88,14 +89,38 @@ Rectangle {
     if (!payload) return
     var id = Reader.chapterId(reader)
     reader = Reader.reduce(reader, { type: "saving" })
+    exitStep("write")
     send(payload, function(reply) {
       if (reply.state !== "ok" && view.reader) view.reader = Reader.reduce(view.reader, { type: "save-failed", chapterId: id })
+      view.exitStep("wrote")
     })
   }
 
   function leave() {
     var payload = Reader.deletePayload(reader, deleteAfterRead)
-    if (payload) send(payload, function() { view.deleted() })
+    if (!payload) return
+    exitStep("write")
+    send(payload, function() {
+      view.deleted()
+      view.exitStep("wrote")
+    })
+  }
+
+  // Every way the window exits lands here: the open chapter saves and
+  // leaves first, and the window quits once those replies are in.
+  function quit() {
+    if (exit.quitting) return
+    if (open) {
+      save()
+      leave()
+    }
+    quitTimeout.start()
+    exitStep("quit")
+  }
+
+  function exitStep(event) {
+    exit = Reader.exit(exit, event)
+    if (Reader.canQuit(exit)) Qt.quit()
   }
 
   // A page turn saves after a pause; leaving the chapter saves it first.
@@ -175,6 +200,13 @@ Rectangle {
     id: saveTimer
     interval: 1000
     onTriggered: view.save()
+  }
+
+  // A server that hangs never answers; the window still quits.
+  Timer {
+    id: quitTimeout
+    interval: 2000
+    onTriggered: Qt.quit()
   }
 
   // Each slot keeps its page while that page stays within the two before

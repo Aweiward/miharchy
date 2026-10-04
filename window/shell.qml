@@ -348,7 +348,7 @@ ShellRoot {
         window.fullscreen = !window.fullscreen
         break
       case "window.quit":
-        Qt.quit()
+        reader.quit()
         break
     }
   }
@@ -361,7 +361,7 @@ ShellRoot {
     implicitHeight: 800
     minimumSize: Qt.size(560, 360)
 
-    onVisibleChanged: if (!visible) Qt.quit()
+    onVisibleChanged: if (!visible) reader.quit()
 
     FocusScope {
       id: keyRoot
