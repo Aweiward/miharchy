@@ -40,6 +40,7 @@ Item {
 
   onActiveChanged: if (active && ext.state === "idle") load()
   onConfigChanged: {
+    if (editing) closeField()
     loadSeq++
     ext = config ? Extensions.initial() : Extensions.reduce(Extensions.initial(), { type: "config-missing" })
     if (active) load()

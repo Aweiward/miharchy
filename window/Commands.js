@@ -7,6 +7,8 @@
 // Qt::Key values as QML's event.key delivers them.
 var KEY = {
   Escape: 0x01000000,
+  Tab: 0x01000001,
+  Backspace: 0x01000003,
   Return: 0x01000004,
   Enter: 0x01000005,
   Up: 0x01000013,
@@ -17,9 +19,10 @@ var KEY = {
 }
 
 // keys: printable characters match event.text; "Esc", "Enter", "Space",
-// "Up" and "Down" match the key code.
+// "Tab", "Backspace", "Up" and "Down" match the key code.
 // hidden: reachable by key only, never listed in the palette.
-// view: the command works only while that view shows.
+// view: the command works only while that view (or Browse screen:
+// sources, extensions, source, manga) shows; an array allows several.
 var commands = [
   { id: "view.library", title: "Library", keys: ["1"] },
   { id: "view.updates", title: "Updates", keys: ["2"] },
@@ -27,21 +30,42 @@ var commands = [
   { id: "view.browse", title: "Browse", keys: ["4"] },
   { id: "view.settings", title: "Settings", keys: ["5"] },
   { id: "view.setup", title: "Setup", keys: [] },
-  // Before library.reload: on Browse, r refreshes the extension list.
-  { id: "extensions.refresh", title: "Refresh extensions", keys: ["r"], view: "browse", hidden: true },
+  // Before library.reload and window.quit: on these screens r and Esc mean
+  // something else.
+  { id: "extensions.refresh", title: "Refresh extensions", keys: ["r"], view: "extensions", hidden: true },
+  { id: "sources.refresh", title: "Refresh sources", keys: ["r"], view: "sources", hidden: true },
+  { id: "source.retry", title: "Load again", keys: ["r"], view: "source", hidden: true },
+  { id: "manga.refresh", title: "Refresh from the source", keys: ["r"], view: "manga", hidden: true },
+  { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: ["source", "manga"], hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },
   { id: "window.quit", title: "Quit", keys: ["q", "Esc"] },
   { id: "palette.open", title: "Command palette", keys: [":"], hidden: true },
   { id: "settings.up", title: "Previous setting", keys: ["k", "Up"], view: "settings", hidden: true },
   { id: "settings.down", title: "Next setting", keys: ["j", "Down"], view: "settings", hidden: true },
   { id: "settings.activate", title: "Change setting", keys: ["Enter", "Space"], view: "settings", hidden: true },
-  { id: "extensions.up", title: "Previous row", keys: ["k", "Up"], view: "browse", hidden: true },
-  { id: "extensions.down", title: "Next row", keys: ["j", "Down"], view: "browse", hidden: true },
-  { id: "extensions.activate", title: "Install or update extension", keys: ["Enter"], view: "browse", hidden: true },
-  { id: "extensions.remove", title: "Uninstall extension or remove repo", keys: ["x"], view: "browse", hidden: true },
-  { id: "extensions.addRepo", title: "Add extension repo", keys: ["a"], view: "browse", hidden: true },
-  { id: "extensions.filter", title: "Filter extensions", keys: ["/"], view: "browse", hidden: true },
-  { id: "extensions.languages", title: "English or every language", keys: ["l"], view: "browse", hidden: true },
+  { id: "extensions.up", title: "Previous row", keys: ["k", "Up"], view: "extensions", hidden: true },
+  { id: "extensions.down", title: "Next row", keys: ["j", "Down"], view: "extensions", hidden: true },
+  { id: "extensions.activate", title: "Install or update extension", keys: ["Enter"], view: "extensions", hidden: true },
+  { id: "extensions.remove", title: "Uninstall extension or remove repo", keys: ["x"], view: "extensions", hidden: true },
+  { id: "extensions.addRepo", title: "Add extension repo", keys: ["a"], view: "extensions", hidden: true },
+  { id: "extensions.filter", title: "Filter extensions", keys: ["/"], view: "extensions", hidden: true },
+  { id: "extensions.languages", title: "English or every language", keys: ["l"], view: "extensions", hidden: true },
+  { id: "browse.tab", title: "Sources or extensions", keys: ["Tab"], view: ["sources", "extensions"], hidden: true },
+  { id: "sources.up", title: "Previous source", keys: ["k", "Up"], view: "sources", hidden: true },
+  { id: "sources.down", title: "Next source", keys: ["j", "Down"], view: "sources", hidden: true },
+  { id: "sources.languages", title: "English or every language", keys: ["l"], view: "sources", hidden: true },
+  { id: "sources.open", title: "Open source", keys: ["Enter"], view: "sources", hidden: true },
+  { id: "source.left", title: "Previous manga", keys: ["h"], view: "source", hidden: true },
+  { id: "source.right", title: "Next manga", keys: ["l"], view: "source", hidden: true },
+  { id: "source.up", title: "Row up", keys: ["k", "Up"], view: "source", hidden: true },
+  { id: "source.down", title: "Row down", keys: ["j", "Down"], view: "source", hidden: true },
+  { id: "source.popular", title: "Popular", keys: ["p"], view: "source", hidden: true },
+  { id: "source.latest", title: "Latest", keys: ["n"], view: "source", hidden: true },
+  { id: "source.search", title: "Search this source", keys: ["/"], view: "source", hidden: true },
+  { id: "source.open", title: "Open manga", keys: ["Enter"], view: "source", hidden: true },
+  { id: "manga.up", title: "Previous chapter", keys: ["k", "Up"], view: "manga", hidden: true },
+  { id: "manga.down", title: "Next chapter", keys: ["j", "Down"], view: "manga", hidden: true },
+  { id: "manga.library", title: "Add to or remove from library", keys: ["a"], view: "manga", hidden: true },
   { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
   { id: "setup.down", title: "Next step", keys: ["j", "Down"], view: "setup", hidden: true },
   { id: "setup.activate", title: "Run step", keys: ["Enter", "Space"], view: "setup", hidden: true }
@@ -56,7 +80,7 @@ function keyEvent(key, text, modifiers) {
 function matches(label, ev) {
   if (label === "Esc") return ev.key === KEY.Escape
   if (label === "Enter") return ev.key === KEY.Return || ev.key === KEY.Enter
-  if (label === "Space" || label === "Up" || label === "Down") return ev.key === KEY[label]
+  if (label === "Space" || label === "Tab" || label === "Backspace" || label === "Up" || label === "Down") return ev.key === KEY[label]
   return !ev.ctrl && ev.text === label
 }
 
@@ -84,7 +108,7 @@ function dispatch(state, ev) {
     return null
   }
   for (var i = 0; i < commands.length; i++) {
-    if (commands[i].view && commands[i].view !== state.view) continue
+    if (commands[i].view && [].concat(commands[i].view).indexOf(state.view) === -1) continue
     for (var j = 0; j < commands[i].keys.length; j++) {
       if (matches(commands[i].keys[j], ev)) return commands[i].id
     }
