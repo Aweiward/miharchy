@@ -1,4 +1,4 @@
-<img src="icons/png/miharchy-knockout-128.png" alt="Miharchy" width="96">
+<img src="icons/png/miharchy-128.png" alt="Miharchy" width="96">
 
 # Miharchy
 

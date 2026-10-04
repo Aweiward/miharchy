@@ -128,12 +128,12 @@ Panel {
     bar: root.bar
     tooltipText: Mark.tooltip(root.mark)
     onPressed: function(button) { root.pressed(button) }
-    // The legs turn green while a sync runs (icons/README.md).
+    // The rays turn green while a sync runs (icons/miharchy-active.svg).
     iconComponent: Component {
       MiharchyIcon {
         iconSize: icon.opticalSize
         color: icon.foreground
-        legColor: root.sync.state === "running" ? "#9ece6a" : color
+        rayColor: root.sync.state === "running" ? "#9ece6a" : color
         badgeColor: root.bar ? root.bar.urgent : Color.urgent
         warning: Mark.down(root.mark)
       }

@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <rect width="48" height="48" fill="#bb9af7"/>
-  <path id="eye" fill="#1a1b26" fill-rule="evenodd" d="M 7 3 H 41 V 33 H 7 Z M 13 11 H 35 V 17 H 13 Z M 13 19 H 35 V 25 H 13 Z"/>
-  <path id="leg" fill="#1a1b26" d="M 13 31 H 19 V 44 H 13 Z"/>
-  <path id="kick" fill="#1a1b26" d="M 27 31 H 33 V 33 L 42 42 H 36 L 27 33 Z"/>
-</svg>

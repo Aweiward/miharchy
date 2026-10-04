@@ -1,34 +1,34 @@
-# Miharchy mark
+# Miharchy mark — burst
 
-見, the first character of 見本 (Mihon, "sample"). The 目 is drawn as a window with two bars — an eye, and a tile. The 儿 kick leaves the floor at 45 degrees.
+The 90s manga-tape logo, reduced. A cross, and a burst of bars on each side. No wordmark: that lettering is theirs. The nod is the shape.
 
-One color, no radius, no gradient. It tints with the theme, and it still reads at 16px.
+Sharp corners, grid, no radius. The rays are gapped off the cross so they stay separate at 16px.
 
-Tokyo Night blue (`#7aa2f7`) is the launcher color, so it doesn't sit next to omaqbt as a second purple tile. A purple knockout is in the pack if you want the pair to match.
+Tokyo Night red (`#f7768e`) is the burst. It sits next to omaqbt's magenta and the 見 set's blue without matching either.
 
 ## Which file
 
 | File | Use |
 | --- | --- |
-| `miharchy-knockout.svg` | Launcher and search. Blue tile, night window. This is the one. |
-| `miharchy-symbolic.svg` | Bar. `fill="currentColor"`. Paths: `eye`, `leg`, `kick`. |
-| `miharchy.svg` | Opaque night tile, blue mark. Use if a surface cannot take the knockout. |
-| `miharchy-purple.svg` | Same knockout in Tokyo Night magenta, to match omaqbt. |
+| `miharchy.svg` | Launcher and search. Night tile, red burst, foreground cross. This is the one. |
+| `miharchy-symbolic.svg` | Bar. `currentColor`. Paths: `rays`, `stem`, `bar`. |
+| `miharchy-knockout.svg` | Red tile, night mark. Use if search wants a single flat color. |
+| `miharchy-burst.svg` | Night tile, red burst, lifted-night cross. Closer to the poster, quieter. |
 | `miharchy-mono.svg` | Night tile, foreground mark. |
-| `miharchy-active.svg` | Reference for a sync in progress: eye in foreground, legs in `#9ece6a`. |
-| `MiharchyIcon.qml` | Bar component. `color`, `legColor`, warning badge. Badge is a square. |
-| `png/` | 16–512 for hicolor and the bar. |
+| `miharchy-active.svg` | Sync: cross in foreground, rays in `#9ece6a`. |
+| `MiharchyIcon.qml` | Bar component. `color` for the cross, `rayColor` for the burst. |
+| `png/` | 16–512. |
 
-## Syncing
+## Bar
 
-The legs are their own paths. Leave `eye` on the theme foreground and set `leg` and `kick` to `#9ece6a` while a sync is running. Idle, all three are the same color.
+Leave `rayColor` on `color` and the whole mark tints. To keep the nod on the bar, set `rayColor` to `#f7768e` and leave the cross on the theme foreground.
 
 ## Geometry
 
-48 grid. Stroke 6. The two lids have a 2-unit gap so they don't fuse into the frame. The kick overlaps the floor by 2 units, so there is no seam.
-
 ```
-eye  M 7 3 H 41 V 33 H 7 Z M 13 11 H 35 V 17 H 13 Z M 13 19 H 35 V 25 H 13 Z
-leg  M 13 31 H 19 V 44 H 13 Z
-kick M 27 31 H 33 V 33 L 42 42 H 36 L 27 33 Z
+stem M 15 3 H 33 V 45 H 15 Z
+bar  M 2 18 H 46 V 30 H 2 Z
+rays M 1 5 H 13 V 9 H 1 Z  M 1 11 H 13 V 15 H 1 Z
+     M 1 33 H 13 V 37 H 1 Z M 1 39 H 13 V 43 H 1 Z
+     and the same four, mirrored from x=35
 ```
