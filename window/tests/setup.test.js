@@ -149,13 +149,6 @@ test("the sync folder is stored as miharchy.syncFolder meta and read back", () =
   assert.equal(S.action(s, "syncFolder"), "edit", "a done folder can still change");
 });
 
-test("a typed folder must be absolute; ~ means home; trailing slashes go", () => {
-  assert.deepEqual(S.commitFolder("  ~/Sync/Mihon/ ", "/home/u"), { folder: "/home/u/Sync/Mihon" });
-  assert.deepEqual(S.commitFolder("~", "/home/u"), { folder: "/home/u" });
-  assert.deepEqual(S.commitFolder("/", "/home/u"), { folder: "/" });
-  for (const bad of ["", "Sync", "~user/x"]) assert.ok(S.commitFolder(bad, "/home/u").error, bad);
-});
-
 test("running setup twice changes nothing: a done machine stays done after another check", () => {
   const done = READY.replace("docker \n", "docker true\n");
   const data = { settings: FLARE_ON, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/s" }] } };

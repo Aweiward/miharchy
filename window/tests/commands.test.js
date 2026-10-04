@@ -372,3 +372,13 @@ test("the download queue opens from the palette or D on the Library and a manga;
 test("d on the categories screen flags a category for auto-download", () => {
   assert.equal(C.dispatch(screen("categories"), text("d")), "categories.autoDownload");
 });
+
+test("Sync now runs from the palette or s on the Library and Updates; its result closes with Esc, q or Enter", () => {
+  assert.ok(C.paletteRows("sync").some((c) => c.id === "sync.now"));
+  assert.equal(C.dispatch(screen("library"), text("s")), "sync.now");
+  assert.equal(C.dispatch(screen("updates"), text("s")), "sync.now");
+  assert.equal(C.dispatch(screen("reader"), text("s")), null);
+  const result = screen("sync");
+  for (const k of [key(C.KEY.Escape), text("q"), key(C.KEY.Return)]) assert.equal(C.dispatch(result, k), "sync.close");
+  assert.equal(C.dispatch(result, text("s")), null, "a second s does not start another sync over the result");
+});

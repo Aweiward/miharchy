@@ -26,7 +26,7 @@ var KEY = {
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, source, global; Library screen: categories; or
-// overlay: manga, manga-categories, manga-select, downloads, reader) shows;
+// overlay: manga, manga-categories, manga-select, downloads, reader, sync) shows;
 // an array allows several.
 var commands = [
   { id: "view.library", title: "Library", keys: ["1"] },
@@ -36,6 +36,7 @@ var commands = [
   { id: "view.settings", title: "Settings", keys: ["5"] },
   { id: "view.setup", title: "Setup", keys: [] },
   { id: "downloads.open", title: "Download queue", keys: [] },
+  { id: "sync.now", title: "Sync now", keys: [] },
   // Before library.reload and window.quit: on these screens r and Esc mean
   // something else.
   { id: "extensions.refresh", title: "Refresh extensions", keys: ["r"], view: "extensions", hidden: true },
@@ -50,6 +51,7 @@ var commands = [
   { id: "manga.selectEnd", title: "End the selection", keys: ["Esc", "v"], view: "manga-select", hidden: true },
   { id: "downloads.close", title: "Close the download queue", keys: ["Esc", "D"], view: "downloads", hidden: true },
   { id: "reader.close", title: "Close the reader", keys: ["Esc", "q"], view: "reader", hidden: true },
+  { id: "sync.close", title: "Close the sync result", keys: ["Esc", "q", "Enter"], view: "sync", hidden: true },
   { id: "reader.retry", title: "Load again", keys: ["r"], view: "reader", hidden: true },
   { id: "history.reload", title: "Reload history", keys: ["r"], view: "history", hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },
@@ -95,6 +97,8 @@ var commands = [
   { id: "manga.select", title: "Select chapters", keys: ["v"], view: "manga", hidden: true },
   { id: "manga.downloadUnread", title: "Download unread chapters", keys: ["U"], view: "manga", hidden: true },
   { id: "downloads.open", title: "Download queue", keys: ["D"], view: ["library", "manga"], hidden: true },
+  // The views a sync changes; the palette runs it from anywhere.
+  { id: "sync.now", title: "Sync now", keys: ["s"], view: ["library", "updates"], hidden: true },
   { id: "downloads.up", title: "Previous download", keys: ["k", "Up"], view: "downloads", hidden: true },
   { id: "downloads.down", title: "Next download", keys: ["j", "Down"], view: "downloads", hidden: true },
   { id: "downloads.dequeue", title: "Take out of the queue", keys: ["x"], view: "downloads", hidden: true },

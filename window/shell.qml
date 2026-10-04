@@ -6,6 +6,7 @@ import Quickshell.Io
 import "Model.js" as Model
 import "Commands.js" as Commands
 import "Settings.js" as Settings
+import "Setup.js" as Setup
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -112,6 +113,32 @@ ShellRoot {
     if (config) sendSettings(Settings.savePayload(row, value))
   }
 
+  // A folder row saves once the folder exists, checked as Setup checks it.
+  Process {
+    id: folderCheck
+    property var row: null
+    property string folder: ""
+
+    function check(r, f) {
+      folderCheck.row = r
+      folderCheck.folder = f
+      folderCheck.command = Setup.runCommand("syncFolder", { folder: f })
+      folderCheck.running = true
+    }
+
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var job = Setup.parseJob(text)
+        if (job.code !== 0) {
+          root.settingsError = job.output
+          return
+        }
+        root.endEdit()
+        root.saveSetting(folderCheck.row, folderCheck.folder)
+      }
+    }
+  }
+
   function endEdit() {
     settingsEditing = false
     settingsError = ""
@@ -138,9 +165,9 @@ ShellRoot {
   // Returns whether a command took the key.
   function handleKey(event) {
     var editing = settingsEditing ? "settings" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
-    // An open download queue, reader or manga detail decides which keys
-    // apply, in that order; on Browse, the screen does.
-    var scope = downloadsView.open ? "downloads" : reader.open ? "reader"
+    // An open sync result, download queue, reader or manga detail decides
+    // which keys apply, in that order; on Browse, the screen does.
+    var scope = syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? "reader"
       : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.selecting ? "manga-select" : "manga")
       : view === "browse" ? browseView.screen : view === "library" && libraryScreen === "categories" ? "categories" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
@@ -155,6 +182,7 @@ ShellRoot {
 
   function run(id) {
     if (id.indexOf("view.") === 0) {
+      syncView.open = false
       if (reader.open) reader.close()
       mangaDetail.close()
       downloadsView.open = false
@@ -201,6 +229,10 @@ ShellRoot {
       updatesView.run(id)
       return
     }
+    if (id.indexOf("sync.") === 0) {
+      syncView.run(id)
+      return
+    }
     switch (id) {
       case "palette.open":
         paletteOpen = true
@@ -234,9 +266,11 @@ ShellRoot {
         break
       case "settings.commit":
         var erow = Settings.ROWS[settingsCursor]
-        var done = Settings.commit(erow, settingsView.editValue)
+        var done = Settings.commit(erow, settingsView.editValue, Quickshell.env("HOME"))
         if ("error" in done) {
           settingsError = done.error
+        } else if ("folder" in done) {
+          folderCheck.check(erow, done.folder)
         } else {
           endEdit()
           saveSetting(erow, done.save)
@@ -496,7 +530,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : "hjkl move   enter open   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   D downloads   ", updates: "j k move   enter read   u check   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: syncView.open ? "" : root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : "hjkl move   enter open   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
@@ -524,6 +558,17 @@ ShellRoot {
         config: root.config
         configPath: root.configPath
         onLeftQueue: function(items) { mangaDetail.downloadsLeft(items) }
+      }
+
+      SyncView {
+        id: syncView
+        anchors.fill: parent
+        theme: theme
+        onSynced: if (root.config) {
+          root.fetchLibrary()
+          root.sendSettings(Settings.loadPayload())
+          updatesView.load()
+        }
       }
 
       CommandPalette {
