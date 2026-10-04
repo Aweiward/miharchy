@@ -6,7 +6,16 @@
 // server's library update run. Pure, so tests/updates.test.js pins it;
 // UpdatesView.qml sends the payloads built here and feeds replies back.
 
+// The server's skip filters and the reason each gives. It reports only a
+// skipped count, never which filter skipped a manga, so the header names
+// the filters that are on.
+var SKIP_FILTERS = [
+  ["excludeUnreadChapters", "unread chapters"],
+  ["excludeNotStarted", "not started"],
+  ["excludeCompleted", "completed"]
+]
 var STATUS_FIELDS = "libraryUpdateStatus { jobsInfo { isRunning finishedJobs totalJobs skippedMangasCount } } lastUpdateTimestamp { timestamp }"
+  + " settings { " + SKIP_FILTERS.map(function(f) { return f[0] }).join(" ") + " }"
 // ponytail: no page limit; the client-side fetchedAt cut must see every
 // unread chapter, so a limit waits for a library big enough to need one.
 var UPDATES_QUERY = "{ chapters(filter: { inLibrary: { equalTo: true }, isRead: { equalTo: false } }) {"
@@ -44,7 +53,7 @@ function count(data) {
 // running: the server runs a library update; checking: u asked for one and
 // no poll has answered yet. checkedAt: when the last run started, in ms.
 function initial() {
-  return { state: "loading", message: "", rows: [], running: false, checking: false, finished: 0, total: 0, skipped: 0, checkedAt: 0 }
+  return { state: "loading", message: "", rows: [], running: false, checking: false, finished: 0, total: 0, skipped: 0, skipReasons: [], checkedAt: 0 }
 }
 
 function listPayload() {
@@ -96,6 +105,7 @@ function status(data) {
     finished: j.finishedJobs || 0,
     total: j.totalJobs || 0,
     skipped: j.skippedMangasCount || 0,
+    skipReasons: SKIP_FILTERS.filter(function(f) { return data.settings && data.settings[f[0]] === true }).map(function(f) { return f[1] }),
     checkedAt: Number(data.lastUpdateTimestamp && data.lastUpdateTimestamp.timestamp) || 0
   }
 }
@@ -127,13 +137,21 @@ function finished(before, after) {
   return (before.running || before.checking) && !after.running && !after.checking
 }
 
+// With every filter off, an excluded category or a source that updates a
+// manga only once skipped them.
+function skippedText(u) {
+  if (!u.skipped) return ""
+  if (!u.skipReasons.length) return ", " + u.skipped + " manga skipped"
+  return ", " + u.skipped + " skipped: " + u.skipReasons.join(", ") + " (change in Settings)"
+}
+
 function progress(u, now) {
   if (u.running) return "Checking for new chapters " + u.finished + " / " + u.total
   if (u.checking) return "Checking for new chapters"
   if (!u.checkedAt) return "Never checked"
   var d = new Date(u.checkedAt)
   return "Last checked " + dayLabel(u.checkedAt, now) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes())
-    + (u.skipped ? ", " + u.skipped + " manga skipped" : "")
+    + skippedText(u)
 }
 
 // { title, detail } in place of the list, or null.

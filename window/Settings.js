@@ -42,6 +42,11 @@ var ROWS = [
       { value: 168, label: "Weekly" }
     ]
   },
+  // The library update skips these manga while on, as Mihon does. On
+  // means skip, the server's own sense, so a fresh library may skip all.
+  { key: "excludeUnreadChapters", label: "Skip manga with unread chapters", type: "bool", default: true, store: "server" },
+  { key: "excludeNotStarted", label: "Skip manga not started", type: "bool", default: true, store: "server" },
+  { key: "excludeCompleted", label: "Skip completed manga", type: "bool", default: true, store: "server" },
   // The server refuses a folder that does not exist; empty means its own.
   { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
   // Suwayomi has no such setting, so the reader deletes a chapter it

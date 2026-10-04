@@ -18,8 +18,8 @@ test("every row is complete, and a choice's default is one of its options", () =
 });
 
 test("the first rows and their defaults", () => {
-  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Download folder", "Delete after read"]);
-  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, downloadsPath: "", deleteAfterRead: false });
+  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Download folder", "Delete after read"]);
+  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, downloadsPath: "", deleteAfterRead: false });
   assert.deepEqual(row("defaultReadingMode").options.map((o) => o.label), ["Paged right-to-left", "Paged left-to-right", "Webtoon"]);
 });
 
@@ -39,7 +39,7 @@ test("a load reply sets server values and namespaced meta, defaults fill the res
     ] }
   }));
   assert.equal(s.state, "ok");
-  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, downloadsPath: "", deleteAfterRead: false });
+  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, downloadsPath: "", deleteAfterRead: false });
 });
 
 test("an unknown stored reading mode falls back to the default", () => {
@@ -112,4 +112,15 @@ test("the library update schedule is the server's own interval in hours, 0 for o
   assert.deepEqual(S.savePayload(every, 24).variables.s, { globalUpdateInterval: 24 });
   assert.equal(S.reduce(S.initial(), ok({ settings: { globalUpdateInterval: 48.0 }, metas: { nodes: [] } })).values.globalUpdateInterval, 48);
   assert.match(S.loadPayload().query, /settings \{[^}]*\bglobalUpdateInterval\b/);
+});
+
+test("the library update skip filters are the server's own settings, on meaning skip", () => {
+  for (const key of ["excludeUnreadChapters", "excludeNotStarted", "excludeCompleted"]) {
+    const r = row(key);
+    assert.equal(r.store, "server", key);
+    assert.match(S.loadPayload().query, new RegExp("settings \\{[^}]*\\b" + key + "\\b"));
+    assert.deepEqual(S.savePayload(r, false).variables.s, { [key]: false });
+    const s = S.reduce(S.initial(), ok({ setSettings: { settings: { [key]: false } } }));
+    assert.equal(s.values[key], false, key + " reads back from the save reply");
+  }
 });

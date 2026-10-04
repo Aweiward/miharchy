@@ -92,6 +92,17 @@ test("a check the server skips entirely still ends, and says what it skipped", (
   assert.equal(U.finished(skipped, skipped), false, "an idle poll reloads nothing");
 });
 
+test("skipped manga name the skip filters that are on", () => {
+  const poll = (settings) => U.reduce(loaded([]), { type: "status", reply: ok({ libraryUpdateStatus: status({ skippedMangasCount: 4 }), lastUpdateTimestamp: { timestamp: String(at(2026, 10, 4, 9, 5)) }, settings }) });
+  assert.match(U.statusPayload().query, /settings \{ excludeUnreadChapters excludeNotStarted excludeCompleted \}/);
+  assert.equal(U.progress(poll({ excludeUnreadChapters: true, excludeNotStarted: false, excludeCompleted: true }), now),
+    "Last checked Today 09:05, 4 skipped: unread chapters, completed (change in Settings)");
+  assert.equal(U.progress(poll({ excludeUnreadChapters: false, excludeNotStarted: true, excludeCompleted: false }), now),
+    "Last checked Today 09:05, 4 skipped: not started (change in Settings)");
+  assert.equal(U.progress(poll({ excludeUnreadChapters: false, excludeNotStarted: false, excludeCompleted: false }), now),
+    "Last checked Today 09:05, 4 manga skipped", "with every filter off, an excluded category or the source skipped them");
+});
+
 test("a failed poll ends the check and keeps the last known status", () => {
   const asked = U.reduce(loaded([], status(), at(2026, 10, 1, 8)), { type: "checking" });
   const lost = U.reduce(asked, { type: "status", reply: M.reply(0, "") });
