@@ -8,8 +8,9 @@
 //   store "meta":   a Miharchy preference in Suwayomi global meta under
 //                   META_PREFIX + key, stored as a string.
 //   choice rows add options: [{ value, label }]; text rows add pattern and
-//   hint for validation; bool rows may add whenOn, extra server settings
-//   sent along when the row turns on.
+//   hint for validation, and may add blank, the text an empty value shows;
+//   bool rows may add whenOn, extra server settings sent along when the
+//   row turns on.
 // A later setting is one more entry here.
 
 var META_PREFIX = "miharchy."
@@ -40,7 +41,12 @@ var ROWS = [
       { value: 72, label: "Every 3 days" },
       { value: 168, label: "Weekly" }
     ]
-  }
+  },
+  // The server refuses a folder that does not exist; empty means its own.
+  { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
+  // Suwayomi has no such setting, so the reader deletes a chapter it
+  // finished as it leaves it.
+  { key: "deleteAfterRead", label: "Delete after read", type: "bool", default: false, store: "meta" }
 ]
 
 function defaults() {
@@ -151,7 +157,7 @@ function display(row, value) {
     var o = option(row, value)
     return o ? o.label : String(value)
   }
-  return String(value)
+  return value === "" && row.blank ? row.blank : String(value)
 }
 
 if (typeof module !== "undefined") {

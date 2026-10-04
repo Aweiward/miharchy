@@ -13,7 +13,7 @@ var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaTy
   + " hasNextPage mangas { id title thumbnailUrl inLibrary } } }"
 
 var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized source { displayName } categories { nodes { id } } meta { key value }"
-var CHAPTER_FIELDS = "id name chapterNumber uploadDate isRead scanlator sourceOrder"
+var CHAPTER_FIELDS = "id name chapterNumber uploadDate isRead isDownloaded scanlator sourceOrder"
 var DETAIL_QUERY = "query($id: Int!) { manga(id: $id) { " + MANGA_FIELDS + " chapters { nodes { " + CHAPTER_FIELDS + " } } } }"
 var FETCH_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: true }) {"
   + " manga { " + MANGA_FIELDS + " } chapters { " + CHAPTER_FIELDS + " } } }"
@@ -177,13 +177,14 @@ function toManga(config, n) {
 
 function toChapters(nodes) {
   return (nodes || []).slice().sort(function(a, b) { return b.sourceOrder - a.sourceOrder }).map(function(c) {
-    return { id: c.id, name: String(c.name || ""), number: c.chapterNumber, date: day(c.uploadDate), read: c.isRead === true, scanlator: String(c.scanlator || "") }
+    return { id: c.id, name: String(c.name || ""), number: c.chapterNumber, date: day(c.uploadDate), read: c.isRead === true, downloaded: c.isDownloaded === true, scanlator: String(c.scanlator || "") }
   })
 }
 
 // event.type: "reply" { reply, config } for the step in flight | "refresh"
 // | "reread" the cache, as after reading | "library-request"
 // | "library-reply" { reply } | "categories-reply" { reply }
+// | "downloads-reply" { reply } from any Downloads.js mutation
 function reduceDetail(d, event) {
   switch (event.type) {
     case "refresh":
@@ -215,6 +216,12 @@ function reduceDetail(d, event) {
       if (event.reply.state !== "ok") return copy(d, { busy: false, libraryError: event.reply.message || event.reply.state })
       var nodes = event.reply.data.updateMangaCategories.manga.categories.nodes
       return copy(d, { busy: false, manga: copy(d.manga, { categories: nodes.map(function(c) { return c.id }) }) })
+    case "downloads-reply":
+      if (event.reply.state !== "ok") return copy(d, { libraryError: event.reply.message || event.reply.state })
+      var deleted = event.reply.data.deleteDownloadedChapters
+      var onDisk = {}
+      if (deleted) deleted.chapters.forEach(function(c) { onDisk[c.id] = c.isDownloaded === true })
+      return copy(d, { libraryError: "", chapters: d.chapters.map(function(c) { return c.id in onDisk ? copy(c, { downloaded: onDisk[c.id] }) : c }) })
   }
   return d
 }

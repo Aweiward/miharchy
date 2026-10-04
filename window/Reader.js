@@ -1,5 +1,6 @@
 .pragma library
 .import "Model.js" as Model
+.import "Downloads.js" as Downloads
 
 // The reader: one chapter's pages, the page shown, and the read state to
 // save. Pure, so tests/reader.test.js pins it; ReaderView.qml fetches pages,
@@ -48,11 +49,12 @@ function delta(readingMode, side) {
 // reader.state: "loading" | "ok" | a failed connection state.
 // chapters run oldest first; index is the chapter open. page counts from 0.
 // read: the chapter is read on the server or reached its last page.
+// wasRead: it was read on the server before it opened.
 // saved: { page, read } last sent for this chapter, null until a save goes
 // out. toEnd: entered backwards, so it opens on its last page.
 // edge: "first" | "last" when a turn ran past the first or last chapter.
 function at(r, index, toEnd) {
-  return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", pages: [], page: 0, read: false, saved: null, edge: "" })
+  return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", pages: [], page: 0, read: false, wasRead: false, saved: null, edge: "" })
 }
 
 // chapters: newest first, as Browse.detail holds them.
@@ -98,7 +100,7 @@ function reduce(r, event) {
       if (!pages.length) return copy(r, { state: "error", message: "This chapter has no pages." })
       var c = f.chapter
       var page = r.toEnd ? pages.length - 1 : c.isRead ? 0 : Math.max(0, Math.min(pages.length - 1, c.lastPageRead || 0))
-      return copy(r, { state: "ok", pages: pages, page: page, read: c.isRead === true || page === pages.length - 1 })
+      return copy(r, { state: "ok", pages: pages, page: page, read: c.isRead === true || page === pages.length - 1, wasRead: c.isRead === true })
     case "turn":
       if (r.state === "loading") return r
       var p = event.chapter ? -1 : r.page + event.delta
@@ -131,6 +133,12 @@ function savePayload(r) {
   var patch = { lastPageRead: r.page }
   if (r.read) patch.isRead = true
   return { query: SAVE_MUTATION, variables: { id: chapterId(r), patch: patch } }
+}
+
+// on: the delete after read setting. Called as the reader leaves the
+// chapter, so its pages stay on disk while it shows.
+function deletePayload(r, on) {
+  return on && r.state === "ok" && r.read && !r.wasRead ? Downloads.deletePayload([chapterId(r)]) : null
 }
 
 function modePayload(r) {
@@ -176,6 +184,7 @@ if (typeof module !== "undefined") {
     pagesPayload: pagesPayload,
     reduce: reduce,
     savePayload: savePayload,
+    deletePayload: deletePayload,
     modePayload: modePayload,
     action: action,
     slotOf: slotOf,

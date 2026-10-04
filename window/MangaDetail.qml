@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "Model.js" as Model
 import "Browse.js" as Browse
+import "Downloads.js" as Downloads
 
 // A manga's detail over the view that opened it, Library or Browse: cover
 // and metadata beside the chapter list, newest first. It talks to the
@@ -20,17 +21,26 @@ Rectangle {
   property var categories: []
   property bool picking: false
   property int pickCursor: 0
+  // -1, or the chapter where v started a selection.
+  property int anchor: -1
+  // The download queue's items, for each chapter's marker.
+  property var queue: []
   // Only the latest detail request may update it.
   property int detailSeq: 0
 
   readonly property bool open: detail !== null
   readonly property var manga: detail ? detail.manga : null
+  readonly property bool selecting: anchor >= 0
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
-  readonly property string hint: picking ? "j k move   space in or out   esc close   " : "j k chapters   enter read   a library   c categories   r refresh   esc back   "
+  readonly property string hint: picking ? "j k move   space in or out   esc close   "
+    : selecting ? "j k extend   d download   x delete download   esc end   "
+    : "j k chapters   enter read   d download   v select   U unread   x delete   D queue   a library   c categories   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
   signal categorized()
+  // A download mutation's reply, which carries the queue.
+  signal downloads(var reply)
 
   visible: open
   color: theme.background
@@ -60,6 +70,7 @@ Rectangle {
 
   function close() {
     picking = false
+    anchor = -1
     detailSeq++
     detail = null
   }
@@ -68,6 +79,12 @@ Rectangle {
   function reread(chapterId) {
     if (!detail) return
     for (var i = 0; i < detail.chapters.length; i++) if (detail.chapters[i].id === chapterId) cursor = i
+    reload()
+  }
+
+  // Reads the cached chapters again, as after a download finished.
+  function reload() {
+    if (!detail) return
     detailSeq++
     detail = Browse.reduceDetail(detail, { type: "reread" })
     advance()
@@ -95,6 +112,20 @@ Rectangle {
     send(payload, function(reply) {
       if (view.detail && view.detail.mangaId === mangaId) view.detail = Browse.reduceDetail(view.detail, { type: "library-reply", reply: reply })
       if (reply.state === "ok") view.libraryChanged(mangaId, reply.data.updateManga.manga.inLibrary === true)
+    })
+  }
+
+  function downloadsLeft(items) {
+    if (detail && items.some(function(i) { return i.mangaId === view.detail.mangaId })) reload()
+  }
+
+  function sendDownloads(payload) {
+    anchor = -1
+    if (!payload) return
+    var mangaId = detail.mangaId
+    send(payload, function(reply) {
+      if (view.detail && view.detail.mangaId === mangaId) view.detail = Browse.reduceDetail(view.detail, { type: "downloads-reply", reply: reply })
+      view.downloads(reply)
     })
   }
 
@@ -139,6 +170,21 @@ Rectangle {
         break
       case "manga.library":
         toggleLibrary()
+        break
+      case "manga.select":
+        anchor = cursor
+        break
+      case "manga.selectEnd":
+        anchor = -1
+        break
+      case "manga.download":
+        sendDownloads(Downloads.enqueuePayload(Downloads.marked(detail.chapters, cursor, anchor)))
+        break
+      case "manga.downloadUnread":
+        sendDownloads(Downloads.enqueuePayload(Downloads.unread(detail.chapters)))
+        break
+      case "manga.deleteDownload":
+        sendDownloads(Downloads.removePayload(Downloads.marked(detail.chapters, cursor, anchor), queue))
         break
       case "manga.refresh":
         detailSeq++
@@ -278,14 +324,16 @@ Rectangle {
       required property var modelData
       required property int index
       readonly property bool current: index === view.cursor
+      readonly property bool inRange: view.selecting && index >= Math.min(view.cursor, view.anchor) && index <= Math.max(view.cursor, view.anchor)
+      readonly property string marker: Downloads.marker(modelData, view.queue)
       width: chapters.width
       height: view.theme.fontSize * 2
-      color: current ? view.theme.selected : "transparent"
+      color: current || inRange ? view.theme.selected : "transparent"
 
       Text {
         anchors.left: parent.left
         anchors.leftMargin: view.theme.fontSize * 0.5
-        anchors.right: meta.left
+        anchors.right: mark.left
         anchors.rightMargin: view.theme.fontSize
         anchors.verticalCenter: parent.verticalCenter
         elide: Text.ElideRight
@@ -293,6 +341,17 @@ Rectangle {
         color: row.current ? view.theme.selectedText : row.modelData.read ? view.theme.muted : view.theme.foreground
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSize
+      }
+
+      Text {
+        id: mark
+        anchors.right: meta.left
+        anchors.rightMargin: text ? view.theme.fontSize * 1.5 : 0
+        anchors.verticalCenter: parent.verticalCenter
+        text: row.marker
+        color: row.marker === "failed" ? view.theme.urgent : view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
       }
 
       Text {

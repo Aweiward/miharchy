@@ -26,7 +26,8 @@ var KEY = {
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, source, global; Library screen: categories; or
-// overlay: manga, manga-categories, reader) shows; an array allows several.
+// overlay: manga, manga-categories, manga-select, downloads, reader) shows;
+// an array allows several.
 var commands = [
   { id: "view.library", title: "Library", keys: ["1"] },
   { id: "view.updates", title: "Updates", keys: ["2"] },
@@ -34,6 +35,7 @@ var commands = [
   { id: "view.browse", title: "Browse", keys: ["4"] },
   { id: "view.settings", title: "Settings", keys: ["5"] },
   { id: "view.setup", title: "Setup", keys: [] },
+  { id: "downloads.open", title: "Download queue", keys: [] },
   // Before library.reload and window.quit: on these screens r and Esc mean
   // something else.
   { id: "extensions.refresh", title: "Refresh extensions", keys: ["r"], view: "extensions", hidden: true },
@@ -45,6 +47,8 @@ var commands = [
   { id: "manga.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga", hidden: true },
   { id: "manga.categoriesClose", title: "Close categories", keys: ["Esc", "Backspace", "c"], view: "manga-categories", hidden: true },
   { id: "categories.back", title: "Back", keys: ["Esc", "Backspace"], view: "categories", hidden: true },
+  { id: "manga.selectEnd", title: "End the selection", keys: ["Esc", "v"], view: "manga-select", hidden: true },
+  { id: "downloads.close", title: "Close the download queue", keys: ["Esc", "D"], view: "downloads", hidden: true },
   { id: "reader.close", title: "Close the reader", keys: ["Esc", "q"], view: "reader", hidden: true },
   { id: "reader.retry", title: "Load again", keys: ["r"], view: "reader", hidden: true },
   { id: "history.reload", title: "Reload history", keys: ["r"], view: "history", hidden: true },
@@ -81,11 +85,20 @@ var commands = [
   { id: "global.up", title: "Previous source", keys: ["k", "Up"], view: "global", hidden: true },
   { id: "global.down", title: "Next source", keys: ["j", "Down"], view: "global", hidden: true },
   { id: "global.open", title: "Open manga", keys: ["Enter"], view: "global", hidden: true },
-  { id: "manga.up", title: "Previous chapter", keys: ["k", "Up"], view: "manga", hidden: true },
-  { id: "manga.down", title: "Next chapter", keys: ["j", "Down"], view: "manga", hidden: true },
+  { id: "manga.up", title: "Previous chapter", keys: ["k", "Up"], view: ["manga", "manga-select"], hidden: true },
+  { id: "manga.down", title: "Next chapter", keys: ["j", "Down"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.library", title: "Add to or remove from library", keys: ["a"], view: "manga", hidden: true },
   { id: "manga.read", title: "Read chapter", keys: ["Enter"], view: "manga", hidden: true },
   { id: "manga.categories", title: "Categories", keys: ["c"], view: "manga", hidden: true },
+  { id: "manga.download", title: "Download chapters", keys: ["d"], view: ["manga", "manga-select"], hidden: true },
+  { id: "manga.deleteDownload", title: "Delete downloads", keys: ["x"], view: ["manga", "manga-select"], hidden: true },
+  { id: "manga.select", title: "Select chapters", keys: ["v"], view: "manga", hidden: true },
+  { id: "manga.downloadUnread", title: "Download unread chapters", keys: ["U"], view: "manga", hidden: true },
+  { id: "downloads.open", title: "Download queue", keys: ["D"], view: ["library", "manga"], hidden: true },
+  { id: "downloads.up", title: "Previous download", keys: ["k", "Up"], view: "downloads", hidden: true },
+  { id: "downloads.down", title: "Next download", keys: ["j", "Down"], view: "downloads", hidden: true },
+  { id: "downloads.dequeue", title: "Take out of the queue", keys: ["x"], view: "downloads", hidden: true },
+  { id: "downloads.toggle", title: "Start or stop downloading", keys: ["Space"], view: "downloads", hidden: true },
   { id: "manga.categoryUp", title: "Previous category", keys: ["k", "Up"], view: "manga-categories", hidden: true },
   { id: "manga.categoryDown", title: "Next category", keys: ["j", "Down"], view: "manga-categories", hidden: true },
   { id: "manga.categoryToggle", title: "In or out of category", keys: ["Space", "Enter"], view: "manga-categories", hidden: true },
@@ -123,6 +136,7 @@ var commands = [
   // Not r: r reloads what a view shows, and a library update asks every
   // source.
   { id: "updates.check", title: "Check for new chapters", keys: ["u"], view: "updates", hidden: true },
+  { id: "categories.autoDownload", title: "Auto-download new chapters", keys: ["d"], view: "categories", hidden: true },
   { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
   { id: "setup.down", title: "Next step", keys: ["j", "Down"], view: "setup", hidden: true },
   { id: "setup.activate", title: "Run step", keys: ["Enter", "Space"], view: "setup", hidden: true }

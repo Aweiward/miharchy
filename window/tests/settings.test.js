@@ -18,8 +18,8 @@ test("every row is complete, and a choice's default is one of its options", () =
 });
 
 test("the first rows and their defaults", () => {
-  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "FlareSolverr", "FlareSolverr URL", "Check for new chapters"]);
-  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12 });
+  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Download folder", "Delete after read"]);
+  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, downloadsPath: "", deleteAfterRead: false });
   assert.deepEqual(row("defaultReadingMode").options.map((o) => o.label), ["Paged right-to-left", "Paged left-to-right", "Webtoon"]);
 });
 
@@ -39,7 +39,7 @@ test("a load reply sets server values and namespaced meta, defaults fill the res
     ] }
   }));
   assert.equal(s.state, "ok");
-  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12 });
+  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, downloadsPath: "", deleteAfterRead: false });
 });
 
 test("an unknown stored reading mode falls back to the default", () => {
