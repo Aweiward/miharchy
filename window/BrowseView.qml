@@ -29,8 +29,6 @@ Item {
   property int chapterCursor: 0
   // "" | "source": the search field is open.
   property string editing: ""
-  // The config the view loaded for; a save that changes nothing keeps the view.
-  property string configKey: ""
   // Only the latest request of each kind may update its state.
   property int sourcesSeq: 0
   property int listingSeq: 0
@@ -49,9 +47,6 @@ Item {
 
   onActiveChanged: if (active && screen === "sources" && src.state === "idle") loadSources()
   onConfigChanged: {
-    var k = config ? JSON.stringify(config) : ""
-    if (k === configKey) return
-    configKey = k
     if (editing) closeSearch()
     sourcesSeq++
     listingSeq++

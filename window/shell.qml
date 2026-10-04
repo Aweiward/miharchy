@@ -35,11 +35,21 @@ ShellRoot {
     printErrors: false
     onLoaded: root.applyConfig(text())
     onLoadFailed: root.applyConfig("")
-    onFileChanged: reload()
+    // An editor's save can truncate before it writes; reading at once would
+    // see an empty file, drop the config and reset every view.
+    onFileChanged: configReload.restart()
+  }
+
+  Timer {
+    id: configReload
+    interval: 300
+    onTriggered: configFile.reload()
   }
 
   function applyConfig(text) {
-    config = Model.parseConfig(text)
+    var next = Model.parseConfig(text)
+    if (next && config && JSON.stringify(next) === JSON.stringify(config)) return
+    config = next
     if (!config) {
       requestSeq++
       connection = Model.reduce(connection, { type: "config-missing" })
@@ -169,6 +179,10 @@ ShellRoot {
         endEdit()
         break
       case "library.reload":
+        if (config) {
+          fetchLibrary()
+          sendSettings(Settings.loadPayload())
+        }
         configFile.reload()
         break
       case "window.quit":
