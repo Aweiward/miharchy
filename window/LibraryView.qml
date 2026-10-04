@@ -78,6 +78,7 @@ Item {
         source: cell.modelData.cover
         title: cell.modelData.title
         current: cell.current
+        badge: cell.modelData.unread
       }
 
       Text {
@@ -87,7 +88,7 @@ Item {
         anchors.left: coverBox.left
         anchors.right: coverBox.right
         text: armed ? "x again to remove from library" : cell.modelData.title
-        color: armed ? view.theme.urgent : cell.current ? view.theme.selectedText : view.theme.foreground
+        color: armed ? view.theme.urgent : cell.current ? view.theme.accent : view.theme.foreground
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
         elide: Text.ElideRight
