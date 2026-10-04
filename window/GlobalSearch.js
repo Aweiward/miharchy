@@ -19,11 +19,12 @@ function payload(group) {
 }
 
 // The indexes of the groups to start now: queued groups, as many as there
-// are free slots. Only the first page loads, so a group starts once.
-function due(s) {
+// are free slots (limit, LIMIT by default). Only the first page loads, so
+// a group starts once.
+function due(s, limit) {
   var busy = s.groups.filter(function(g) { return g.state === "loading" }).length
   var out = []
-  for (var i = 0; i < s.groups.length && out.length < LIMIT - busy; i++) {
+  for (var i = 0; i < s.groups.length && out.length < (limit || LIMIT) - busy; i++) {
     if (s.groups[i].state === "idle" && s.groups[i].page === 0) out.push(i)
   }
   return out

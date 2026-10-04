@@ -164,6 +164,8 @@ test("sourceHelp says what to do about a missing source", () => {
   assert.match(B.sourceHelp(known, { installed: true }), /^The installed Asura Scans extension serves a different source.*Migrate/);
   assert.match(B.sourceHelp(known, null), /^No extension in your repos is named Asura Scans\. Migrate/);
   assert.match(B.sourceHelp({ missing: true, sourceName: "" }, null), /^Migrate/);
+  assert.doesNotMatch(B.sourceHelp(known, null), /coming soon/);
+  assert.match(B.sourceHelp(known, { installed: true }), /M\.$/, "names the key that migrates");
 });
 
 test("add to library flips inLibrary from the server's answer", () => {

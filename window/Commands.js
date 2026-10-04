@@ -26,7 +26,9 @@ var KEY = {
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, source, global; Library screen: categories; or
-// overlay: manga, manga-categories, manga-select, downloads, reader, sync) shows;
+// overlay: manga, manga-categories, manga-select, downloads, reader, sync,
+// or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
+// -done) shows;
 // an array allows several.
 var commands = [
   { id: "view.library", title: "Library", keys: ["1"] },
@@ -37,6 +39,7 @@ var commands = [
   { id: "view.setup", title: "Setup", keys: [] },
   { id: "downloads.open", title: "Download queue", keys: [] },
   { id: "sync.now", title: "Sync now", keys: [] },
+  { id: "migrate.batch", title: "Migrate a source", keys: [] },
   // Before library.reload and window.quit: on these screens r and Esc mean
   // something else.
   { id: "extensions.refresh", title: "Refresh extensions", keys: ["r"], view: "extensions", hidden: true },
@@ -44,6 +47,10 @@ var commands = [
   { id: "source.retry", title: "Load again", keys: ["r"], view: "source", hidden: true },
   { id: "manga.refresh", title: "Refresh from the source", keys: ["r"], view: "manga", hidden: true },
   { id: "global.retry", title: "Search failed sources again", keys: ["r"], view: "global", hidden: true },
+  { id: "migrate.retry", title: "Search failed again", keys: ["r"], view: ["migrate-search", "migrate-match"], hidden: true },
+  // Every step answers Esc, so it never falls through to quit, even while
+  // a migration runs.
+  { id: "migrate.back", title: "Back", keys: ["Esc", "Backspace"], view: ["migrate-search", "migrate-from", "migrate-to", "migrate-match", "migrate-confirm", "migrate-busy", "migrate-done"], hidden: true },
   { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: ["source", "global"], hidden: true },
   { id: "manga.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga", hidden: true },
   { id: "manga.categoriesClose", title: "Close categories", keys: ["Esc", "Backspace", "c"], view: "manga-categories", hidden: true },
@@ -144,6 +151,17 @@ var commands = [
   { id: "categories.autoDownload", title: "Auto-download new chapters", keys: ["d"], view: "categories", hidden: true },
   { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
   { id: "setup.down", title: "Next step", keys: ["j", "Down"], view: "setup", hidden: true },
+  // M, not m: m is the reader's reading mode, and a migration is a big step.
+  { id: "manga.migrate", title: "Migrate to another source", keys: ["M"], view: "manga", hidden: true },
+  { id: "migrate.batch", title: "Migrate a source", keys: ["M"], view: "sources", hidden: true },
+  { id: "migrate.up", title: "Up", keys: ["k", "Up"], view: ["migrate-search", "migrate-from", "migrate-to", "migrate-match", "migrate-done"], hidden: true },
+  { id: "migrate.down", title: "Down", keys: ["j", "Down"], view: ["migrate-search", "migrate-from", "migrate-to", "migrate-match", "migrate-done"], hidden: true },
+  { id: "migrate.left", title: "Previous result", keys: ["h", "Left"], view: ["migrate-search", "migrate-match"], hidden: true },
+  { id: "migrate.right", title: "Next result", keys: ["l", "Right"], view: ["migrate-search", "migrate-match"], hidden: true },
+  { id: "migrate.open", title: "Choose", keys: ["Enter"], view: ["migrate-search", "migrate-from", "migrate-to", "migrate-match", "migrate-confirm", "migrate-done"], hidden: true },
+  { id: "migrate.search", title: "Search another title", keys: ["/"], view: "migrate-search", hidden: true },
+  { id: "migrate.copy", title: "Copy", keys: ["c"], view: "migrate-confirm", hidden: true },
+  { id: "migrate.downloads", title: "Delete or keep the old downloads", keys: ["d"], view: "migrate-confirm", hidden: true },
   { id: "setup.activate", title: "Run step", keys: ["Enter", "Space"], view: "setup", hidden: true }
 ]
 
