@@ -110,7 +110,7 @@ test("on the extensions screen, keys drive the extension list", () => {
 test("r refreshes extensions on that screen and reloads the library elsewhere", () => {
   assert.equal(C.dispatch(browse, text("r")), "extensions.refresh");
   for (const v of ["library", "settings"]) assert.equal(C.dispatch({ palette: false, view: v }, text("r")), "library.reload", v);
-  for (const t of ["x", "a", "/"]) assert.equal(C.dispatch({ palette: false, view: "library" }, text(t)), null, t);
+  for (const t of ["a", "/"]) assert.equal(C.dispatch({ palette: false, view: "library" }, text(t)), null, t);
 });
 
 test("an open edit field gets its own commit and cancel", () => {
@@ -299,7 +299,8 @@ test("on History, j/k move, Enter resumes, x removes an entry, X clears it all a
   assert.equal(C.dispatch(h, text("X")), "history.clear");
   assert.equal(C.dispatch(h, text("r")), "history.reload");
   assert.equal(C.dispatch(h, key(C.KEY.Escape)), "window.quit");
-  assert.equal(C.dispatch(screen("library"), text("x")), null);
+  assert.equal(C.dispatch(screen("library"), text("x")), "library.remove");
+  assert.equal(C.dispatch(screen("settings"), text("x")), null);
   assert.equal(C.dispatch(screen("library"), text("r")), "library.reload");
 });
 

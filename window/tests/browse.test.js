@@ -127,6 +127,45 @@ test("a source fetch that fails keeps the cached manga and says why", () => {
   assert.equal(B.detailPayload(d), null);
 });
 
+const ASURA = "6247824327199706550";
+const missing = (o) => mangaNode(Object.assign({ sourceId: ASURA, source: null, initialized: false }, o));
+const names = (map) => ({ metas: { nodes: [{ value: JSON.stringify(map) }] } });
+
+test("sourceLabel names the installed source, a known missing one, or the id", () => {
+  assert.equal(B.sourceLabel({ sourceId: "1", source: { displayName: "MangaDex (EN)" } }, {}), "MangaDex (EN)");
+  assert.equal(B.sourceLabel({ sourceId: ASURA, source: null }, { [ASURA]: "Asura Scans" }), "Asura Scans (not installed)");
+  assert.equal(B.sourceLabel({ sourceId: ASURA, source: null }, {}), "Unknown source " + ASURA);
+});
+
+test("a manga with a missing source shows its stored name, no cover and never fetches", () => {
+  let d = B.reduceDetail(B.detail(5, true), { type: "reply", reply: ok(Object.assign({ manga: missing() }, names({ [ASURA]: "Asura Scans" }))), config });
+  assert.equal(d.manga.source, "Asura Scans (not installed)");
+  assert.equal(d.manga.cover, "", "the server fetches covers through the source, so it would only fail");
+  const p = B.detailPayload(d);
+  assert.doesNotMatch(p.query, /fetchMangaAndChapters/);
+  assert.deepEqual(p.variables, { name: "Asura Scans" });
+  d = B.reduceDetail(d, { type: "reply", reply: ok({ extensions: { nodes: [{ name: "Asura Scans", isInstalled: false }] } }), config });
+  assert.equal(d.state, "ok");
+  assert.deepEqual(d.extension, { installed: false });
+  assert.equal(B.detailPayload(d), null);
+});
+
+test("an unknown missing source skips the extension lookup", () => {
+  const d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: missing(), metas: { nodes: [] } }), config });
+  assert.equal(d.manga.source, "Unknown source " + ASURA);
+  assert.equal(B.detailPayload(d), null);
+  assert.equal(d.state, "ok");
+});
+
+test("sourceHelp says what to do about a missing source", () => {
+  const known = { missing: true, sourceName: "Asura Scans" };
+  assert.equal(B.sourceHelp({ missing: false }, null), "");
+  assert.match(B.sourceHelp(known, { installed: false }), /^Install the Asura Scans extension in Browse\. If .*migrate/);
+  assert.match(B.sourceHelp(known, { installed: true }), /^The installed Asura Scans extension serves a different source.*Migrate/);
+  assert.match(B.sourceHelp(known, null), /^No extension in your repos is named Asura Scans\. Migrate/);
+  assert.match(B.sourceHelp({ missing: true, sourceName: "" }, null), /^Migrate/);
+});
+
 test("add to library flips inLibrary from the server's answer", () => {
   let d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode() }), config });
   const p = B.libraryPayload(d);

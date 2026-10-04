@@ -130,22 +130,14 @@ Item {
           width: strip.cellWidth + view.theme.fontSize
           height: strip.height
 
-          Rectangle {
+          Cover {
             id: coverBox
             width: strip.cellWidth
             height: width * 1.5
-            color: Qt.alpha(view.theme.foreground, 0.06)
-            border.width: cell.current ? 2 : 0
-            border.color: view.theme.accent
-
-            Image {
-              anchors.fill: parent
-              anchors.margins: cell.current ? 2 : 0
-              source: cell.modelData.cover
-              fillMode: Image.PreserveAspectCrop
-              asynchronous: true
-              sourceSize.width: width
-            }
+            theme: view.theme
+            source: cell.modelData.cover
+            title: cell.modelData.title
+            current: cell.current
 
             Rectangle {
               anchors.top: parent.top

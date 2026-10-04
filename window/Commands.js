@@ -122,6 +122,7 @@ var commands = [
   { id: "library.nextCategory", title: "Next category", keys: ["Tab"], view: "library", hidden: true },
   { id: "library.previousCategory", title: "Previous category", keys: ["Backtab"], view: "library", hidden: true },
   { id: "library.categories", title: "Categories", keys: ["c"], view: "library", hidden: true },
+  { id: "library.remove", title: "Remove from library", keys: ["x"], view: "library", hidden: true },
   { id: "categories.up", title: "Previous category", keys: ["k", "Up"], view: "categories", hidden: true },
   { id: "categories.down", title: "Next category", keys: ["j", "Down"], view: "categories", hidden: true },
   { id: "categories.moveUp", title: "Move category up", keys: ["K"], view: "categories", hidden: true },

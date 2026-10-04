@@ -182,22 +182,16 @@ Item {
         height: view.theme.fontSize * 5
         color: entry.current ? view.theme.selected : "transparent"
 
-        Rectangle {
+        Cover {
           id: coverBox
           anchors.left: parent.left
           anchors.leftMargin: view.theme.fontSize * 0.5
           anchors.verticalCenter: parent.verticalCenter
           height: parent.height - view.theme.fontSize * 0.5
           width: height / 1.5
-          color: Qt.alpha(view.theme.foreground, 0.06)
-
-          Image {
-            anchors.fill: parent
-            source: entry.modelData.cover
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            sourceSize.width: width
-          }
+          theme: view.theme
+          source: entry.modelData.cover
+          title: entry.modelData.title
         }
 
         Column {

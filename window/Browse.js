@@ -12,12 +12,15 @@ var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaTy
   + " fetchSourceManga(input: { source: $source, type: $type, page: $page, query: $query }) {"
   + " hasNextPage mangas { id title thumbnailUrl inLibrary } } }"
 
-var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized source { displayName } categories { nodes { id } } meta { key value }"
+var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized sourceId source { displayName } categories { nodes { id } } meta { key value }"
 var CHAPTER_FIELDS = "id name chapterNumber uploadDate isRead isDownloaded scanlator sourceOrder"
-var DETAIL_QUERY = "query($id: Int!) { manga(id: $id) { " + MANGA_FIELDS + " chapters { nodes { " + CHAPTER_FIELDS + " } } } }"
+// The sync helper stores source names from phone backups here, id -> name.
+var SOURCE_NAMES_META = "miharchy.sourceNames"
+var DETAIL_QUERY = "query($id: Int!) { manga(id: $id) { " + MANGA_FIELDS + " chapters { nodes { " + CHAPTER_FIELDS + " } } }"
+  + " metas(condition: { key: \"" + SOURCE_NAMES_META + "\" }) { nodes { value } } }"
+var EXTENSION_QUERY = "query($name: String!) { extensions(filter: { name: { equalTo: $name } }) { nodes { name isInstalled } } }"
 var FETCH_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: true }) {"
   + " manga { " + MANGA_FIELDS + " } chapters { " + CHAPTER_FIELDS + " } } }"
-var LIBRARY_MUTATION = "mutation($id: Int!, $inLibrary: Boolean!) { updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) { manga { id inLibrary } } }"
 var CATEGORY_MUTATION = "mutation($id: Int!, $add: [Int!]!, $remove: [Int!]!) {"
   + " updateMangaCategories(input: { id: $id, patch: { addToCategories: $add, removeFromCategories: $remove } }) { manga { id categories { nodes { id } } } } }"
 
@@ -114,17 +117,20 @@ function reduceListing(l, event) {
 }
 
 // detail.step: the request due next: "read" the cached manga, "fetch" it
-// from the source, or null. fetched: the source fetch already ran, so a
-// manga the source leaves empty is not fetched in a loop. fromSource: opened
+// from the source, look up the "extension" named like a missing source, or
+// null. extension: that extension as { installed }, or null. fetched: the
+// source fetch already ran, so a manga the source leaves empty is not
+// fetched in a loop. fromSource: opened
 // while browsing a source, where cached details can be stale, so it always
 // refreshes once after showing the cache.
 function detail(mangaId, fromSource) {
-  return { mangaId: mangaId, fromSource: fromSource === true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "" }
+  return { mangaId: mangaId, fromSource: fromSource === true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null }
 }
 
 function detailPayload(d) {
   if (d.step === "read") return { query: DETAIL_QUERY, variables: { id: d.mangaId } }
   if (d.step === "fetch") return { query: FETCH_MUTATION, variables: { id: d.mangaId } }
+  if (d.step === "extension") return { query: EXTENSION_QUERY, variables: { name: d.manga.sourceName } }
   return null
 }
 
@@ -153,8 +159,38 @@ function longStrip(genres, sourceName) {
   return /webtoon/i.test(sourceName) || genres.some(function(g) { return LONG_STRIP_GENRES.indexOf(String(g).toLowerCase()) !== -1 })
 }
 
-function toManga(config, n) {
-  var source = n.source ? String(n.source.displayName || "") : ""
+// n: a manga node with sourceId and source { displayName }, null when the
+// source is not installed. names: SOURCE_NAMES_META parsed.
+function sourceLabel(n, names) {
+  if (n.source) return String(n.source.displayName || n.sourceId)
+  var name = names[n.sourceId]
+  return name ? name + " (not installed)" : "Unknown source " + n.sourceId
+}
+
+// What to do about a manga whose source is not installed. extension: the
+// extension with the source's name, as { installed }, or null for none.
+// An installed one means the extension's source has a new id now.
+function sourceHelp(manga, extension) {
+  if (!manga || !manga.missing) return ""
+  var name = manga.sourceName
+  if (!name) return "Migrate this manga to another source (coming soon)."
+  if (extension && extension.installed) return "The installed " + name + " extension serves a different source now. Migrate this manga to it (coming soon)."
+  if (extension) return "Install the " + name + " extension in Browse. If the manga still shows not installed, the source changed: migrate it (coming soon)."
+  return "No extension in your repos is named " + name + ". Migrate this manga to another source (coming soon)."
+}
+
+function parseNames(data) {
+  var node = ((data.metas && data.metas.nodes) || [])[0]
+  try {
+    var names = JSON.parse(node ? node.value : "{}")
+    return names && typeof names === "object" ? names : {}
+  } catch (e) {
+    return {}
+  }
+}
+
+function toManga(config, n, names) {
+  var source = sourceLabel(n, names)
   var own = (n.meta || []).filter(function(m) { return m.key === "miharchy.readingMode" })[0]
   return {
     id: n.id,
@@ -164,8 +200,12 @@ function toManga(config, n) {
     description: String(n.description || ""),
     genres: (n.genre || []).join(", "),
     status: titleCase(n.status),
-    cover: Model.coverUrl(config, n.thumbnailUrl),
+    // The server fetches a cover through its source, so without one it only fails.
+    cover: n.source ? Model.coverUrl(config, n.thumbnailUrl) : "",
     source: source,
+    sourceId: String(n.sourceId),
+    missing: !n.source,
+    sourceName: n.source ? source : String(names[n.sourceId] || ""),
     inLibrary: n.inLibrary === true,
     initialized: n.initialized === true,
     categories: ((n.categories && n.categories.nodes) || []).map(function(c) { return c.id }),
@@ -192,20 +232,29 @@ function reduceDetail(d, event) {
     case "reread":
       return copy(d, { step: "read", fetched: true })
     case "reply":
+      if (d.step === "extension") {
+        var ext = event.reply.state === "ok" ? event.reply.data.extensions.nodes[0] : null
+        return copy(d, { step: null, extension: ext ? { installed: ext.isInstalled === true } : null })
+      }
       if (event.reply.state !== "ok") return copy(copy(d, failed(event.reply)), { step: null })
       if (d.step === "read") {
         var n = event.reply.data.manga
+        var names = parseNames(event.reply.data)
+        var manga = toManga(event.config, n, names)
         var chapters = toChapters(n.chapters && n.chapters.nodes)
+        // A fetch goes through the source, so a missing one only fails.
+        if (manga.missing) return copy(d, { manga: manga, chapters: chapters, sourceNames: names, step: manga.sourceName ? "extension" : null, state: "ok" })
         var stale = d.fromSource || !n.initialized || chapters.length === 0
         return copy(d, {
-          manga: toManga(event.config, n),
+          manga: manga,
           chapters: chapters,
+          sourceNames: names,
           step: stale && !d.fetched ? "fetch" : null,
           state: stale && !d.fetched ? "loading" : "ok"
         })
       }
       var f = event.reply.data.fetchMangaAndChapters
-      return copy(d, { manga: toManga(event.config, f.manga), chapters: toChapters(f.chapters), step: null, state: "ok", fetched: true })
+      return copy(d, { manga: toManga(event.config, f.manga, d.sourceNames), chapters: toChapters(f.chapters), step: null, state: "ok", fetched: true })
     case "library-request":
       return copy(d, { busy: true, libraryError: "" })
     case "library-reply":
@@ -238,7 +287,7 @@ function categoryPayload(d, categoryId) {
 // is in flight.
 function libraryPayload(d) {
   if (!d.manga || d.busy) return null
-  return { query: LIBRARY_MUTATION, variables: { id: d.mangaId, inLibrary: !d.manga.inLibrary } }
+  return Model.inLibraryPayload(d.mangaId, !d.manga.inLibrary)
 }
 
 function markInLibrary(l, mangaId, inLibrary) {
@@ -266,6 +315,8 @@ if (typeof module !== "undefined") {
     detail: detail,
     detailPayload: detailPayload,
     reduceDetail: reduceDetail,
+    sourceLabel: sourceLabel,
+    sourceHelp: sourceHelp,
     libraryPayload: libraryPayload,
     categoryPayload: categoryPayload,
     markInLibrary: markInLibrary,
