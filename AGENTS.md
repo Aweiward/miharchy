@@ -26,7 +26,9 @@ A manga reader for Omarchy (Arch + Hyprland). It reads Mihon's extension ecosyst
 - `plugin/` stays thin: the mark, the popup, a launcher. The reader never runs inside the shell process (ADR 0003).
 - `window/` keeps decisions in pure JS modules, tested with node. QML files only wire those modules to the UI, the same split as the `aweiward.omaqbt` plugin in `~/.config/omarchy/plugins/`.
 - `sync/` copies Mihon's backup model classes as the schema (ADR 0004). Keep them identical to upstream.
-- Suwayomi-Server runs from `~/.local/share/miharchy/suwayomi`, bound to `127.0.0.1`, with `basic_auth` and a random password in `~/.config/miharchy/` (mode 600). Its WebUI and tray are off.
+- Suwayomi-Server runs as the systemd user service `miharchy-server`, from `~/.local/share/miharchy/suwayomi` (mode 700), on `127.0.0.1:4590` with `basic_auth`. `server/miharchy-server` sets it up and is safe to rerun.
+- Every component reads the server address and credentials from `~/.config/miharchy/server.json` (mode 600): `{url, username, password}`. Never hard-code them.
+- Suwayomi rewrites its `server.conf` with mode 644, so the 700 folder is what keeps the password private.
 - FlareSolverr is optional. The setup screen offers it as a Docker container bound to `127.0.0.1:8191` and then sets `flareSolverrEnabled` and `flareSolverrAsResponseFallback`. Without it, Cloudflare sources show a "needs FlareSolverr" message.
 
 ## Current work

@@ -1,0 +1,12 @@
+[Unit]
+Description=Miharchy manga server (Suwayomi-Server)
+After=graphical-session.target network-online.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/suwayomi-server -Dsuwayomi.tachidesk.config.server.rootDir=%h/.local/share/miharchy/suwayomi
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

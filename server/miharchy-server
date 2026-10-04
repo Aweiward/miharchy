@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Idempotent: creates credentials once, pins Miharchy's keys in server.conf, and keeps the service running.
+set -euo pipefail
+
+config_dir=$HOME/.config/miharchy
+root_dir=$HOME/.local/share/miharchy/suwayomi
+creds=$config_dir/server.json
+conf=$root_dir/server.conf
+unit=$(dirname "$(readlink -f "$0")")/miharchy-server.service
+
+# Suwayomi rewrites server.conf as mode 644 with the password inside; the 700 folder keeps it private.
+install -d -m 700 "$config_dir" "$root_dir"
+
+if [[ ! -f $creds ]]; then
+  (umask 077; jq -n --arg password "$(openssl rand -hex 24)" \
+    '{url: "http://127.0.0.1:4590", username: "miharchy", password: $password}' > "$creds")
+fi
+
+port=$(jq -r '.url | capture(":(?<p>[0-9]+)$").p' "$creds")
+username=$(jq -r .username "$creds")
+password=$(jq -r .password "$creds")
+
+touch "$conf"
+before=$(sha256sum < "$conf")
+while IFS='=' read -r key value; do
+  line="server.$key = $value"
+  grep -qFx -e "$line" "$conf" || grep -qF -e "$line #" "$conf" && continue
+  sed -i "/^server\.$key[ =]/d" "$conf"
+  echo "$line" >> "$conf"
+done <<CONF
+ip="127.0.0.1"
+port=$port
+webUIEnabled=false
+systemTrayEnabled=false
+initialOpenInBrowserEnabled=false
+authMode="basic_auth"
+authUsername="$username"
+authPassword="$password"
+CONF
+changed=$([[ $(sha256sum < "$conf") != "$before" ]] && echo yes || echo no)
+
+unit_dir=$HOME/.config/systemd/user
+if ! cmp -s "$unit" "$unit_dir/miharchy-server.service"; then
+  install -D -m 644 "$unit" "$unit_dir/miharchy-server.service"
+  systemctl --user daemon-reload
+  changed=yes
+fi
+systemctl --user enable --now miharchy-server.service >/dev/null 2>&1
+[[ $changed == yes ]] && systemctl --user restart miharchy-server.service
+echo "miharchy-server: running on 127.0.0.1:$port (config changed: $changed)"
