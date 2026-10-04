@@ -82,9 +82,10 @@ function command(script, args) {
 
 // The launcher entry for the plugin's window/. Exec quotes its path as the
 // desktop entry spec says: \ " ` $ escaped, then \ escaped again for the
-// key file, and % doubled.
+// key file. A % in the path stays unsupported: GLib, which gtk-launch uses,
+// refuses an entry whose program path holds the spec's %% escape.
 function desktopEntry(windowDir) {
-  var exec = String(windowDir + "/miharchy").replace(/["`$\\]/g, "\\$&").replace(/\\/g, "\\\\").replace(/%/g, "%%")
+  var exec = String(windowDir + "/miharchy").replace(/["`$\\]/g, "\\$&").replace(/\\/g, "\\\\")
   return [
     "[Desktop Entry]",
     "Type=Application",

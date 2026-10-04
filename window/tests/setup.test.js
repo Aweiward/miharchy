@@ -249,6 +249,6 @@ test("the launcher entry opens window/miharchy and a rerun or a moved plugin is 
   assert.equal(S.status(probe("/q/window"), "launcher").state, "todo", "a plugin in another folder needs a new entry");
 });
 
-test("the launcher Exec line survives spaces, quotes and percent signs", () => {
-  assert.ok(S.desktopEntry('/a b/100%/"q"/$x').includes(String.raw`Exec="/a b/100%%/\\"q\\"/\\$x/miharchy"` + "\n"));
+test("the launcher Exec line survives spaces, quotes, $ and backslashes", () => {
+  assert.ok(S.desktopEntry('/a b/"q"/$x/b\\s').includes(String.raw`Exec="/a b/\\"q\\"/\\$x/b\\\\s/miharchy"` + "\n"));
 });
