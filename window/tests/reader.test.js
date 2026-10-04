@@ -188,3 +188,15 @@ test("with delete after read on, leaving a chapter this reading finished deletes
   assert.equal(R.deletePayload(loaded(12, 3, { isRead: true }), true), null, "a chapter read before stays when read again");
   assert.equal(R.deletePayload(R.open(5, chapters, 12, "paged-rtl"), true), null, "nothing before the pages load");
 });
+
+test("quitting waits for the reader's saves and deletes in flight, then quits once", () => {
+  const quit = (s) => R.exit(s, "quit");
+  assert.equal(R.canQuit(quit(R.EXIT)), true, "nothing in flight quits now");
+  const busy = R.exit(R.exit(R.EXIT, "write"), "write");
+  assert.equal(R.canQuit(busy), false, "a write before the quit does not quit");
+  assert.equal(R.canQuit(R.exit(busy, "wrote")), false);
+  const waiting = quit(R.exit(busy, "wrote"));
+  assert.equal(R.canQuit(waiting), false, "the quit waits for the write in flight");
+  assert.equal(R.canQuit(R.exit(waiting, "wrote")), true, "the last reply quits");
+  assert.equal(quit(waiting), waiting, "a second quit changes nothing, so it quits once");
+});

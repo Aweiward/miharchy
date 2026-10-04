@@ -169,6 +169,19 @@ function slots(r) {
   return out
 }
 
+// Quitting the window waits for the saves and deletes in flight: a process
+// that exits first can drop the request. event: "write" | "wrote" | "quit".
+var EXIT = { quitting: false, writes: 0 }
+
+function exit(s, event) {
+  if (event === "quit") return s.quitting ? s : copy(s, { quitting: true })
+  return copy(s, { writes: s.writes + (event === "write" ? 1 : -1) })
+}
+
+function canQuit(s) {
+  return s.quitting && s.writes === 0
+}
+
 function indicator(r) {
   return r.state === "ok" ? (r.page + 1) + " / " + r.pages.length + "   " + MODE_LABELS[r.mode] : ""
 }
@@ -189,6 +202,9 @@ if (typeof module !== "undefined") {
     action: action,
     slotOf: slotOf,
     slots: slots,
+    EXIT: EXIT,
+    exit: exit,
+    canQuit: canQuit,
     indicator: indicator
   }
 }
