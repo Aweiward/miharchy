@@ -14,6 +14,15 @@ omarchy plugin add https://github.com/Aweiward/miharchy --enable
 
 This clones the plugin into `~/.config/omarchy/plugins/miharchy` and puts the Miharchy mark in the bar. Middle click the mark to open the window. The first time, the window opens on Setup.
 
+To update:
+
+```sh
+omarchy plugin update miharchy
+omarchy-restart-shell
+```
+
+The shell can keep the old bar mark in memory, so restart it to see bar changes. Reopen the window for window changes.
+
 ## Setup
 
 Setup lists the steps below. Move with `j` and `k`, press Enter on a step. A step that changes your system asks first: press `y` to run it, `n` to cancel. Setup never runs `sudo` or installs packages; for those it shows the command to run in a terminal. Every step checks its own state, so you can run Setup again at any time (`:` then Setup).
