@@ -6,7 +6,6 @@ import Quickshell.Io
 import "Model.js" as Model
 import "Commands.js" as Commands
 import "Settings.js" as Settings
-import "Reader.js" as Reader
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -404,7 +403,7 @@ ShellRoot {
             browseView.markInLibrary(mangaId, inLibrary)
             if (root.config) root.fetchLibrary()
           }
-          onRead: function(chapters, chapterId) { reader.start(chapters, chapterId, Reader.mode(root.settingsState.values.defaultReadingMode)) }
+          onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
         }
       }
 

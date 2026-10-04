@@ -268,3 +268,15 @@ test("/ on the sources screen searches every source; on its results hjkl move, E
 test("l on the sources screen toggles every language", () => {
   assert.equal(C.dispatch(screen("sources"), text("l")), "sources.languages");
 });
+
+test("in the reader, j/k and the arrows scroll, d/u go half a view, and m changes the reading mode", () => {
+  const r = screen("reader");
+  assert.equal(C.dispatch(r, text("j")), "reader.down");
+  assert.equal(C.dispatch(r, key(C.KEY.Down)), "reader.down");
+  assert.equal(C.dispatch(r, text("k")), "reader.up");
+  assert.equal(C.dispatch(r, key(C.KEY.Up)), "reader.up");
+  assert.equal(C.dispatch(r, text("d")), "reader.halfDown");
+  assert.equal(C.dispatch(r, text("u")), "reader.halfUp");
+  assert.equal(C.dispatch(r, text("m")), "reader.mode");
+  assert.equal(C.dispatch(screen("manga"), text("m")), null);
+});

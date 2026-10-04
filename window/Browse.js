@@ -12,7 +12,7 @@ var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaTy
   + " fetchSourceManga(input: { source: $source, type: $type, page: $page, query: $query }) {"
   + " hasNextPage mangas { id title thumbnailUrl inLibrary } } }"
 
-var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized source { displayName } categories { nodes { id } }"
+var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized source { displayName } categories { nodes { id } } meta { key value }"
 var CHAPTER_FIELDS = "id name chapterNumber uploadDate isRead scanlator sourceOrder"
 var DETAIL_QUERY = "query($id: Int!) { manga(id: $id) { " + MANGA_FIELDS + " chapters { nodes { " + CHAPTER_FIELDS + " } } } }"
 var FETCH_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: true }) {"
@@ -144,7 +144,18 @@ function day(ms) {
   return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
 }
 
+// Mihon has no layout field, so the layout comes from what sources say.
+// Language tags (MangaDex's "Korean") and "Web Comic" also cover paged
+// books, and Webtoons.com tags genres only, so its name counts.
+var LONG_STRIP_GENRES = ["long strip", "webtoon", "webtoons", "manhwa", "manhua"]
+
+function longStrip(genres, sourceName) {
+  return /webtoon/i.test(sourceName) || genres.some(function(g) { return LONG_STRIP_GENRES.indexOf(String(g).toLowerCase()) !== -1 })
+}
+
 function toManga(config, n) {
+  var source = n.source ? String(n.source.displayName || "") : ""
+  var own = (n.meta || []).filter(function(m) { return m.key === "miharchy.readingMode" })[0]
   return {
     id: n.id,
     title: String(n.title || ""),
@@ -154,10 +165,13 @@ function toManga(config, n) {
     genres: (n.genre || []).join(", "),
     status: titleCase(n.status),
     cover: Model.coverUrl(config, n.thumbnailUrl),
-    source: n.source ? String(n.source.displayName || "") : "",
+    source: source,
     inLibrary: n.inLibrary === true,
     initialized: n.initialized === true,
-    categories: ((n.categories && n.categories.nodes) || []).map(function(c) { return c.id })
+    categories: ((n.categories && n.categories.nodes) || []).map(function(c) { return c.id }),
+    longStrip: longStrip(n.genre || [], source),
+    // "" until m picks one in the reader.
+    readingMode: own ? String(own.value) : ""
   }
 }
 

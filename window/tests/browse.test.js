@@ -218,3 +218,18 @@ test("a reread after reading shows the read flags from the cache, never refetchi
   assert.equal(d.state, "ok");
   assert.equal(B.detailPayload(d), null);
 });
+
+test("a manga reads as a long strip by its genre tags or a webtoon source", () => {
+  const strip = (o) => B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode(o) }), config }).manga.longStrip;
+  assert.equal(strip(), false);
+  for (const g of ["Long Strip", "Webtoon", "manhwa", "Manhua"]) assert.equal(strip({ genre: ["Action", g] }), true, g);
+  assert.equal(strip({ genre: ["Web Comic", "Korean", "Full Color"] }), false, "language, color and web publication say nothing about the layout");
+  assert.equal(strip({ genre: ["Romance"], source: { displayName: "Webtoons.com (EN)" } }), true);
+});
+
+test("a manga's own reading mode comes from its miharchy.readingMode meta", () => {
+  const mode = (meta) => B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode({ meta }) }), config }).manga.readingMode;
+  assert.equal(mode(undefined), "");
+  assert.equal(mode([{ key: "other", value: "x" }, { key: "miharchy.readingMode", value: "webtoon" }]), "webtoon");
+  assert.match(B.detailPayload(B.detail(5)).query, /meta \{ key value \}/);
+});
