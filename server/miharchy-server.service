@@ -4,6 +4,10 @@ After=graphical-session.target network-online.target
 PartOf=graphical-session.target
 
 [Service]
+# Docker starts on demand, so after a reboot the FlareSolverr container stays
+# down until something calls it; start it with the server. A no-op without
+# Docker or the container.
+ExecStartPre=-/bin/sh -c 'command -v docker >/dev/null || exit 0; docker start miharchy-flaresolverr >/dev/null 2>&1 || true'
 ExecStart=/usr/bin/suwayomi-server -Dsuwayomi.tachidesk.config.server.rootDir=%h/.local/share/miharchy/suwayomi
 Restart=on-failure
 RestartSec=5
