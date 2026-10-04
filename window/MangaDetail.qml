@@ -248,7 +248,7 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         elide: Text.ElideRight
         text: row.modelData.name
-        color: row.modelData.read ? view.theme.muted : row.current ? view.theme.selectedText : view.theme.foreground
+        color: row.current ? view.theme.selectedText : row.modelData.read ? view.theme.muted : view.theme.foreground
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSize
       }
