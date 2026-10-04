@@ -131,7 +131,7 @@ ShellRoot {
       extensionsView.run(id)
       return
     }
-    if (/^(browse|sources|source)\./.test(id)) {
+    if (/^(browse|sources|source|global)\./.test(id)) {
       browseView.run(id)
       return
     }
