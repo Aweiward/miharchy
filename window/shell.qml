@@ -233,6 +233,11 @@ ShellRoot {
         }
         configFile.reload()
         break
+      case "window.fullscreen":
+        // xdg-shell's own fullscreen request, so the compositor acts on
+        // this window and no other.
+        window.fullscreen = !window.fullscreen
+        break
       case "window.quit":
         Qt.quit()
         break
