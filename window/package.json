@@ -3,6 +3,6 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "lint:qml": "/usr/lib/qt6/bin/qmllint shell.qml Theme.qml LibraryView.qml CommandPalette.qml SettingsView.qml ExtensionsView.qml"
+    "lint:qml": "/usr/lib/qt6/bin/qmllint shell.qml Theme.qml LibraryView.qml CommandPalette.qml SettingsView.qml ExtensionsView.qml SetupView.qml"
   }
 }

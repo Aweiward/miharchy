@@ -34,6 +34,7 @@ A manga reader for Omarchy (Arch + Hyprland). It reads Mihon's extension ecosyst
 - Miharchy-only preferences live in Suwayomi global meta under `miharchy.<key>` (`metas` / `setGlobalMeta`), never in a local file, so the window, plugin and sync helper read one place. Settings that belong to Suwayomi stay server settings. `window/Settings.js` holds the row table: a new setting is one entry there.
 - Browse adds the Keiyoushi extension repo once per server and records that in meta `miharchy.repoPreset`, so a repo the user removes stays removed. Suwayomi rewrites a repo's `index.min.json` URL to `index.pb` and ignores removal by any other URL, so remove a repo by the `indexUrl` the server returns.
 - FlareSolverr is optional. The setup screen offers it as a Docker container bound to `127.0.0.1:8191` and then sets `flareSolverrEnabled` and `flareSolverrAsResponseFallback`. Without it, Cloudflare sources show a "needs FlareSolverr" message.
+- The setup screen (`window/Setup.js`) changes the system only after the user presses y on a step, and it never runs an install command or sudo: it shows `pacman`/`yay` commands for the user to run. Each step detects "done" from a fresh check, so a rerun changes nothing. The sync folder lives in meta `miharchy.syncFolder`.
 
 ## Current work
 

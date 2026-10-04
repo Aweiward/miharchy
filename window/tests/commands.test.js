@@ -119,3 +119,23 @@ test("an open edit field gets its own commit and cancel", () => {
   assert.equal(C.dispatch(filtering, key(C.KEY.Enter)), "extensions.commit");
   for (const t of ["x", "j", "/", "q"]) assert.equal(C.dispatch(filtering, text(t)), null, t);
 });
+
+test("the palette opens Setup; in it j/k move and Enter acts on a step", () => {
+  assert.ok(C.paletteRows("setup").some((c) => c.id === "view.setup"));
+  const setup = { palette: false, view: "setup" };
+  assert.equal(C.dispatch(setup, text("j")), "setup.down");
+  assert.equal(C.dispatch(setup, key(C.KEY.Up)), "setup.up");
+  assert.equal(C.dispatch(setup, key(C.KEY.Return)), "setup.activate");
+  assert.equal(C.dispatch(setup, text("y")), null, "y runs nothing without a question");
+  assert.equal(C.dispatch(settings, text("j")), "settings.down", "setup keys stay out of Settings");
+});
+
+test("a setup question takes only y, n or Esc", () => {
+  const asking = { palette: false, view: "setup", confirming: true };
+  assert.equal(C.dispatch(asking, text("y")), "setup.confirm");
+  assert.equal(C.dispatch(asking, text("n")), "setup.cancel");
+  assert.equal(C.dispatch(asking, key(C.KEY.Escape)), "setup.cancel");
+  for (const t of ["q", "Y", "1", ":", "j"]) assert.equal(C.dispatch(asking, text(t)), null, t);
+  assert.equal(C.dispatch(asking, key(C.KEY.Return)), null, "Enter does not consent");
+  assert.equal(C.dispatch(asking, C.keyEvent(0x59, "y", CTRL)), null, "Ctrl-y does not consent");
+});

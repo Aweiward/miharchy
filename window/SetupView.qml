@@ -1,0 +1,261 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import "Setup.js" as Setup
+import "Model.js" as Model
+import "Commands.js" as Commands
+
+// The setup screen: one row per Setup.STEPS entry. It owns the one Process
+// that runs checks and confirmed steps, and sends its own server reads and
+// writes. The window's dispatcher hands it keys through run().
+Item {
+  id: view
+
+  required property Theme theme
+  property var config: null
+  property string configPath: ""
+  property string home: ""
+
+  property var setup: Setup.initial()
+  property int cursor: 0
+  property bool editing: false
+  property string message: ""
+  readonly property bool confirming: setup.confirm !== null
+  // The folder waiting on its existence check.
+  property string folder: ""
+  property bool checked: false
+  // The window runs from the repo's window/, beside server/.
+  readonly property string serverScript: Quickshell.shellPath("../server/miharchy-server")
+  readonly property var current: Setup.STEPS[cursor]
+  readonly property var currentStatus: Setup.status(setup, current.id)
+
+  signal key(var event)
+  // The first check found a required step not done.
+  signal needed()
+  // A step changed the server's config or settings.
+  signal wrote()
+  signal editEnded()
+
+  Component.onCompleted: check()
+  onConfigChanged: readServer()
+
+  function start(id, command) {
+    message = ""
+    setup = Setup.reduce(setup, { type: "start", id: id })
+    proc.job = id
+    proc.command = command
+    proc.running = true
+  }
+
+  function check() {
+    if (!setup.job) start("probe", Setup.probeCommand(configPath))
+  }
+
+  function post(payload, done) {
+    var req = Model.request(config, payload)
+    var xhr = new XMLHttpRequest()
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === XMLHttpRequest.DONE) done(Model.reply(xhr.status, xhr.responseText))
+    }
+    xhr.open("POST", req.url)
+    xhr.setRequestHeader("Content-Type", "application/json")
+    xhr.setRequestHeader("Authorization", req.authorization)
+    xhr.send(req.body)
+  }
+
+  function readServer() {
+    if (config) post({ query: Setup.SERVER_QUERY }, function(reply) { view.setup = Setup.reduce(view.setup, { type: "server", reply: reply }) })
+  }
+
+  function finished(id, text) {
+    setup = Setup.reduce(setup, { type: "finish", id: id, text: text })
+    if (id === "probe") {
+      readServer()
+      if (checked) return
+      checked = true
+      cursor = Setup.next(setup)
+      if (Setup.incomplete(setup)) needed()
+      return
+    }
+    var save = Setup.savePayload(id, setup.results[id], folder)
+    if (save) {
+      post(save, function(reply) {
+        if (reply.state !== "ok") view.message = "Saving to the server failed: " + (reply.message || reply.state) + "."
+        view.wrote()
+        view.readServer()
+      })
+    }
+    if (id === "server") wrote()
+    check()
+  }
+
+  function endEdit() {
+    editing = false
+    message = ""
+    editEnded()
+  }
+
+  // id: a setup.* command id from Commands.js.
+  function run(id) {
+    switch (id) {
+      case "setup.up":
+      case "setup.down":
+        cursor = Commands.moveCursor(cursor, id === "setup.up" ? -1 : 1, Setup.STEPS.length)
+        break
+      case "setup.activate":
+        var act = Setup.action(setup, current.id)
+        if (act === "check") check()
+        if (act === "confirm") setup = Setup.reduce(setup, { type: "confirm", id: current.id })
+        if (act === "edit") {
+          field.text = setup.server.syncFolder || home + "/"
+          editing = true
+          field.forceActiveFocus()
+        }
+        break
+      case "setup.confirm":
+        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript }))
+        break
+      case "setup.cancel":
+        if (editing) endEdit()
+        else setup = Setup.reduce(setup, { type: "cancel" })
+        break
+      case "setup.commit":
+        var c = Setup.commitFolder(field.text, home)
+        if ("error" in c) {
+          message = c.error
+        } else {
+          endEdit()
+          folder = c.folder
+          start("syncFolder", Setup.runCommand("syncFolder", { folder: folder }))
+        }
+        break
+    }
+  }
+
+  Process {
+    id: proc
+    property string job: ""
+    stdout: StdioCollector {
+      onStreamFinished: view.finished(proc.job, text)
+    }
+  }
+
+  Column {
+    anchors.fill: parent
+    anchors.margins: view.theme.fontSize * 2
+    spacing: view.theme.fontSize
+
+    Text {
+      text: "Miharchy needs these pieces. Nothing on the system changes until you confirm a step."
+      color: view.theme.muted
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSize
+    }
+
+    Column {
+      width: Math.min(parent.width, view.theme.fontSize * 60)
+
+      Repeater {
+        model: Setup.STEPS
+
+        Rectangle {
+          id: row
+          required property var modelData
+          required property int index
+          readonly property bool current: index === view.cursor
+          readonly property string status: Setup.status(view.setup, modelData.id).state
+          width: parent.width
+          height: view.theme.fontSize * 2.4
+          color: current ? view.theme.selected : "transparent"
+
+          Text {
+            anchors.left: parent.left
+            anchors.leftMargin: view.theme.fontSize * 0.75
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.StyledText
+            text: "<font color='" + view.theme.muted + "'>" + (row.index + 1) + "</font> " + row.modelData.title
+            color: row.current ? view.theme.selectedText : view.theme.foreground
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSize
+          }
+
+          Text {
+            anchors.right: parent.right
+            anchors.rightMargin: view.theme.fontSize * 0.75
+            anchors.verticalCenter: parent.verticalCenter
+            text: row.status === "todo" ? "to do" : row.status === "unavailable" ? "no docker" : row.status
+            color: row.status === "todo" ? view.theme.urgent : row.status === "done" ? view.theme.accent : view.theme.muted
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSize
+          }
+        }
+      }
+    }
+
+    Column {
+      width: Math.min(parent.width, view.theme.fontSize * 60)
+      spacing: view.theme.fontSize * 0.5
+
+      Text {
+        width: parent.width
+        wrapMode: Text.Wrap
+        visible: text !== ""
+        text: view.currentStatus.detail
+        color: view.theme.foreground
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSize
+      }
+
+      Text {
+        visible: view.current.kind === "install" && view.currentStatus.state === "todo"
+        text: "$ " + (view.current.command || "")
+        color: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSize
+      }
+
+      Text {
+        visible: view.confirming
+        text: view.current.id === "server" ? "Run server/miharchy-server now?  y run   n cancel" : "Start the FlareSolverr container and turn it on in Suwayomi?  y run   n cancel"
+        color: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSize
+      }
+
+      TextInput {
+        id: field
+        width: parent.width
+        visible: view.editing
+        clip: true
+        color: view.theme.selectedText
+        selectionColor: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSize
+        Keys.onPressed: function(event) { view.key(event) }
+      }
+
+      Text {
+        width: parent.width
+        visible: text !== ""
+        wrapMode: Text.Wrap
+        text: view.message
+        color: view.theme.urgent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      Text {
+        readonly property var result: view.setup.results[view.current.id] || null
+        width: parent.width
+        visible: result !== null && view.currentStatus.state !== "running"
+        wrapMode: Text.Wrap
+        text: result ? (result.code === 0 ? "" : "Failed with exit status " + result.code + ".\n") + result.output : ""
+        color: result && result.code !== 0 ? view.theme.urgent : view.theme.muted
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+    }
+  }
+}

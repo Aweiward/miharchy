@@ -26,6 +26,7 @@ var commands = [
   { id: "view.history", title: "History", keys: ["3"] },
   { id: "view.browse", title: "Browse", keys: ["4"] },
   { id: "view.settings", title: "Settings", keys: ["5"] },
+  { id: "view.setup", title: "Setup", keys: [] },
   // Before library.reload: on Browse, r refreshes the extension list.
   { id: "extensions.refresh", title: "Refresh extensions", keys: ["r"], view: "browse", hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },
@@ -40,7 +41,10 @@ var commands = [
   { id: "extensions.remove", title: "Uninstall extension or remove repo", keys: ["x"], view: "browse", hidden: true },
   { id: "extensions.addRepo", title: "Add extension repo", keys: ["a"], view: "browse", hidden: true },
   { id: "extensions.filter", title: "Filter extensions", keys: ["/"], view: "browse", hidden: true },
-  { id: "extensions.languages", title: "English or every language", keys: ["l"], view: "browse", hidden: true }
+  { id: "extensions.languages", title: "English or every language", keys: ["l"], view: "browse", hidden: true },
+  { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
+  { id: "setup.down", title: "Next step", keys: ["j", "Down"], view: "setup", hidden: true },
+  { id: "setup.activate", title: "Run step", keys: ["Enter", "Space"], view: "setup", hidden: true }
 ]
 
 // ev: { key, text, ctrl }. Returns { key, text, ctrl } with defaults so
@@ -57,12 +61,19 @@ function matches(label, ev) {
 }
 
 // state: { palette: bool, view: view id, editing: "" or the command prefix
-// of the open edit field, as "settings" }. Returns a command id, or null for
-// no command (in the palette or an edit, null lets the field type the key).
+// of the open edit field, as "settings", confirming: bool }. Returns a
+// command id, or null for no command (in the palette or an edit, null lets
+// the field type the key). While a setup step waits for consent, only y, n
+// and Esc answer, so a stray key neither runs nor drops it.
 function dispatch(state, ev) {
   if (state.editing) {
     if (ev.key === KEY.Escape) return state.editing + ".cancel"
     if (ev.key === KEY.Return || ev.key === KEY.Enter) return state.editing + ".commit"
+    return null
+  }
+  if (state.confirming) {
+    if (!ev.ctrl && ev.text === "y") return "setup.confirm"
+    if (ev.key === KEY.Escape || (!ev.ctrl && ev.text === "n")) return "setup.cancel"
     return null
   }
   if (state.palette) {
