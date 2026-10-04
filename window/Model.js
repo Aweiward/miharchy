@@ -167,7 +167,7 @@ function notice(connection, configPath) {
 function problem(connection, configPath) {
   switch (connection.state) {
     case "no-config":
-      return { title: "No server config", detail: configPath + " is missing or invalid. Run server/miharchy-server to create it." }
+      return { title: "No server config", detail: configPath + " is missing or invalid. Run Setup from the : palette to create it." }
     case "down":
       return { title: "The server is not running", detail: "Start it with: systemctl --user start miharchy-server. Press r to retry." }
     case "unauthorized":

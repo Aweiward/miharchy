@@ -94,8 +94,8 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var editing = settingsEditing ? "settings" : (extensionsView.editing ? "extensions" : "")
-    var id = Commands.dispatch({ palette: paletteOpen, view: view, editing: editing }, Commands.keyEvent(event.key, event.text, event.modifiers))
+    var editing = settingsEditing ? "settings" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : ""
+    var id = Commands.dispatch({ palette: paletteOpen, view: view, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
     if (id !== null) run(id)
     return id !== null
   }
@@ -112,6 +112,10 @@ ShellRoot {
     }
     if (id.indexOf("extensions.") === 0) {
       extensionsView.run(id)
+      return
+    }
+    if (id.indexOf("setup.") === 0) {
+      setupView.run(id)
       return
     }
     switch (id) {
@@ -265,10 +269,24 @@ ShellRoot {
           onEditEnded: keyRoot.forceActiveFocus()
         }
 
+        SetupView {
+          id: setupView
+          anchors.fill: parent
+          visible: root.view === "setup"
+          theme: theme
+          config: root.config
+          configPath: root.configPath
+          home: Quickshell.env("HOME")
+          onKey: function(event) { event.accepted = root.handleKey(event) }
+          onNeeded: if (root.view === "library") root.view = "setup"
+          onWrote: configFile.reload()
+          onEditEnded: keyRoot.forceActiveFocus()
+        }
+
         Text {
           anchors.centerIn: parent
-          visible: ["library", "settings", "browse"].indexOf(root.view) === -1
-          text: Model.VIEWS[Model.viewIndex(root.view)].title + " comes in a later version"
+          visible: Model.viewIndex(root.view) !== -1 && ["library", "settings", "browse"].indexOf(root.view) === -1
+          text: visible ? Model.VIEWS[Model.viewIndex(root.view)].title + " comes in a later version" : ""
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSize
@@ -296,7 +314,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.settingsEditing || extensionsView.editing ? "enter save   esc cancel" : (({ settings: "j k move   enter change   ", browse: extensionsView.hint })[root.view] || "") + ": commands   r reload   q quit"
+          text: root.settingsEditing || extensionsView.editing || setupView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : (({ settings: "j k move   enter change   ", browse: extensionsView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   r reload   q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
