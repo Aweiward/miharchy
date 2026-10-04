@@ -26,6 +26,8 @@ A manga reader for Omarchy (Arch + Hyprland). It reads Mihon's extension ecosyst
 - `plugin/` stays thin: the mark, the popup, a launcher. The reader never runs inside the shell process (ADR 0003).
 - `window/` keeps decisions in pure JS modules, tested with node. QML files only wire those modules to the UI, the same split as the `aweiward.omaqbt` plugin in `~/.config/omarchy/plugins/`.
 - `sync/` copies Mihon's backup model classes as the schema (ADR 0004). Keep them identical to upstream.
+- Build and test `sync/` with `./gradlew test installDist` inside it (JDK 21+, nothing else). The CLI lands in `build/install/miharchy-sync/bin/`.
+- Backups Miharchy writes to the sync folder are named `miharchy-*.tachibk`. `ingest` ignores them and takes the newest other `.tachibk` as the phone backup. Baselines live in `~/.local/share/miharchy/sync/` (mode 700).
 - Suwayomi-Server runs as the systemd user service `miharchy-server`, from `~/.local/share/miharchy/suwayomi` (mode 700), on `127.0.0.1:4590` with `basic_auth`. `server/miharchy-server` sets it up and is safe to rerun.
 - Every component reads the server address and credentials from `~/.config/miharchy/server.json` (mode 600): `{url, username, password}`. Never hard-code them.
 - Suwayomi rewrites its `server.conf` with mode 644, so the 700 folder is what keeps the password private.
