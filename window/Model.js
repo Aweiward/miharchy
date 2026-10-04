@@ -13,7 +13,7 @@ var VIEWS = [
 ]
 
 var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDownload } }"
-  + " mangas(condition: {inLibrary: true}, orderBy: TITLE) { nodes { id title thumbnailUrl source { id } categories { nodes { id } } } } }"
+  + " mangas(condition: {inLibrary: true}, orderBy: TITLE) { nodes { id title thumbnailUrl source { id } unreadCount categories { nodes { id } } } } }"
 
 var LIBRARY_MUTATION = "mutation($id: Int!, $inLibrary: Boolean!) { updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) { manga { id inLibrary } } }"
 
@@ -168,7 +168,7 @@ function fromResponse(status, body, config) {
   return conn("ok", {
     manga: nodes.map(function(n) {
       // The server fetches a cover through its source, so without one it only fails.
-      return { id: n.id, title: String(n.title || ""), cover: n.source ? coverUrl(config, n.thumbnailUrl) : "", categories: ids(n.categories) }
+      return { id: n.id, title: String(n.title || ""), cover: n.source ? coverUrl(config, n.thumbnailUrl) : "", categories: ids(n.categories), unread: n.unreadCount || 0 }
     }),
     categories: ((r.data.categories && r.data.categories.nodes) || [])
       .filter(function(c) { return c.id !== DEFAULT_CATEGORY })

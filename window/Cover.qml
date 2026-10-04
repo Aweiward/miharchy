@@ -12,6 +12,8 @@ Rectangle {
   property string source: ""
   property string title: ""
   property bool current: false
+  // Unread chapters, shown top-left like Mihon; 0 shows nothing.
+  property int badge: 0
 
   color: Qt.alpha(theme.foreground, 0.06)
   border.width: current ? 2 : 0
@@ -42,5 +44,25 @@ Rectangle {
     verticalAlignment: Text.AlignVCenter
     wrapMode: Text.Wrap
     elide: Text.ElideRight
+  }
+
+  Rectangle {
+    x: cover.border.width + cover.theme.fontSize * 0.3
+    y: cover.border.width + cover.theme.fontSize * 0.3
+    visible: cover.badge > 0
+    width: Math.max(height, count.implicitWidth + cover.theme.fontSize * 0.6)
+    height: count.implicitHeight + cover.theme.fontSize * 0.2
+    radius: height / 4
+    color: cover.theme.accent
+
+    Text {
+      id: count
+      anchors.centerIn: parent
+      text: cover.badge
+      color: cover.theme.background
+      font.family: cover.theme.fontFamily
+      font.pixelSize: cover.theme.fontSmall
+      font.bold: true
+    }
   }
 }
