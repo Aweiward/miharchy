@@ -1,0 +1,174 @@
+package miharchy.sync
+
+import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupCategory
+import eu.kanade.tachiyomi.data.backup.models.BackupChapter
+import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+private const val SOURCE = 2499283573021220255L
+private val M = MangaKey(SOURCE, "/manga/m")
+private val N = MangaKey(SOURCE, "/manga/n")
+
+private fun chapter(url: String, read: Boolean = false, page: Long = 0) =
+    BackupChapter(url = url, name = url, read = read, lastPageRead = page)
+
+private fun manga(key: MangaKey, vararg chapters: BackupChapter, favorite: Boolean = true, categories: List<String> = emptyList()) =
+    key to Triple(chapters.toList(), favorite, categories)
+
+/** Builds a backup the way Mihon does (categories referenced by order) and reads it back through the real codec. */
+private fun library(vararg manga: Pair<MangaKey, Triple<List<BackupChapter>, Boolean, List<String>>>): Library {
+    val names = manga.flatMap { it.second.third }.distinct()
+    val backup = Backup(
+        backupManga = manga.map { (key, m) ->
+            BackupManga(
+                source = key.source, url = key.url, title = key.url,
+                chapters = m.first, favorite = m.second,
+                categories = m.third.map { names.indexOf(it).toLong() * 10 },
+            )
+        },
+        backupCategories = names.mapIndexed { i, name -> BackupCategory(name, order = i.toLong() * 10) },
+    )
+    return decodeBackup(encodeBackup(backup)).toLibrary()
+}
+
+class MergeTest {
+    @Test fun `first sync imports a manga the desktop has never seen, with its categories`() {
+        val phone = library(manga(M, chapter("/c1", read = true), categories = listOf("Action")))
+        assertEquals(
+            listOf(CreateCategory("Action"), ImportManga(M, "/manga/m"), SetCategories(M, setOf("Action"))),
+            merge(null, phone, Library.EMPTY, null),
+        )
+    }
+
+    @Test fun `first sync is additive only`() {
+        val phone = library(
+            manga(M, chapter("/c1", page = 0), chapter("/c2", read = true, page = 7), categories = listOf("B")),
+            manga(N, favorite = false),
+        )
+        val desktop = library(
+            manga(M, chapter("/c1", read = true, page = 5), chapter("/c2"), categories = listOf("A")),
+            manga(N),
+        )
+        assertEquals(
+            listOf(CreateCategory("B"), SetCategories(M, setOf("A", "B")), MarkRead(M, "/c2"), SetLastPage(M, "/c2", 7)),
+            merge(null, phone, desktop, null),
+        )
+    }
+
+    @Test fun `a change on the phone only wins, even unread over read`() {
+        val base = library(manga(M, chapter("/c1", read = true, page = 12)))
+        val phone = library(manga(M, chapter("/c1")))
+        assertEquals(listOf(MarkUnread(M, "/c1"), SetLastPage(M, "/c1", 0)), merge(base, phone, base, null))
+    }
+
+    @Test fun `a change on the desktop only is kept`() {
+        val base = library(manga(M, chapter("/c1"), categories = listOf("A")))
+        val desktop = library(manga(M, chapter("/c1", read = true, page = 3), categories = listOf("B")))
+        assertEquals(emptyList(), merge(base, base, desktop, base))
+    }
+
+    @Test fun `without a desktop baseline the phone baseline stands in, so desktop edits survive`() {
+        val base = library(manga(M, chapter("/c1"), chapter("/c2")))
+        val phone = library(manga(M, chapter("/c1", read = true), chapter("/c2")))
+        val desktop = library(manga(M, chapter("/c1"), chapter("/c2", read = true)))
+        assertEquals(listOf(MarkRead(M, "/c1")), merge(base, phone, desktop, null))
+    }
+
+    @Test fun `both sides changed read state - read beats unread`() {
+        val phoneBase = library(manga(M, chapter("/c1", read = true)))
+        val phone = library(manga(M, chapter("/c1")))
+        val desktopBase = library(manga(M, chapter("/c1")))
+        val desktop = library(manga(M, chapter("/c1", read = true)))
+        assertEquals(emptyList(), merge(phoneBase, phone, desktop, desktopBase))
+        assertEquals(listOf(MarkRead(M, "/c1")), merge(desktopBase, desktop, phone, phoneBase))
+    }
+
+    @Test fun `both sides changed the last page - the higher value wins`() {
+        val base = library(manga(M, chapter("/c1", page = 2)))
+        val phone = library(manga(M, chapter("/c1", page = 5)))
+        assertEquals(emptyList(), merge(base, phone, library(manga(M, chapter("/c1", page = 9))), base))
+        assertEquals(listOf(SetLastPage(M, "/c1", 5)), merge(base, phone, library(manga(M, chapter("/c1", page = 4))), base))
+    }
+
+    @Test fun `both sides changed categories - union, creating unknown ones by name`() {
+        val base = library(manga(M, categories = listOf("A")))
+        val phone = library(manga(M, categories = listOf("B")))
+        val desktop = library(manga(M, categories = listOf("A", "C")))
+        assertEquals(
+            listOf(CreateCategory("B"), SetCategories(M, setOf("A", "B", "C"))),
+            merge(base, phone, desktop, base),
+        )
+    }
+
+    @Test fun `a category the desktop already has is not created again`() {
+        val base = library(manga(M), manga(N, categories = listOf("A")))
+        val phone = library(manga(M, categories = listOf("A")), manga(N, categories = listOf("A")))
+        assertEquals(listOf(SetCategories(M, setOf("A"))), merge(base, phone, base, null))
+    }
+
+    @Test fun `a phone removal propagates when the desktop did not change the manga`() {
+        val base = library(manga(M, chapter("/c1", read = true), categories = listOf("A")))
+        val phone = library(manga(M, chapter("/c1", read = true), favorite = false))
+        assertEquals(listOf(RemoveFromLibrary(M, "/manga/m")), merge(base, phone, base, null))
+    }
+
+    @Test fun `a phone removal does not propagate when the desktop changed the manga`() {
+        val base = library(manga(M, chapter("/c1"), categories = listOf("A")))
+        val phone = library(manga(M, chapter("/c1"), favorite = false))
+        val desktop = library(manga(M, chapter("/c1", read = true), categories = listOf("A")))
+        assertEquals(emptyList(), merge(base, phone, desktop, null))
+    }
+
+    @Test fun `a manga that dropped out of the phone backup is a removal, not an unread mark`() {
+        val base = library(manga(M, chapter("/c1", read = true, page = 4)), manga(N))
+        val phone = library(manga(N))
+        assertEquals(listOf(RemoveFromLibrary(M, "/manga/m")), merge(base, phone, base, null))
+    }
+
+    @Test fun `a desktop removal stays unless the phone changed the manga`() {
+        val base = library(manga(M, chapter("/c1")))
+        val desktop = library(manga(M, chapter("/c1"), favorite = false))
+        assertEquals(emptyList(), merge(base, base, desktop, base))
+
+        val phone = library(manga(M, chapter("/c1", read = true)))
+        assertEquals(listOf(AddToLibrary(M, "/manga/m"), MarkRead(M, "/c1")), merge(base, phone, desktop, base))
+    }
+
+    @Test fun `both sides removed the manga`() {
+        val base = library(manga(M, chapter("/c1")))
+        val removed = library(manga(M, chapter("/c1"), favorite = false))
+        assertEquals(emptyList(), merge(base, removed, removed, base))
+    }
+
+    @Test fun `a chapter the desktop lacks still gets its change, for the apply layer to fetch`() {
+        val base = library(manga(M, chapter("/c1")))
+        val phone = library(manga(M, chapter("/c1"), chapter("/c2", read = true, page = 3)))
+        assertEquals(listOf(MarkRead(M, "/c2"), SetLastPage(M, "/c2", 3)), merge(base, phone, base, null))
+    }
+
+    @Test fun `a new unread chapter on the phone is no change`() {
+        val base = library(manga(M, chapter("/c1")))
+        val phone = library(manga(M, chapter("/c1"), chapter("/c2")))
+        assertEquals(emptyList(), merge(base, phone, base, null))
+    }
+
+    @Test fun `a phone manga outside the library that the desktop never saw is not created`() {
+        val phone = library(manga(M, chapter("/c1", read = true), favorite = false))
+        assertEquals(emptyList(), merge(null, phone, Library.EMPTY, null))
+    }
+
+    @Test fun `a desktop manga outside the library gets added, not imported`() {
+        val phone = library(manga(M, chapter("/c1", read = true)))
+        val desktop = library(manga(M, chapter("/c1"), favorite = false))
+        assertEquals(listOf(AddToLibrary(M, "/manga/m"), MarkRead(M, "/c1")), merge(null, phone, desktop, null))
+    }
+
+    @Test fun `merging is idempotent once applied`() {
+        val base = library(manga(M, chapter("/c1", read = true)))
+        val phone = library(manga(M, chapter("/c1"), favorite = false), manga(N, chapter("/c9", read = true)))
+        val applied = library(manga(M, chapter("/c1"), favorite = false), manga(N, chapter("/c9", read = true)))
+        assertEquals(emptyList(), merge(base, phone, applied, null))
+    }
+}
