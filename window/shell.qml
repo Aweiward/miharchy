@@ -160,6 +160,10 @@ ShellRoot {
       reader.run(id)
       return
     }
+    if (id.indexOf("history.") === 0) {
+      historyView.run(id)
+      return
+    }
     if (id.indexOf("setup.") === 0) {
       setupView.run(id)
       return
@@ -373,6 +377,18 @@ ShellRoot {
           onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, true) }
         }
 
+        HistoryView {
+          id: historyView
+          anchors.fill: parent
+          visible: root.view === "history"
+          theme: theme
+          config: root.config
+          configPath: root.configPath
+          // Off while the reader shows, so closing it reloads what it read.
+          active: root.view === "history" && !reader.open
+          onResume: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+        }
+
         SetupView {
           id: setupView
           anchors.fill: parent
@@ -389,7 +405,7 @@ ShellRoot {
 
         Text {
           anchors.centerIn: parent
-          visible: Model.viewIndex(root.view) !== -1 && ["library", "settings", "browse"].indexOf(root.view) === -1
+          visible: Model.viewIndex(root.view) !== -1 && ["library", "history", "settings", "browse"].indexOf(root.view) === -1
           text: visible ? Model.VIEWS[Model.viewIndex(root.view)].title + " comes in a later version" : ""
           color: theme.muted
           font.family: theme.fontFamily
@@ -433,7 +449,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : "hjkl move   enter open   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   ", settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : "hjkl move   enter open   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall

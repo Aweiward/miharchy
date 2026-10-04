@@ -287,3 +287,35 @@ test("f toggles fullscreen everywhere, but types in an edit field or the palette
   assert.equal(C.dispatch({ palette: false, view: "source", editing: "browse" }, text("f")), null);
   assert.ok(C.paletteRows("full").some((c) => c.id === "window.fullscreen"));
 });
+
+test("on History, j/k move, Enter resumes, x removes an entry, X clears it all and r reloads", () => {
+  const h = screen("history");
+  assert.equal(C.dispatch(h, text("j")), "history.down");
+  assert.equal(C.dispatch(h, key(C.KEY.Down)), "history.down");
+  assert.equal(C.dispatch(h, text("k")), "history.up");
+  assert.equal(C.dispatch(h, key(C.KEY.Up)), "history.up");
+  assert.equal(C.dispatch(h, key(C.KEY.Return)), "history.open");
+  assert.equal(C.dispatch(h, text("x")), "history.remove");
+  assert.equal(C.dispatch(h, text("X")), "history.clear");
+  assert.equal(C.dispatch(h, text("r")), "history.reload");
+  assert.equal(C.dispatch(h, key(C.KEY.Escape)), "window.quit");
+  assert.equal(C.dispatch(screen("library"), text("x")), null);
+  assert.equal(C.dispatch(screen("library"), text("r")), "library.reload");
+});
+
+test("in each view a key has one command, and a view's own command comes before the global one it shadows", () => {
+  const scopes = new Set(["library", "updates", "history", "browse", "settings", "setup"]);
+  C.commands.forEach((c) => [].concat(c.view || []).forEach((v) => scopes.add(v)));
+  for (const v of scopes) {
+    const seen = {};
+    for (const c of C.commands) {
+      if (c.view && ![].concat(c.view).includes(v)) continue;
+      for (const k of c.keys) {
+        const kind = (c.view ? "scoped " : "global ") + k;
+        assert.ok(!seen[kind], v + ": " + k + " is both " + seen[kind] + " and " + c.id);
+        assert.ok(!(c.view && seen["global " + k]), v + ": " + c.id + " comes after " + seen["global " + k]);
+        seen[kind] = c.id;
+      }
+    }
+  }
+});
