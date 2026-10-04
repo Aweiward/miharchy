@@ -48,6 +48,10 @@ _Avoid_: recent, read state
 A new chapter found for a manga in the library.
 _Avoid_: notification, release
 
+**Migrate**:
+To move a library manga to another source: the new manga joins the library with the old one's categories and read state, matched by chapter number, and the old one leaves it. **Copy** does the same but keeps the old one.
+_Avoid_: move, transfer, switch source
+
 **Download**:
 A chapter stored on disk for offline reading.
 _Avoid_: cache, offline copy
