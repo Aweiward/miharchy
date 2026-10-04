@@ -12,12 +12,14 @@ var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaTy
   + " fetchSourceManga(input: { source: $source, type: $type, page: $page, query: $query }) {"
   + " hasNextPage mangas { id title thumbnailUrl inLibrary } } }"
 
-var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized source { displayName }"
+var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized source { displayName } categories { nodes { id } }"
 var CHAPTER_FIELDS = "id name chapterNumber uploadDate isRead scanlator sourceOrder"
 var DETAIL_QUERY = "query($id: Int!) { manga(id: $id) { " + MANGA_FIELDS + " chapters { nodes { " + CHAPTER_FIELDS + " } } } }"
 var FETCH_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: true }) {"
   + " manga { " + MANGA_FIELDS + " } chapters { " + CHAPTER_FIELDS + " } } }"
 var LIBRARY_MUTATION = "mutation($id: Int!, $inLibrary: Boolean!) { updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) { manga { id inLibrary } } }"
+var CATEGORY_MUTATION = "mutation($id: Int!, $add: [Int!]!, $remove: [Int!]!) {"
+  + " updateMangaCategories(input: { id: $id, patch: { addToCategories: $add, removeFromCategories: $remove } }) { manga { id categories { nodes { id } } } } }"
 
 var TYPES = { popular: "POPULAR", latest: "LATEST", search: "SEARCH" }
 var LOCAL_SOURCE = "0"
@@ -154,7 +156,8 @@ function toManga(config, n) {
     cover: Model.coverUrl(config, n.thumbnailUrl),
     source: n.source ? String(n.source.displayName || "") : "",
     inLibrary: n.inLibrary === true,
-    initialized: n.initialized === true
+    initialized: n.initialized === true,
+    categories: ((n.categories && n.categories.nodes) || []).map(function(c) { return c.id })
   }
 }
 
@@ -166,7 +169,7 @@ function toChapters(nodes) {
 
 // event.type: "reply" { reply, config } for the step in flight | "refresh"
 // | "reread" the cache, as after reading | "library-request"
-// | "library-reply" { reply }
+// | "library-reply" { reply } | "categories-reply" { reply }
 function reduceDetail(d, event) {
   switch (event.type) {
     case "refresh":
@@ -194,8 +197,20 @@ function reduceDetail(d, event) {
       if (event.reply.state !== "ok") return copy(d, { busy: false, libraryError: event.reply.message || event.reply.state })
       var m = event.reply.data.updateManga.manga
       return copy(d, { busy: false, manga: copy(d.manga, { inLibrary: m.inLibrary === true }) })
+    case "categories-reply":
+      if (event.reply.state !== "ok") return copy(d, { busy: false, libraryError: event.reply.message || event.reply.state })
+      var nodes = event.reply.data.updateMangaCategories.manga.categories.nodes
+      return copy(d, { busy: false, manga: copy(d.manga, { categories: nodes.map(function(c) { return c.id }) }) })
   }
   return d
+}
+
+// Puts the manga in the category or takes it out, or null unless it is in
+// the library and no toggle is in flight. It shares "library-request".
+function categoryPayload(d, categoryId) {
+  if (!d.manga || !d.manga.inLibrary || d.busy) return null
+  var member = d.manga.categories.indexOf(categoryId) !== -1
+  return { query: CATEGORY_MUTATION, variables: { id: d.mangaId, add: member ? [] : [categoryId], remove: member ? [categoryId] : [] } }
 }
 
 // The add/remove toggle, or null before the manga loads or while a toggle
@@ -230,6 +245,7 @@ if (typeof module !== "undefined") {
     detailPayload: detailPayload,
     reduceDetail: reduceDetail,
     libraryPayload: libraryPayload,
+    categoryPayload: categoryPayload,
     markInLibrary: markInLibrary,
     notice: notice
   }

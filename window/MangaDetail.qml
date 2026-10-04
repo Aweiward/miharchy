@@ -16,16 +16,21 @@ Rectangle {
   property string configPath: ""
   property var detail: null
   property int cursor: 0
+  // The user's categories, from the library; the checklist lists them.
+  property var categories: []
+  property bool picking: false
+  property int pickCursor: 0
   // Only the latest detail request may update it.
   property int detailSeq: 0
 
   readonly property bool open: detail !== null
   readonly property var manga: detail ? detail.manga : null
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
-  readonly property string hint: "j k chapters   enter read   a library   r refresh   esc back   "
+  readonly property string hint: picking ? "j k move   space in or out   esc close   " : "j k chapters   enter read   a library   c categories   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
+  signal categorized()
 
   visible: open
   color: theme.background
@@ -54,6 +59,7 @@ Rectangle {
   }
 
   function close() {
+    picking = false
     detailSeq++
     detail = null
   }
@@ -92,8 +98,34 @@ Rectangle {
     })
   }
 
+  function toggleCategory() {
+    var c = categories[pickCursor]
+    var payload = c ? Browse.categoryPayload(detail, c.id) : null
+    if (!payload) return
+    var mangaId = detail.mangaId
+    detail = Browse.reduceDetail(detail, { type: "library-request" })
+    send(payload, function(reply) {
+      if (view.detail && view.detail.mangaId === mangaId) view.detail = Browse.reduceDetail(view.detail, { type: "categories-reply", reply: reply })
+      if (reply.state === "ok") view.categorized()
+    })
+  }
+
   function run(id) {
     switch (id) {
+      case "manga.categories":
+        picking = true
+        pickCursor = 0
+        break
+      case "manga.categoriesClose":
+        picking = false
+        break
+      case "manga.categoryUp":
+      case "manga.categoryDown":
+        if (categories.length) pickCursor = Math.max(0, Math.min(categories.length - 1, pickCursor + (id === "manga.categoryUp" ? -1 : 1)))
+        break
+      case "manga.categoryToggle":
+        toggleCategory()
+        break
       case "manga.back":
         close()
         break
@@ -195,6 +227,16 @@ Rectangle {
       width: parent.width
       wrapMode: Text.Wrap
       visible: text !== ""
+      text: !view.manga || !view.manga.inLibrary || !view.categories.length ? "" : view.categories.filter(function(c) { return view.manga.categories.indexOf(c.id) !== -1 }).map(function(c) { return c.name }).join(", ") || "Default"
+      color: view.theme.muted
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
+    }
+
+    Text {
+      width: parent.width
+      wrapMode: Text.Wrap
+      visible: text !== ""
       text: view.detail && view.detail.libraryError ? view.detail.libraryError : view.notice ? view.notice.title + ". " + view.notice.detail : ""
       color: view.theme.urgent
       font.family: view.theme.fontFamily
@@ -262,6 +304,61 @@ Rectangle {
         color: view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
+      }
+    }
+  }
+
+  Rectangle {
+    id: picker
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: view.theme.fontSize * 28
+    height: Math.min(parent.height - view.theme.fontSize * 4, pickList.contentHeight + view.theme.fontSize * 2)
+    visible: view.picking
+    color: view.theme.panel
+    border.width: 1
+    border.color: view.theme.panelBorder
+
+    ListView {
+      id: pickList
+      anchors.fill: parent
+      anchors.margins: view.theme.fontSize
+      clip: true
+      model: view.categories
+      currentIndex: view.pickCursor
+
+      header: Text {
+        width: pickList.width
+        bottomPadding: view.theme.fontSize * 0.5
+        wrapMode: Text.Wrap
+        text: !view.manga || view.manga.inLibrary ? (view.categories.length ? "Categories" : "No categories yet. Press c in the Library to make one.") : "Add the manga to the library first: a"
+        color: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      delegate: Rectangle {
+        id: pick
+        required property var modelData
+        required property int index
+        readonly property bool current: index === view.pickCursor
+        readonly property bool member: view.manga !== null && view.manga.categories.indexOf(modelData.id) !== -1
+        width: pickList.width
+        height: view.theme.fontSize * 2
+        color: current ? view.theme.selected : "transparent"
+
+        Text {
+          anchors.left: parent.left
+          anchors.leftMargin: view.theme.fontSize * 0.5
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          elide: Text.ElideRight
+          text: (pick.member ? "[x] " : "[ ] ") + pick.modelData.name
+          color: pick.current ? view.theme.selectedText : pick.member ? view.theme.foreground : view.theme.muted
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+        }
       }
     }
   }

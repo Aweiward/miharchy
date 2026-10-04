@@ -142,10 +142,44 @@ test("a setup question takes only y, n or Esc", () => {
 
 const screen = (view) => ({ palette: false, view });
 
-test("Tab switches between sources and extensions, and only there", () => {
+test("Tab switches between sources and extensions on Browse, and between categories on the Library", () => {
   assert.equal(C.dispatch(screen("sources"), key(C.KEY.Tab)), "browse.tab");
   assert.equal(C.dispatch(screen("extensions"), key(C.KEY.Tab)), "browse.tab");
-  assert.equal(C.dispatch(screen("library"), key(C.KEY.Tab)), null);
+  assert.equal(C.dispatch(screen("library"), key(C.KEY.Tab)), "library.nextCategory");
+  assert.equal(C.dispatch(screen("library"), key(C.KEY.Backtab)), "library.previousCategory");
+  assert.equal(C.dispatch(screen("settings"), key(C.KEY.Tab)), null);
+});
+
+test("c on the Library opens its categories; there j/k move, J/K reorder, a adds, Enter renames, x deletes, Esc goes back", () => {
+  assert.equal(C.dispatch(screen("library"), text("c")), "library.categories");
+  assert.equal(C.dispatch(screen("settings"), text("c")), null);
+  const c = screen("categories");
+  assert.equal(C.dispatch(c, text("j")), "categories.down");
+  assert.equal(C.dispatch(c, key(C.KEY.Up)), "categories.up");
+  assert.equal(C.dispatch(c, text("J")), "categories.moveDown");
+  assert.equal(C.dispatch(c, text("K")), "categories.moveUp");
+  assert.equal(C.dispatch(c, text("a")), "categories.add");
+  assert.equal(C.dispatch(c, key(C.KEY.Return)), "categories.rename");
+  assert.equal(C.dispatch(c, text("x")), "categories.remove");
+  assert.equal(C.dispatch(c, key(C.KEY.Escape)), "categories.back");
+  assert.equal(C.dispatch(c, text("r")), "library.reload");
+  assert.equal(C.dispatch(c, text("q")), "window.quit");
+  const naming = { palette: false, view: "categories", editing: "categories" };
+  assert.equal(C.dispatch(naming, key(C.KEY.Return)), "categories.commit");
+  assert.equal(C.dispatch(naming, key(C.KEY.Escape)), "categories.cancel");
+  assert.equal(C.dispatch(naming, text("x")), null);
+});
+
+test("c on a manga opens its category checklist; there j/k move, Space or Enter toggles, Esc or c closes", () => {
+  assert.equal(C.dispatch(screen("manga"), text("c")), "manga.categories");
+  const p = screen("manga-categories");
+  assert.equal(C.dispatch(p, text("j")), "manga.categoryDown");
+  assert.equal(C.dispatch(p, text("k")), "manga.categoryUp");
+  assert.equal(C.dispatch(p, C.keyEvent(C.KEY.Space, " ", 0)), "manga.categoryToggle");
+  assert.equal(C.dispatch(p, key(C.KEY.Return)), "manga.categoryToggle");
+  assert.equal(C.dispatch(p, key(C.KEY.Escape)), "manga.categoriesClose");
+  assert.equal(C.dispatch(p, text("c")), "manga.categoriesClose");
+  assert.equal(C.dispatch(p, text("a")), null, "the detail's keys wait until the checklist closes");
 });
 
 test("on the sources screen, j/k move, Enter opens and r refreshes", () => {

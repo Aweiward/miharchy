@@ -115,4 +115,5 @@ _Avoid_: layout, direction
 - Mihon calls a manga an "entry" in places. Resolved: Miharchy says **manga**.
 - "Sync" can mean live sync, as in SyncYomi. Resolved: in v1 **sync** means the user-started backup exchange only.
 - "Page" means one image of a chapter. Resolved: a screen of the window is a **view**, never a page.
+- "Default" is a category in Suwayomi (id 0) and in Mihon's UI. Resolved: Default means a manga is in no **category**; it is never a user category, and the Library shows it only once user categories exist.
 - "Base" first meant one backup shared by both sides. Resolved: each side has its own **baseline**, because the phone may never restore what the desktop wrote.

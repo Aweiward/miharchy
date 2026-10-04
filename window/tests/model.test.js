@@ -82,9 +82,9 @@ test("the library answer becomes manga with authenticated cover URLs", () => {
     { id: 9, title: "Remote", thumbnailUrl: "https://cdn.example/9.jpg" }
   ] } } };
   assert.deepEqual(M.reduce(M.initial(), respond(200, body)).manga, [
-    { id: 7, title: "Yotsuba&!", cover: "http://miharchy:s3cret@127.0.0.1:4590/api/v1/manga/7/thumbnail" },
-    { id: 8, title: "No cover", cover: "" },
-    { id: 9, title: "Remote", cover: "https://cdn.example/9.jpg" }
+    { id: 7, title: "Yotsuba&!", cover: "http://miharchy:s3cret@127.0.0.1:4590/api/v1/manga/7/thumbnail", categories: [] },
+    { id: 8, title: "No cover", cover: "", categories: [] },
+    { id: 9, title: "Remote", cover: "https://cdn.example/9.jpg", categories: [] }
   ]);
 });
 
@@ -123,4 +123,45 @@ test("notice: a clear message per state, none over a filled library", () => {
   assert.match(n(M.reduce(M.initial(), respond(500, ""))).detail, /HTTP 500/);
   assert.equal(n(M.reduce(M.initial(), respond(200, { data: { mangas: { nodes: [] } } }))).title, "Your library is empty");
   assert.equal(n(M.reduce(M.initial(), respond(200, { data: { mangas: { nodes: [{ id: 1, title: "A" }] } } }))), null);
+});
+
+const library = (categories, manga) => M.reduce(M.initial(), respond(200, { data: {
+  categories: { nodes: [{ id: 0, name: "Default", order: 0 }].concat(categories) },
+  mangas: { nodes: manga.map(([id, cats]) => ({ id, title: "M" + id, thumbnailUrl: null, categories: { nodes: cats.map((c) => ({ id: c })) } })) }
+} }));
+const ids = (shown) => shown.manga.map((m) => m.id);
+
+test("the library answer carries user categories, without Suwayomi's Default", () => {
+  const c = library([{ id: 4, name: "Action", order: 1 }, { id: 2, name: "Romance", order: 2 }], [[7, [4, 2]]]);
+  assert.deepEqual(c.categories, [{ id: 4, name: "Action" }, { id: 2, name: "Romance" }]);
+  assert.deepEqual(c.manga[0].categories, [4, 2]);
+});
+
+test("without categories the switcher holds only All", () => {
+  const switcher = M.switcher(library([], [[1, []], [2, []]]));
+  assert.deepEqual(switcher.map((s) => s.name), ["All"]);
+  assert.deepEqual(ids(switcher[0]), [1, 2]);
+});
+
+test("the switcher: All, Default for manga in no category, then each category; a manga shows under each of its categories", () => {
+  const c = library([{ id: 4, name: "Action", order: 1 }, { id: 2, name: "Romance", order: 2 }], [[1, []], [2, [4]], [3, [4, 2]]]);
+  const switcher = M.switcher(c);
+  assert.deepEqual(switcher.map((s) => [s.id, s.name]), [[-1, "All"], [0, "Default"], [4, "Action"], [2, "Romance"]]);
+  assert.deepEqual(switcher.map(ids), [[1, 2, 3], [1], [2, 3], [3]]);
+});
+
+test("the shown category falls back to All when its category is gone", () => {
+  const c = library([{ id: 4, name: "Action", order: 1 }], [[1, [4]]]);
+  assert.equal(M.switcherIndex(M.switcher(c), 4), 2);
+  assert.equal(M.switcherIndex(M.switcher(c), 9), 0);
+  assert.equal(M.switcherIndex(M.switcher(library([], [[1, []]])), 0), 0);
+});
+
+test("an empty category has its own notice; a filled library with an empty category is not 'empty'", () => {
+  const c = library([{ id: 4, name: "Action", order: 1 }], [[1, []]]);
+  const switcher = M.switcher(c);
+  assert.equal(M.notice(c, "p", switcher[2]).title, "Action is empty");
+  assert.equal(M.notice(c, "p", switcher[1]), null);
+  const empty = library([], []);
+  assert.equal(M.notice(empty, "p", M.switcher(empty)[0]).title, "Your library is empty");
 });

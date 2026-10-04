@@ -8,6 +8,7 @@
 var KEY = {
   Escape: 0x01000000,
   Tab: 0x01000001,
+  Backtab: 0x01000002,
   Backspace: 0x01000003,
   Return: 0x01000004,
   Enter: 0x01000005,
@@ -21,11 +22,11 @@ var KEY = {
 }
 
 // keys: printable characters match event.text; "Esc", "Enter", "Space",
-// "Tab", "Backspace" and the arrows match the key code.
+// "Tab", "Backtab" (Shift-Tab), "Backspace" and the arrows match the key code.
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
-// sources, extensions, source, global; or overlay: manga, reader) shows; an array
-// allows several.
+// sources, extensions, source, global; Library screen: categories; or
+// overlay: manga, manga-categories, reader) shows; an array allows several.
 var commands = [
   { id: "view.library", title: "Library", keys: ["1"] },
   { id: "view.updates", title: "Updates", keys: ["2"] },
@@ -42,6 +43,8 @@ var commands = [
   { id: "global.retry", title: "Search failed sources again", keys: ["r"], view: "global", hidden: true },
   { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: ["source", "global"], hidden: true },
   { id: "manga.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga", hidden: true },
+  { id: "manga.categoriesClose", title: "Close categories", keys: ["Esc", "Backspace", "c"], view: "manga-categories", hidden: true },
+  { id: "categories.back", title: "Back", keys: ["Esc", "Backspace"], view: "categories", hidden: true },
   { id: "reader.close", title: "Close the reader", keys: ["Esc", "q"], view: "reader", hidden: true },
   { id: "reader.retry", title: "Load again", keys: ["r"], view: "reader", hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },
@@ -81,6 +84,10 @@ var commands = [
   { id: "manga.down", title: "Next chapter", keys: ["j", "Down"], view: "manga", hidden: true },
   { id: "manga.library", title: "Add to or remove from library", keys: ["a"], view: "manga", hidden: true },
   { id: "manga.read", title: "Read chapter", keys: ["Enter"], view: "manga", hidden: true },
+  { id: "manga.categories", title: "Categories", keys: ["c"], view: "manga", hidden: true },
+  { id: "manga.categoryUp", title: "Previous category", keys: ["k", "Up"], view: "manga-categories", hidden: true },
+  { id: "manga.categoryDown", title: "Next category", keys: ["j", "Down"], view: "manga-categories", hidden: true },
+  { id: "manga.categoryToggle", title: "In or out of category", keys: ["Space", "Enter"], view: "manga-categories", hidden: true },
   { id: "reader.left", title: "Page to the left", keys: ["h", "Left"], view: "reader", hidden: true },
   { id: "reader.right", title: "Page to the right", keys: ["l", "Right"], view: "reader", hidden: true },
   { id: "reader.next", title: "Next page", keys: ["Space"], view: "reader", hidden: true },
@@ -89,6 +96,16 @@ var commands = [
   { id: "library.up", title: "Row up", keys: ["k", "Up"], view: "library", hidden: true },
   { id: "library.down", title: "Row down", keys: ["j", "Down"], view: "library", hidden: true },
   { id: "library.open", title: "Open manga", keys: ["Enter"], view: "library", hidden: true },
+  { id: "library.nextCategory", title: "Next category", keys: ["Tab"], view: "library", hidden: true },
+  { id: "library.previousCategory", title: "Previous category", keys: ["Backtab"], view: "library", hidden: true },
+  { id: "library.categories", title: "Categories", keys: ["c"], view: "library", hidden: true },
+  { id: "categories.up", title: "Previous category", keys: ["k", "Up"], view: "categories", hidden: true },
+  { id: "categories.down", title: "Next category", keys: ["j", "Down"], view: "categories", hidden: true },
+  { id: "categories.moveUp", title: "Move category up", keys: ["K"], view: "categories", hidden: true },
+  { id: "categories.moveDown", title: "Move category down", keys: ["J"], view: "categories", hidden: true },
+  { id: "categories.add", title: "Add category", keys: ["a"], view: "categories", hidden: true },
+  { id: "categories.rename", title: "Rename category", keys: ["Enter"], view: "categories", hidden: true },
+  { id: "categories.remove", title: "Delete category", keys: ["x"], view: "categories", hidden: true },
   { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
   { id: "setup.down", title: "Next step", keys: ["j", "Down"], view: "setup", hidden: true },
   { id: "setup.activate", title: "Run step", keys: ["Enter", "Space"], view: "setup", hidden: true }
@@ -103,7 +120,7 @@ function keyEvent(key, text, modifiers) {
 function matches(label, ev) {
   if (label === "Esc") return ev.key === KEY.Escape
   if (label === "Enter") return ev.key === KEY.Return || ev.key === KEY.Enter
-  if (["Space", "Tab", "Backspace", "Left", "Up", "Right", "Down"].indexOf(label) !== -1) return ev.key === KEY[label]
+  if (["Space", "Tab", "Backtab", "Backspace", "Left", "Up", "Right", "Down"].indexOf(label) !== -1) return ev.key === KEY[label]
   return !ev.ctrl && ev.text === label
 }
 
