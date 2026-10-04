@@ -255,6 +255,7 @@ if (typeof module !== "undefined") {
     listing: listing,
     listingPayload: listingPayload,
     reduceListing: reduceListing,
+    day: day,
     detail: detail,
     detailPayload: detailPayload,
     reduceDetail: reduceDetail,

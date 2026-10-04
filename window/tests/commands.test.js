@@ -75,7 +75,7 @@ test("in the Settings view, j/k/arrows move and Enter/Space change a row", () =>
 });
 
 test("settings keys do nothing in other views", () => {
-  for (const v of ["updates", undefined]) {
+  for (const v of ["nowhere", undefined]) {
     const s = { palette: false, view: v };
     assert.equal(C.dispatch(s, text("j")), null);
     assert.equal(C.dispatch(s, key(C.KEY.Return)), null);
@@ -318,4 +318,18 @@ test("in each view a key has one command, and a view's own command comes before 
       }
     }
   }
+});
+
+test("on Updates, j/k move, Enter reads the chapter, u checks for updates and r reloads", () => {
+  const updates = screen("updates");
+  assert.equal(C.dispatch(updates, text("j")), "updates.down");
+  assert.equal(C.dispatch(updates, key(C.KEY.Down)), "updates.down");
+  assert.equal(C.dispatch(updates, text("k")), "updates.up");
+  assert.equal(C.dispatch(updates, key(C.KEY.Up)), "updates.up");
+  assert.equal(C.dispatch(updates, key(C.KEY.Return)), "updates.open");
+  assert.equal(C.dispatch(updates, text("u")), "updates.check");
+  assert.equal(C.dispatch(updates, text("r")), "library.reload");
+  assert.equal(C.dispatch(updates, key(C.KEY.Escape)), "window.quit");
+  assert.equal(C.dispatch(screen("reader"), text("u")), "reader.halfUp", "u still goes half a view up in the reader");
+  assert.equal(C.dispatch(screen("library"), text("u")), null);
 });

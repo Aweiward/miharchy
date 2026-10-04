@@ -117,6 +117,12 @@ var commands = [
   { id: "history.open", title: "Resume chapter", keys: ["Enter"], view: "history", hidden: true },
   { id: "history.remove", title: "Remove from history", keys: ["x"], view: "history", hidden: true },
   { id: "history.clear", title: "Clear history", keys: ["X"], view: "history", hidden: true },
+  { id: "updates.up", title: "Previous update", keys: ["k", "Up"], view: "updates", hidden: true },
+  { id: "updates.down", title: "Next update", keys: ["j", "Down"], view: "updates", hidden: true },
+  { id: "updates.open", title: "Read chapter", keys: ["Enter"], view: "updates", hidden: true },
+  // Not r: r reloads what a view shows, and a library update asks every
+  // source.
+  { id: "updates.check", title: "Check for new chapters", keys: ["u"], view: "updates", hidden: true },
   { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
   { id: "setup.down", title: "Next step", keys: ["j", "Down"], view: "setup", hidden: true },
   { id: "setup.activate", title: "Run step", keys: ["Enter", "Space"], view: "setup", hidden: true }
