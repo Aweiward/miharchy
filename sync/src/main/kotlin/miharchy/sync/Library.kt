@@ -2,6 +2,7 @@ package miharchy.sync
 
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.LongAsStringSerializer
 import kotlinx.serialization.protobuf.ProtoBuf
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPInputStream
@@ -9,7 +10,11 @@ import java.util.zip.GZIPOutputStream
 
 /** A manga is the same manga on both sides when its source and url match. */
 @Serializable
-data class MangaKey(val source: Long, val url: String)
+data class MangaKey(
+    // Source ids exceed 2^53, which a JSON number loses in JavaScript (the window parses --json).
+    @Serializable(with = LongAsStringSerializer::class) val source: Long,
+    val url: String,
+)
 
 data class ChapterState(val read: Boolean = false, val lastPageRead: Long = 0)
 
