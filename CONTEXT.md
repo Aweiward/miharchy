@@ -37,7 +37,7 @@ A user-made group in the library. A manga can belong to several categories.
 _Avoid_: folder, tag, shelf
 
 **Read state**:
-Whether a chapter is read, and the last page read in it.
+Whether a chapter is read, whether it is bookmarked, and the last page read in it.
 _Avoid_: progress (alone), history
 
 **History**:
