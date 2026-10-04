@@ -27,7 +27,20 @@ var ROWS = [
   // Cloudflare sources fail without the response fallback even when
   // FlareSolverr solves the challenge (docs/spikes/extension-spike.md).
   { key: "flareSolverrEnabled", label: "FlareSolverr", type: "bool", default: false, store: "server", whenOn: { flareSolverrAsResponseFallback: true } },
-  { key: "flareSolverrUrl", label: "FlareSolverr URL", type: "text", default: "http://127.0.0.1:8191", store: "server", pattern: /^https?:\/\/\S+$/, hint: "Enter a URL that starts with http:// or https://." }
+  { key: "flareSolverrUrl", label: "FlareSolverr URL", type: "text", default: "http://127.0.0.1:8191", store: "server", pattern: /^https?:\/\/\S+$/, hint: "Enter a URL that starts with http:// or https://." },
+  // The server runs the library update on this schedule, in hours, so it
+  // runs with the window closed. It takes 0 (off) or at least 6.
+  {
+    key: "globalUpdateInterval", label: "Check for new chapters", type: "choice", default: 12, store: "server",
+    options: [
+      { value: 0, label: "Off" },
+      { value: 12, label: "Every 12 hours" },
+      { value: 24, label: "Daily" },
+      { value: 48, label: "Every 2 days" },
+      { value: 72, label: "Every 3 days" },
+      { value: 168, label: "Weekly" }
+    ]
+  }
 ]
 
 function defaults() {

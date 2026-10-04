@@ -168,6 +168,10 @@ ShellRoot {
       setupView.run(id)
       return
     }
+    if (id.indexOf("updates.") === 0) {
+      updatesView.run(id)
+      return
+    }
     switch (id) {
       case "palette.open":
         paletteOpen = true
@@ -234,6 +238,7 @@ ShellRoot {
         if (config) {
           fetchLibrary()
           sendSettings(Settings.loadPayload())
+          updatesView.load()
         }
         configFile.reload()
         break
@@ -389,6 +394,17 @@ ShellRoot {
           onResume: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
         }
 
+        UpdatesView {
+          id: updatesView
+          anchors.fill: parent
+          visible: root.view === "updates"
+          theme: theme
+          config: root.config
+          configPath: root.configPath
+          active: visible
+          onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+        }
+
         SetupView {
           id: setupView
           anchors.fill: parent
@@ -405,7 +421,7 @@ ShellRoot {
 
         Text {
           anchors.centerIn: parent
-          visible: Model.viewIndex(root.view) !== -1 && ["library", "history", "settings", "browse"].indexOf(root.view) === -1
+          visible: Model.viewIndex(root.view) !== -1 && ["library", "updates", "history", "settings", "browse"].indexOf(root.view) === -1
           text: visible ? Model.VIEWS[Model.viewIndex(root.view)].title + " comes in a later version" : ""
           color: theme.muted
           font.family: theme.fontFamily
@@ -449,7 +465,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : "hjkl move   enter open   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: root.settingsEditing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : "hjkl move   enter open   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   ", updates: "j k move   enter read   u check   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
@@ -462,7 +478,10 @@ ShellRoot {
         theme: theme
         config: root.config
         configPath: root.configPath
-        onClosed: function(chapterId) { mangaDetail.reread(chapterId) }
+        onClosed: function(chapterId) {
+          mangaDetail.reread(chapterId)
+          updatesView.load()
+        }
       }
 
       CommandPalette {

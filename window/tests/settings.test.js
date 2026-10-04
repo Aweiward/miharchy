@@ -18,8 +18,8 @@ test("every row is complete, and a choice's default is one of its options", () =
 });
 
 test("the first rows and their defaults", () => {
-  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "FlareSolverr", "FlareSolverr URL"]);
-  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191" });
+  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "FlareSolverr", "FlareSolverr URL", "Check for new chapters"]);
+  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12 });
   assert.deepEqual(row("defaultReadingMode").options.map((o) => o.label), ["Paged right-to-left", "Paged left-to-right", "Webtoon"]);
 });
 
@@ -39,7 +39,7 @@ test("a load reply sets server values and namespaced meta, defaults fill the res
     ] }
   }));
   assert.equal(s.state, "ok");
-  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191" });
+  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12 });
 });
 
 test("an unknown stored reading mode falls back to the default", () => {
@@ -100,4 +100,16 @@ test("display words each type", () => {
   assert.equal(S.display(row("showNsfw"), false), "off");
   assert.equal(S.display(row("defaultReadingMode"), "webtoon"), "Webtoon");
   assert.equal(S.display(row("flareSolverrUrl"), "http://x"), "http://x");
+});
+
+test("the library update schedule is the server's own interval in hours, 0 for off", () => {
+  const every = row("globalUpdateInterval");
+  assert.deepEqual(every.options.map((o) => o.value), [0, 12, 24, 48, 72, 168]);
+  assert.ok(every.options.every((o) => o.value === 0 || o.value >= 6), "the server takes 0 or at least 6 hours");
+  assert.equal(S.display(every, 0), "Off");
+  assert.equal(S.display(every, 24), "Daily");
+  assert.deepEqual(S.activate(every, 168), { save: 0 });
+  assert.deepEqual(S.savePayload(every, 24).variables.s, { globalUpdateInterval: 24 });
+  assert.equal(S.reduce(S.initial(), ok({ settings: { globalUpdateInterval: 48.0 }, metas: { nodes: [] } })).values.globalUpdateInterval, 48);
+  assert.match(S.loadPayload().query, /settings \{[^}]*\bglobalUpdateInterval\b/);
 });
