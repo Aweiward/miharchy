@@ -96,6 +96,7 @@ function reduceListing(l, event) {
     case "request":
       return copy(l, { state: "loading", message: "", flare: false })
     case "retry":
+      if (l.state === "idle" || l.state === "loading" || l.state === "ok") return l
       return copy(l, { state: "idle", message: "", flare: false })
     case "reply":
       if (event.reply.state !== "ok") return copy(l, failed(event.reply))

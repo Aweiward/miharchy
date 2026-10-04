@@ -168,3 +168,10 @@ test("a manga opened from a source shows the cache, then refreshes from the sour
   assert.equal(d.manga.status, "Completed");
   assert.equal(B.detailPayload(d), null);
 });
+
+test("retry only restarts a failed list, so r during a load cannot skip a page", () => {
+  let l = B.reduceListing(B.listing({ id: "9", name: "S" }, "popular", ""), { type: "request" });
+  assert.equal(B.reduceListing(l, { type: "retry" }).state, "loading");
+  l = B.reduceListing(l, { type: "reply", reply: page([1], true), config });
+  assert.equal(B.reduceListing(l, { type: "retry" }), l, "a healthy list ignores retry");
+});
