@@ -307,6 +307,7 @@ function notice(s, configPath) {
 if (typeof module !== "undefined") {
   module.exports = {
     SOURCES_QUERY: SOURCES_QUERY,
+    SOURCE_NAMES_META: SOURCE_NAMES_META,
     sources: sources,
     listing: listing,
     listingPayload: listingPayload,
