@@ -32,7 +32,7 @@ A manga reader for Omarchy (Arch + Hyprland). It reads Mihon's extension ecosyst
 
 v1 scope: browse and search, library and categories, reader (paged LTR/RTL, webtoon), downloads, extension repos, updates, and sync. Trackers and local manga come in v1.1.
 
-The first task is the extension spike (Suwayomi issue #2298): install 10 popular Keiyoushi extensions, including one behind Cloudflare, and record which browse, list chapters and load pages. Its result decides whether ADR 0001 holds. Build UI only after it.
+The extension spike passed (`docs/spikes/extension-spike.md`), so ADR 0001 holds.
 
 ## Git
 

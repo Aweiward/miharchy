@@ -12,4 +12,5 @@ Mihon extensions are Android APKs. They need a JVM, dex-to-jar conversion and an
 - Users need Java 21 or newer.
 - Cloudflare-protected sources use Suwayomi's Chromium (JCEF), which runs under XWayland.
 - New extension lib versions (for example Keiyoushi's 1.6 `KeiSource`) work only after Suwayomi supports them.
-- Known risk (Oct 2026): Suwayomi issue #2298 says dex-to-jar emits invalid bytecode for extensions built with Kotlin 2.x, which may cover all recent Keiyoushi builds. Issue #2347 says the new `runWebView` helpers time out. If these stay broken, this ADR gets revisited.
+- Suwayomi issues #2298 (Kotlin 2.x bytecode) and #2347 (`runWebView`) looked like blockers. The 2026-10-04 spike (`docs/spikes/extension-spike.md`) ran 10 current lib 1.6 extensions: 9 passed, and the failure was a dead site.
+- Cloudflare-protected sources need FlareSolverr (or Byparr) beside Suwayomi, with `flareSolverrAsResponseFallback` on.
