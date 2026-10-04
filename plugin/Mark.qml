@@ -13,7 +13,7 @@ import "../window/Sync.js" as Sync
 // runs the same sync helper the window runs.
 Panel {
   id: root
-  moduleName: "aweiward.miharchy"
+  moduleName: "miharchy"
 
   readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
   readonly property string launcher: decodeURIComponent(Qt.resolvedUrl("../window/miharchy").toString().replace(/^file:\/\//, ""))
