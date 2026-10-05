@@ -39,6 +39,8 @@
     for (var i = 1; i <= 10; i++) vMouse.mouseMove(item, x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10, -1, Qt.LeftButton, Qt.NoModifier)
     vMouse.mouseRelease(item, x2, y2, Qt.LeftButton, Qt.NoModifier, -1)
   }
+  // grabToImage of keyRoot leaves out the window's own color; this fill gives captures the theme background.
+  property Rectangle vBackground: Rectangle { parent: keyRoot; anchors.fill: parent; z: -1; color: theme.background }
   function grab(name) { keyRoot.grabToImage(function(r) { r.saveToFile("@EVIDENCE@/" + name + ".png") }) }
   function log(label, value) { console.log("DRIVER " + label + " " + JSON.stringify(value)) }
   function done() { Qt.quit() }

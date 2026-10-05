@@ -1,6 +1,6 @@
 # Download queue
 
-`D` on the Library or a manga (or the palette's "Download queue") opens the server's download queue over the window (`DownloadsView.qml`, decisions in `window/Downloads.js`). It polls `downloadStatus` each second while it shows.
+`D` on the Library or a manga (or the palette's "Download queue") opens the server's download queue over the window (`DownloadsView.qml`, decisions in `window/Downloads.js`). It polls `downloadStatus` each second while it shows, and also while anything waits in the queue. `D` is bound on the Library and a manga only, not on Updates. Other ways in: the manga detail's `d`/`x` and `U` download menu (`manga.md`), the reader's download ahead (`reader.md`), Library and Updates `d`.
 
 ## Keys
 

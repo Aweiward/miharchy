@@ -21,7 +21,9 @@ start)
   (umask 077; printf '{"url":"http://127.0.0.1:%s","username":"verify","password":"%s"}\n' "$PORT" "$pw" > "$SERVER_JSON")
   # Suwayomi caches pages and covers in <java.io.tmpdir>/Tachidesk; the default
   # /tmp is shared with the user's server, so a cache clear here would empty it.
-  ( cd /tmp && setsid /usr/bin/suwayomi-server -Dsuwayomi.tachidesk.config.server.rootDir="$SERVER_DIR" -Djava.io.tmpdir="$SERVER_DIR/tmp" > "$RUN/server.log" 2>&1 < /dev/null & )
+  # setsid -f forks and returns at once: no shell is left waiting on the server
+  # with the caller's stdout, so `start | cat` and a backgrounded start both end.
+  ( cd /tmp && setsid -f /usr/bin/suwayomi-server -Dsuwayomi.tachidesk.config.server.rootDir="$SERVER_DIR" -Djava.io.tmpdir="$SERVER_DIR/tmp" > "$RUN/server.log" 2>&1 < /dev/null )
   for _ in $(seq 120); do
     v=$(gql '{"query":"{aboutServer{version}}"}' 2>/dev/null | jq -r '.data.aboutServer.version // empty' 2>/dev/null || true)
     if [ -n "$v" ]; then
