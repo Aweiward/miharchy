@@ -34,7 +34,7 @@ Rectangle {
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
   readonly property string hint: picking ? "j k move   space in or out   esc close   "
     : selecting ? "j k extend   d download   x delete download   esc end   "
-    : "j k chapters   enter read   d download   v select   U unread   x delete   D queue   " + (manga && manga.inLibrary ? "a remove from library   M migrate" : "a add to library") + "   c categories   r refresh   esc back   "
+    : "j k chapters   enter read   d download   v select   U unread   x delete   D queue   " + (manga && manga.inLibrary ? "a remove from library   M migrate" : "a add to library") + "   c categories   t tracking   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
@@ -380,7 +380,7 @@ Rectangle {
     width: view.theme.fontSize * 28
     height: Math.min(parent.height - view.theme.fontSize * 4, pickList.contentHeight + view.theme.fontSize * 2)
     visible: view.picking
-    color: view.theme.panel
+    color: Qt.alpha(view.theme.panel, 1)
     border.width: 1
     border.color: view.theme.panelBorder
 

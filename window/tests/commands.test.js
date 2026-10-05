@@ -217,6 +217,29 @@ test("on a manga, j/k move the chapters, a toggles the library, r refreshes, Ent
   assert.equal(C.dispatch(m, key(C.KEY.Backspace)), "manga.back");
 });
 
+test("t on a manga opens tracking; there j/k move, Enter finds the manga, s S c x change the track, and Esc or t closes it", () => {
+  assert.equal(C.dispatch(screen("manga"), text("t")), "manga.track");
+  const t = screen("manga-track");
+  assert.equal(C.dispatch(t, text("j")), "track.down");
+  assert.equal(C.dispatch(t, key(C.KEY.Up)), "track.up");
+  assert.equal(C.dispatch(t, key(C.KEY.Return)), "track.search");
+  assert.equal(C.dispatch(t, text("s")), "track.status");
+  assert.equal(C.dispatch(t, text("S")), "track.score");
+  assert.equal(C.dispatch(t, text("c")), "track.chapters");
+  assert.equal(C.dispatch(t, text("x")), "track.unbind");
+  for (const close of [text("t"), key(C.KEY.Escape), key(C.KEY.Backspace)]) assert.equal(C.dispatch(t, close), "track.close");
+  assert.equal(C.dispatch(t, text("a")), null, "the manga's keys wait while tracking shows");
+  const pick = screen("manga-track-pick");
+  assert.equal(C.dispatch(pick, text("k")), "track.up");
+  assert.equal(C.dispatch(pick, key(C.KEY.Return)), "track.choose");
+  assert.equal(C.dispatch(pick, key(C.KEY.Escape)), "track.back");
+  assert.equal(C.dispatch(pick, text("x")), null);
+  const field = { palette: false, view: "manga-track", editing: "track" };
+  assert.equal(C.dispatch(field, key(C.KEY.Return)), "track.commit");
+  assert.equal(C.dispatch(field, key(C.KEY.Escape)), "track.cancel");
+  assert.equal(C.dispatch(field, text("t")), null);
+});
+
 test("in the reader, h/l and the arrows turn by side, Space goes on, and Esc or q closes it", () => {
   const r = screen("reader");
   assert.equal(C.dispatch(r, text("h")), "reader.left");

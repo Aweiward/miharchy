@@ -186,12 +186,13 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var editing = settingsEditing ? "settings" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
+    var editing = settingsEditing ? "settings" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
     // An open sync result, download queue, reader, migration or manga
     // detail decides which keys apply, in that order; on Browse, the screen
     // does.
     var scope = syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? "reader"
       : migrateView.open ? "migrate-" + migrateView.step
+      : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.selecting ? "manga-select" : "manga")
       : view === "browse" ? browseView.screen : view === "library" && libraryScreen === "categories" ? "categories" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
@@ -233,6 +234,18 @@ ShellRoot {
     }
     if (id.indexOf("categories.") === 0) {
       categoriesView.run(id)
+      return
+    }
+    if (id === "manga.track") {
+      trackPanel.show(mangaDetail.manga)
+      return
+    }
+    if (id.indexOf("track.") === 0) {
+      trackPanel.run(id)
+      return
+    }
+    if (id.indexOf("login.") === 0) {
+      settingsView.run(id)
       return
     }
     if (id === "manga.migrate") {
@@ -294,9 +307,13 @@ ShellRoot {
         break
       case "settings.up":
       case "settings.down":
-        settingsCursor = Commands.moveCursor(settingsCursor, id === "settings.up" ? -1 : 1, Settings.ROWS.length)
+        settingsCursor = Commands.moveCursor(settingsCursor, id === "settings.up" ? -1 : 1, Settings.ROWS.length + settingsView.trackers.list.length)
         break
       case "settings.activate":
+        if (settingsCursor >= Settings.ROWS.length) {
+          settingsView.startLogin(settingsCursor - Settings.ROWS.length)
+          break
+        }
         var srow = Settings.ROWS[settingsCursor]
         var act = Settings.activate(srow, settingsState.values[srow.key])
         if ("save" in act) {
@@ -353,6 +370,7 @@ ShellRoot {
         if (config) {
           fetchLibrary()
           sendSettings(Settings.loadPayload())
+          settingsView.loadTrackers()
           updatesView.load()
         }
         configFile.reload()
@@ -464,12 +482,14 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "settings"
           theme: theme
+          config: root.config
           values: root.settingsState.values
           cursor: root.settingsCursor
           editing: root.settingsEditing
           problem: Model.problem(root.settingsState, root.configPath)
           editError: root.settingsError
           onKey: function(event) { event.accepted = root.handleKey(event) }
+          onEditEnded: keyRoot.forceActiveFocus()
         }
 
         ExtensionsView {
@@ -562,6 +582,20 @@ ShellRoot {
           onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
         }
 
+        TrackPanel {
+          id: trackPanel
+          anchors.top: parent.top
+          anchors.right: parent.right
+          anchors.margins: theme.fontSize * 2
+          width: Math.min(parent.width - theme.fontSize * 4, theme.fontSize * 52)
+          theme: theme
+          config: root.config
+          configPath: root.configPath
+          active: mangaDetail.open
+          onKey: function(event) { event.accepted = root.handleKey(event) }
+          onEditEnded: keyRoot.forceActiveFocus()
+        }
+
         MigrateView {
           id: migrateView
           anchors.fill: parent
@@ -598,7 +632,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: syncView.open ? "" : root.settingsEditing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: syncView.open ? "" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
