@@ -10,6 +10,10 @@ gql() { curl -s -m 30 -u "$(jq -r .username "$SERVER_JSON"):$(jq -r .password "$
 
 case "${1:-}" in
 start)
+  # Another run's live server in this dir would be killed by our stop; refuse to share it.
+  if [ -f "$RUN/server.pid" ] && kill -0 "$(cat "$RUN/server.pid")" 2>/dev/null; then
+    echo "$RUN already has a running server (pid $(cat "$RUN/server.pid")); set your own MIHARCHY_VERIFY_DIR" >&2; exit 1
+  fi
   ss -ltn | grep -q ":$PORT " && { echo "port $PORT is taken; pick another MIHARCHY_VERIFY_PORT" >&2; exit 1; }
   install -d -m 700 "$RUN" "$SERVER_DIR" "$EVIDENCE"
   pw=$(openssl rand -hex 16)
