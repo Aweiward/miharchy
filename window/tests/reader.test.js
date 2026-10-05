@@ -134,8 +134,8 @@ test("with always show on, turning past the last page shows the finished and the
   assert.equal(t.index, r.index, "still in the chapter");
   assert.equal(t.page, 1);
   assert.deepEqual(R.transitionLines(t.transition), [
-    { label: "Finished", chapter: { id: 21, name: "Ch. 1", url: "u1", number: 1, downloaded: false, scanlator: "" } },
-    { label: "Next", chapter: { id: 22, name: "Ch. 2", url: "u2", number: 2, downloaded: true, scanlator: "Kumo" } }
+    { label: "Finished", chapter: { id: 21, name: "Ch. 1", url: "u1", number: 1, downloaded: false, bookmarked: false, scanlator: "" } },
+    { label: "Next", chapter: { id: 22, name: "Ch. 2", url: "u2", number: 2, downloaded: true, bookmarked: false, scanlator: "Kumo" } }
   ]);
   const back = R.reduce(t, { type: "turn", delta: -1 });
   assert.equal(back.transition, null);
@@ -501,6 +501,17 @@ test("in incognito the reader saves no read state, pushes no track and deletes n
   assert.notEqual(R.savePayload(plain), null, "without incognito the same reading saves");
   assert.notEqual(R.trackPayload(plain), null);
   assert.equal(R.deleteTarget(plain, 0), 13);
+});
+
+test("b bookmarks the chapter open, or takes its bookmark off, and the list keeps what the server stored", () => {
+  const marked = [{ id: 13, name: "Ch. 3" }, { id: 12, name: "Ch. 2", bookmarked: true }, { id: 11, name: "Ch. 1" }];
+  let r = R.open(5, marked, 11, "paged-rtl");
+  assert.deepEqual(R.bookmarkPayload(r).variables, { ids: [11], bookmarked: true });
+  r = R.reduce(r, { type: "bookmarked", chapterId: 11, bookmarked: true });
+  assert.equal(r.chapters[r.index].bookmarked, true);
+  assert.deepEqual(R.bookmarkPayload(r).variables, { ids: [11], bookmarked: false }, "a second b takes it off");
+  const two = R.reduce(r, { type: "chapter", delta: 1 });
+  assert.deepEqual(R.bookmarkPayload(two).variables, { ids: [12], bookmarked: false }, "the chapter's own bookmark comes from the list");
 });
 
 // Page sizes by URL, as ReaderView collects them; the pages at wideAt are

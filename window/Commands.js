@@ -211,6 +211,8 @@ var commands = [
   { id: "manga.searchTitle", title: "Search every source for the title", keys: ["/"], view: "manga", hidden: true },
   { id: "reader.openWeb", title: "Open the chapter in the browser", keys: ["o"], view: "reader", hidden: true },
   { id: "reader.copyLink", title: "Copy the chapter's link", keys: ["y"], view: "reader", hidden: true },
+  // b, as on a manga's chapter list.
+  { id: "reader.bookmark", title: "Bookmark or unbookmark the chapter", keys: ["b"], view: "reader", hidden: true },
   { id: "track.up", title: "Up", keys: ["k", "Up"], view: ["manga-track", "manga-track-pick"], hidden: true },
   { id: "track.down", title: "Down", keys: ["j", "Down"], view: ["manga-track", "manga-track-pick"], hidden: true },
   { id: "track.search", title: "Find the manga on the tracker", keys: ["Enter"], view: "manga-track", hidden: true },
