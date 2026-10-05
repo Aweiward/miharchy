@@ -28,6 +28,22 @@ var ROWS = [
       { value: "webtoon", label: "Webtoon" }
     ]
   },
+  // Mihon's image scale type, for paged reading; z in the reader cycles it.
+  {
+    key: "pageFit", label: "Page fit", type: "choice", default: "screen", store: "meta",
+    options: [
+      { value: "screen", label: "Fit screen" },
+      { value: "width", label: "Fit width" },
+      { value: "height", label: "Fit height" },
+      { value: "original", label: "Original size" }
+    ]
+  },
+  // Mihon's webtoon side padding, the other way round: the strip's share
+  // of the window width. + and - in the reader step it.
+  {
+    key: "webtoonWidth", label: "Webtoon width", type: "choice", default: "60", store: "meta",
+    options: ["30", "40", "50", "60", "70", "80", "90", "100"].map(function(v) { return { value: v, label: v + "% of the window" } })
+  },
   // Cloudflare sources fail without the response fallback even when
   // FlareSolverr solves the challenge (docs/spikes/extension-spike.md).
   { key: "flareSolverrEnabled", label: "FlareSolverr", type: "bool", default: false, store: "server", whenOn: { flareSolverrAsResponseFallback: true } },

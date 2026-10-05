@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "Model.js" as Model
 import "Reader.js" as Reader
+import "Settings.js" as Settings
 
 // The reader over the whole window. It fetches pages and saves the read
 // state itself; Reader.js decides. shell.qml forwards every "reader."
@@ -15,6 +16,12 @@ Rectangle {
   property string configPath: ""
   property var reader: null
   property bool deleteAfterRead: false
+  // The pageFit and webtoonWidth settings.
+  property string pageFit: "screen"
+  property string webtoonWidth: "60"
+  // Whether the go-to-page field is open.
+  property bool editing: false
+  readonly property alias pageField: field
   // Only the latest page fetch may update the reader.
   property int pagesSeq: 0
   property var exit: Reader.EXIT
@@ -27,12 +34,17 @@ Rectangle {
   signal closed(int chapterId)
   // A chapter it finished left the disk, after delete after read.
   signal deleted()
+  signal key(var event)
+  signal editEnded()
+  // z, + and - change a Settings row; shell.qml saves it.
+  signal setting(var row, var value)
 
   visible: open
   color: theme.background
 
   // The chapter ids belong to the old server, so nothing saves.
   onConfigChanged: {
+    endEdit()
     saveTimer.stop()
     pagesSeq++
     reader = null
@@ -59,6 +71,7 @@ Rectangle {
   }
 
   function close() {
+    endEdit()
     save()
     leave()
     pagesSeq++
@@ -129,9 +142,9 @@ Rectangle {
     if (Reader.canQuit(exit)) Qt.quit()
   }
 
-  // A page turn saves after a pause; leaving the chapter saves it first.
-  function turn(delta, chapter) {
-    var next = Reader.reduce(reader, { type: "turn", delta: delta, chapter: chapter === true })
+  // A page change saves after a pause; leaving the chapter saves it first.
+  function go(event) {
+    var next = Reader.reduce(reader, event)
     if (next.index === reader.index) {
       reader = next
       saveTimer.restart()
@@ -170,14 +183,50 @@ Rectangle {
     saveTimer.restart()
   }
 
+  // In webtoon the strip moves there and track() then takes the page at
+  // the middle of the view, as for any scroll.
+  function jump(page) {
+    var before = reader
+    go({ type: "goto", page: page })
+    if (!webtoon || reader === before) return
+    scrollAnimation.stop()
+    strip.pinToEnd = reader.page === reader.pages.length - 1
+    if (strip.pinToEnd) strip.positionViewAtEnd()
+    else strip.positionViewAtIndex(reader.page, ListView.Beginning)
+  }
+
+  // The page or the strip, whichever shows.
+  function flick() {
+    return webtoon ? strip : pager
+  }
+
   function scroll(part) {
-    var from = scrollAnimation.running ? scrollAnimation.to : strip.contentY
-    var top = strip.originY
-    var bottom = strip.originY + strip.contentHeight - strip.height
+    var f = flick()
+    var from = scrollAnimation.running && scrollAnimation.target === f ? scrollAnimation.to : f.contentY
+    var top = f.originY
+    var bottom = f.originY + f.contentHeight - f.height
     scrollAnimation.stop()
     strip.pinToEnd = false
-    scrollAnimation.to =Math.max(top, Math.min(bottom, from + part * strip.height))
+    scrollAnimation.target = f
+    scrollAnimation.to = Math.max(top, Math.min(bottom, from + part * f.height))
     scrollAnimation.start()
+  }
+
+  function openEdit() {
+    if (!reader || reader.state !== "ok") return
+    editing = true
+    field.text = ""
+    field.forceActiveFocus()
+  }
+
+  function endEdit() {
+    if (!editing) return
+    editing = false
+    editEnded()
+  }
+
+  function row(key) {
+    return Settings.ROWS.filter(function(r) { return r.key === key })[0]
   }
 
   function run(id) {
@@ -194,12 +243,41 @@ Rectangle {
         send(Reader.modePayload(reader), function() {})
         layoutStrip()
         return
+      case "reader.nextChapter":
+      case "reader.previousChapter":
+        go({ type: "chapter", delta: id === "reader.nextChapter" ? 1 : -1 })
+        return
+      case "reader.first":
+        jump(0)
+        return
+      case "reader.last":
+        jump(Infinity)
+        return
+      case "reader.goto":
+        openEdit()
+        return
+      case "reader.commit":
+        var page = Reader.pageNumber(field.text)
+        endEdit()
+        jump(page)
+        return
+      case "reader.cancel":
+        endEdit()
+        return
+      case "reader.fit":
+        if (!webtoon) setting(row("pageFit"), Settings.activate(row("pageFit"), pageFit).save)
+        return
+      case "reader.wider":
+      case "reader.narrower":
+        if (webtoon) setting(row("webtoonWidth"), Reader.step(row("webtoonWidth").options, webtoonWidth, id === "reader.wider" ? 1 : -1))
+        return
     }
     if (webtoon) track()
-    var act = Reader.action(reader, id, strip.atYEnd, strip.atYBeginning)
+    var f = flick()
+    var act = Reader.action(reader, id, f.atYEnd, f.atYBeginning)
     if (!act) return
     if ("scroll" in act) scroll(act.scroll)
-    else turn(act.turn, act.chapter)
+    else go({ type: "turn", delta: act.turn, chapter: act.chapter === true })
   }
 
   Timer {
@@ -215,32 +293,61 @@ Rectangle {
     onTriggered: Qt.quit()
   }
 
-  // Each slot keeps its page while that page stays within the two before
-  // and three after the one shown, so a live Image holds it decoded and a
-  // turn shows it at once.
-  Repeater {
-    model: Reader.SLOTS
+  // The page shown, sized by the page fit. A page larger than the view
+  // scrolls; a new page starts at its top, and on the side the reading
+  // starts from (Mihon's automatic zoom start).
+  Flickable {
+    id: pager
+    property Item page: null
+    anchors.fill: parent
+    visible: view.open && !view.webtoon
+    contentWidth: page ? Math.max(width, page.width) : width
+    contentHeight: page ? Math.max(height, page.height) : height
+    boundsBehavior: Flickable.StopAtBounds
+    clip: true
 
-    ServerImage {
-      id: slot
-      required property int index
-      readonly property var held: view.reader && view.reader.state === "ok" && !view.webtoon ? Reader.slots(view.reader)[index] : null
-      anchors.fill: parent
-      visible: held !== null && held.page === view.reader.page
-      config: view.config
-      url: held ? held.url : ""
-      // Decoded at the size shown, not the scan's: six full-size scans
-      // would hold hundreds of megabytes.
-      sourceSize: Qt.size(width, height)
-      fillMode: Image.PreserveAspectFit
-      asynchronous: true
-      cache: true
-      smooth: true
-      mipmap: true
+    function place() {
+      contentY = 0
+      contentX = view.reader && view.reader.mode === "paged-rtl" ? contentWidth - width : 0
+    }
+
+    // Each slot keeps its page while that page stays within the two before
+    // and three after the one shown, so a live Image holds it decoded and a
+    // turn shows it at once.
+    Repeater {
+      model: Reader.SLOTS
+
+      ServerImage {
+        id: slot
+        required property int index
+        readonly property var held: view.reader && view.reader.state === "ok" && !view.webtoon ? Reader.slots(view.reader)[index] : null
+        readonly property bool current: held !== null && held.page === view.reader.page
+        readonly property var size: Reader.fit(view.pageFit, { width: implicitWidth, height: implicitHeight }, { width: pager.width, height: pager.height })
+        x: Math.max(0, (pager.width - width) / 2)
+        y: Math.max(0, (pager.height - height) / 2)
+        width: size.width
+        height: size.height
+        visible: current
+        onCurrentChanged: if (current) {
+          pager.page = slot
+          Qt.callLater(pager.place)
+        }
+        onSizeChanged: if (current) Qt.callLater(pager.place)
+        config: view.config
+        url: held ? held.url : ""
+        // Decoded at the size shown, not the scan's: six full-size scans
+        // would hold hundreds of megabytes. Stretch, as the size already
+        // keeps the aspect.
+        sourceSize: Qt.size(size.sourceWidth, size.sourceHeight)
+        asynchronous: true
+        cache: true
+        smooth: true
+        mipmap: true
+      }
     }
   }
 
-  // One vertical strip, no wider than the view is tall. A ListView creates
+  // One vertical strip, as wide as the webtoon width setting. A ListView creates
   // only the pages in view plus a view's height either side and destroys
   // the rest, so a long chapter keeps a few pages decoded, each at the
   // strip's width.
@@ -254,7 +361,7 @@ Rectangle {
     anchors.top: parent.top
     anchors.bottom: parent.bottom
     anchors.horizontalCenter: parent.horizontalCenter
-    width: Math.min(parent.width, parent.height)
+    width: Reader.stripWidth(view.webtoonWidth, parent.width)
     visible: view.webtoon
     cacheBuffer: height
     boundsBehavior: Flickable.StopAtBounds
@@ -276,12 +383,13 @@ Rectangle {
       smooth: true
     }
 
-    NumberAnimation on contentY {
-      id: scrollAnimation
-      running: false
-      duration: 120
-      easing.type: Easing.OutQuad
-    }
+  }
+
+  NumberAnimation {
+    id: scrollAnimation
+    property: "contentY"
+    duration: 120
+    easing.type: Easing.OutQuad
   }
 
   Text {
@@ -310,9 +418,52 @@ Rectangle {
     anchors.right: parent.right
     anchors.bottom: parent.bottom
     anchors.margins: view.theme.fontSize
-    text: view.reader ? Reader.indicator(view.reader) : ""
+    text: view.reader ? Reader.indicator(view.reader, view.pageFit, view.webtoonWidth) : ""
     color: view.theme.muted
     font.family: view.theme.fontFamily
     font.pixelSize: view.theme.fontSmall
+  }
+
+  Rectangle {
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.bottom: parent.bottom
+    anchors.margins: view.theme.fontSize
+    width: goTo.width + view.theme.fontSize * 2
+    height: goTo.height + view.theme.fontSize
+    visible: view.editing
+    color: view.theme.background
+    border.color: view.theme.accent
+
+    Row {
+      id: goTo
+      anchors.centerIn: parent
+      spacing: view.theme.fontSize / 2
+
+      Text {
+        text: "Go to page"
+        color: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      TextInput {
+        id: field
+        width: view.theme.fontSize * 4
+        clip: true
+        color: view.theme.foreground
+        selectionColor: view.theme.selected
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+        validator: IntValidator { bottom: 1 }
+        Keys.onPressed: function(event) { view.key(event) }
+      }
+
+      Text {
+        text: view.reader && view.reader.state === "ok" ? "of " + view.reader.pages.length + "   enter go   esc cancel" : ""
+        color: view.theme.muted
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+    }
   }
 }
