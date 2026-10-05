@@ -76,10 +76,6 @@ test("d queues the marked chapters not yet downloaded; nothing to queue sends no
   assert.equal(D.enqueuePayload([chapters[1], chapters[3]]), null);
 });
 
-test("U queues every unread chapter not yet downloaded", () => {
-  assert.deepEqual(D.unread(chapters).map((c) => c.id), [14]);
-});
-
 test("x dequeues and then deletes the marked chapters that are downloaded or queued", () => {
   const queue = polled(D.initial(), { downloadStatus: status("STARTED", [item(14, "DOWNLOADING", 0.3)]) }).items;
   const p = D.removePayload(chapters, queue);

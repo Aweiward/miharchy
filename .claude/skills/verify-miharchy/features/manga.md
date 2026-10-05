@@ -14,7 +14,8 @@ The manga detail's chapter list: mark read or unread, bookmark, mark every earli
 - The reader gets the chapters in the manga's chosen sort, read ascending, like Mihon's `ReaderViewModel` (`getChapterSort(manga, sortDescending = false)`), minus what the skip settings drop (`Chapters.readingOrder`, see `reader.md`). Proof: set `miharchy.chapterSort` to `uploadDate` with `setMangaMeta`, open a chapter from the detail, wait 2 s, and log `reader.reader.chapters` ids: they follow upload date, oldest first.
 - A mark read sends `trackProgress` for the manga after the mark succeeds.
 - Every mark and bookmark goes through `shell.qml` `markChapters(chapters, action)` (`window/Chapters.js` builds the payloads), which reloads the detail, Updates and the Library (its unread badge and bookmarked filter).
-- `d` / `x` / `U` download, delete, download unread (`window/Downloads.js`).
+- `d` / `x` download or delete the chapter under the cursor or the selection (`window/Downloads.js`).
+- `U` opens the download menu (Mihon's `DownloadDropdownMenu`, `Chapters.DOWNLOADS`): next chapter, next 5, 10, 25, next N with a typed number (Enter on that row opens a field; anything but a whole number above 0 shows "Type a whole number above 0"), unread, bookmarked. `Chapters.toDownload` follows `MangaViewModel`: chapters not on disk and not in the queue, never an excluded scanlator's, and only those the filters show while skip filtered is on; "next" takes the first unread in reading order. A row with nothing to queue says "Nothing to download"; otherwise the menu closes. Proof: stop the downloader, then log `downloadsView.queue.items` chapter ids after each row; set the field's text (`find(mangaDetail, function(i) { return i.cursorPosition !== undefined && i.width > 0 })`) before Enter.
 
 ## How to get to it (user POV)
 Library → `Enter` on a manga.
