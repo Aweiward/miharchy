@@ -1,8 +1,38 @@
 
   // ---- verify-miharchy driver (appended to a scratch copy of shell.qml) ----
   property int vStep: 0
+  // Scratch space a step leaves for a later one: root.v.list = ...
+  property var v: ({})
   readonly property var vKeys: ({ Enter: [0x01000004, "\r"], Esc: [0x01000000, "\u001b"], Tab: [0x01000001, "\t"], Backspace: [0x01000003, "\b"] })
   function key(t) { var k = vKeys[t]; root.handleKey({ key: k ? k[0] : t.toUpperCase().charCodeAt(0), text: k ? k[1] : t, modifiers: 0 }) }
+  // Real mouse events at item-local x, y (default: the item's center), delivered by the window as a
+  // user's would be: the topmost enabled MouseArea under the point takes them.
+  property TestEvent vMouse: TestEvent {}
+  function vAt(item, x, y) { return [x === undefined ? item.width / 2 : x, y === undefined ? item.height / 2 : y] }
+  function click(item, x, y) { var p = vAt(item, x, y); vMouse.mouseClick(item, p[0], p[1], Qt.LeftButton, Qt.NoModifier, -1) }
+  // A press, release, press, double-click, release: what a real double click sends.
+  function dblclick(item, x, y) {
+    var p = vAt(item, x, y)
+    vMouse.mousePress(item, p[0], p[1], Qt.LeftButton, Qt.NoModifier, -1)
+    vMouse.mouseRelease(item, p[0], p[1], Qt.LeftButton, Qt.NoModifier, -1)
+    vMouse.mousePress(item, p[0], p[1], Qt.LeftButton, Qt.NoModifier, -1)
+    vMouse.mouseDoubleClick(item, p[0], p[1], Qt.LeftButton, Qt.NoModifier, -1)
+    vMouse.mouseRelease(item, p[0], p[1], Qt.LeftButton, Qt.NoModifier, -1)
+  }
+  // The first visible item under `from` (depth first) that test(item) accepts, or null: how a step
+  // reaches a delegate, e.g. find(libraryView, function(i) { return i.modelData && i.index === 1 }).
+  function find(from, test) {
+    var kids = from.children || []
+    for (var i = 0; i < kids.length; i++) {
+      if (!kids[i].visible) continue
+      if (test(kids[i])) return kids[i]
+      var hit = find(kids[i], test)
+      if (hit) return hit
+    }
+    return null
+  }
+  // dy in angleDelta units: -120 is one notch down.
+  function wheel(item, dy, x, y) { var p = vAt(item, x, y); vMouse.mouseWheel(item, p[0], p[1], Qt.NoButton, Qt.NoModifier, 0, dy, -1) }
   function grab(name) { keyRoot.grabToImage(function(r) { r.saveToFile("@EVIDENCE@/" + name + ".png") }) }
   function log(label, value) { console.log("DRIVER " + label + " " + JSON.stringify(value)) }
   function done() { Qt.quit() }

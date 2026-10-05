@@ -12,5 +12,6 @@ One file per user-facing feature: how a user reaches it, how to drive it with `s
 | Settings storage | `settings.md` | downloads and cache sizes match `du` on the scratch server, Enter on "Clear the cache" empties its cache and reports the bytes freed, downloads keep their size |
 | Sync | `sync.md` | the helper merges a phone backup and writes `miharchy-*.tachibk` |
 | Restore a backup | `restore.md` | the window lists the missing sources and trackers, restores the file, and the next sync keeps what it restored |
+| Mouse | `mouse.md` | a click moves the cursor and a double click runs what Enter runs, on every list; hint parts and tabs press their key; reader tap zones turn in the reading direction; the wheel scrolls lists and the webtoon strip and turns paged pages |
 
 Not yet mapped: the rest of Settings, Setup, Extensions, Global search, Migrate, Trackers, Downloads, History, the bar plugin (`plugin/Mark.qml`, rendered offscreen with the shell's `Commons`/`Ui` copied into a scratch Quickshell config).

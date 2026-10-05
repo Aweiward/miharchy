@@ -41,6 +41,13 @@ Item {
   signal wrote()
   signal editEnded()
 
+  // A click moves the cursor as j and k do; a double click then sends Enter.
+  function point(index, twice) {
+    if (editing || confirming) return
+    cursor = index
+    if (twice) key(Commands.enter())
+  }
+
   Component.onCompleted: check()
   onConfigChanged: readServer()
 
@@ -187,6 +194,12 @@ Item {
           width: parent.width
           height: view.theme.fontSize * 2.4
           color: current ? view.theme.selected : "transparent"
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: view.point(row.index, false)
+            onDoubleClicked: view.point(row.index, true)
+          }
 
           Text {
             anchors.left: parent.left

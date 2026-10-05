@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Commands.js" as Commands
 import "Model.js" as Model
 import "Browse.js" as Browse
 import "GlobalSearch.js" as GlobalSearch
@@ -296,6 +297,14 @@ Rectangle {
     editEnded()
   }
 
+  // A click moves the cursor as the keys do (move() makes the change); a
+  // double click then sends Enter. Not while the search field types.
+  function point(move, twice) {
+    if (editing) return
+    move()
+    if (twice) key(Commands.enter())
+  }
+
   function moveList(delta) {
     if (rows.length) cursor = Math.max(0, Math.min(rows.length - 1, cursor + delta))
   }
@@ -417,6 +426,11 @@ Rectangle {
     onTriggered: view.expire()
   }
 
+  // Over the whole window: a click never reaches the view below.
+  MouseArea {
+    anchors.fill: parent
+  }
+
   Text {
     id: head
     anchors.top: parent.top
@@ -445,6 +459,7 @@ Rectangle {
     editing: view.editing
     configPath: view.configPath
     onKey: function(event) { view.key(event) }
+    onPicked: function(row, col, twice) { view.point(function() { view.searchCursor = { row: row, col: Math.max(0, col) } }, twice) }
   }
 
   ListView {
@@ -466,6 +481,12 @@ Rectangle {
       width: list.width
       height: view.theme.fontSize * 2.2
       color: current ? view.theme.selected : "transparent"
+
+      MouseArea {
+        anchors.fill: parent
+        onClicked: view.point(function() { view.cursor = row.index }, false)
+        onDoubleClicked: view.point(function() { view.cursor = row.index }, true)
+      }
 
       Text {
         id: left

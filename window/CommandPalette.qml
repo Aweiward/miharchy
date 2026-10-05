@@ -27,8 +27,10 @@ Rectangle {
   color: theme.scrim
   onRowsChanged: cursor = 0
 
+  // A click outside the box closes the palette, as Esc does.
   MouseArea {
     anchors.fill: parent
+    onClicked: pal.key({ key: Commands.KEY.Escape, text: "\u001b", modifiers: 0 })
   }
 
   Rectangle {
@@ -40,6 +42,10 @@ Rectangle {
     color: pal.theme.panel
     border.color: pal.theme.panelBorder
     border.width: 1
+
+    MouseArea {
+      anchors.fill: parent
+    }
 
     Column {
       id: content
@@ -85,6 +91,15 @@ Rectangle {
           width: content.width
           height: pal.theme.fontSize * 2.2
           color: current ? pal.theme.selected : "transparent"
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: pal.cursor = row.index
+            onDoubleClicked: {
+              pal.cursor = row.index
+              pal.key(Commands.enter())
+            }
+          }
 
           Text {
             anchors.left: parent.left

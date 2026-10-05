@@ -246,6 +246,17 @@ test("a library change shows on the source grid without a reload", () => {
   assert.deepEqual(B.markInLibrary(l, 2, false).items.map((m) => m.inLibrary), [true, false]);
 });
 
+test("the grid keeps its place for a page more or a library mark, not for a new listing", () => {
+  const first = B.reduceListing(B.reduceListing(B.listing({ id: "9", name: "S" }, "popular", ""), { type: "request" }), { type: "reply", reply: page([1, 2], true), config });
+  const more = B.reduceListing(B.reduceListing(first, { type: "request" }), { type: "reply", reply: page([3, 4], false), config });
+  assert.equal(B.continues(first.items, more.items), true, "a page more");
+  assert.equal(B.continues(first.items, B.markInLibrary(first, 2, true).items), true, "a library mark");
+  const search = B.reduceListing(B.reduceListing(B.listing({ id: "9", name: "S" }, "search", "x"), { type: "request" }), { type: "reply", reply: page([5, 6], false), config });
+  assert.equal(B.continues(more.items, search.items), false, "a new search starts at the top");
+  assert.equal(B.continues([], first.items), false, "the first page starts at the top");
+  assert.equal(B.continues(more.items, first.items), false, "fewer items: a new listing");
+});
+
 test("sources show English and multi-language ones unless every language is asked for", () => {
   const data = { sources: { nodes: [src({ id: "5", displayName: "MangaDex (EN)", lang: "en" }), src({ id: "6", displayName: "MangaDex (JA)", lang: "ja" }), src({ id: "7", displayName: "Comick", lang: "all" })] } };
   assert.deepEqual(B.sources(ok(data), config, false).sources.map((x) => x.id), ["7", "5"]);

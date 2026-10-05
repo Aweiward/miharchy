@@ -301,6 +301,14 @@ function markInLibrary(l, mangaId, inLibrary) {
   return copy(l, { items: l.items.map(function(m) { return m.id === mangaId ? copy(m, { inLibrary: inLibrary }) : m }) })
 }
 
+// Whether the grid's new items continue the ones it showed: a page more or
+// a library mark, not a new listing. The grid then keeps its scroll place;
+// a new model would put it back at the top under a wheel that just
+// reached the end.
+function continues(before, after) {
+  return before.length > 0 && after.length >= before.length && after[0].id === before[0].id
+}
+
 // { title, detail } for a listing or detail that failed or came back empty,
 // else null.
 function notice(s, configPath) {
@@ -313,6 +321,7 @@ function notice(s, configPath) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+    continues: continues,
     SOURCES_QUERY: SOURCES_QUERY,
     SOURCE_NAMES_META: SOURCE_NAMES_META,
     sources: sources,

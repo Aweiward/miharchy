@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Commands.js" as Commands
 import "Model.js" as Model
 import "History.js" as History
 import "Browse.js" as Browse
@@ -34,6 +35,8 @@ Item {
 
   // chapters: newest first, as the manga detail holds them.
   signal resume(var manga, var chapters, int chapterId)
+  // A double click sends Enter, as typed.
+  signal key(var event)
 
   onActiveChanged: if (active) reload()
   onConfigChanged: {
@@ -181,6 +184,15 @@ Item {
         width: parent.width
         height: view.theme.fontSize * 5
         color: entry.current ? view.theme.selected : "transparent"
+
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.cursor = entry.index
+          onDoubleClicked: {
+            view.cursor = entry.index
+            view.key(Commands.enter())
+          }
+        }
 
         Cover {
           id: coverBox

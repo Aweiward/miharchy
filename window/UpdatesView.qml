@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Commands.js" as Commands
 import "Model.js" as Model
 import "Browse.js" as Browse
 import "Updates.js" as Updates
@@ -48,6 +49,8 @@ Item {
   signal mark(var chapters, string action, var mangaIds)
   // A download mutation's reply, which carries the queue.
   signal downloads(var reply)
+  // A double click sends Enter, as typed.
+  signal key(var event)
 
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
   onActiveChanged: load()
@@ -258,6 +261,15 @@ Item {
         width: parent.width
         height: view.theme.fontSize * 4
         color: entry.current || entry.chosen ? view.theme.selected : "transparent"
+
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.cursorId = entry.modelData.id
+          onDoubleClicked: {
+            view.cursorId = entry.modelData.id
+            view.key(Commands.enter())
+          }
+        }
 
         Rectangle {
           visible: entry.chosen

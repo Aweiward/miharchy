@@ -290,3 +290,35 @@ test("a new chapter list keeps the chapter open", () => {
   assert.equal(R.chapterId(r), 12);
   assert.equal(R.reduce(r, { type: "chapter", delta: 1 }).edge, "last", "the next chapter is gone");
 });
+
+test("a click on the left or right third turns the page in the reading direction", () => {
+  const click = (mode, x) => R.action(loaded(12, 5, {}, mode), R.tapZone(mode, x, 400, 1000, 800), true, true);
+  assert.deepEqual(click("paged-rtl", 100), { turn: 1 }, "right to left: the left side reads on");
+  assert.deepEqual(click("paged-rtl", 900), { turn: -1 });
+  assert.deepEqual(click("paged-ltr", 100), { turn: -1 });
+  assert.deepEqual(click("paged-ltr", 900), { turn: 1 }, "left to right: the right side reads on");
+  assert.equal(R.tapZone("paged-ltr", 329, 0, 1000, 800), "reader.left");
+  assert.equal(R.tapZone("paged-ltr", 330, 0, 1000, 800), null, "the middle third does nothing");
+  assert.equal(R.tapZone("paged-ltr", 659, 799, 1000, 800), null);
+  assert.equal(R.tapZone("paged-ltr", 660, 799, 1000, 800), "reader.right");
+});
+
+test("a webtoon click follows Mihon's L layout", () => {
+  const zone = (x, y) => R.tapZone("webtoon", x, y, 1000, 1000);
+  assert.equal(zone(500, 100), "reader.halfUp", "top third");
+  assert.equal(zone(100, 500), "reader.halfUp", "left of the middle");
+  assert.equal(zone(900, 500), "reader.halfDown", "right of the middle");
+  assert.equal(zone(500, 900), "reader.halfDown", "bottom third");
+  assert.equal(zone(500, 500), null, "the middle does nothing");
+});
+
+test("the wheel moves one step per notch and adds up touchpad deltas", () => {
+  assert.deepEqual(R.wheel(0, -120), { steps: 1, acc: 0 }, "down reads on");
+  assert.deepEqual(R.wheel(0, 240), { steps: -2, acc: 0 }, "up reads back");
+  let s = { steps: 0, acc: 0 };
+  const steps = [];
+  for (let i = 0; i < 5; i++) { s = R.wheel(s.acc, -40); steps.push(s.steps); }
+  assert.deepEqual(steps, [0, 0, 1, 0, 0], "three small deltas make one notch");
+  assert.equal(s.acc, -80);
+  assert.deepEqual(R.wheel(-80, 100), { steps: 0, acc: 20 }, "a turn back cancels a partial notch");
+});

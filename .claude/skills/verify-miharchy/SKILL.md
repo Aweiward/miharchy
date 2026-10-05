@@ -44,6 +44,9 @@ $S/drive.sh steps.js 90     # copies window/ into $RUN/app, appends the driver, 
 - `key("j")`, `key("Enter")`, `key("Esc")`, `key("Tab")`, `key("Backspace")`, `key(" ")` — go through `root.handleKey`, the window's one key path.
 - `root.run("view.library")` — run a command id from `window/Commands.js` directly (the palette path).
 - `grab("name")` → `$RUN/evidence/name.png`; `log("label", value)` → a `DRIVER label <json>` line in `$RUN/evidence/drive.log`.
+- `click(item, x, y)`, `dblclick(item, x, y)`, `wheel(item, dy, x, y)` — real mouse events at item-local `x, y` (default: the item's center), sent by QtTest's `TestEvent` (drive.sh adds `import QtTest` to the copy; the module ships with `qt6-declarative`, which Quickshell needs anyway). The window delivers them as a user's: the topmost enabled `MouseArea` under the point takes them, so a click on a covered item proves the cover blocks it. `dy` is in wheel units: `-120` is one notch down. `dblclick` sends press, release, press, double-click, release, as a real double click does. A ListView scrolls with an animation: log its `contentY` about 1 s after `wheel`.
+- `find(from, test)` — the first visible item under `from` that `test(item)` accepts: how a step reaches a delegate, e.g. `find(libraryView, function(i) { return i.modelData && i.index === 2 && i.current !== undefined })`. A delegate outside its list's viewport still exists, but a click on it lands on whatever is drawn there; pick one in view.
+- `root.v` — scratch space a step leaves for a later one (`root.v.list = ...`).
 - `done()` — quit. Prefer `root.run("window.quit")` when the quit path itself matters (it flushes reader saves).
 
 Handles (ids in `window/shell.qml`): `root` (view, connection, settingsState), `libraryView`, `browseView` (screen, src, listing, global), `mangaDetail` (open, detail, cursor), `reader` (open, reader.chapters/index/page/mode), `updatesView`, `historyView`, `settingsView`, `setupView`, `trackPanel`, `migrateView`, `downloadsView`, `syncView`, `palette`, `keyRoot` (grab target). `drive.sh` turns off both Setup jumps in the copy (the required-step jump and the one-time offer): Setup probes the *real* machine, so it would otherwise take over the window. To verify Setup itself, drive `root.run("view.setup")` and stub the commands its probe calls on PATH (see `window/tests/setup.test.js` for the stub pattern).
@@ -57,11 +60,12 @@ Read-backs: `$S/gql.sh '<query>' ['{"var":1}']` against the scratch server, afte
 Everything a proof needs lands in `$RUN/evidence/` and survives cleanup: `*.png` captures, `drive.log` (DRIVER lines). Also keep the GraphQL read-back output you rely on (`$S/gql.sh … | tee $RUN/evidence/readback.json`). Read the captures (the Read tool shows images) before claiming anything about the UI.
 
 Proof standard:
-- Drive the real path (keys or command ids), not internal setters, except to fill a text field.
+- Drive the real path (keys, mouse events or command ids), not internal setters, except to fill a text field.
 - Capture the action and the resulting state, not just the final screen.
 - Check the side effect on the server (read state, library flag, categories, settings, meta), not only what is drawn.
 - For sync: check the files written to the sync folder and the baselines in `$RUN/home/.local/share/miharchy/sync`.
 - `grabToImage` of `keyRoot` omits the window background color; a black or white background in captures is expected.
+- `grab()` captures after the step returns, so a key or click later in the same step shows in the capture. End the step with the `grab`.
 
 ## Cleanup
 

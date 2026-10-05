@@ -19,6 +19,8 @@ Rectangle {
 
   // A sync finished and changed the desktop library.
   signal synced()
+  // A click on a key in the hint sends that key, as typed.
+  signal key(var event)
 
   visible: open
   color: theme.scrim
@@ -117,12 +119,11 @@ Rectangle {
         }
       }
 
-      Text {
+      HintBar {
         id: hint
+        theme: view.theme
         text: view.sync.state === "running" ? "esc hide (the sync goes on)" : "esc close"
-        color: view.theme.muted
-        font.family: view.theme.fontFamily
-        font.pixelSize: view.theme.fontSmall
+        onKey: function(event) { view.key(event) }
       }
     }
   }

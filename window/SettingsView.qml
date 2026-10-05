@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Commands.js" as Commands
 import Quickshell
 import Quickshell.Io
 import "Model.js" as Model
@@ -48,6 +49,14 @@ Item {
 
   signal key(var event)
   signal editEnded()
+  // A click puts shell.qml's cursor on a row; a double click then sends Enter.
+  signal picked(int index)
+
+  function point(index, twice) {
+    if (editing || loginEditing) return
+    picked(index)
+    if (twice) key(Commands.enter())
+  }
 
   onVisibleChanged: if (visible) {
     loadTrackers()
@@ -184,6 +193,12 @@ Item {
           height: view.theme.fontSize * 2.4
           color: current ? view.theme.selected : "transparent"
 
+          MouseArea {
+            anchors.fill: parent
+            onClicked: view.point(row.index, false)
+            onDoubleClicked: view.point(row.index, true)
+          }
+
           Text {
             id: label
             anchors.left: parent.left
@@ -265,6 +280,12 @@ Item {
         height: view.theme.fontSize * 2.4
         color: current ? view.theme.selected : "transparent"
 
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.point(Settings.ROWS.length, false)
+          onDoubleClicked: view.point(Settings.ROWS.length, true)
+        }
+
         Text {
           anchors.left: parent.left
           anchors.leftMargin: view.theme.fontSize * 0.75
@@ -311,6 +332,12 @@ Item {
           width: parent.width
           height: view.theme.fontSize * 2.4
           color: current ? view.theme.selected : "transparent"
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: view.point(tracker.index + Settings.ROWS.length + 1, false)
+            onDoubleClicked: view.point(tracker.index + Settings.ROWS.length + 1, true)
+          }
 
           Text {
             anchors.left: parent.left

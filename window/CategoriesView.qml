@@ -36,6 +36,13 @@ Item {
   signal editEnded()
   signal edited()
 
+  // A click moves the cursor as j and k do; a double click then sends Enter.
+  function point(id, twice) {
+    if (editing) return
+    cursorId = id
+    if (twice) key(Commands.enter())
+  }
+
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
 
   function send(payload, done) {
@@ -205,6 +212,12 @@ Item {
       width: list.width
       height: view.theme.fontSize * 2.4
       color: current ? view.theme.selected : "transparent"
+
+      MouseArea {
+        anchors.fill: parent
+        onClicked: view.point(entry.modelData.id, false)
+        onDoubleClicked: view.point(entry.modelData.id, true)
+      }
 
       Text {
         anchors.left: parent.left

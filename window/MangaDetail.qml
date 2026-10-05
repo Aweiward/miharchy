@@ -5,6 +5,7 @@ import "Model.js" as Model
 import "Browse.js" as Browse
 import "Downloads.js" as Downloads
 import "Chapters.js" as Chapters
+import "Commands.js" as Commands
 
 // A manga's detail over the view that opened it, Library or Browse: cover
 // and metadata beside the chapter list, filtered and sorted as the manga's
@@ -58,6 +59,8 @@ Rectangle {
   signal categorized()
   // A download mutation's reply, which carries the queue.
   signal downloads(var reply)
+  // A double click sends Enter, a click on a key label its key, as typed.
+  signal key(var event)
 
   visible: open
   color: theme.background
@@ -271,6 +274,11 @@ Rectangle {
     }
   }
 
+  // Over the view it opened from: a click never reaches the grid below.
+  MouseArea {
+    anchors.fill: parent
+  }
+
   Cover {
     id: coverBox
     anchors.top: parent.top
@@ -344,11 +352,12 @@ Rectangle {
       font.pixelSize: view.theme.fontSmall
     }
 
-    Text {
+    HintBar {
+      theme: view.theme
       text: !view.manga ? "" : view.detail.busy ? "saving" : view.manga.inLibrary ? "In library   a remove from library" : "a add to library"
       color: view.manga && view.manga.inLibrary ? view.theme.accent : view.theme.foreground
-      font.family: view.theme.fontFamily
-      font.pixelSize: view.theme.fontSize
+      pixelSize: view.theme.fontSize
+      onKey: function(event) { view.key(event) }
     }
 
     Text {
@@ -417,6 +426,15 @@ Rectangle {
       height: view.theme.fontSize * 2
       color: current || inRange ? view.theme.selected : "transparent"
 
+      MouseArea {
+        anchors.fill: parent
+        onClicked: view.cursor = row.index
+        onDoubleClicked: {
+          view.cursor = row.index
+          view.key(Commands.enter())
+        }
+      }
+
       Text {
         anchors.left: parent.left
         anchors.leftMargin: view.theme.fontSize * 0.5
@@ -453,6 +471,12 @@ Rectangle {
         font.pixelSize: view.theme.fontSmall
       }
     }
+  }
+
+  // Under an open panel: a click outside it never reaches a chapter.
+  MouseArea {
+    anchors.fill: parent
+    visible: view.optionsOpen || view.picking
   }
 
   // The chapter filter and sort, drawn as the Library's panel.
@@ -500,6 +524,15 @@ Rectangle {
             color: option.current ? view.theme.accent : option.on || option.modelData.kind === "default" ? view.theme.foreground : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
+
+            MouseArea {
+              anchors.fill: parent
+              onClicked: view.optionsCursor = option.index
+              onDoubleClicked: {
+                view.optionsCursor = option.index
+                view.key(Commands.enter())
+              }
+            }
           }
         }
       }
@@ -556,6 +589,15 @@ Rectangle {
         width: pickList.width
         height: view.theme.fontSize * 2
         color: current ? view.theme.selected : "transparent"
+
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.pickCursor = pick.index
+          onDoubleClicked: {
+            view.pickCursor = pick.index
+            view.key(Commands.enter())
+          }
+        }
 
         Text {
           anchors.left: parent.left

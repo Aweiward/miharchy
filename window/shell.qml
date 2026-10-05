@@ -545,6 +545,12 @@ ShellRoot {
               color: theme.accent
               visible: tab.current
             }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.handleKey({ key: tab.modelData.key.charCodeAt(0), text: tab.modelData.key, modifiers: 0 })
+            }
           }
         }
       }
@@ -573,6 +579,9 @@ ShellRoot {
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           onSearched: function(text) { root.libraryQuery = text }
+          onPicked: function(index) { root.libraryCursor = index }
+          onCategoryPicked: function(index) { root.libraryCategory = root.switcher[index].id }
+          onOptionPicked: function(index) { root.libraryOptionsCursor = index }
         }
 
         CategoriesView {
@@ -601,6 +610,7 @@ ShellRoot {
           problem: Model.problem(root.settingsState, root.configPath)
           editError: root.settingsError
           onKey: function(event) { event.accepted = root.handleKey(event) }
+          onPicked: function(index) { root.settingsCursor = index }
           onEditEnded: keyRoot.forceActiveFocus()
         }
 
@@ -641,6 +651,7 @@ ShellRoot {
           // Off while the reader shows, so closing it reloads what it read.
           active: root.view === "history" && !reader.open
           onResume: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+          onKey: function(event) { event.accepted = root.handleKey(event) }
         }
 
         UpdatesView {
@@ -655,6 +666,7 @@ ShellRoot {
           onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
           onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
           onDownloads: function(reply) { downloadsView.apply(reply) }
+          onKey: function(event) { event.accepted = root.handleKey(event) }
         }
 
         SetupView {
@@ -697,6 +709,13 @@ ShellRoot {
           libraryIds: root.connection.manga.map(function(m) { return m.id })
           onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
           onMark: function(chapters, action, mangaId) { root.markChapters(chapters, action, [mangaId]) }
+          onKey: function(event) { event.accepted = root.handleKey(event) }
+        }
+
+        // Under the tracking panel: a click outside it never reaches a chapter.
+        MouseArea {
+          anchors.fill: parent
+          visible: trackPanel.open
         }
 
         TrackPanel {
@@ -746,13 +765,12 @@ ShellRoot {
           font.pixelSize: theme.fontSmall
         }
 
-        Text {
+        HintBar {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
           text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
-          color: theme.muted
-          font.family: theme.fontFamily
-          font.pixelSize: theme.fontSmall
+          theme: theme
+          onKey: function(event) { root.handleKey(event) }
         }
       }
 
@@ -787,6 +805,7 @@ ShellRoot {
           mangaDetail.downloadsLeft(items)
           updatesView.load()
         }
+        onKey: function(event) { root.handleKey(event) }
       }
 
       SyncView {
@@ -794,6 +813,7 @@ ShellRoot {
         anchors.fill: parent
         theme: theme
         onSynced: root.reloadAfterImport()
+        onKey: function(event) { root.handleKey(event) }
       }
 
       RestoreView {
