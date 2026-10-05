@@ -1,6 +1,8 @@
-<img src="icons/png/miharchy-128.png" alt="Miharchy" width="96">
+<a href="https://aweiward.github.io/miharchy/"><img src="site/banner.png" alt="Miharchy: a keyboard-first manga reader for Omarchy. Mihon's extensions on the desktop, your library synced with Mihon on your phone." width="1280"></a>
 
 # Miharchy
+
+See it in action on [aweiward.github.io/miharchy](https://aweiward.github.io/miharchy/).
 
 A manga reader that feels native on [Omarchy](https://omarchy.org). It uses [Mihon](https://github.com/mihonapp/mihon)'s sources and extensions through [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server), and it syncs your library with Mihon on your phone.
 
