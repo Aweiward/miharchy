@@ -93,6 +93,9 @@ var ROWS = [
       { value: 168, label: "Weekly" }
     ]
   },
+  // Read by the bar mark (plugin/Mark.js), which sends the notification
+  // when its poll finds chapters above the newest it saw.
+  { key: "notifyNewChapters", label: "Notify about new chapters", type: "bool", default: true, store: "meta" },
   // The library update skips these manga while on, as Mihon does. On
   // means skip, the server's own sense, so a fresh library may skip all.
   { key: "excludeUnreadChapters", label: "Skip manga with unread chapters", type: "bool", default: true, store: "server" },

@@ -2,6 +2,7 @@
 # Opens the Miharchy window, or focuses it when one already runs.
 # miharchy open-chapter <mangaId> <chapterId>: opens the reader on that
 # chapter, in the running window or else in a new one.
+# miharchy open-updates: opens Updates, the same way.
 dir="$(dirname "$(readlink -f "$0")")"
 
 # Every Quickshell window has class org.quickshell, so the pid of this config's
@@ -23,6 +24,13 @@ if [ "$1" = open-chapter ]; then
   fi
   export MIHARCHY_OPEN_CHAPTER="$2 $3"
   shift 3
+elif [ "$1" = open-updates ]; then
+  if quickshell ipc -p "$dir" call miharchy openUpdates >/dev/null 2>&1; then
+    focus
+    exit 0
+  fi
+  export MIHARCHY_OPEN_VIEW=updates
+  shift
 fi
 focus && exit 0
 exec quickshell -n -p "$dir" "$@"

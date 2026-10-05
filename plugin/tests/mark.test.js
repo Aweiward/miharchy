@@ -55,3 +55,71 @@ test("any failure to reach the updates is the dot; loading is not", () => {
   assert.equal(Mark.down(broken), true);
   assert.match(Mark.notice(broken, "/c").detail, /HTTP 500/);
 });
+
+const other = { id: 8, title: "Normal Girl", thumbnailUrl: null, inLibraryAt: sec(1) };
+const withNotify = (nodes, value) => M.reply(200, JSON.stringify({ data: { chapters: { nodes }, notify: { nodes: value === undefined ? [] : [{ value }] } } }));
+const poll = (m, r) => Mark.reduce(m, { type: "reply", reply: r, config, now });
+
+test("the poll asks for the notification setting in the same query", () => {
+  const q = Mark.listPayload().query;
+  assert.match(q, /chapters\(filter:/);
+  assert.match(q, /notify: metas\(condition: \{ key: "miharchy.notifyNewChapters" \}\) \{ nodes \{ value \} \} \}$/);
+  assert.equal(q.split("{").length, q.split("}").length, "braces balance");
+});
+
+test("the first poll after a start notifies nothing, however many updates wait", () => {
+  const first = poll(Mark.initial(), withNotify([chapter(1, 3), chapter(2, 4)]));
+  assert.equal(first.count, 2);
+  assert.equal(Mark.notification(first), null);
+});
+
+test("chapters above the newest seen notify once, naming each manga once", () => {
+  const first = poll(Mark.initial(), withNotify([chapter(1, 3), chapter(2, 4)]));
+  const second = poll(first, withNotify([chapter(1, 3), chapter(2, 4), chapter(5, 9), chapter(6, 9), Object.assign(chapter(7, 9), { manga: other })]));
+  assert.deepEqual(Mark.notification(second), { key: "7", title: "3 new chapters", body: "Normal Girl\nMaid to Skate" }, "newest first");
+  assert.equal(Mark.notification(poll(second, withNotify([chapter(5, 9), chapter(6, 9), chapter(7, 9)]))), null, "the same updates again notify nothing");
+});
+
+test("a chapter marked unread again, or one back after a failed poll, is no new chapter", () => {
+  const seen = poll(Mark.initial(), withNotify([chapter(3, 3), chapter(9, 4)]));
+  const readThen = poll(seen, withNotify([chapter(9, 4)]));
+  assert.equal(Mark.notification(poll(readThen, withNotify([chapter(3, 3), chapter(9, 4)]))), null, "3 is below the top");
+  const down = poll(seen, M.reply(0, ""));
+  assert.equal(down.top, 9, "a failure keeps the top");
+  assert.equal(Mark.notification(poll(down, withNotify([chapter(3, 3), chapter(9, 4)]))), null);
+  assert.equal(Mark.notification(poll(down, withNotify([chapter(9, 4), chapter(10, 5)]))).title, "1 new chapter");
+});
+
+test("the Settings row turns notifications off", () => {
+  const first = poll(Mark.initial(), withNotify([chapter(1, 3)], "false"));
+  assert.equal(Mark.notification(poll(first, withNotify([chapter(1, 3), chapter(2, 4)], "false"))), null);
+  assert.notEqual(Mark.notification(poll(first, withNotify([chapter(1, 3), chapter(2, 4)], "true"))), null);
+});
+
+test("more than five manga: five names, then how many more", () => {
+  const many = [1, 2, 3, 4, 5, 6, 7].map((i) => Object.assign(chapter(10 + i, 9), { manga: Object.assign({}, manga, { id: i, title: "M" + i }) }));
+  const n = Mark.notification(poll(poll(Mark.initial(), withNotify([chapter(1, 3)])), withNotify(many)));
+  assert.equal(n.body, "M7\nM6\nM5\nM4\nM3\nand 2 more", "newest first, as the popup lists them");
+});
+
+test("the notification goes out once across bars, and a click opens Updates", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { execFileSync } = require("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mark-notify-"));
+  const log = path.join(dir, "log");
+  fs.writeFileSync(path.join(dir, "notify-send"), "#!/bin/sh\necho \"notify-send $*\" >> " + log + "\necho default\n", { mode: 0o755 });
+  const launcher = path.join(dir, "launcher");
+  fs.writeFileSync(launcher, "echo \"launcher $*\" >> " + log + "\n");
+  const n = { key: "7", title: "3 new chapters", body: "Maid to Skate\nNormal Girl" };
+  const [cmd, ...args] = Mark.notifyCommand(n, launcher, "/icons/miharchy.svg");
+  const env = { PATH: dir + ":" + process.env.PATH, XDG_RUNTIME_DIR: dir };
+  execFileSync(cmd, args, { env });
+  execFileSync(cmd, args, { env });
+  assert.deepEqual(fs.readFileSync(log, "utf8").trim().split("\n"), [
+    "notify-send -a Miharchy -i /icons/miharchy.svg -A default=Open -- 3 new chapters Maid to Skate\nNormal Girl".split("\n")[0],
+    "Normal Girl",
+    "launcher open-updates"
+  ]);
+});

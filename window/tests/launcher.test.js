@@ -11,7 +11,7 @@ const dir = path.dirname(fs.realpathSync(launcher));
 // Fake quickshell and hyprctl log every call; the env vars below script their replies.
 const STUBS = {
   quickshell: `#!/bin/sh
-echo "quickshell $* | MIHARCHY_OPEN_CHAPTER=$MIHARCHY_OPEN_CHAPTER" >> "$STUB_LOG"
+echo "quickshell $* | MIHARCHY_OPEN_CHAPTER=$MIHARCHY_OPEN_CHAPTER\${STUB_VIEW:+ view=$MIHARCHY_OPEN_VIEW}" >> "$STUB_LOG"
 case "$1" in
   list) printf '%s\\n' "$STUB_LIST" ;;
   ipc) exit "$STUB_IPC_RC" ;;
@@ -74,6 +74,18 @@ test("open-chapter hands the chapter to the running window, then focuses it", ()
   assert.equal(calls[0], "quickshell ipc -p " + dir + " call miharchy openChapter 5 9 | MIHARCHY_OPEN_CHAPTER=");
   assert.deepEqual(dispatches(calls), [LUA_FOCUS]);
   assert.deepEqual(launches(calls), []);
+});
+
+test("open-updates shows Updates in the running window, then focuses it", () => {
+  const calls = run(["open-updates"], { STUB_LIST: RUNNING, STUB_IPC_RC: "0" });
+  assert.equal(calls[0], "quickshell ipc -p " + dir + " call miharchy openUpdates | MIHARCHY_OPEN_CHAPTER=");
+  assert.deepEqual(dispatches(calls), [LUA_FOCUS]);
+  assert.deepEqual(launches(calls), []);
+});
+
+test("open-updates with no window running starts one on Updates", () => {
+  const calls = run(["open-updates"], { STUB_VIEW: "1" });
+  assert.deepEqual(launches(calls), ["quickshell -n -p " + dir + " | MIHARCHY_OPEN_CHAPTER= view=updates"]);
 });
 
 test("open-chapter with no window running starts one on that chapter", () => {
