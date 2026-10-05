@@ -1,13 +1,16 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import "Model.js" as Model
 import "Settings.js" as Settings
+import "Storage.js" as Storage
 import "Trackers.js" as Trackers
 
-// The Settings view: one row per Settings.ROWS entry, then one per tracker
-// the server offers. Its edit fields send every key to `key` first, so the
+// The Settings view: one row per Settings.ROWS entry, the cache clear (row
+// Settings.ROWS.length) under the storage sizes, then one per tracker the
+// server offers. Its edit fields send every key to `key` first, so the
 // window's one dispatcher decides what Esc and Enter do. The tracker rows
 // talk to the server themselves; Trackers.js decides.
 Item {
@@ -28,10 +31,30 @@ Item {
   property string editStart: ""
   property string editValue: ""
 
+  // Bytes from Storage.sizes(), null until du answers; the note is the
+  // last clear's outcome.
+  property var storage: null
+  property string storageNote: ""
+  property bool clearing: false
+  // Taken when the clear starts, so freed is what it removed.
+  property var storageBefore: null
+  // A string, so a settings load that keeps the folder measures nothing.
+  readonly property string downloadsPath: values.downloadsPath || ""
+  readonly property var storageDirs: Storage.dirs({
+    HOME: Quickshell.env("HOME"),
+    MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT"),
+    MIHARCHY_SERVER_TMPDIR: Quickshell.env("MIHARCHY_SERVER_TMPDIR")
+  }, downloadsPath)
+
   signal key(var event)
   signal editEnded()
 
-  onVisibleChanged: if (visible) loadTrackers()
+  onVisibleChanged: if (visible) {
+    loadTrackers()
+    storageNote = ""
+    measure()
+  }
+  onDownloadsPathChanged: if (visible) measure()
   onConfigChanged: {
     trackers = Trackers.initial()
     loadTrackers()
@@ -77,6 +100,41 @@ Item {
         browser.running = true
       }
     })
+  }
+
+  function measure() {
+    if (du.running) return
+    du.command = Storage.command(storageDirs)
+    du.running = true
+  }
+
+  function clearCache() {
+    if (!config || clearing || du.running || !storage) return
+    clearing = true
+    storageBefore = storage
+    storageNote = ""
+    send(Storage.clearPayload(), function(reply) {
+      if (reply.state !== "ok" || !Storage.cleared(reply.data)) {
+        view.clearing = false
+        view.storageNote = reply.state !== "ok" ? reply.message || Model.problem(reply, "server.json").title : "The server could not empty the cache."
+        return
+      }
+      view.measure()
+    })
+  }
+
+  // du's exit code is 1 when a folder is missing; sizes() reads what it
+  // listed.
+  Process {
+    id: du
+    stdout: StdioCollector {
+      onStreamFinished: {
+        view.storage = Storage.sizes(view.storageDirs, text)
+        if (!view.clearing) return
+        view.clearing = false
+        view.storageNote = "Freed " + Storage.format(Math.max(0, (view.storageBefore ? view.storageBefore.cache : 0) - view.storage.cache))
+      }
+    }
   }
 
   function run(id) {
@@ -190,6 +248,46 @@ Item {
     }
 
     Column {
+      width: Math.min(parent.width, view.theme.fontSize * 60)
+
+      Text {
+        leftPadding: view.theme.fontSize * 0.75
+        bottomPadding: view.theme.fontSize * 0.5
+        text: "Storage   downloads " + (view.storage ? Storage.format(view.storage.downloads) : "measuring")
+        color: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      Rectangle {
+        readonly property bool current: view.cursor === Settings.ROWS.length
+        width: parent.width
+        height: view.theme.fontSize * 2.4
+        color: current ? view.theme.selected : "transparent"
+
+        Text {
+          anchors.left: parent.left
+          anchors.leftMargin: view.theme.fontSize * 0.75
+          anchors.verticalCenter: parent.verticalCenter
+          text: "Clear the cache"
+          color: parent.current ? view.theme.selectedText : view.theme.foreground
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+        }
+
+        Text {
+          anchors.right: parent.right
+          anchors.rightMargin: view.theme.fontSize * 0.75
+          anchors.verticalCenter: parent.verticalCenter
+          text: view.clearing ? "clearing" : (view.storageNote ? view.storageNote + "   " : "") + (view.storage ? Storage.format(view.storage.cache) : "measuring")
+          color: parent.current ? view.theme.selectedText : view.theme.muted
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+        }
+      }
+    }
+
+    Column {
       id: trackerRows
       width: Math.min(parent.width, view.theme.fontSize * 60)
 
@@ -209,7 +307,7 @@ Item {
           id: tracker
           required property var modelData
           required property int index
-          readonly property bool current: index + Settings.ROWS.length === view.cursor
+          readonly property bool current: index + Settings.ROWS.length + 1 === view.cursor
           width: parent.width
           height: view.theme.fontSize * 2.4
           color: current ? view.theme.selected : "transparent"

@@ -353,11 +353,16 @@ ShellRoot {
         break
       case "settings.up":
       case "settings.down":
-        settingsCursor = Commands.moveCursor(settingsCursor, id === "settings.up" ? -1 : 1, Settings.ROWS.length + settingsView.trackers.list.length)
+        settingsCursor = Commands.moveCursor(settingsCursor, id === "settings.up" ? -1 : 1, Settings.ROWS.length + 1 + settingsView.trackers.list.length)
         break
       case "settings.activate":
-        if (settingsCursor >= Settings.ROWS.length) {
-          settingsView.startLogin(settingsCursor - Settings.ROWS.length)
+        // After the rows: the cache clear, then the trackers.
+        if (settingsCursor === Settings.ROWS.length) {
+          settingsView.clearCache()
+          break
+        }
+        if (settingsCursor > Settings.ROWS.length) {
+          settingsView.startLogin(settingsCursor - Settings.ROWS.length - 1)
           break
         }
         var srow = Settings.ROWS[settingsCursor]
