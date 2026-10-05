@@ -96,7 +96,7 @@ Rectangle {
     var table = Chapters.PREFS.concat(Chapters.SCANLATOR_PREFS)
     var defaults = Prefs.defaults(table)
     source = { chapters: chapters, prefs: defaults }
-    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting))
+    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito)
     loadPages()
     var seq = ++startSeq
     send(Prefs.loadPayload(table, manga.id), function(reply) {
@@ -682,7 +682,19 @@ Rectangle {
   }
 
   Text {
+    id: incognitoMark
     anchors.left: parent.left
+    anchors.bottom: parent.bottom
+    anchors.margins: view.theme.fontSize
+    visible: view.reader !== null && view.reader.incognito
+    text: visible ? "incognito" : ""
+    color: view.theme.accent
+    font.family: view.theme.fontFamily
+    font.pixelSize: view.theme.fontSmall
+  }
+
+  Text {
+    anchors.left: incognitoMark.visible ? incognitoMark.right : parent.left
     anchors.bottom: parent.bottom
     anchors.margins: view.theme.fontSize
     text: view.reader ? Reader.chapterName(view.reader) + ({ first: "   no previous chapter", last: "   no next chapter" }[view.reader.edge] || "") + (view.note ? "   " + view.note : "") : ""

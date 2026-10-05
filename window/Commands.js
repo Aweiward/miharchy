@@ -49,6 +49,7 @@ var commands = [
   { id: "sync.now", title: "Sync now", keys: [] },
   { id: "restore.open", title: "Restore a backup", keys: [] },
   { id: "backup.create", title: "Create a backup", keys: [] },
+  { id: "mode.incognito", title: "Incognito mode on or off", keys: [] },
   { id: "migrate.batch", title: "Migrate a source", keys: [] },
   // Before library.reload and window.quit: on these screens r and Esc mean
   // something else.
