@@ -22,7 +22,6 @@ Item {
   property string configPath: ""
   property bool active: false
   property bool showNsfw: false
-  property bool allLanguages: false
 
   // "sources" | "extensions" | "source" | "global"
   property string screen: "sources"
@@ -30,7 +29,11 @@ Item {
   property int sourceCursor: 0
   // Browse.PREFS values, and the Sources list they group.
   readonly property var prefs: store.values
-  readonly property var sourceRows: Browse.sourceRows(src.sources, prefs)
+  readonly property var sourceRows: Browse.sourceRows(Browse.enabled(src.sources, prefs), prefs)
+  // The languages panel (l) over the Sources list.
+  property bool languagesOpen: false
+  property int languagesCursor: 0
+  readonly property var languageRows: Browse.languageRows(src.sources, prefs)
   property var listing: null
   property int gridCursor: 0
   property var global: null
@@ -44,7 +47,7 @@ Item {
   property var panelEditPath: null
   readonly property var panelRows: panel ? Widgets.rows(panel.widgets, panel.open) : []
   // The command scope: the open panel, else the screen.
-  readonly property string scope: panel ? (panel.kind === "filters" ? "source-filters" : "source-settings") : screen
+  readonly property string scope: panel ? (panel.kind === "filters" ? "source-filters" : "source-settings") : languagesOpen ? "sources-languages" : screen
   // "" | "source" | "global" | "panel": a text field is open.
   property string editing: ""
   // Only the latest request of each kind may update its state.
@@ -65,7 +68,8 @@ Item {
     source: "hjkl move   enter open   p popular   n latest   / search   F filter   " + settingsHint + "r retry   esc back   ",
     global: "hjkl move   enter open   / search   r retry   esc back   ",
     "source-filters": "j k move   enter change   a apply   x reset   esc close   ",
-    "source-settings": "j k move   enter change   esc close   "
+    "source-settings": "j k move   enter change   esc close   ",
+    "sources-languages": "j k move   enter show or hide   esc close   "
   })[scope]
 
   signal key(var event)
@@ -115,7 +119,7 @@ Item {
     src = { state: "loading", message: "", sources: src.sources }
     send({ query: Browse.SOURCES_QUERY }, function(reply) {
       if (seq !== view.sourcesSeq) return
-      view.src = Browse.sources(reply, cfg, view.showNsfw, view.allLanguages)
+      view.src = Browse.sources(reply, cfg, view.showNsfw, true)
       view.sourceCursor = Math.min(view.sourceCursor, Math.max(0, view.sourceRows.length - 1))
       if (then) then()
     })
@@ -123,7 +127,7 @@ Item {
 
   function startGlobal(query) {
     globalSeq++
-    global = GlobalSearch.search(src.sources, query)
+    global = GlobalSearch.search(Browse.enabled(src.sources, prefs), query)
     globalCursor = { row: 0, col: 0 }
     pumpGlobal()
   }
@@ -285,8 +289,22 @@ Item {
         sourceCursor = Browse.rowIndex(sourceRows, ps.id)
         break
       case "sources.languages":
-        allLanguages = !allLanguages
-        loadSources()
+        languagesOpen = true
+        break
+      case "sources.languagesClose":
+        languagesOpen = false
+        sourceCursor = Math.min(sourceCursor, Math.max(0, sourceRows.length - 1))
+        break
+      case "sources.languagesUp":
+      case "sources.languagesDown":
+        languagesCursor = Commands.moveCursor(languagesCursor, id === "sources.languagesUp" ? -1 : 1, languageRows.length)
+        break
+      case "sources.languagesChoose":
+        var lr = languageRows[languagesCursor]
+        if (!lr) break
+        store.set([Browse.chooseLanguage(prefs, lr)])
+        // The row moves as Mihon re-sorts; the cursor goes with it.
+        languagesCursor = Math.max(0, languageRows.findIndex(function(r) { return r.kind === lr.kind && r.id === lr.id }))
         break
       case "sources.refresh":
         loadSources()
@@ -526,8 +544,8 @@ Item {
 
     Text {
       anchors.centerIn: sourceList
-      visible: view.src.sources.length === 0 && Model.problem(view.src, view.configPath) === null
-      text: view.src.state === "ok" ? "No source yet. Press tab, then install an extension." : "Loading sources"
+      visible: view.sourceRows.length === 0 && Model.problem(view.src, view.configPath) === null
+      text: view.src.state !== "ok" ? "Loading sources" : view.src.sources.length ? "No source in the languages shown. Press l to pick them." : "No source yet. Press tab, then install an extension."
       color: view.theme.muted
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSize
@@ -570,11 +588,28 @@ Item {
     onPicked: function(row, col, twice) { view.point(function() { view.globalCursor = { row: row, col: Math.max(0, col) } }, twice) }
   }
 
-  // Under the filter or settings panel: a click outside it never reaches
-  // the screen below, where a double click's Enter would act on the panel.
+  // Under the filter, settings or languages panel: a click outside it never
+  // reaches the screen below, where a double click's Enter would act on
+  // the panel.
   MouseArea {
     anchors.fill: parent
-    visible: view.panel !== null
+    visible: view.panel !== null || view.languagesOpen
+  }
+
+  WidgetPanel {
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: Math.min(parent.width - view.theme.fontSize * 4, view.theme.fontSize * 30)
+    visible: view.languagesOpen
+    theme: view.theme
+    title: "Languages and sources"
+    rows: view.languageRows
+    cursor: view.languagesCursor
+    problem: view.languageRows.length ? "" : "No source yet. Press tab, then install an extension."
+    onKey: function(event) { view.key(event) }
+    onPicked: function(index, twice) { view.point(function() { view.languagesCursor = index }, twice) }
   }
 
   WidgetPanel {

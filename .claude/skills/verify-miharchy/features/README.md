@@ -5,7 +5,7 @@ One file per user-facing feature: how a user reaches it, how to drive it with `s
 | Feature | File | Proof is |
 |---|---|---|
 | Library | `library.md` | the grid shows the server's library, categories, search and filters narrow it, the sort orders it, choices survive a restart, `x x` removes |
-| Browse and add | `browse.md` | a source lists manga, the detail opens, `a` toggles `inLibrary`; `p` pins land in `miharchy.pinnedSources` and the pinned and last used sources list first |
+| Browse and add | `browse.md` | a source lists manga, the detail opens, `a` toggles `inLibrary`; `p` pins land in `miharchy.pinnedSources` and the pinned and last used sources list first; the `l` panel's languages and hidden sources land in `miharchy.enabledLanguages` and `miharchy.disabledSources` and narrow Sources and global search |
 | Manga chapter actions | `manga.md` | `R`/`u`/`P` change `isRead`/`lastPageRead`, the Library badge follows; `b` sets `isBookmarked`; `F` filter and sort land in manga meta `miharchy.chapter*`; Space resumes |
 | Reader | `reader.md` | pages render, `lastPageRead`/`isRead` saved, quit flushes the save |
 | History | `history.md` | `/` narrows the entries to titles holding the search, `Enter` keeps it, `Esc` clears it |

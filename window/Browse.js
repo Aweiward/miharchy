@@ -69,10 +69,15 @@ function sources(reply, config, showNsfw, allLanguages) {
 }
 
 // Mihon's SourcePreferences, in global meta through Prefs: pinned sources
-// as a JSON list of ids, and the last source opened.
+// as a JSON list of ids, the last source opened, the languages shown and
+// the sources hidden, JSON lists too. English and multi-language sources
+// show until the user picks, as before; Mihon starts with "all", "en" and
+// the system language.
 var PREFS = [
   { key: "pinnedSources", default: "[]" },
-  { key: "lastUsedSource", default: "" }
+  { key: "lastUsedSource", default: "" },
+  { key: "enabledLanguages", default: "[\"all\",\"en\"]" },
+  { key: "disabledSources", default: "[]" }
 ]
 
 function idList(json) {
@@ -90,12 +95,60 @@ function pinned(prefs) {
 
 // The { key, value } that pins the source, or unpins a pinned one.
 function togglePin(prefs, id) {
-  var list = pinned(prefs)
-  return { key: "pinnedSources", value: JSON.stringify(list.indexOf(id) === -1 ? list.concat([id]) : list.filter(function(p) { return p !== id })) }
+  return { key: "pinnedSources", value: toggled(pinned(prefs), id) }
 }
 
 function languageName(lang) {
   return lang === "all" ? "Multi" : lang
+}
+
+// The sources Sources and global search use: an enabled language, and not
+// hidden one by one (Mihon's GetEnabledSources).
+function enabled(sources, prefs) {
+  var langs = idList(prefs.enabledLanguages)
+  var off = idList(prefs.disabledSources)
+  return sources.filter(function(s) { return langs.indexOf(s.lang) !== -1 && off.indexOf(s.id) === -1 })
+}
+
+function toggled(list, item) {
+  return JSON.stringify(list.indexOf(item) === -1 ? list.concat([item]) : list.filter(function(i) { return i !== item }))
+}
+
+function langOrder(lang) {
+  return (lang === "all" ? "0" : "1") + lang
+}
+
+// The languages panel (Mihon's SourcesFilterScreen and
+// GetLanguagesWithSources), in WidgetPanel's shape: every language of the
+// installed sources, the enabled ones first, Multi first among each, and
+// under each enabled one its sources, the hidden ones last.
+function languageRows(sources, prefs) {
+  var langs = idList(prefs.enabledLanguages)
+  var off = idList(prefs.disabledSources)
+  var all = sources.map(function(s) { return s.lang }).filter(function(l, i, a) { return a.indexOf(l) === i })
+  var key = function(l) { return (langs.indexOf(l) !== -1 ? "0" : "1") + langOrder(l) }
+  all.sort(function(a, b) { return key(a).localeCompare(key(b)) })
+  var hidden = function(s) { return off.indexOf(s.id) !== -1 }
+  var row = function(kind, id, label, on, depth) {
+    return { kind: kind, id: id, label: label, mark: on ? "[x]" : "[ ]", detail: "", summary: "", depth: depth, enabled: true }
+  }
+  var out = []
+  all.forEach(function(lang) {
+    var on = langs.indexOf(lang) !== -1
+    out.push(row("language", lang, languageName(lang), on, 0))
+    if (!on) return
+    // Split, not sorted: a sort need not keep the name order.
+    var mine = sources.filter(function(s) { return s.lang === lang })
+    mine.filter(function(s) { return !hidden(s) }).concat(mine.filter(hidden))
+      .forEach(function(s) { out.push(row("source", s.id, s.name, !hidden(s), 1)) })
+  })
+  return out
+}
+
+// What Enter on a languages panel row changes, as { key, value }.
+function chooseLanguage(prefs, row) {
+  if (row.kind === "language") return { key: "enabledLanguages", value: toggled(idList(prefs.enabledLanguages), row.id) }
+  return { key: "disabledSources", value: toggled(idList(prefs.disabledSources), row.id) }
 }
 
 // The Sources list as Mihon's SourcesScreen groups it: the last used
@@ -380,6 +433,9 @@ if (typeof module !== "undefined") {
     togglePin: togglePin,
     sourceRows: sourceRows,
     rowIndex: rowIndex,
+    enabled: enabled,
+    languageRows: languageRows,
+    chooseLanguage: chooseLanguage,
     listing: listing,
     listingPayload: listingPayload,
     reduceListing: reduceListing,

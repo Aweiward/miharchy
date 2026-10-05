@@ -30,7 +30,7 @@ var KEY = {
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, extension (an extension's details), source,
 // global, or its panel: source-filters,
-// source-settings; Library screen: categories; or
+// source-settings, sources-languages; Library screen: categories; or
 // overlay: library-options, updates-filter, library-categories, library-remove, manga, manga-categories, manga-options,
 // manga-download, manga-select, manga-track,
 // manga-track-pick, track-ask, downloads, reader, reader-settings, sync,
@@ -70,6 +70,10 @@ var commands = [
   { id: "extension.back", title: "Back", keys: ["Esc", "Backspace"], view: "extension", hidden: true },
   // F and S close the panel they open, as F does on the Library.
   { id: "panel.closeFilters", title: "Close filters", keys: ["Esc", "Backspace", "F"], view: "source-filters", hidden: true },
+  { id: "sources.languagesClose", title: "Close languages", keys: ["Esc", "Backspace", "l"], view: "sources-languages", hidden: true },
+  { id: "sources.languagesUp", title: "Previous row", keys: ["k", "Up"], view: "sources-languages", hidden: true },
+  { id: "sources.languagesDown", title: "Next row", keys: ["j", "Down"], view: "sources-languages", hidden: true },
+  { id: "sources.languagesChoose", title: "Show or hide", keys: ["Enter", "Space"], view: "sources-languages", hidden: true },
   { id: "panel.closeSettings", title: "Close source settings", keys: ["Esc", "Backspace", "S"], view: "source-settings", hidden: true },
   { id: "manga.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga", hidden: true },
   { id: "manga.categoriesClose", title: "Close categories", keys: ["Esc", "Backspace", "c"], view: "manga-categories", hidden: true },
@@ -128,7 +132,7 @@ var commands = [
   { id: "sources.up", title: "Previous source", keys: ["k", "Up"], view: "sources", hidden: true },
   { id: "sources.down", title: "Next source", keys: ["j", "Down"], view: "sources", hidden: true },
   { id: "sources.pin", title: "Pin or unpin the source", keys: ["p"], view: "sources", hidden: true },
-  { id: "sources.languages", title: "English or every language", keys: ["l"], view: "sources", hidden: true },
+  { id: "sources.languages", title: "Languages and sources", keys: ["l"], view: "sources", hidden: true },
   { id: "sources.open", title: "Open source", keys: ["Enter"], view: "sources", hidden: true },
   { id: "source.left", title: "Previous manga", keys: ["h"], view: "source", hidden: true },
   { id: "source.right", title: "Next manga", keys: ["l"], view: "source", hidden: true },
