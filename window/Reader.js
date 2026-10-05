@@ -58,12 +58,17 @@ function at(r, index, toEnd) {
   return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", pages: [], page: 0, read: false, wasRead: false, saved: null, edge: "" })
 }
 
-// chapters: newest first, as Browse.detail holds them.
+// chapters: newest first, as Chapters.readingOrder() hands them.
 function open(mangaId, chapters, chapterId, readingMode) {
+  var l = relist(chapters, chapterId)
+  return at({ mangaId: mangaId, chapters: l.chapters, mode: readingMode }, l.index, false)
+}
+
+function relist(chapters, chapterId) {
   var list = chapters.slice().reverse().map(function(c) { return { id: c.id, name: c.name } })
   var index = 0
   for (var i = 0; i < list.length; i++) if (list[i].id === chapterId) index = i
-  return at({ mangaId: mangaId, chapters: list, mode: readingMode }, index, false)
+  return { chapters: list, index: index }
 }
 
 function chapterId(r) {
@@ -95,6 +100,8 @@ function last(r) {
 //   "saving"       savePayload() went out
 //   "save-failed"  { chapterId }
 //   "retry"        fetch the pages again after a failure
+//   "chapters"     { chapters } newest first: the list again, once the
+//                  manga's chapter choices load; the chapter open stays
 function reduce(r, event) {
   switch (event.type) {
     case "pages":
@@ -130,6 +137,8 @@ function reduce(r, event) {
       return copy(r, { saved: { page: r.page, read: r.read } })
     case "save-failed":
       return event.chapterId === chapterId(r) ? copy(r, { saved: null }) : r
+    case "chapters":
+      return copy(r, relist(event.chapters, chapterId(r)))
     case "retry":
       return r.state === "loading" || r.state === "ok" ? r : copy(r, { state: "loading", message: "" })
   }

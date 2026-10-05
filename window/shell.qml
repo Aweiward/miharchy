@@ -728,6 +728,7 @@ ShellRoot {
         deleteAfterRead: root.settingsState.values.deleteAfterRead
         pageFit: root.settingsState.values.pageFit
         webtoonWidth: root.settingsState.values.webtoonWidth
+        skip: ({ read: root.settingsState.values.skipRead, filtered: root.settingsState.values.skipFiltered, dupe: root.settingsState.values.skipDupe })
         onKey: function(event) { event.accepted = root.handleKey(event) }
         onEditEnded: keyRoot.forceActiveFocus()
         onSetting: function(row, value) { root.saveSetting(row, value) }

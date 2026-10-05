@@ -283,3 +283,10 @@ test("Home, End and a typed page number go to that page, within the chapter", ()
   assert.equal(R.pageNumber(" 7 "), 6, "pages count from 1 on screen");
   assert.ok(Number.isNaN(R.pageNumber("abc")));
 });
+
+test("a new chapter list keeps the chapter open", () => {
+  const r = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "chapters", chapters: [chapters[1], chapters[2]] });
+  assert.deepEqual(r.chapters.map((c) => c.id), [11, 12]);
+  assert.equal(R.chapterId(r), 12);
+  assert.equal(R.reduce(r, { type: "chapter", delta: 1 }).edge, "last", "the next chapter is gone");
+});

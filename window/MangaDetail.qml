@@ -216,10 +216,10 @@ Rectangle {
         break
       case "manga.read":
         var c = shown[cursor]
-        if (c) read(Chapters.readingOrder(detail.chapters, chapterPrefs.values), c.id)
+        if (c) read(detail.chapters, c.id)
         break
       case "manga.resume":
-        if (next) read(Chapters.readingOrder(detail.chapters, chapterPrefs.values), next.id)
+        if (next) read(detail.chapters, next.id)
         break
       case "manga.options":
         optionsOpen = true

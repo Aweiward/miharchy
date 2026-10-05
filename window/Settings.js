@@ -44,6 +44,11 @@ var ROWS = [
     key: "webtoonWidth", label: "Webtoon width", type: "choice", default: "60", store: "meta",
     options: ["30", "40", "50", "60", "70", "80", "90", "100"].map(function(v) { return { value: v, label: v + "% of the window" } })
   },
+  // Mihon's reader skips, applied as a chapter opens; the chapter opened
+  // always stays.
+  { key: "skipRead", label: "Skip read chapters", type: "bool", default: false, store: "meta" },
+  { key: "skipFiltered", label: "Skip filtered chapters", type: "bool", default: true, store: "meta" },
+  { key: "skipDupe", label: "Skip duplicate chapters", type: "bool", default: false, store: "meta" },
   // Cloudflare sources fail without the response fallback even when
   // FlareSolverr solves the challenge (docs/spikes/extension-spike.md).
   { key: "flareSolverrEnabled", label: "FlareSolverr", type: "bool", default: false, store: "server", whenOn: { flareSolverrAsResponseFallback: true } },

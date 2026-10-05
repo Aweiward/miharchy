@@ -1,7 +1,9 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Chapters.js" as Chapters
 import "Model.js" as Model
+import "Prefs.js" as Prefs
 import "Reader.js" as Reader
 import "Settings.js" as Settings
 
@@ -19,6 +21,10 @@ Rectangle {
   // The pageFit and webtoonWidth settings.
   property string pageFit: "screen"
   property string webtoonWidth: "60"
+  // The skipRead, skipFiltered and skipDupe settings, as Chapters.readingOrder() takes them.
+  property var skip: ({ read: false, filtered: true, dupe: false })
+  // Only the latest start may set the chapter list.
+  property int startSeq: 0
   // Whether the go-to-page field is open.
   property bool editing: false
   readonly property alias pageField: field
@@ -64,10 +70,20 @@ Rectangle {
   }
 
   // manga: the manga detail's; chapters: newest first, as it lists them;
-  // setting: miharchy.defaultReadingMode.
+  // setting: miharchy.defaultReadingMode. The pages load at once with the
+  // default chapter choices; the manga's own sort and filters follow.
   function start(manga, chapters, chapterId, setting) {
-    reader = Reader.open(manga.id, chapters, chapterId, Reader.mode(manga, setting))
+    var skip = view.skip
+    var defaults = Prefs.defaults(Chapters.PREFS)
+    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting))
     loadPages()
+    var seq = ++startSeq
+    send(Prefs.loadPayload(Chapters.PREFS, manga.id), function(reply) {
+      if (seq !== view.startSeq || !view.reader || reply.state !== "ok") return
+      var prefs = Prefs.read(Chapters.PREFS, reply.data, defaults)
+      // The chapter open now, which a quick ] may have moved, is the one kept.
+      view.reader = Reader.reduce(view.reader, { type: "chapters", chapters: Chapters.readingOrder(chapters, prefs, Reader.chapterId(view.reader), skip) })
+    })
   }
 
   function close() {

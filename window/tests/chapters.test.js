@@ -122,10 +122,39 @@ test("a bookmark sets every chapter when any is unset, else clears them all, and
   assert.equal(Ch.bookmarkPayload([]), null);
 });
 
-test("the reader reads every chapter in the manga's chosen sort, oldest first, like Mihon", () => {
+const noSkip = { read: false, filtered: false, dupe: false };
+
+test("the reader reads in the manga's chosen sort, oldest first, like Mihon", () => {
   // The reader reverses its input, so readingOrder hands it newest first.
-  const hidden = prefs({ chapterFilterUnread: "include" });
-  assert.deepEqual(ids(Ch.readingOrder(list, hidden)), [4, 3, 2, 1], "filters never hide chapters from the reader");
-  assert.deepEqual(ids(Ch.readingOrder(list, prefs({ chapterSort: "uploadDate", chapterSortDirection: "asc" }))), [4, 2, 1, 3], "upload date, ties on source order");
-  assert.deepEqual(ids(Ch.readingOrder(list, prefs({ chapterSort: "uploadDate", chapterSortDirection: "desc" }))), [4, 2, 1, 3], "the list's direction does not change the reading order");
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs({ chapterFilterUnread: "include" }), 4, noSkip)), [4, 3, 2, 1], "without skip filtered, filters hide nothing");
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs({ chapterSort: "uploadDate", chapterSortDirection: "asc" }), 4, noSkip)), [4, 2, 1, 3], "upload date, ties on source order");
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs({ chapterSort: "uploadDate", chapterSortDirection: "desc" }), 4, noSkip)), [4, 2, 1, 3], "the list's direction does not change the reading order");
+});
+
+test("skip read drops read chapters, but never the chapter opened", () => {
+  const skip = { read: true, filtered: false, dupe: false };
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs(), 3, skip)), [4, 3]);
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs(), 1, skip)), [4, 3, 1], "a read chapter opened stays, and the next one is the next unread");
+});
+
+test("skip filtered drops what the manga's chapter filter hides, but never the chapter opened", () => {
+  const skip = { read: false, filtered: true, dupe: false };
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs({ chapterFilterDownloaded: "include" }), 3, skip)), [3, 2]);
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs({ chapterFilterBookmarked: "exclude" }), 1, skip)), [4, 2, 1]);
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs(), 1, skip)), [4, 3, 2, 1], "no filter on drops nothing");
+});
+
+test("skip duplicates keeps one chapter per number: the one opened, else its scanlator's, else the first", () => {
+  const dupes = [
+    { id: 25, sourceOrder: 5, number: 2, scanlator: "B" },
+    { id: 24, sourceOrder: 4, number: 2, scanlator: "A" },
+    { id: 23, sourceOrder: 3, number: 1, scanlator: "C" },
+    { id: 22, sourceOrder: 2, number: 1, scanlator: "B" },
+    { id: 21, sourceOrder: 1, number: 1, scanlator: "A" }
+  ];
+  const skip = { read: false, filtered: false, dupe: true };
+  assert.deepEqual(ids(Ch.readingOrder(dupes, prefs(), 21, skip)), [24, 21], "scanlator A throughout");
+  assert.deepEqual(ids(Ch.readingOrder(dupes, prefs(), 22, skip)), [25, 22], "scanlator B throughout");
+  assert.deepEqual(ids(Ch.readingOrder(dupes, prefs(), 23, skip)), [24, 23], "no C for chapter 2: the first in reading order");
+  assert.deepEqual(ids(Ch.readingOrder(dupes, prefs(), 23, noSkip)), [25, 24, 23, 22, 21], "off keeps every chapter");
 });
