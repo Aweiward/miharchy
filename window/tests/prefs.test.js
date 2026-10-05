@@ -73,3 +73,9 @@ test("read never changes the values it is given", () => {
   P.read(TABLE, metas([{ key: "miharchy.librarySort", value: "unread" }]), was);
   assert.equal(was.librarySort, "title");
 });
+
+test("a choice without options takes any stored string, and an absent one keeps its default", () => {
+  const free = [{ key: "excludedScanlators", default: "[]" }];
+  assert.deepEqual(P.read(free, { manga: { meta: [{ key: "miharchy.excludedScanlators", value: "[\"A\"]" }] } }, P.defaults(free)), { excludedScanlators: "[\"A\"]" });
+  assert.deepEqual(P.read(free, metas([]), P.defaults(free)), { excludedScanlators: "[]" });
+});

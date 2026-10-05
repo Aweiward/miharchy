@@ -3,9 +3,10 @@
 
 // Chapter actions any view can run on a set of chapters: mark read or
 // unread, bookmark, and push the trackers after. Also the manga's chapter
-// list as shown: its filters and sort (Mihon's chapterFlags), the next
-// chapter to read. Pure, so tests/chapters.test.js pins it; shell.qml's
-// markChapters() sends the action payloads, for every view.
+// list as shown: its filters, excluded scanlators and sort (Mihon's
+// chapterFlags and excluded_scanlators), the next chapter to read. Pure,
+// so tests/chapters.test.js pins it; shell.qml's markChapters() sends the
+// action payloads, for every view.
 
 // Setting lastPageRead also stamps lastReadAt, which puts the chapter in the
 // history, so only chapters with a page read get the reset; Suwayomi skips an
@@ -74,17 +75,39 @@ var PREFS = FILTERS.map(function(f) { return { key: filterKey(f), default: "off"
   { key: "chapterSortDirection", default: "desc", options: ["asc", "desc"] }
 ])
 
+// Mihon's excluded scanlators: per manga only, so never a default and
+// never in PREFS, which "save as default" copies to every manga. The value
+// is a JSON list of names.
+var SCANLATOR_PREFS = [{ key: "excludedScanlators", default: "[]" }]
+
+function excluded(prefs) {
+  try {
+    var names = JSON.parse(prefs.excludedScanlators || "[]")
+    return Array.isArray(names) ? names.map(String) : []
+  } catch (e) {
+    return []
+  }
+}
+
+// The manga's scanlators, A to Z ignoring case, as Mihon's dialog lists them.
+function scanlators(chapters) {
+  var names = []
+  chapters.forEach(function(c) { if (c.scanlator && names.indexOf(c.scanlator) === -1) names.push(c.scanlator) })
+  return names.sort(function(a, b) { return a.toLowerCase().localeCompare(b.toLowerCase()) })
+}
+
 function sortOf(prefs) {
   return SORTS.filter(function(s) { return s.id === prefs.chapterSort })[0] || SORTS[0]
 }
 
-// The chapters that pass every filter, sorted; descending is newest first,
-// and source order breaks ties. A copy: the list given stays in source
-// order, which the reader turns chapters by.
+// The chapters that pass every filter and whose scanlator is not excluded,
+// sorted; descending is newest first, and source order breaks ties. A copy:
+// the list given stays in source order, which the reader turns chapters by.
 function apply(chapters, prefs) {
   var sort = sortOf(prefs)
   var dir = prefs.chapterSortDirection === "asc" ? 1 : -1
-  return chapters.filter(function(c) { return passes(c, prefs) }).sort(function(a, b) {
+  var gone = excluded(prefs)
+  return chapters.filter(function(c) { return gone.indexOf(c.scanlator) === -1 && passes(c, prefs) }).sort(function(a, b) {
     return dir * ((sort.value(a) - sort.value(b)) || (a.sourceOrder - b.sourceOrder))
   })
 }
@@ -101,13 +124,15 @@ function passes(c, prefs) {
 // the { read, filtered, dupe } reader settings. Skip read and skip filtered
 // drop chapters; skip duplicates keeps one chapter per chapter number: the
 // one opened, else one by its scanlator, else the first in reading order.
-// The chapter opened always stays. Newest first, because the reader
-// reverses its input.
+// An excluded scanlator's chapters drop whatever the skip settings say, as
+// Mihon's applyScanlatorFilter. The chapter opened always stays. Newest
+// first, because the reader reverses its input.
 function readingOrder(chapters, prefs, chapterId, skip) {
   var sort = sortOf(prefs)
+  var gone = excluded(prefs)
   var opened = chapters.filter(function(c) { return c.id === chapterId })[0]
   var list = chapters.filter(function(c) {
-    return c === opened || !(skip.read && c.read) && !(skip.filtered && !passes(c, prefs))
+    return c === opened || gone.indexOf(c.scanlator) === -1 && !(skip.read && c.read) && !(skip.filtered && !passes(c, prefs))
   }).sort(function(a, b) {
     return (sort.value(a) - sort.value(b)) || (a.sourceOrder - b.sourceOrder)
   })
@@ -126,12 +151,17 @@ function readingOrder(chapters, prefs, chapterId, skip) {
   return list.reverse()
 }
 
-// The panel: each filter with its state, each sort with "asc" or "desc" on
-// the chosen one and "" on the rest, then the two ways to save as default.
-function rows(prefs) {
+// The panel: each filter with its state, each of the manga's scanlators
+// ("exclude" or "off"), each sort with "asc" or "desc" on the chosen one
+// and "" on the rest, then the two ways to save as default. names:
+// scanlators().
+function rows(prefs, names) {
+  var gone = excluded(prefs)
   return FILTERS.map(function(f) {
     return { kind: "filter", id: f.id, label: f.label, state: prefs[filterKey(f)] }
-  }).concat(SORTS.map(function(s) {
+  }).concat(names.map(function(n) {
+    return { kind: "scanlator", id: n, label: n, state: gone.indexOf(n) === -1 ? "off" : "exclude" }
+  })).concat(SORTS.map(function(s) {
     return { kind: "sort", id: s.id, label: s.label, state: s === sortOf(prefs) ? prefs.chapterSortDirection : "" }
   })).concat([
     { kind: "default", id: "default", label: "Save as default", state: "" },
@@ -142,6 +172,10 @@ function rows(prefs) {
 // What Enter on a row changes, as [{ key, value }] for Prefs. Mihon's
 // SetMangaChapterFlags: the chosen sort flips, a new one starts ascending.
 function choose(prefs, row) {
+  if (row.kind === "scanlator") {
+    var rest = excluded(prefs).filter(function(n) { return n !== row.id })
+    return [{ key: "excludedScanlators", value: JSON.stringify(row.state === "exclude" ? rest : rest.concat([row.id])) }]
+  }
   if (row.kind === "filter") return [{ key: filterKey(row), value: Prefs.TRI_STATE[(Prefs.TRI_STATE.indexOf(row.state) + 1) % Prefs.TRI_STATE.length] }]
   if (row.kind !== "sort") return []
   if (row.state) return [{ key: "chapterSortDirection", value: row.state === "asc" ? "desc" : "asc" }]
@@ -172,6 +206,8 @@ function resumeLabel(chapters, next) {
 if (typeof module !== "undefined") {
   module.exports = {
     PREFS: PREFS,
+    SCANLATOR_PREFS: SCANLATOR_PREFS,
+    scanlators: scanlators,
     markPayload: markPayload,
     bookmarkPayload: bookmarkPayload,
     trackPayload: trackPayload,

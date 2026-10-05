@@ -3,7 +3,8 @@
 // View choices (sort, filter, display) kept in Suwayomi global meta under
 // PREFIX + key, so they survive a restart and every window reads one
 // place. A view lists its choices as a table, each { key, default,
-// options: [string] }; a stored value outside options reads as unset.
+// options: [string] }; a stored value outside options reads as unset. A
+// choice without options takes any stored string.
 // A choice for one manga (pass its mangaId) lives in that manga's meta
 // under the same key, over the global value, which is then the default for
 // every manga. Pure, so tests/prefs.test.js pins it; PrefStore.qml sends
@@ -62,7 +63,7 @@ function read(table, data, values) {
   for (var k in values) next[k] = values[k]
   table.forEach(function(c) {
     var s = stored[PREFIX + c.key]
-    if (c.options.indexOf(s) !== -1) next[c.key] = s
+    if (s !== undefined && (!c.options || c.options.indexOf(s) !== -1)) next[c.key] = s
   })
   return next
 }
