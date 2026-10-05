@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miharchy</title>
+<meta name="description" content="A keyboard-first manga reader for Omarchy. Mihon's extensions through Suwayomi-Server, synced with Mihon on your phone.">
+<meta name="theme-color" content="#1a1b26">
+<meta property="og:title" content="Miharchy">
+<meta property="og:description" content="A keyboard-first manga reader for Omarchy that syncs with Mihon.">
+<meta property="og:image" content="https://aweiward.github.io/miharchy/banner.png">
+<link rel="icon" href="miharchy.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+JP:wght@900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #1a1b26;
+  --bg-dark: #13141c;
+  --bg-darker: #0e0e14;
+  --panel: #24283b;
+  --line: #414868;
+  --fg: #c0caf5;
+  --fg-dim: #a9b1d6;
+  --red: #f7768e;
+  --blue: #7aa2f7;
+  --green: #9ece6a;
+  --yellow: #e0af68;
+  --magenta: #bb9af7;
+  --cyan: #7dcfff;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --jp: "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  position: relative;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.6 var(--mono);
+  overflow-x: hidden;
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--blue); text-underline-offset: 3px; }
+a:hover { color: var(--fg); }
+:focus-visible { outline: 2px solid var(--yellow); outline-offset: 3px; }
+.skip { position: absolute; left: -999px; top: 8px; background: var(--yellow); color: var(--bg); padding: 6px 10px; z-index: 10; }
+.skip:focus { left: 16px; }
+
+/* CRT: scanlines over everything, drifting slowly; a soft vignette. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  background:
+    repeating-linear-gradient(to bottom, rgba(0,0,0,.18) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,.35) 100%);
+  animation: drift 14s linear infinite;
+}
+@keyframes drift { to { background-position: 0 30px, 0 0; } }
+
+/* 漫画, huge, behind the page. */
+.kanji-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.kanji-bg span {
+  position: absolute;
+  right: -2vw;
+  top: 520px;
+  font: 900 34vw/1 var(--jp);
+  color: var(--fg);
+  opacity: .035;
+  writing-mode: vertical-rl;
+  user-select: none;
+}
+
+.wrap { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+section { padding: 72px 0; border-top: 1px solid var(--line); }
+.label {
+  display: inline-block;
+  font-size: 12px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--bg);
+  background: var(--red);
+  padding: 2px 10px;
+  margin: 0 0 16px;
+}
+h2 { font-size: clamp(26px, 4vw, 40px); line-height: 1.15; margin: 0 0 12px; }
+h3 { font-size: 18px; margin: 0 0 6px; }
+.lede { color: var(--fg-dim); max-width: 64ch; margin: 0 0 32px; }
+kbd {
+  font: 700 13px var(--mono);
+  color: var(--bg);
+  background: var(--fg-dim);
+  padding: 1px 6px;
+  border-bottom: 2px solid var(--line);
+}
+code { font-family: var(--mono); color: var(--green); }
+
+/* Hero: a VHS box. The spine on the left, the burst on the cover. */
+.hero { padding: 40px 0 72px; border: 0; }
+.box {
+  position: relative;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  background: var(--bg-dark);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  animation: tracking .9s steps(1, end) 1;
+}
+.spine {
+  background: var(--red);
+  color: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  writing-mode: vertical-rl;
+  padding: 18px 0;
+  font-weight: 800;
+  letter-spacing: .3em;
+  font-size: 15px;
+}
+.spine span:last-child { font: 900 20px var(--jp); letter-spacing: .1em; }
+.cover {
+  position: relative;
+  padding: 48px clamp(20px, 5vw, 64px) 44px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 24px clamp(24px, 5vw, 56px);
+  align-items: center;
+  isolation: isolate;
+}
+/* Halftone dots, fading from the top right corner. */
+.cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(var(--red) 1.6px, transparent 1.8px);
+  background-size: 11px 11px;
+  -webkit-mask-image: radial-gradient(circle at 100% 0%, #000 0, transparent 55%);
+  mask-image: radial-gradient(circle at 100% 0%, #000 0, transparent 55%);
+  opacity: .5;
+}
+.burst {
+  position: relative;
+  width: clamp(150px, 22vw, 230px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+}
+.burst::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  background: repeating-conic-gradient(from 0deg, rgba(247,118,142,.16) 0 6deg, transparent 6deg 18deg);
+  -webkit-mask-image: radial-gradient(circle, #000 20%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 20%, transparent 68%);
+}
+.burst svg { width: 100%; height: 100%; filter: drop-shadow(0 0 18px rgba(247,118,142,.45)); }
+.burst .rays { fill: var(--red); }
+.burst .cross { fill: var(--fg); }
+.title h1 {
+  font-size: clamp(44px, 8vw, 92px);
+  line-height: .95;
+  margin: 0;
+  letter-spacing: -.02em;
+  text-shadow: 0 0 22px rgba(192,202,245,.25), 3px 0 0 rgba(247,118,142,.55), -3px 0 0 rgba(125,207,255,.35);
+}
+.title .kata {
+  font: 900 clamp(22px, 3.6vw, 40px)/1 var(--jp);
+  color: var(--red);
+  margin: 0 0 12px;
+  letter-spacing: .08em;
+  text-shadow: 0 0 16px rgba(247,118,142,.5);
+}
+.pitch { font-size: clamp(16px, 2vw, 20px); color: var(--fg); margin: 18px 0 0; max-width: 46ch; }
+.install {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  background: var(--bg-darker);
+  max-width: 100%;
+}
+.install code {
+  flex: 1;
+  padding: 14px 16px;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-size: 15px;
+}
+.install code::before { content: "$ "; color: var(--red); }
+.copy {
+  font: 700 14px var(--mono);
+  background: var(--red);
+  color: var(--bg);
+  border: 0;
+  padding: 0 18px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+.copy:hover { background: var(--fg); }
+.tags { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--fg-dim); font-size: 13px; margin: 0; padding: 0; list-style: none; }
+.tags li::before { content: "▮ "; color: var(--red); }
+.box-foot {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding: 8px clamp(20px, 5vw, 64px);
+  font-size: 12px;
+  color: var(--fg-dim);
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+.rec::before { content: "● "; color: var(--red); }
+
+/* One VHS tracking glitch on load. */
+@keyframes tracking {
+  0% { transform: translateX(-6px); filter: brightness(1.6) contrast(1.3); clip-path: inset(0 0 62% 0); }
+  12% { transform: translateX(5px); clip-path: inset(30% 0 20% 0); }
+  24% { transform: translateX(-2px); filter: none; clip-path: inset(0 0 0 0); }
+  36% { transform: translateX(3px); filter: hue-rotate(-12deg); }
+  48% { transform: none; filter: none; }
+}
+
+/* Gallery: each capture a tape, its spine a label. */
+.gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.tape { margin: 0; background: var(--bg-dark); border: 1px solid var(--line); }
+.tape.wide { grid-column: 1 / -1; }
+.tape a { display: block; }
+.tape img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; border-bottom: 1px solid var(--line); }
+.tape figcaption { display: grid; grid-template-columns: auto 1fr; }
+.tape .no {
+  background: var(--red);
+  color: var(--bg);
+  font-weight: 800;
+  padding: 10px 12px;
+  font-size: 13px;
+  letter-spacing: .1em;
+}
+.tape .txt { padding: 10px 14px; font-size: 14px; color: var(--fg-dim); }
+.tape .txt b { color: var(--fg); }
+
+/* Bar widget. */
+.bar-shot { border: 1px solid var(--line); background: var(--bg-dark); max-width: 900px; }
+.bar-shot img { width: 100%; }
+.note { font-size: 13px; color: var(--fg-dim); margin: 12px 0 0; max-width: 90ch; }
+.two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 32px; align-items: start; }
+.keys { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.keys li { color: var(--fg-dim); }
+
+/* Sync diagram. */
+.sync { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch; gap: 0; }
+.node {
+  border: 1px solid var(--line);
+  background: var(--bg-dark);
+  padding: 20px;
+}
+.node .dev { font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--red); }
+.node h3 { margin-top: 6px; }
+.node p { margin: 0; color: var(--fg-dim); font-size: 14px; }
+.arrow {
+  display: grid;
+  place-items: center;
+  padding: 0 14px;
+  color: var(--red);
+  font-size: 28px;
+  font-weight: 800;
+  text-shadow: 0 0 12px rgba(247,118,142,.6);
+}
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 32px 0 0; display: grid; gap: 14px; max-width: 80ch; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 44px 1fr; gap: 12px; color: var(--fg-dim); }
+.steps li::before {
+  content: counter(s, decimal-leading-zero);
+  background: var(--panel);
+  border-left: 3px solid var(--red);
+  color: var(--fg);
+  font-weight: 800;
+  text-align: center;
+  height: 28px;
+  line-height: 28px;
+}
+
+/* Features. */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.feat { background: var(--bg-dark); padding: 22px 20px; }
+.feat .ico { color: var(--red); font-weight: 800; font-size: 13px; letter-spacing: .15em; }
+.feat p { margin: 0; color: var(--fg-dim); font-size: 14px; }
+
+/* Install. */
+pre {
+  margin: 0;
+  background: var(--bg-darker);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--red);
+  padding: 14px 16px;
+  overflow-x: auto;
+  font: 14px/1.6 var(--mono);
+  color: var(--green);
+}
+.setup { list-style: none; padding: 0; margin: 28px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.setup li { border: 1px solid var(--line); background: var(--bg-dark); padding: 14px 16px; color: var(--fg-dim); font-size: 14px; }
+.setup b { color: var(--fg); display: block; }
+
+footer { border-top: 1px solid var(--line); padding: 40px 0 56px; color: var(--fg-dim); font-size: 14px; }
+footer .row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px; align-items: center; }
+footer img { width: 32px; height: 32px; display: inline-block; vertical-align: middle; margin-right: 10px; }
+
+@media (max-width: 860px) {
+  .cover { grid-template-columns: minmax(0, 1fr); }
+  .burst { width: 140px; }
+  .gallery { grid-template-columns: 1fr; }
+  .two { grid-template-columns: 1fr; }
+  .sync { grid-template-columns: 1fr; }
+  .arrow { padding: 8px 0; transform: rotate(90deg); }
+}
+@media (max-width: 520px) {
+  .box { grid-template-columns: 36px minmax(0, 1fr); }
+  .spine { font-size: 11px; }
+  .spine span:last-child { font-size: 15px; }
+  .box-foot { grid-column: 1 / -1; }
+  .copy { padding: 0 12px; }
+  section { padding: 56px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::after, .box { animation: none; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="kanji-bg" aria-hidden="true"><span>漫画</span></div>
+
+<main id="main" class="wrap">
+
+<header class="hero" id="hero">
+  <div class="box">
+    <div class="spine" aria-hidden="true"><span>MIHARCHY</span><span>ミハーキー</span></div>
+    <div class="cover">
+      <div class="burst" aria-hidden="true">
+        <svg viewBox="0 0 48 48" focusable="false">
+          <path class="rays" d="M 1 5 H 13 V 9 H 1 Z M 1 11 H 13 V 15 H 1 Z M 1 33 H 13 V 37 H 1 Z M 1 39 H 13 V 43 H 1 Z M 35 5 H 47 V 9 H 35 Z M 35 11 H 47 V 15 H 35 Z M 35 33 H 47 V 37 H 35 Z M 35 39 H 47 V 43 H 35 Z"/>
+          <path class="cross" d="M 15 3 H 33 V 45 H 15 Z"/>
+          <path class="cross" d="M 2 18 H 46 V 30 H 2 Z"/>
+        </svg>
+      </div>
+      <div class="title">
+        <p class="kata" lang="ja" aria-hidden="true">ミハーキー</p>
+        <h1>Miharchy</h1>
+        <p class="pitch">A keyboard-first manga reader for Omarchy. Mihon's extensions on the desktop, your library synced with Mihon on your phone.</p>
+      </div>
+      <div class="install">
+        <code id="cmd">omarchy plugin add https://github.com/Aweiward/miharchy --enable</code>
+        <button class="copy" type="button" data-copy="cmd" aria-label="Copy the install command">Copy</button>
+      </div>
+      <ul class="tags">
+        <li>Omarchy plugin</li>
+        <li>Mihon extensions</li>
+        <li>Syncs with Mihon</li>
+        <li>MIT</li>
+      </ul>
+    </div>
+    <div class="box-foot" aria-hidden="true"><span class="rec">REC</span><span>Tokyo Night</span><span>SP · 漫画</span></div>
+  </div>
+</header>
+
+<section id="window" aria-labelledby="window-h">
+  <p class="label">Side A · the window</p>
+  <h2 id="window-h">Your library, one key away</h2>
+  <p class="lede">A Quickshell window that follows your Omarchy theme. Every view below is a real capture of Miharchy on a scratch server, in the Tokyo Night theme. Select a capture to open it full size.</p>
+  <div class="gallery">
+    <figure class="tape wide">
+      <a href="img/library.webp"><img src="img/library.webp" width="1280" height="800" alt="The Library view: a grid of manga covers with unread-chapter badges, and category tabs All, Default, Reading, Webtoon and Plan to read." loading="eager"></a>
+      <figcaption><span class="no">01</span><span class="txt"><b>Library.</b> Covers, unread badges, categories. Sort, filter and search with <kbd>F</kbd> and <kbd>/</kbd>.</span></figcaption>
+    </figure>
+    <figure class="tape">
+      <a href="img/manga.webp"><img src="img/manga.webp" width="1280" height="800" alt="The manga page for Yotsuba&amp;!: cover, author, genres, description and the chapter list with read chapters dimmed." loading="lazy"></a>
+      <figcaption><span class="no">02</span><span class="txt"><b>Manga.</b> Chapters, read state, bookmarks. <kbd>Space</kbd> resumes where you stopped.</span></figcaption>
+    </figure>
+    <figure class="tape">
+      <a href="img/reader-paged.webp"><img src="img/reader-paged.webp" width="1280" height="800" alt="The paged reader showing a black-and-white page of Yotsuba&amp;! chapter 110, read right to left." loading="lazy"></a>
+      <figcaption><span class="no">03</span><span class="txt"><b>Paged reader.</b> Right to left, left to right, vertical, spreads.</span></figcaption>
+    </figure>
+    <figure class="tape">
+      <a href="img/reader-webtoon.webp"><img src="img/reader-webtoon.webp" width="1280" height="800" alt="The webtoon reader showing a full-color strip of Eleceed with a speech bubble above a white cat." loading="lazy"></a>
+      <figcaption><span class="no">04</span><span class="txt"><b>Webtoon.</b> Long strips scroll as one, picked from the manga's tags.</span></figcaption>
+    </figure>
+    <figure class="tape">
+      <a href="img/updates.webp"><img src="img/updates.webp" width="1280" height="800" alt="The Updates view listing new chapters of Blue Lock, One-Punch Man and Bocchi the Rock!, grouped under Today." loading="lazy"></a>
+      <figcaption><span class="no">05</span><span class="txt"><b>Updates.</b> New chapters from your library, filters and bulk actions.</span></figcaption>
+    </figure>
+    <figure class="tape wide">
+      <a href="img/browse.webp"><img src="img/browse.webp" width="1280" height="800" alt="Browse: MangaDex search results for Bocchi the Rock as a cover grid, with the title already in the library marked." loading="lazy"></a>
+      <figcaption><span class="no">06</span><span class="txt"><b>Browse.</b> Every source from Mihon's extension repos: search, filters, global search, extensions.</span></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="bar" aria-labelledby="bar-h">
+  <p class="label">Side B · the bar</p>
+  <h2 id="bar-h">New chapters in the bar</h2>
+  <div class="two">
+    <div>
+      <div class="bar-shot">
+        <img src="img/bar-popup.webp" width="1520" height="600" alt="The Miharchy mark in a bar strip with a count of 4, and its popup listing four new chapters with the hints enter read, w window, s sync and r refresh." loading="lazy">
+      </div>
+      <p class="note">The mark and its popup are the real <code>plugin/Mark.qml</code>, rendered offscreen. The bar around them (workspaces, clock, tray) and the popup's frame are stand-ins drawn for this picture, not a desktop capture.</p>
+    </div>
+    <ul class="keys">
+      <li>The mark counts unread updates and checks once a minute.</li>
+      <li><kbd>Left click</kbd> lists the new chapters. <kbd>Enter</kbd> opens one in the reader.</li>
+      <li><kbd>Middle click</kbd> or <kbd>w</kbd> opens the window.</li>
+      <li><kbd>s</kbd> syncs with your phone; the burst turns green while it runs.</li>
+      <li>A notification tells you when new chapters land.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="sync" aria-labelledby="sync-h">
+  <p class="label">Dubbing · phone ⇄ desktop</p>
+  <h2 id="sync-h">Syncs with Mihon</h2>
+  <p class="lede">Stock Mihon on the phone, no fork, no account. The two meet in a folder you already sync, through Mihon's own backup files.</p>
+  <div class="sync" role="img" aria-label="Diagram: Mihon on the phone writes backups to a shared sync folder; Miharchy on the desktop merges them and writes a backup back for Mihon to restore.">
+    <div class="node"><span class="dev">Phone</span><h3>Mihon</h3><p>Automatic backups, and Restore backup for the file Miharchy writes.</p></div>
+    <div class="arrow" aria-hidden="true">⇄</div>
+    <div class="node"><span class="dev">Sync folder</span><h3>.tachibk files</h3><p>Shared by Syncthing or any folder sync. Miharchy keeps its newest three.</p></div>
+    <div class="arrow" aria-hidden="true">⇄</div>
+    <div class="node"><span class="dev">Desktop</span><h3>Miharchy</h3><p>A three-way merge of library, categories, read state and tracks.</p></div>
+  </div>
+  <ol class="steps">
+    <li><span>Turn on automatic backups in Mihon, and share that folder with the desktop.</span></li>
+    <li><span>Press <kbd>s</kbd> in the window or the bar popup. Miharchy merges the newest phone backup and writes <code>miharchy-&lt;time&gt;.tachibk</code>.</span></li>
+    <li><span>Restore that file in Mihon. Anything a restore cannot apply, such as a manga you removed, is listed after the sync.</span></li>
+  </ol>
+</section>
+
+<section id="features" aria-labelledby="features-h">
+  <p class="label">Specs</p>
+  <h2 id="features-h">What's on the tape</h2>
+  <div class="grid">
+    <div class="feat"><span class="ico">KEYS</span><h3>Keyboard first</h3><p>vim keys everywhere, and <kbd>:</kbd> opens a palette of every command.</p></div>
+    <div class="feat"><span class="ico">MOUSE</span><h3>Mouse too</h3><p>Click, double-click, scroll and tap zones in the reader. Hints are buttons.</p></div>
+    <div class="feat"><span class="ico">READ</span><h3>Five reading modes</h3><p>Paged both ways, vertical, webtoon and continuous. Two-page spreads, page fit, split wide pages.</p></div>
+    <div class="feat"><span class="ico">SRC</span><h3>Mihon's extensions</h3><p>Install from extension repos, search one source or all of them, set source filters and settings.</p></div>
+    <div class="feat"><span class="ico">TRACK</span><h3>Trackers</h3><p>Log in to the trackers Suwayomi offers. Progress goes out when you finish a chapter.</p></div>
+    <div class="feat"><span class="ico">LOCAL</span><h3>Local manga</h3><p>Point it at a folder of chapters or CBZ files and read them like any source.</p></div>
+    <div class="feat"><span class="ico">DL</span><h3>Downloads</h3><p>A queue you can reorder, CBZ, auto-download of new chapters, delete after reading.</p></div>
+    <div class="feat"><span class="ico">BAK</span><h3>Backups and restore</h3><p>Write and restore Mihon-format backups, by hand or on a schedule.</p></div>
+    <div class="feat"><span class="ico">INC</span><h3>Incognito mode</h3><p>Read without saving progress or history, and nothing goes to trackers. Downloaded-only mode for offline days.</p></div>
+    <div class="feat"><span class="ico">MIG</span><h3>Migrate</h3><p>Move a manga to another source with its read state, categories and tracks.</p></div>
+    <div class="feat"><span class="ico">LIB</span><h3>Library tools</h3><p>Categories, sorts, filters, selection and bulk actions, history with search.</p></div>
+    <div class="feat"><span class="ico">THEME</span><h3>Your Omarchy theme</h3><p>Colors and fonts follow the active theme, live.</p></div>
+  </div>
+</section>
+
+<section id="install" aria-labelledby="install-h">
+  <p class="label">Install</p>
+  <h2 id="install-h">One command, then Setup</h2>
+  <pre><code>omarchy plugin add https://github.com/Aweiward/miharchy --enable</code></pre>
+  <p class="note">This adds the mark to the bar. Middle click it to open the window. The first time, the window opens on Setup. Move with <kbd>j</kbd> and <kbd>k</kbd>, press <kbd>Enter</kbd> on a step, and <kbd>y</kbd> to run it. Setup never runs <code>sudo</code>: it shows the command for you to run.</p>
+  <ol class="setup">
+    <li><b>Java</b><code>sudo pacman -S jdk-openjdk</code></li>
+    <li><b>Suwayomi-Server</b><code>yay -S suwayomi-server-bin</code></li>
+    <li><b>Server</b>A local user service on 127.0.0.1, with its own password.</li>
+    <li><b>FlareSolverr</b>Optional, for Cloudflare sources (Docker).</li>
+    <li><b>Sync folder</b>The folder Mihon and Miharchy share.</li>
+    <li><b>Sync helper</b>Builds the sync helper once, a few minutes.</li>
+    <li><b>App launcher entry</b>Miharchy in Super + Space.</li>
+  </ol>
+  <p class="note">Update with <code>omarchy plugin update miharchy</code>. The <a href="https://github.com/Aweiward/miharchy#readme">README</a> has the details and how to uninstall.</p>
+</section>
+
+</main>
+
+<footer class="wrap">
+  <div class="row">
+    <span><img src="miharchy.svg" alt="" width="32" height="32"><b>Miharchy</b> · MIT · <a href="https://github.com/Aweiward/miharchy">github.com/Aweiward/miharchy</a></span>
+    <span>Built on <a href="https://github.com/mihonapp/mihon">Mihon</a>, <a href="https://github.com/Suwayomi/Suwayomi-Server">Suwayomi-Server</a> and <a href="https://omarchy.org">Omarchy</a>.</span>
+  </div>
+  <p class="note">Miharchy is not affiliated with Mihon, Suwayomi or Omarchy. Manga covers and pages in the captures belong to their authors and publishers, and are shown only to illustrate the reader.</p>
+</footer>
+
+<script>
+document.querySelectorAll("[data-copy]").forEach(function(b) {
+  b.addEventListener("click", function() {
+    var text = document.getElementById(b.dataset.copy).textContent
+    navigator.clipboard.writeText(text).then(function() {
+      b.textContent = "Copied"
+      setTimeout(function() { b.textContent = "Copy" }, 1600)
+    })
+  })
+})
+</script>
+</body>
+</html>
