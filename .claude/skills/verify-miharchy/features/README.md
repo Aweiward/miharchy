@@ -16,5 +16,6 @@ One file per user-facing feature: how a user reaches it, how to drive it with `s
 | Mouse | `mouse.md` | a click moves the cursor and a double click runs what Enter runs, on every list; hint parts and tabs press their key; reader tap zones turn in the reading direction; the wheel scrolls lists and the webtoon strip and turns paged pages |
 | Extensions | `extensions.md` | Enter on an installed extension shows its version, language and sources; Enter on a source opens its settings and a change lands in `source { preferences }`; `x x` in the details uninstalls; `U` updates every extension with an update |
 | Migrate | `migrate.md` | the target joins the library with the old categories, read state and tracks (`trackRecords` read back); `t` on the confirm leaves the tracks out; the old manga leaves only after the target write |
+| Trackers | `trackers.md` | the panel lists the manga's tracks; `o`/`y` hand the track's link to `xdg-open`/`wl-copy` (stubbed); date and private writes send `updateTrack` inputs the server accepts |
 
-Not yet mapped: the rest of Settings, Setup, Global search, Trackers, History, the bar plugin (`plugin/Mark.qml`, rendered offscreen with the shell's `Commons`/`Ui` copied into a scratch Quickshell config).
+Not yet mapped: the rest of Settings, Setup, Global search, tracker logins, History, the bar plugin (`plugin/Mark.qml`, rendered offscreen with the shell's `Commons`/`Ui` copied into a scratch Quickshell config).

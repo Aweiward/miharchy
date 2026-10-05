@@ -18,8 +18,8 @@ var CREDENTIALS_MUTATION = "mutation($id: Int!, $username: String!, $password: S
   + " loginTrackerCredentials(input: { trackerId: $id, username: $username, password: $password }) { isLoggedIn tracker { " + TRACKER_FIELDS + " } } }"
 var LOGOUT_MUTATION = "mutation($id: Int!) { logoutTracker(input: { trackerId: $id }) { isLoggedIn tracker { " + TRACKER_FIELDS + " } } }"
 
-var RECORD_FIELDS = "id trackerId remoteId title status displayScore lastChapterRead totalChapters remoteUrl"
-var PANEL_QUERY = "query($id: Int!) { trackers { nodes { id name isLoggedIn scores statuses { value name } } }"
+var RECORD_FIELDS = "id trackerId remoteId title status displayScore lastChapterRead totalChapters remoteUrl startDate finishDate private"
+var PANEL_QUERY = "query($id: Int!) { trackers { nodes { id name isLoggedIn scores statuses { value name } supportsReadingDates supportsPrivateTracking } }"
   + " manga(id: $id) { trackRecords { nodes { " + RECORD_FIELDS + " } } } }"
 var SEARCH_QUERY = "query($id: Int!, $query: String!) { searchTracker(input: { trackerId: $id, query: $query }) {"
   + " trackSearches { remoteId title publishingType startDate totalChapters } } }"
@@ -205,8 +205,27 @@ function toRecord(n) {
     score: String(n.displayScore || ""),
     read: Number(n.lastChapterRead) || 0,
     total: n.totalChapters || 0,
-    url: String(n.remoteUrl || "")
+    url: String(n.remoteUrl || ""),
+    start: Number(n.startDate) || 0,
+    finish: Number(n.finishDate) || 0,
+    private: n.private === true
   }
+}
+
+// A track date: epoch milliseconds at UTC midnight, as Mihon's date picker
+// gives; 0 is no date.
+function formatDate(ms) {
+  return ms ? new Date(ms).toISOString().slice(0, 10) : ""
+}
+
+// Typed text -> { ms } (0 clears the date) or { error }.
+function parseDate(text) {
+  var t = String(text).trim()
+  if (!t) return { ms: 0 }
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t)
+  var ms = m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : NaN
+  if (!m || formatDate(ms) !== t) return { error: "Enter a date as 2026-01-31, or nothing to clear it." }
+  return { ms: ms }
 }
 
 function toRows(data) {
@@ -216,7 +235,10 @@ function toRows(data) {
     return t.isLoggedIn === true || records[t.id]
   }).map(function(t) {
     return {
-      tracker: { id: t.id, name: String(t.name), loggedIn: t.isLoggedIn === true, statuses: t.statuses || [], scores: t.scores || [] },
+      tracker: {
+        id: t.id, name: String(t.name), loggedIn: t.isLoggedIn === true, statuses: t.statuses || [], scores: t.scores || [],
+        dates: t.supportsReadingDates === true, privacy: t.supportsPrivateTracking === true
+      },
       record: records[t.id] || null
     }
   })
@@ -238,6 +260,9 @@ function summary(row) {
   if (!r) return "not tracked"
   var parts = [statusName(row.tracker, r.status), number(r.read) + " / " + (r.total || "?") + " chapters"]
   if (r.score && r.score !== "0" && r.score !== "-") parts.push("score " + r.score)
+  if (r.start) parts.push("started " + formatDate(r.start))
+  if (r.finish) parts.push("finished " + formatDate(r.finish))
+  if (r.private) parts.push("private")
   return parts.filter(function(x) { return x }).join("   ")
 }
 
@@ -276,6 +301,8 @@ function stay(p) {
 //   "chapters"              the chapters read field
 //   "progress" { text }     that field committed
 //   "unbind"                "written" { trackerId, reply } for a write
+//   "start" | "finish"      the reading date field  "date" { text } it committed
+//   "private"               private on or off, where the tracker has it
 function act(p, event) {
   var row = current(p)
   switch (event.type) {
@@ -344,6 +371,20 @@ function act(p, event) {
     case "unbind":
       if (!r) return stay(p)
       return write(p, { query: UNBIND_MUTATION, variables: { id: r.id } })
+    case "start":
+    case "finish":
+      if (!r) return stay(copy(p, { error: "Find the manga on " + row.tracker.name + " first: Enter." }))
+      if (!row.tracker.dates) return stay(copy(p, { error: row.tracker.name + " keeps no reading dates." }))
+      return stay(copy(p, { mode: event.type, error: "" }))
+    case "date":
+      if (!r || (p.mode !== "start" && p.mode !== "finish")) return stay(p)
+      var d = parseDate(event.text)
+      if (d.error) return stay(copy(p, { error: d.error }))
+      return write(p, update(r, p.mode === "start" ? { startDate: String(d.ms) } : { finishDate: String(d.ms) }))
+    case "private":
+      if (!r) return stay(copy(p, { error: "Find the manga on " + row.tracker.name + " first: Enter." }))
+      if (!row.tracker.privacy) return stay(copy(p, { error: row.tracker.name + " has no private tracking." }))
+      return write(p, update(r, { private: !r.private }))
   }
   return stay(p)
 }
@@ -352,7 +393,15 @@ function act(p, event) {
 function fieldStart(p) {
   var row = current(p)
   if (p.mode === "progress" && row && row.record) return number(row.record.read)
+  if ((p.mode === "start" || p.mode === "finish") && row && row.record) return formatDate(p.mode === "start" ? row.record.start : row.record.finish)
   return p.title
+}
+
+// The tracker's page for the track under the cursor, or "". Mihon offers
+// it on a logged-out tracker's track too.
+function link(p) {
+  var row = current(p)
+  return row && row.record ? row.record.url : ""
 }
 
 if (typeof module !== "undefined") {
@@ -371,6 +420,8 @@ if (typeof module !== "undefined") {
     panelPayload: panelPayload,
     summary: summary,
     act: act,
-    fieldStart: fieldStart
+    fieldStart: fieldStart,
+    link: link,
+    parseDate: parseDate
   }
 }
