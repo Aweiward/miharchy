@@ -74,7 +74,7 @@ A manga reader for Omarchy (Arch + Hyprland). It reads Mihon's extension ecosyst
 
 ## Current work
 
-v1 is built: every v1 ticket (#1 to #17, plus #21 to #23 and #35) is merged. Since then: Migrate (#52), window focus (#45) and the reader's save on quit (#46), credential-free images (#44), the global search timeout (#47) trackers (#41) and the phone's tracks in sync (#66) are merged. The open GitHub issues are the follow-ups: local manga (v1.1) and the AUR package. Work them through `ready-for-agent` issues.
+The v1 base is built and merged. The work now is Mihon parity for v1.0.0, tracked in #134 (milestone v1.0.0). Almost every parity item is merged. Two are left: logging in to a source in a WebView (#98) and local manga (#42). Outside the milestone, the AUR package (#43) is open. Check `gh issue list --milestone v1.0.0` for the current list, and work items through `ready-for-agent` issues.
 
 Verified on the user's phone (2026-10-04): stock Mihon restores a `miharchy-*.tachibk` export from a real 216-manga library without issues. The FlareSolverr Setup step ran on the user's machine; `docs/spikes/cloudflare-solvers.md` compares it with Byparr.
 
