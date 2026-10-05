@@ -26,7 +26,7 @@ Item {
   // What a second x or X does to the targets: "remove", "delete" or "".
   property string armed: ""
   property var targets: []
-  readonly property string armedText: armed === "remove" ? "x again to remove from library" : "X again to delete downloads"
+  readonly property string armedText: armed === "remove" ? "x again to remove, d with downloads" : "X again to delete downloads"
   // The change categories panel's rows (Library.categoryRows), shown while
   // picking.
   property bool picking: false
