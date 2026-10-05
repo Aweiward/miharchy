@@ -24,9 +24,20 @@ function copy(o, changes) {
 
 var MODE_MUTATION = "mutation($meta: MangaMetaTypeInput!) { setMangaMeta(input: { meta: $meta }) { meta { key value } } }"
 var MODE_KEY = "miharchy.readingMode"
-// The order m cycles through.
-var MODES = ["paged-rtl", "paged-ltr", "webtoon"]
-var MODE_LABELS = { "paged-rtl": "right to left", "paged-ltr": "left to right", "webtoon": "webtoon" }
+// The order m cycles through: Mihon's reading modes.
+var MODES = ["paged-rtl", "paged-ltr", "paged-vertical", "webtoon", "continuous-vertical"]
+var MODE_LABELS = { "paged-rtl": "right to left", "paged-ltr": "left to right", "paged-vertical": "vertical", "webtoon": "webtoon", "continuous-vertical": "continuous vertical" }
+
+// Webtoon and continuous vertical read as one strip; the rest page.
+function strip(readingMode) {
+  return readingMode === "webtoon" || readingMode === "continuous-vertical"
+}
+
+// The space under each page of the strip: 15dp in Mihon's continuous
+// vertical, none in webtoon.
+function stripGap(readingMode) {
+  return readingMode === "continuous-vertical" ? 15 : 0
+}
 
 // Webtoon keys scroll by these parts of the view height; paged keys turn
 // one page their way.
@@ -42,9 +53,10 @@ function mode(manga, setting) {
 }
 
 // The keys follow the screen: in right-to-left the next page lies to the
-// left, as in a Japanese book. side: "left" | "right" -> +1 next, -1 back.
+// left, as in a Japanese book; left to right and vertical read on to the
+// right, as Mihon's. side: "left" | "right" -> +1 next, -1 back.
 function delta(readingMode, side) {
-  return (side === "right") === (readingMode === "paged-ltr") ? 1 : -1
+  return (side === "right") === (readingMode !== "paged-rtl") ? 1 : -1
 }
 
 // reader.state: "loading" | "ok" | a failed connection state.
@@ -243,28 +255,29 @@ function action(r, id, atEnd, atStart) {
   var side = { "reader.left": "left", "reader.right": "right" }[id]
   // On the transition page every key that reads on or back turns at once.
   if (r.transition) {
-    var d = side ? (r.mode === "webtoon" ? 0 : delta(r.mode, side)) : SCROLL[id] ? (SCROLL[id] > 0 ? 1 : -1) : 0
+    var d = side ? (strip(r.mode) ? 0 : delta(r.mode, side)) : SCROLL[id] ? (SCROLL[id] > 0 ? 1 : -1) : 0
     return d ? { turn: d } : null
   }
-  if (side) return r.mode === "webtoon" ? null : { turn: delta(r.mode, side) }
+  if (side) return strip(r.mode) ? null : { turn: delta(r.mode, side) }
   if (!SCROLL[id]) return null
   var forward = SCROLL[id] > 0
   if (!(forward ? atEnd : atStart)) return { scroll: SCROLL[id] }
-  return r.mode === "webtoon" ? { turn: forward ? 1 : -1, chapter: true } : { turn: forward ? 1 : -1 }
+  return strip(r.mode) ? { turn: forward ? 1 : -1, chapter: true } : { turn: forward ? 1 : -1 }
 }
 
 // Where a click on the reader lands, as the key command it stands for,
-// or null. x, y: the click; w, h: the reader's size. Paged follows
-// Mihon's default pager navigation (RightAndLeftNavigation): the left
-// third is reader.left and the right third reader.right, so the reading
-// direction decides the turn as it does for h and l. Webtoon follows
-// Mihon's default L layout: the top third and the left of the middle
-// scroll back, the bottom third and the right of the middle scroll on.
-// The middle opens Mihon's menu; Miharchy has none, so it does nothing.
+// or null. x, y: the click; w, h: the reader's size. Right to left and
+// left to right follow Mihon's default pager navigation
+// (RightAndLeftNavigation): the left third is reader.left and the right
+// third reader.right, so the reading direction decides the turn as it
+// does for h and l. Vertical and the strip follow Mihon's default L
+// layout there: the top third and the left of the middle read back, the
+// bottom third and the right of the middle read on. The middle opens
+// Mihon's menu; Miharchy has none, so it does nothing.
 function tapZone(readingMode, x, y, w, h) {
   var fx = x / w
   var fy = y / h
-  if (readingMode !== "webtoon") return fx < 0.33 ? "reader.left" : fx >= 0.66 ? "reader.right" : null
+  if (readingMode === "paged-rtl" || readingMode === "paged-ltr") return fx < 0.33 ? "reader.left" : fx >= 0.66 ? "reader.right" : null
   if (fy < 0.33 || (fy < 0.66 && fx < 0.33)) return "reader.halfUp"
   if (fy >= 0.66 || fx >= 0.66) return "reader.halfDown"
   return null
@@ -371,13 +384,16 @@ function canQuit(s) {
 // fit, width: the pageFit and webtoonWidth settings.
 function indicator(r, fit, width) {
   if (r.state !== "ok") return ""
-  var shape = r.mode === "webtoon" ? width + "%" : FIT_LABELS[fit]
+  var shape = strip(r.mode) ? width + "%" : FIT_LABELS[fit]
   return (r.page + 1) + " / " + r.pages.length + "   " + MODE_LABELS[r.mode] + (shape ? "   " + shape : "")
 }
 
 if (typeof module !== "undefined") {
   module.exports = {
     SLOTS: SLOTS,
+    MODES: MODES,
+    strip: strip,
+    stripGap: stripGap,
     mode: mode,
     delta: delta,
     open: open,

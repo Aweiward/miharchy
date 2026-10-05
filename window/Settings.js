@@ -35,7 +35,9 @@ var ROWS = [
     options: [
       { value: "paged-rtl", label: "Paged right-to-left" },
       { value: "paged-ltr", label: "Paged left-to-right" },
-      { value: "webtoon", label: "Webtoon" }
+      { value: "paged-vertical", label: "Paged vertical" },
+      { value: "webtoon", label: "Webtoon" },
+      { value: "continuous-vertical", label: "Continuous vertical" }
     ]
   },
   // Mihon's image scale type, for paged reading; z in the reader cycles it.
