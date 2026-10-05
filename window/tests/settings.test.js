@@ -9,17 +9,21 @@ const ok = (data) => ({ type: "response", reply: M.reply(200, JSON.stringify({ d
 test("every row is complete, and a choice's default is one of its options", () => {
   const keys = new Set();
   for (const r of S.ROWS) {
-    assert.ok(r.key && r.label && ["bool", "choice", "text", "folder", "category"].includes(r.type) && ["server", "meta"].includes(r.store), r.key);
-    assert.ok("default" in r, r.key);
     assert.ok(!keys.has(r.key), "unique key " + r.key);
     keys.add(r.key);
+    if (r.type === "action") {
+      assert.ok(r.label && r.command && !("store" in r), r.key);
+      continue;
+    }
+    assert.ok(r.key && r.label && ["bool", "choice", "text", "folder", "category"].includes(r.type) && ["server", "meta"].includes(r.store), r.key);
+    assert.ok("default" in r, r.key);
     if (r.type === "choice") assert.ok(r.options.some((o) => o.value === r.default), r.key);
   }
 });
 
 test("the first rows and their defaults", () => {
-  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "Page fit", "Webtoon width", "Reader background", "Keep the screen on", "Always show chapter transition", "Skip read chapters", "Skip filtered chapters", "Skip duplicate chapters", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Default category", "Download folder", "Save downloads as CBZ", "Auto-download new chapters", "Auto-download only for manga with no unread chapters", "Auto-download skips re-uploaded chapters", "Delete downloads marked read", "Delete after reading", "Delete bookmarked chapters", "Update trackers after reading", "Update trackers when marking chapters read", "Sync folder"]);
-  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, autoDownloadNewChapters: false, excludeEntryWithUnreadChapters: true, autoDownloadIgnoreReUploads: false, deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, trackAfterReading: true, trackOnMarkRead: "always", syncFolder: "" });
+  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "Page fit", "Webtoon width", "Reader background", "Keep the screen on", "Always show chapter transition", "Skip read chapters", "Skip filtered chapters", "Skip duplicate chapters", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Default category", "Download folder", "Save downloads as CBZ", "Auto-download new chapters", "Auto-download only for manga with no unread chapters", "Auto-download skips re-uploaded chapters", "Delete downloads marked read", "Delete after reading", "Delete bookmarked chapters", "Update trackers after reading", "Update trackers when marking chapters read", "Sync folder", "Backup folder", "Backups include categories", "Backups include chapters", "Backups include tracking", "Backups include history", "Create a backup"]);
+  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, autoDownloadNewChapters: false, excludeEntryWithUnreadChapters: true, autoDownloadIgnoreReUploads: false, deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, trackAfterReading: true, trackOnMarkRead: "always", syncFolder: "", backupPath: "", autoBackupIncludeCategories: true, autoBackupIncludeChapters: true, autoBackupIncludeTracking: true, autoBackupIncludeHistory: true });
   assert.deepEqual(row("defaultReadingMode").options.map((o) => o.label), ["Paged right-to-left", "Paged left-to-right", "Webtoon"]);
 });
 
@@ -39,7 +43,7 @@ test("a load reply sets server values and namespaced meta, defaults fill the res
     ] }
   }));
   assert.equal(s.state, "ok");
-  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, autoDownloadNewChapters: false, excludeEntryWithUnreadChapters: true, autoDownloadIgnoreReUploads: false, deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, trackAfterReading: true, trackOnMarkRead: "always", syncFolder: "" });
+  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, autoDownloadNewChapters: false, excludeEntryWithUnreadChapters: true, autoDownloadIgnoreReUploads: false, deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, trackAfterReading: true, trackOnMarkRead: "always", syncFolder: "", backupPath: "", autoBackupIncludeCategories: true, autoBackupIncludeChapters: true, autoBackupIncludeTracking: true, autoBackupIncludeHistory: true });
 });
 
 test("the page fit and webtoon width come back from meta after a restart; an unknown one reads as the default", () => {
@@ -164,6 +168,39 @@ test("a typed folder must be absolute; ~ means home; trailing slashes go", () =>
   assert.deepEqual(S.commitFolder("~", "/home/u"), { folder: "/home/u" });
   assert.deepEqual(S.commitFolder("/", "/home/u"), { folder: "/" });
   for (const bad of ["", "Sync", "~user/x"]) assert.ok(S.commit(folder, bad, "/home/u").error, bad);
+});
+
+test("the backup folder never is the sync folder, and the sync folder never the backup folder", () => {
+  const backup = row("backupPath");
+  const sync = row("syncFolder");
+  assert.ok(S.commit(backup, "/home/u/Sync/", "/home/u", { syncFolder: "/home/u/Sync" }).error);
+  assert.ok(S.commit(sync, "~/Backups", "/home/u", { backupPath: "/home/u/Backups/" }).error);
+  assert.deepEqual(S.commit(backup, "/home/u/Backups", "/home/u", { syncFolder: "/home/u/Sync" }), { save: "/home/u/Backups" });
+  assert.deepEqual(S.commit(backup, "", "/home/u", { syncFolder: "/home/u/Sync" }), { save: "" }, "blank is the server's own folder");
+  assert.deepEqual(S.commit(sync, "~/Sync", "/home/u", { backupPath: "" }), { folder: "/home/u/Sync" });
+  assert.ok(S.commit(backup, "Backups", "/home/u", {}).error, "a relative path");
+});
+
+test("saving the backup folder keeps the server password out of automatic backups", () => {
+  assert.deepEqual(S.savePayload(row("backupPath"), "/home/u/Backups").variables.s, { backupPath: "/home/u/Backups", autoBackupIncludeServerSettings: false });
+  assert.equal(S.display(row("backupPath"), ""), "server default");
+});
+
+test("the backup include rows are the server's automatic backup settings", () => {
+  for (const part of ["Categories", "Chapters", "Tracking", "History"]) {
+    const r = row("autoBackupInclude" + part);
+    assert.equal(r.store, "server");
+    assert.deepEqual(S.savePayload(r, false).variables.s, { ["autoBackupInclude" + part]: false });
+  }
+});
+
+test("Create a backup is an action: Enter runs its command and the row shows the outcome", () => {
+  const r = row("createBackup");
+  assert.deepEqual(S.activate(r, undefined), { run: "backup.create" });
+  assert.equal(S.display(r, "Wrote /b/x.tachibk"), "Wrote /b/x.tachibk");
+  assert.equal(S.display(r, undefined), "");
+  assert.ok(!("createBackup" in S.initial().values));
+  assert.doesNotMatch(S.loadPayload().query, /createBackup/);
 });
 
 test("the sync folder is the meta Setup writes, shown as not set until then", () => {

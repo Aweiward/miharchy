@@ -18,9 +18,9 @@ Fill the cache over REST with the server.json credentials: `fetchChapterPages(in
 ```js
 [
   [5000, function() { key("5") }],
-  [3000, function() { log("before", settingsView.storage); for (var i = 0; i < 22; i++) key("j"); grab("before") }],
+  [3000, function() { log("before", settingsView.storage); for (var i = 0; i < Settings.ROWS.length; i++) key("j"); grab("before") }],
   [300, function() { key("Enter") }],
   [4000, function() { log("after", settingsView.storage); log("note", settingsView.storageNote); grab("after"); done() }]
 ]
 ```
-The 22 is `Settings.ROWS.length`. Read back: `du -s -B1` on `$RUN/server/tmp/Tachidesk/*` and `$RUN/server/downloads`. The server deletes both cache folders, and downloads keep their byte count. `ls /tmp/Tachidesk` must be unchanged.
+Count `Settings.ROWS.length` at run time rather than hard-coding it: rows keep being added. Settings scrolls, so the cursor's row is always on screen. Read back: `du -s -B1` on `$RUN/server/tmp/Tachidesk/*` and `$RUN/server/downloads`. The server deletes both cache folders, and downloads keep their byte count. `ls /tmp/Tachidesk` must be unchanged.

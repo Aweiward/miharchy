@@ -13,8 +13,13 @@
 //   a folder row is a text row that takes an absolute path or ~ (see
 //   commitFolder) and saves only once the folder exists;
 //   bool rows may add whenOn, extra server settings sent along when the
-//   row turns on; a category row's options are the user's categories, so
-//   activate() and display() take them.
+//   row turns on; any server row may add with, extra server settings sent
+//   along with every save; a category row's options are the user's
+//   categories, so activate() and display() take them.
+//   A text or folder row may add notSameAs, the key of a folder row it
+//   must differ from.
+// An action row { key, label, type: "action", command } stores nothing:
+// Enter runs the command id, and the view shows its outcome as the value.
 // A later setting is one more entry here.
 
 var META_PREFIX = Prefs.PREFIX
@@ -135,12 +140,23 @@ var ROWS = [
     ]
   },
   // Setup sets it too; the sync helper reads it from the server.
-  { key: "syncFolder", label: "Sync folder", type: "folder", default: "", store: "meta", blank: "not set" }
+  { key: "syncFolder", label: "Sync folder", type: "folder", default: "", store: "meta", blank: "not set", notSameAs: "backupPath" },
+  // Mihon's backup options. Manual and automatic backups share Suwayomi's
+  // automatic backup settings, so one folder holds both. Never the sync
+  // folder: the sync would read Suwayomi's backups as phone backups. The
+  // server settings hold the server password, so they stay out of a
+  // folder the user picks.
+  { key: "backupPath", label: "Backup folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default", notSameAs: "syncFolder", with: { autoBackupIncludeServerSettings: false } },
+  { key: "autoBackupIncludeCategories", label: "Backups include categories", type: "bool", default: true, store: "server" },
+  { key: "autoBackupIncludeChapters", label: "Backups include chapters", type: "bool", default: true, store: "server" },
+  { key: "autoBackupIncludeTracking", label: "Backups include tracking", type: "bool", default: true, store: "server" },
+  { key: "autoBackupIncludeHistory", label: "Backups include history", type: "bool", default: true, store: "server" },
+  { key: "createBackup", label: "Create a backup", type: "action", command: "backup.create" }
 ]
 
 function defaults() {
   var v = {}
-  ROWS.forEach(function(r) { v[r.key] = r.default })
+  ROWS.forEach(function(r) { if (r.type !== "action") v[r.key] = r.default })
   return v
 }
 
@@ -163,6 +179,7 @@ function savePayload(row, value) {
   var s = {}
   s[row.key] = value
   if (value === true && row.whenOn) for (var k in row.whenOn) s[k] = row.whenOn[k]
+  for (var w in row.with) s[w] = row.with[w]
   return {
     query: "mutation($s: PartialSettingsTypeInput!) { setSettings(input: { settings: $s }) { settings { " + row.key + " } } }",
     variables: { s: s }
@@ -227,8 +244,9 @@ function categoryOptions(categories) {
 
 // What Enter or Space does to a row: { save: newValue } for bool, choice
 // and category rows, { edit: currentText } for text rows. categories: the
-// user's, for a category row.
+// user's, for a category row. An action row gives { run: commandId }.
 function activate(row, value, categories) {
+  if (row.type === "action") return { run: row.command }
   if (row.type === "bool") return { save: !value }
   if (row.type === "category") {
     var options = categoryOptions(categories)
@@ -251,15 +269,23 @@ function commitFolder(text, home) {
 
 // An edited text -> { save: value } or { error: message }. A folder row
 // gives { folder } instead: the caller checks that it exists, then saves.
-function commit(row, text, home) {
-  if (row.type === "folder") return commitFolder(text, home)
-  var t = String(text).trim()
-  if (row.pattern && !row.pattern.test(t)) return { error: row.hint }
-  return { save: t }
+// values: the rows' current values, for notSameAs.
+function commit(row, text, home, values) {
+  var done = row.type === "folder" ? commitFolder(text, home) : row.pattern && !row.pattern.test(String(text).trim()) ? { error: row.hint } : { save: String(text).trim() }
+  var path = "folder" in done ? done.folder : done.save
+  var other = row.notSameAs && values ? values[row.notSameAs] : ""
+  if (path && other && samePath(path, other)) return { error: "The sync folder and the backup folder must differ: the sync would read the server's backups as phone backups." }
+  return done
+}
+
+function samePath(a, b) {
+  var trim = function(p) { return String(p).replace(/(.)\/+$/, "$1") }
+  return trim(a) === trim(b)
 }
 
 // A deleted category shows as always ask, which is what adding then does.
 function display(row, value, categories) {
+  if (row.type === "action") return value || ""
   if (row.type === "bool") return value ? "on" : "off"
   if (row.type === "category") {
     var found = categoryOptions(categories).filter(function(o) { return o.value === value })[0]

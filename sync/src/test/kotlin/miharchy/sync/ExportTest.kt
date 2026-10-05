@@ -140,4 +140,20 @@ class ExportTest {
         )
         assertContentEquals(byteArrayOf(4), folder.resolve("miharchy-2026-10-04_00-00-00.tachibk").readBytes())
     }
+
+    @Test fun `a backup made by hand is no phone backup, and pruning neither takes it nor counts it`() {
+        val folder = Files.createTempDirectory("sync-folder")
+        folder.resolve("phone.tachibk").writeBytes(byteArrayOf(9))
+        val manual = writeBackup(folder, backupName(Instant.parse("2026-10-05T00:00:00Z")), byteArrayOf(7))
+        assertEquals("miharchy-backup-2026-10-05_00-00-00.tachibk", manual.name)
+        for (day in 1..4) writeExport(folder, "miharchy-2026-10-0${day}_00-00-00.tachibk", byteArrayOf(day.toByte()))
+        assertEquals(
+            listOf(
+                "miharchy-2026-10-02_00-00-00.tachibk", "miharchy-2026-10-03_00-00-00.tachibk", "miharchy-2026-10-04_00-00-00.tachibk",
+                "miharchy-backup-2026-10-05_00-00-00.tachibk", "phone.tachibk",
+            ),
+            folder.listDirectoryEntries().map { it.name }.sorted(),
+        )
+        assertEquals("phone.tachibk", newestPhoneBackup(folder)?.name)
+    }
 }
