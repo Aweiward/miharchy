@@ -92,13 +92,13 @@ test("the library answer becomes manga with absolute cover URLs", () => {
 
 test("a library manga carries what search, filters and sort read; LongString times become numbers", () => {
   const body = { data: { mangas: { nodes: [
-    { id: 7, title: "Yotsuba&!", author: "Azuma", artist: null, genre: ["Comedy"], status: "COMPLETED", sourceId: "1", source: { id: "1", displayName: "MangaDex (EN)" }, unreadCount: 3, downloadCount: 2, bookmarkCount: 1,
+    { id: 7, title: "Yotsuba&!", author: "Azuma", artist: null, genre: ["Comedy"], status: "COMPLETED", sourceId: "1", source: { id: "1", displayName: "MangaDex (EN)", lang: "en" }, unreadCount: 3, downloadCount: 2, bookmarkCount: 1,
       inLibraryAt: "1700000000", chapters: { totalCount: 10 }, lastReadChapter: { lastReadAt: "1700000500" }, latestUploadedChapter: { uploadDate: "1690000000000" },
       latestFetchedChapter: { fetchedAt: "1700000100" }, trackRecords: { totalCount: 2 } },
     { id: 8, title: "Bare", sourceId: "9", source: null }
   ] }, metas: { nodes: [{ value: JSON.stringify({ 9: "Asura Scans" }) }] } } };
   const [full, bare] = M.reduce(M.initial(), respond(200, body)).manga;
-  assert.deepEqual({ ...full, cover: undefined }, { id: 7, title: "Yotsuba&!", cover: undefined, categories: [], source: "MangaDex (EN)", unread: 3, author: "Azuma", artist: "", genre: ["Comedy"], status: "COMPLETED",
+  assert.deepEqual({ ...full, cover: undefined }, { id: 7, title: "Yotsuba&!", cover: undefined, categories: [], source: "MangaDex (EN)", lang: "en", unread: 3, author: "Azuma", artist: "", genre: ["Comedy"], status: "COMPLETED",
     total: 10, read: 7, downloads: 2, bookmarks: 1, tracks: 2, lastRead: 1700000500, latestUpload: 1690000000000, lastUpdate: 1700000100, added: 1700000000 });
   assert.deepEqual([bare.read, bare.lastRead, bare.added, bare.genre, bare.status], [0, 0, 0, [], ""]);
   assert.equal(bare.source, "Asura Scans (not installed)", "a missing source takes its name from the sync's meta");

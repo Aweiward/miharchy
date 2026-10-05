@@ -89,7 +89,7 @@ Item {
         required property var modelData
         required property int index
         anchors.bottom: parent.bottom
-        text: modelData.name
+        text: Library.tabLabel(modelData, view.prefs, view.query)
         color: index === view.switcherIndex ? view.theme.foreground : view.theme.muted
         font.underline: index === view.switcherIndex
         font.family: view.theme.fontFamily
@@ -172,7 +172,10 @@ Item {
         source: cell.modelData.cover
         title: cell.modelData.title
         current: cell.current
-        badge: cell.modelData.unread
+        readonly property var badges: Library.badges(cell.modelData, view.prefs)
+        badge: badges.unread
+        downloads: badges.downloads
+        lang: badges.lang
       }
 
       Text {
@@ -260,7 +263,8 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.5
         anchors.verticalCenter: parent.verticalCenter
-        text: row.modelData.unread ? row.modelData.unread + " unread" : ""
+        readonly property var badges: Library.badges(row.modelData, view.prefs)
+        text: [badges.lang, badges.downloads ? badges.downloads + " downloaded" : "", badges.unread ? badges.unread + " unread" : ""].filter(function(t) { return t }).join("   ")
         color: row.current ? view.theme.selectedText : view.theme.accent
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
@@ -333,7 +337,7 @@ Item {
           Text {
             visible: option.index === 0 || option.modelData.kind !== view.optionRows[option.index - 1].kind
             topPadding: option.index === 0 ? 0 : view.theme.fontSize * 0.8
-            text: ({ filter: "Filter", sort: "Sort", display: "Display" })[option.modelData.kind]
+            text: ({ filter: "Filter", sort: "Sort", display: "Display", badge: "Badges", tabs: "Tabs" })[option.modelData.kind]
             color: view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSmall
@@ -341,7 +345,7 @@ Item {
 
           Text {
             width: parent.width
-            text: ({ off: "[ ] ", include: "[+] ", exclude: "[-] ", "": "    ", asc: " ↑  ", desc: " ↓  ", picked: "(•) ", unpicked: "( ) " })[option.modelData.state] + option.modelData.label
+            text: ({ off: "[ ] ", include: "[+] ", exclude: "[-] ", "": "    ", asc: " ↑  ", desc: " ↓  ", picked: "(•) ", unpicked: "( ) ", on: "[x] " })[option.modelData.state] + option.modelData.label
             color: option.current ? view.theme.accent : option.on ? view.theme.foreground : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
