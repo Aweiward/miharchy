@@ -314,7 +314,7 @@ function step(options, value, dir) {
 // The settings panel (s), Mihon's reader settings sheet: the manga's own
 // reading mode, then the Settings rows the reader reads, which apply to
 // every manga. A later reader setting is one more key here.
-var PANEL_KEYS = ["pageFit", "webtoonWidth", "readerTheme", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
+var PANEL_KEYS = ["pageFit", "webtoonWidth", "readerTheme", "keepScreenOn", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
 
 // The readerTheme setting -> the reader's background; themeColor for
 // "theme". Gray is Mihon's ReaderGrayBackgroundColor.

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import "Model.js" as Model
 import "Commands.js" as Commands
 import "Settings.js" as Settings
@@ -639,6 +640,14 @@ ShellRoot {
         reader.quit()
         break
     }
+  }
+
+  // Mihon's keep screen on: the compositor's idle inhibit holds hypridle
+  // off while the reader shows and the window is visible.
+  IdleInhibitor {
+    id: idleInhibitor
+    window: window
+    enabled: reader.open && root.settingsState.values.keepScreenOn
   }
 
   FloatingWindow {

@@ -56,6 +56,9 @@ var ROWS = [
       { value: "white", label: "White" }
     ]
   },
+  // Mihon's keep screen on, on by default here: hypridle would lock a page
+  // read slowly.
+  { key: "keepScreenOn", label: "Keep the screen on", type: "bool", default: true, store: "meta" },
   // Off, the transition page between chapters shows only past either end,
   // on a gap in the chapter numbers, or when the chapter cannot load.
   { key: "alwaysShowChapterTransition", label: "Always show chapter transition", type: "bool", default: true, store: "meta" },
