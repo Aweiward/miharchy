@@ -1,4 +1,5 @@
 .pragma library
+.import "Prefs.js" as Prefs
 
 // The Library's search, filters and sort, after Mihon's library sheet and
 // toolbar search. Pure, so tests/library.test.js pins it; shell.qml runs
@@ -6,9 +7,7 @@
 // The choices live in server meta through Prefs.js (PREFS); the search
 // does not persist, as in Mihon.
 
-// Mihon's tri-state: a filter is off, keeps only matching manga (include)
-// or drops them (exclude). Choosing one again moves to the next state.
-var STATES = ["off", "include", "exclude"]
+var STATES = Prefs.TRI_STATE
 
 // A manga is the shape Model.fromResponse() builds.
 var FILTERS = [
