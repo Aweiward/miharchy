@@ -102,6 +102,7 @@ var commands = [
   { id: "extensions.down", title: "Next row", keys: ["j", "Down"], view: "extensions", hidden: true },
   { id: "extensions.activate", title: "Install extension or show its details", keys: ["Enter"], view: "extensions", hidden: true },
   { id: "extensions.update", title: "Update extension", keys: ["u"], view: "extensions", hidden: true },
+  { id: "extensions.updateAll", title: "Update all extensions", keys: ["U"], view: "extensions", hidden: true },
   { id: "extensions.remove", title: "Uninstall extension or remove repo", keys: ["x"], view: "extensions", hidden: true },
   { id: "extension.up", title: "Previous source", keys: ["k", "Up"], view: "extension", hidden: true },
   { id: "extension.down", title: "Next source", keys: ["j", "Down"], view: "extension", hidden: true },

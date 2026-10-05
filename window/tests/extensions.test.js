@@ -152,6 +152,36 @@ test("details list the extension's sources by name and open settings only where 
   assert.equal(failed.state, "unauthorized");
 });
 
+test("update all sends every installed extension with an update in one mutation", () => {
+  let s = loadedState();
+  const second = Object.assign({}, s.extensions.find((e) => e.name === "Asura Scans"), { pkgName: "pkg.Second", name: "Second", hasUpdate: true });
+  s = Object.assign({}, s, { extensions: s.extensions.concat([second]) });
+  const u = E.updateAll(s);
+  assert.deepEqual(u.pkgNames, ["pkg.MangaDex", "pkg.Second"]);
+  assert.match(u.payload.query, /updateExtensions\(input: \{ ids: \$ids, patch: \{ update: true \} \}\)/);
+  assert.deepEqual(u.payload.variables, { ids: ["pkg.MangaDex", "pkg.Second"] });
+
+  const busy = E.reduce(s, { type: "update-all", pkgNames: u.pkgNames });
+  const row = (st, t) => E.rows(st, {}).find((r) => r.title === t);
+  assert.equal(E.status(busy, row(busy, "MangaDex")), "updating...");
+  assert.equal(E.status(busy, row(busy, "Second")), "updating...");
+  assert.equal(E.updateAll(busy), null, "nothing more while they run");
+
+  const done = E.reduce(busy, { type: "update-all-reply", pkgNames: u.pkgNames, config, reply: ok({ updateExtensions: { extensions: [
+    node({ name: "MangaDex", lang: "all", isInstalled: true, hasUpdate: false, versionName: "1.6.1" }),
+    node({ name: "Second", isInstalled: true, hasUpdate: false })
+  ] } }) });
+  assert.equal(row(done, "MangaDex").group, "Installed");
+  assert.equal(row(done, "Second").group, "Installed");
+  assert.equal(E.status(done, row(done, "Second")), "");
+  assert.equal(E.updateAll(done), null, "no update left");
+
+  const failed = E.reduce(busy, { type: "update-all-reply", pkgNames: u.pkgNames, config, reply: M.reply(200, JSON.stringify({ errors: [{ message: "Exception while fetching data (/updateExtensions) : Failed to download\nstack" }] })) });
+  assert.equal(E.status(failed, row(failed, "MangaDex")), "Failed to download");
+  assert.equal(E.status(failed, row(failed, "Second")), "Failed to download");
+  assert.deepEqual(E.updateAll(failed).pkgNames, u.pkgNames, "a failure leaves them to retry");
+});
+
 test("a repo is removed by the URL the server stores, never the one typed", () => {
   let s = E.reduce(E.initial(), { type: "load" });
   s = reply(s, stores([PB]));
