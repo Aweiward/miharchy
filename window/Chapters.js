@@ -82,25 +82,46 @@ function sortOf(prefs) {
 function apply(chapters, prefs) {
   var sort = sortOf(prefs)
   var dir = prefs.chapterSortDirection === "asc" ? 1 : -1
-  return chapters.filter(function(c) {
-    return FILTERS.every(function(f) {
-      var state = prefs[filterKey(f)]
-      return state === "off" || f.test(c) === (state === "include")
-    })
-  }).sort(function(a, b) {
+  return chapters.filter(function(c) { return passes(c, prefs) }).sort(function(a, b) {
     return dir * ((sort.value(a) - sort.value(b)) || (a.sourceOrder - b.sourceOrder))
   })
 }
 
-// The reader's chapter list, like Mihon's ReaderViewModel: every chapter (a
-// filter never hides one from the reader) in the manga's chosen sort, read
-// ascending whatever the list's direction. Newest first, because the reader
-// reverses its input.
-function readingOrder(chapters, prefs) {
-  var sort = sortOf(prefs)
-  return chapters.slice().sort(function(a, b) {
-    return (sort.value(b) - sort.value(a)) || (b.sourceOrder - a.sourceOrder)
+function passes(c, prefs) {
+  return FILTERS.every(function(f) {
+    var state = prefs[filterKey(f)]
+    return state === "off" || f.test(c) === (state === "include")
   })
+}
+
+// The reader's chapter list, like Mihon's ReaderViewModel.chapterList: the
+// manga's chosen sort, read ascending whatever the list's direction. skip:
+// the { read, filtered, dupe } reader settings. Skip read and skip filtered
+// drop chapters; skip duplicates keeps one chapter per chapter number: the
+// one opened, else one by its scanlator, else the first in reading order.
+// The chapter opened always stays. Newest first, because the reader
+// reverses its input.
+function readingOrder(chapters, prefs, chapterId, skip) {
+  var sort = sortOf(prefs)
+  var opened = chapters.filter(function(c) { return c.id === chapterId })[0]
+  var list = chapters.filter(function(c) {
+    return c === opened || !(skip.read && c.read) && !(skip.filtered && !passes(c, prefs))
+  }).sort(function(a, b) {
+    return (sort.value(a) - sort.value(b)) || (a.sourceOrder - b.sourceOrder)
+  })
+  if (skip.dupe && opened) {
+    var groups = {}
+    var numbers = []
+    list.forEach(function(c) {
+      if (!groups[c.number]) { groups[c.number] = []; numbers.push(c.number) }
+      groups[c.number].push(c)
+    })
+    list = numbers.map(function(n) {
+      var g = groups[n]
+      return g.indexOf(opened) !== -1 ? opened : g.filter(function(c) { return c.scanlator === opened.scanlator })[0] || g[0]
+    })
+  }
+  return list.reverse()
 }
 
 // The panel: each filter with its state, each sort with "asc" or "desc" on
