@@ -102,9 +102,12 @@ function move(r, delta) {
 }
 
 // chapters: newest first, as Chapters.readingOrder() hands them.
-function open(mangaId, chapters, chapterId, readingMode) {
+// incognito: Mihon's incognito mode, taken once as the reader opens. The
+// reader then saves no read state, so no history either, pushes nothing
+// to trackers and deletes nothing after reading.
+function open(mangaId, chapters, chapterId, readingMode, incognito) {
   var l = relist(chapters, chapterId)
-  return at({ mangaId: mangaId, chapters: l.chapters, mode: readingMode }, l.index, false)
+  return at({ mangaId: mangaId, chapters: l.chapters, mode: readingMode, incognito: incognito === true }, l.index, false)
 }
 
 function relist(chapters, chapterId) {
@@ -202,7 +205,7 @@ function reduce(r, event) {
 // lastPageRead to a page count it only knows then) or when nothing changed.
 // isRead only ever turns on.
 function savePayload(r) {
-  if (r.state !== "ok") return null
+  if (r.state !== "ok" || r.incognito) return null
   if (r.saved && r.saved.page === r.page && r.saved.read === r.read) return null
   var patch = { lastPageRead: r.page }
   if (r.read) patch.isRead = true
@@ -212,7 +215,7 @@ function savePayload(r) {
 // The tracker push due after savePayload()'s reply: only for the save that
 // first marks the chapter read. Take it before "saving" records the save.
 function trackPayload(r) {
-  if (r.state !== "ok" || !r.read || r.wasRead || (r.saved && r.saved.read)) return null
+  if (r.state !== "ok" || r.incognito || !r.read || r.wasRead || (r.saved && r.saved.read)) return null
   return Chapters.trackPayload([r.mangaId])
 }
 
@@ -222,7 +225,7 @@ function trackPayload(r) {
 // leaves the chapter, so its pages stay on disk while it shows. -> a
 // chapter id, or null.
 function deleteTarget(r, slots) {
-  if (slots < 0 || r.state !== "ok" || !r.read || r.wasRead) return null
+  if (slots < 0 || r.state !== "ok" || r.incognito || !r.read || r.wasRead) return null
   var c = r.chapters[r.index - slots]
   return c ? c.id : null
 }

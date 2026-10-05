@@ -15,6 +15,7 @@ The reader overlay: paged (RTL/LTR) or webtoon, page preload, read state saved t
 - `m` cycles the reading mode (saved per manga in meta `miharchy.readingMode`); `f` fullscreen (real compositor only).
 - `s` opens the settings panel (Mihon's reader settings sheet, `reader.panelOpen`, scope `reader-settings`): "This manga" holds the reading mode (manga meta, as `m`), "Every manga" the Settings rows in `Reader.PANEL_KEYS` (global meta, the same rows as the Settings view). `j`/`k` move, Enter or Space change a row at once, Esc, `s` or `q` close it. A skip change lists the chapters again at once (`reader.relist()`), keeping the chapter open. Rows: `reader.panelRows`, cursor `reader.panelCursor`; a row's delegate is `find(reader, function(i) { return i.modelData && i.modelData.key === "<key>" && i.current !== undefined })`.
 - Saves `lastPageRead` 1 s after the last turn; marks `isRead` on the last page; quitting flushes the pending save.
+- Incognito (palette "Incognito mode on or off", Settings row, global meta `miharchy.incognito`): the reader takes it as it opens (`reader.reader.incognito`) and then saves nothing (no `lastPageRead`, `isRead` or `lastReadAt`, so no history), sends no `trackProgress` and deletes nothing after reading. The status bar and the reader's bottom-left show "incognito" in the accent color. Prove it: toggle it with `root.run("mode.incognito")`, read a chapter to its end (End), `window.quit`, and read back the chapter unchanged.
 
 ## How to get to it (user POV)
 Library → `Enter` on a manga → `Enter` on a chapter.

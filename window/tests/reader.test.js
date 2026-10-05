@@ -421,3 +421,18 @@ test("the reader background is black, Mihon's gray, white, or the theme's backgr
   assert.equal(R.background("theme", "#1a1b26"), "#1a1b26");
   assert.ok(R.PANEL_KEYS.includes("readerTheme"), "the reader's settings panel offers it");
 });
+
+test("in incognito the reader saves no read state, pushes no track and deletes nothing", () => {
+  const open = R.open(5, chapters, 13, "paged-rtl", true);
+  assert.equal(open.incognito, true);
+  const read = turn(turn(R.reduce(open, { type: "pages", reply: pages(13, 3), config }), 1), 1);
+  assert.equal(read.read, true, "the chapter still reads to its end");
+  assert.equal(R.savePayload(read), null, "no lastPageRead or isRead, so no history entry");
+  assert.equal(R.trackPayload(read), null);
+  assert.equal(R.deleteTarget(read, 0), null);
+  assert.equal(R.reduce(read, { type: "chapter", delta: -1 }).incognito, true, "the mode holds for the reader's whole session");
+  const plain = turn(turn(R.reduce(R.open(5, chapters, 13, "paged-rtl"), { type: "pages", reply: pages(13, 3), config }), 1), 1);
+  assert.notEqual(R.savePayload(plain), null, "without incognito the same reading saves");
+  assert.notEqual(R.trackPayload(plain), null);
+  assert.equal(R.deleteTarget(plain, 0), 13);
+});

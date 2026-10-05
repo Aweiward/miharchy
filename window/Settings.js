@@ -25,6 +25,9 @@
 var META_PREFIX = Prefs.PREFIX
 
 var ROWS = [
+  // Mihon's More screen toggles, also in the palette. The status bar and
+  // the reader show them while on (modes()).
+  { key: "incognito", label: "Incognito mode", type: "bool", default: false, store: "meta" },
   { key: "showNsfw", label: "Show NSFW sources", type: "bool", default: false, store: "meta" },
   {
     key: "defaultReadingMode", label: "Default reading mode", type: "choice", default: "paged-rtl", store: "meta",
@@ -306,6 +309,19 @@ function samePath(a, b) {
   return trim(a) === trim(b)
 }
 
+// The modes on, as the status bar names them beside the connection.
+var MODES = [["incognito", "incognito"]]
+
+function modes(values) {
+  return MODES.filter(function(m) { return values[m[0]] === true }).map(function(m) { return m[1] })
+}
+
+// The palette's toggle for a mode row: the save that flips it.
+function toggle(key, values) {
+  var row = ROWS.filter(function(r) { return r.key === key })[0]
+  return { row: row, value: !values[key] }
+}
+
 // A deleted category shows as always ask, which is what adding then does.
 function display(row, value, categories) {
   if (row.type === "action") return value || ""
@@ -332,6 +348,8 @@ if (typeof module !== "undefined") {
     activate: activate,
     commitFolder: commitFolder,
     commit: commit,
-    display: display
+    display: display,
+    modes: modes,
+    toggle: toggle
   }
 }

@@ -505,6 +505,10 @@ ShellRoot {
         settingsCursor = Settings.ROWS.map(function(r) { return r.command }).indexOf(id)
         settingsView.createBackup()
         break
+      case "mode.incognito":
+        var mode = Settings.toggle(id.slice(5), settingsState.values)
+        saveSetting(mode.row, mode.value)
+        break
       case "palette.open":
         paletteOpen = true
         palette.open()
@@ -987,7 +991,9 @@ ShellRoot {
           id: connectionText
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          text: ({ loading: "connecting", ok: "connected", "no-config": "no server config", down: "server down", unauthorized: "unauthorized", error: "server error" })[root.connection.state]
+          // The modes on follow, in the accent color, as Mihon's banners.
+          textFormat: Text.StyledText
+          text: [({ loading: "connecting", ok: "connected", "no-config": "no server config", down: "server down", unauthorized: "unauthorized", error: "server error" })[root.connection.state]].concat(Settings.modes(root.settingsState.values).map(function(m) { return "<font color='" + theme.accent + "'>" + m + "</font>" })).join("&nbsp;&nbsp;&nbsp;")
           color: root.connection.state === "ok" || root.connection.state === "loading" ? theme.muted : theme.urgent
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
