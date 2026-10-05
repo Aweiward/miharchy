@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# halt: stop the verify run's scratch server but keep its database, so the next start-at reuses it
+# (server.sh stop deletes the server dir). Kills by PID file and by this run's server dir only.
+set -euo pipefail
+source "$(cd "$(dirname "$0")" && pwd)/../../.claude/skills/verify-miharchy/scripts/env.sh"
+[ -f "$RUN/server.pid" ] || { echo "no server.pid in $RUN: nothing to halt" >&2; exit 1; }
+pid=$(cat "$RUN/server.pid")
+kill "$pid" 2>/dev/null || true
+for _ in $(seq 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+for p in /proc/[0-9]*; do
+  n=${p#/proc/}; [ "$n" = "$$" ] && continue
+  { tr '\0' ' ' < "$p/cmdline"; } 2>/dev/null | grep -qF -e "$SERVER_DIR/" -e "rootDir=$SERVER_DIR " && kill -9 "$n" 2>/dev/null || true
+done
+sleep 1
+ss -ltn | grep -q ":$PORT " && { echo "port $PORT still open" >&2; exit 1; }
+rm -f "$RUN/server.pid"
+echo halted
