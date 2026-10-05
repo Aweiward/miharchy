@@ -12,8 +12,8 @@ var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaTy
   + " fetchSourceManga(input: { source: $source, type: $type, page: $page, query: $query, filters: $filters }) {"
   + " hasNextPage mangas { id title thumbnailUrl inLibrary } } }"
 
-var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized sourceId source { displayName } categories { nodes { id } } meta { key value }"
-var CHAPTER_FIELDS = "id name chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder"
+var MANGA_FIELDS = "id title realUrl author artist description genre status thumbnailUrl inLibrary initialized sourceId source { displayName } categories { nodes { id } } meta { key value }"
+var CHAPTER_FIELDS = "id name realUrl chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder"
 var DETAIL_QUERY = "query($id: Int!) { manga(id: $id) { " + MANGA_FIELDS + " chapters { nodes { " + CHAPTER_FIELDS + " } } }"
   + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
 var EXTENSION_QUERY = "query($name: String!) { extensions(filter: { name: { equalTo: $name } }) { nodes { name isInstalled } } }"
@@ -180,6 +180,8 @@ function toManga(config, n, names) {
   return {
     id: n.id,
     title: String(n.title || ""),
+    // The page on the source's site; "" when the server cannot build it.
+    url: String(n.realUrl || ""),
     author: String(n.author || ""),
     artist: String(n.artist || ""),
     description: String(n.description || ""),
@@ -202,7 +204,7 @@ function toManga(config, n, names) {
 
 function toChapters(nodes) {
   return (nodes || []).slice().sort(function(a, b) { return b.sourceOrder - a.sourceOrder }).map(function(c) {
-    return { id: c.id, name: String(c.name || ""), number: c.chapterNumber, date: day(c.uploadDate), uploadDate: Number(c.uploadDate) || 0, sourceOrder: c.sourceOrder, read: c.isRead === true, bookmarked: c.isBookmarked === true, lastPage: c.lastPageRead || 0, downloaded: c.isDownloaded === true, scanlator: String(c.scanlator || "") }
+    return { id: c.id, name: String(c.name || ""), url: String(c.realUrl || ""), number: c.chapterNumber, date: day(c.uploadDate), uploadDate: Number(c.uploadDate) || 0, sourceOrder: c.sourceOrder, read: c.isRead === true, bookmarked: c.isBookmarked === true, lastPage: c.lastPageRead || 0, downloaded: c.isDownloaded === true, scanlator: String(c.scanlator || "") }
   })
 }
 

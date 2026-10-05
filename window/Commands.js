@@ -166,6 +166,12 @@ var commands = [
   { id: "downloads.dequeue", title: "Take out of the queue", keys: ["x"], view: "downloads", hidden: true },
   { id: "downloads.toggle", title: "Start or stop downloading", keys: ["Space"], view: "downloads", hidden: true },
   { id: "manga.track", title: "Tracking", keys: ["t"], view: "manga", hidden: true },
+  // Mihon's WebView and Share, on a desktop: the browser and the clipboard.
+  // y yanks, as in vim. In the reader they act on the chapter.
+  { id: "manga.openWeb", title: "Open the manga in the browser", keys: ["o"], view: "manga", hidden: true },
+  { id: "manga.copyLink", title: "Copy the manga's link", keys: ["y"], view: "manga", hidden: true },
+  { id: "reader.openWeb", title: "Open the chapter in the browser", keys: ["o"], view: "reader", hidden: true },
+  { id: "reader.copyLink", title: "Copy the chapter's link", keys: ["y"], view: "reader", hidden: true },
   { id: "track.up", title: "Up", keys: ["k", "Up"], view: ["manga-track", "manga-track-pick"], hidden: true },
   { id: "track.down", title: "Down", keys: ["j", "Down"], view: ["manga-track", "manga-track-pick"], hidden: true },
   { id: "track.search", title: "Find the manga on the tracker", keys: ["Enter"], view: "manga-track", hidden: true },

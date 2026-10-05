@@ -476,6 +476,14 @@ test("in the download menu j/k move, Enter or Space downloads, Esc or U closes; 
   assert.equal(C.dispatch(field, text("7")), null, "digits type into the field");
 });
 
+test("o opens and y copies the link: the manga's on a manga, the chapter's in the reader", () => {
+  assert.equal(C.dispatch(screen("manga"), text("o")), "manga.openWeb");
+  assert.equal(C.dispatch(screen("manga"), text("y")), "manga.copyLink");
+  assert.equal(C.dispatch(screen("reader"), text("o")), "reader.openWeb");
+  assert.equal(C.dispatch(screen("reader"), text("y")), "reader.copyLink");
+  assert.equal(C.dispatch(screen("library"), text("o")), null);
+});
+
 test("on a manga, R marks read, u marks unread and P marks every chapter below the cursor read; R and u act on a selection too", () => {
   const m = screen("manga");
   assert.equal(C.dispatch(m, text("R")), "manga.markRead");

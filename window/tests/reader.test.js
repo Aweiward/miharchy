@@ -9,7 +9,7 @@ const ok = (data) => M.reply(200, JSON.stringify({ data }));
 // Newest first, as Browse.detail holds them.
 const chapters = [
   { id: 13, name: "Ch. 3" },
-  { id: 12, name: "Ch. 2" },
+  { id: 12, name: "Ch. 2", url: "https://example.org/c/2" },
   { id: 11, name: "Ch. 1" }
 ];
 const pages = (id, n, o) => ok({ fetchChapterPages: {
@@ -39,6 +39,7 @@ test("opening a chapter asks for its pages, which load from the server", () => {
   const r = R.open(5, chapters, 12, "paged-rtl");
   assert.equal(r.state, "loading");
   assert.equal(R.chapterName(r), "Ch. 2");
+  assert.equal(r.chapters[r.index].url, "https://example.org/c/2", "o and y in the reader act on this link");
   assert.deepEqual(R.pagesPayload(r).variables, { id: 12 });
   assert.equal(R.savePayload(r), null, "nothing saves before the pages are fetched: the server clamps to pageCount");
   const l = loaded(12, 3);
@@ -120,9 +121,9 @@ test("past the last or first chapter the transition page says there is none; a t
 
 // Newest first, numbered, as Browse.detail holds them: chapter 3 is missing.
 const numbered = [
-  { id: 24, name: "Ch. 4", number: 4, downloaded: false, scanlator: "Kumo" },
-  { id: 22, name: "Ch. 2", number: 2, downloaded: true, scanlator: "Kumo" },
-  { id: 21, name: "Ch. 1", number: 1, downloaded: false, scanlator: "" }
+  { id: 24, name: "Ch. 4", url: "u4", number: 4, downloaded: false, scanlator: "Kumo" },
+  { id: 22, name: "Ch. 2", url: "u2", number: 2, downloaded: true, scanlator: "Kumo" },
+  { id: 21, name: "Ch. 1", url: "u1", number: 1, downloaded: false, scanlator: "" }
 ];
 const onLast = (id, n) => R.reduce(R.open(5, numbered, id, "paged-ltr"), { type: "pages", reply: pages(id, n), config });
 const readOn = (r, o) => R.reduce(r, Object.assign({ type: "turn", delta: 1 }, o));
@@ -133,8 +134,8 @@ test("with always show on, turning past the last page shows the finished and the
   assert.equal(t.index, r.index, "still in the chapter");
   assert.equal(t.page, 1);
   assert.deepEqual(R.transitionLines(t.transition), [
-    { label: "Finished", chapter: { id: 21, name: "Ch. 1", number: 1, downloaded: false, scanlator: "" } },
-    { label: "Next", chapter: { id: 22, name: "Ch. 2", number: 2, downloaded: true, scanlator: "Kumo" } }
+    { label: "Finished", chapter: { id: 21, name: "Ch. 1", url: "u1", number: 1, downloaded: false, scanlator: "" } },
+    { label: "Next", chapter: { id: 22, name: "Ch. 2", url: "u2", number: 2, downloaded: true, scanlator: "Kumo" } }
   ]);
   const back = R.reduce(t, { type: "turn", delta: -1 });
   assert.equal(back.transition, null);
