@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import "Chapters.js" as Chapters
 import "Commands.js" as Commands
+import "Downloads.js" as Downloads
 import "Model.js" as Model
 import "Prefs.js" as Prefs
 import "Reader.js" as Reader
@@ -28,6 +29,7 @@ Rectangle {
   // chapters again at once.
   readonly property var skip: ({ read: values.skipRead, filtered: values.skipFiltered, dupe: values.skipDupe })
   readonly property string skipKey: [skip.read, skip.filtered, skip.dupe].join()
+  readonly property bool deleteBookmarked: values.deleteBookmarked === true
   // What the chapter list comes from: { chapters, prefs }, the manga's
   // chapters newest first and its chapter choices.
   property var source: null
@@ -55,7 +57,7 @@ Rectangle {
 
   // The chapter the reader showed last, when it closed.
   signal closed(int chapterId)
-  // A chapter it finished left the disk, after delete after read.
+  // A chapter left the disk, after delete after reading.
   signal deleted()
   signal key(var event)
   signal editEnded()
@@ -158,13 +160,19 @@ Rectangle {
     })
   }
 
+  // The chapter left counts as read: its save may still be on the way.
   function leave() {
-    var payload = Reader.deletePayload(reader, values.deleteAfterRead)
-    if (!payload) return
+    var target = Reader.deleteTarget(reader, Downloads.deleteSlots(values.deleteAfterRead))
+    if (target === null) return
+    var read = [Reader.chapterId(reader)]
     exitStep("write")
-    send(payload, function() {
-      view.deleted()
-      view.exitStep("wrote")
+    send(Downloads.autoDeleteQuery([target]), function(reply) {
+      var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, view.deleteBookmarked, read) : null
+      if (!payload) return view.exitStep("wrote")
+      view.send(payload, function() {
+        view.deleted()
+        view.exitStep("wrote")
+      })
     })
   }
 

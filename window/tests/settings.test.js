@@ -18,8 +18,8 @@ test("every row is complete, and a choice's default is one of its options", () =
 });
 
 test("the first rows and their defaults", () => {
-  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "Page fit", "Webtoon width", "Reader background", "Keep the screen on", "Always show chapter transition", "Skip read chapters", "Skip filtered chapters", "Skip duplicate chapters", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Default category", "Download folder", "Save downloads as CBZ", "Delete after read", "Sync folder"]);
-  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, deleteAfterRead: false, syncFolder: "" });
+  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "Page fit", "Webtoon width", "Reader background", "Keep the screen on", "Always show chapter transition", "Skip read chapters", "Skip filtered chapters", "Skip duplicate chapters", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Default category", "Download folder", "Save downloads as CBZ", "Delete downloads marked read", "Delete after reading", "Delete bookmarked chapters", "Sync folder"]);
+  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, syncFolder: "" });
   assert.deepEqual(row("defaultReadingMode").options.map((o) => o.label), ["Paged right-to-left", "Paged left-to-right", "Webtoon"]);
 });
 
@@ -39,7 +39,7 @@ test("a load reply sets server values and namespaced meta, defaults fill the res
     ] }
   }));
   assert.equal(s.state, "ok");
-  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, deleteAfterRead: false, syncFolder: "" });
+  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, syncFolder: "" });
 });
 
 test("the page fit and webtoon width come back from meta after a restart; an unknown one reads as the default", () => {
@@ -54,6 +54,14 @@ test("the page fit and webtoon width come back from meta after a restart; an unk
 test("an unknown stored reading mode falls back to the default", () => {
   const s = S.reduce(S.initial(), ok({ settings: {}, metas: { nodes: [{ key: "miharchy.defaultReadingMode", value: "scroll" }] } }));
   assert.equal(s.values.defaultReadingMode, "paged-rtl");
+});
+
+test("delete after reading keeps what the old on/off row stored: on is the last read chapter", () => {
+  const load = (value) => S.reduce(S.initial(), ok({ settings: {}, metas: { nodes: [{ key: "miharchy.deleteAfterRead", value }] } })).values.deleteAfterRead;
+  assert.equal(S.display(row("deleteAfterRead"), load("true")), "Last read chapter");
+  assert.equal(S.display(row("deleteAfterRead"), load("false")), "Off");
+  assert.equal(S.display(row("deleteAfterRead"), load("4")), "Fifth to last read chapter");
+  assert.deepEqual(S.activate(row("deleteAfterRead"), "4"), { save: "false" });
 });
 
 test("a meta save goes to setGlobalMeta as a string and its reply updates the row", () => {

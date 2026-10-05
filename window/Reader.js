@@ -1,6 +1,5 @@
 .pragma library
 .import "Model.js" as Model
-.import "Downloads.js" as Downloads
 .import "Chapters.js" as Chapters
 .import "Settings.js" as Settings
 
@@ -217,10 +216,15 @@ function trackPayload(r) {
   return Chapters.trackPayload([r.mangaId])
 }
 
-// on: the delete after read setting. Called as the reader leaves the
-// chapter, so its pages stay on disk while it shows.
-function deletePayload(r, on) {
-  return on && r.state === "ok" && r.read && !r.wasRead ? Downloads.deletePayload([chapterId(r)]) : null
+// Mihon's delete after reading: once the chapter open is read here, the
+// chapter slots back in reading order may go (0: this one; -1: off), the
+// rules of Downloads.autoDeletePayload permitting. Asked as the reader
+// leaves the chapter, so its pages stay on disk while it shows. -> a
+// chapter id, or null.
+function deleteTarget(r, slots) {
+  if (slots < 0 || r.state !== "ok" || !r.read || r.wasRead) return null
+  var c = r.chapters[r.index - slots]
+  return c ? c.id : null
 }
 
 function modePayload(r) {
@@ -380,7 +384,7 @@ if (typeof module !== "undefined") {
     reduce: reduce,
     savePayload: savePayload,
     trackPayload: trackPayload,
-    deletePayload: deletePayload,
+    deleteTarget: deleteTarget,
     modePayload: modePayload,
     action: action,
     tapZone: tapZone,

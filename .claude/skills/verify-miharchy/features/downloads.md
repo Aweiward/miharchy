@@ -14,6 +14,16 @@
 
 - "Save downloads as CBZ" is the server setting `downloadAsCbz` (Mihon's "Save as CBZ archive"). It applies to new downloads: the chapter lands as `<scanlator>_<name>.cbz` in the manga's folder under `$RUN/server/downloads/mangas/<source>/`, and `fetchChapterPages` still serves its pages. Proof: Enter on the row, `settings { downloadAsCbz }` reads `true`, download a chapter, `find` the `.cbz`.
 
+## Delete after reading
+
+Mihon's "Delete chapters" group. Suwayomi has none of it, so the window deletes, and `Downloads.autoDeletePayload` holds the rules both paths share (Mihon's `DownloadManager.getChaptersToDelete`): a chapter goes only when it is on disk and read, not bookmarked unless "Delete bookmarked chapters" is on, and its manga is in no category flagged with `p` in Categories (category meta `miharchy.keepDownloads` = `"true"`, Mihon's excluded categories). The rules read the server at delete time (`autoDeleteQuery`).
+
+- "Delete after reading" (global meta `miharchy.deleteAfterRead`): Off, last read chapter, or the second to fifth to last. Once the chapter open in the reader is read there for the first time, the chapter that many slots back in reading order (`reader.chapters`, Mihon's `chapterList`) goes as the reader leaves the chapter (`Reader.deleteTarget`). Mihon defers the delete until the reader closes. The stored values `"false"`/`"true"` are those of the on/off row this replaced, so an old "on" reads as "last read chapter".
+- "Delete downloads marked read" (`miharchy.deleteAfterMarkRead`): after a mark read from the manga detail or Updates (`shell.qml` `markChapters` → `deleteRead`), the chapters that mark read go. Mihon's own check of excluded categories reads the chapters from before the mark, so it never keeps one there; Miharchy keeps them.
+- A manga in no category is in Default, which the Categories screen does not list, so Default cannot keep downloads.
+
+Proof. Set up with `gql.sh`: every chapter of both seeded manga downloaded (enqueue, `startDownloader`, poll `isDownloaded`), chapter 4 read and 6 bookmarked on manga 2, manga 1 in a category. With "second to last" on, reading chapter 5 to its end and leaving deletes 4 and keeps 5; `R` on bookmarked 6 keeps it; `R` on manga 1's chapter 1 keeps it while `p` flags the category, and `R` on chapter 2 deletes it once `p` clears the flag. Read back `chapters(filter:{id:{in:[...]}}){ nodes{ id isRead isBookmarked isDownloaded } }` and `category(id){ meta{ key value } }`.
+
 ## Setup
 
 Enqueuing starts the downloader a moment later, and MangaDex finishes a chapter in seconds, so a queue to drive must be stopped after the enqueue:

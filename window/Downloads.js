@@ -107,6 +107,48 @@ function removePayload(chapters, items) {
   return { query: REMOVE_MUTATION, variables: { queued: ids(queued), ids: ids(held) } }
 }
 
+// Mihon's delete after reading, from the deleteAfterRead setting: how many
+// read chapters back from the one finished the delete goes, or -1 for off.
+var SLOTS = { "false": -1, "true": 0, "1": 1, "2": 2, "3": 3, "4": 4 }
+
+function deleteSlots(setting) {
+  return SLOTS[setting] === undefined ? -1 : SLOTS[setting]
+}
+
+// A category's meta flag that keeps the downloads of its manga.
+var KEEP_KEY = "miharchy.keepDownloads"
+
+// What an automatic delete needs to know of each chapter.
+function autoDeleteQuery(chapterIds) {
+  return {
+    query: "query($ids: [Int!]!) { chapters(filter: { id: { in: $ids } }) { nodes { id isRead isBookmarked isDownloaded"
+      + " manga { categories { nodes { meta { key value } } } } } } }",
+    variables: { ids: chapterIds }
+  }
+}
+
+// meta: a category's [{ key, value }].
+function keepsDownloads(meta) {
+  return meta.some(function(m) { return m.key === KEEP_KEY && m.value === "true" })
+}
+
+function keeps(manga) {
+  return manga.categories.nodes.some(function(c) { return keepsDownloads(c.meta) })
+}
+
+// Deletes the chapters of an autoDeleteQuery() reply that Mihon's
+// getChaptersToDelete lets go: on disk, read, not bookmarked unless
+// deleteBookmarked, and in no category that keeps its downloads. Mihon's
+// check of those categories reads the chapters from before a mark read,
+// so it never keeps one; here it does. readIds: chapters read whose save
+// may not have reached the server yet. null when none goes.
+function autoDeletePayload(data, deleteBookmarked, readIds) {
+  var gone = data.chapters.nodes.filter(function(c) {
+    return c.isDownloaded && (c.isRead || readIds.indexOf(c.id) !== -1) && (deleteBookmarked || !c.isBookmarked) && !keeps(c.manga)
+  })
+  return gone.length ? deletePayload(ids(gone)) : null
+}
+
 function deletePayload(chapterIds) {
   return { query: DELETE_MUTATION, variables: { ids: chapterIds } }
 }
@@ -189,6 +231,11 @@ if (typeof module !== "undefined") {
     enqueuePayload: enqueuePayload,
     removePayload: removePayload,
     deletePayload: deletePayload,
+    KEEP_KEY: KEEP_KEY,
+    keepsDownloads: keepsDownloads,
+    deleteSlots: deleteSlots,
+    autoDeleteQuery: autoDeleteQuery,
+    autoDeletePayload: autoDeletePayload,
     dequeuePayload: dequeuePayload,
     moved: moved,
     sorted: sorted,
