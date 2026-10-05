@@ -687,4 +687,7 @@ test("every key a hint part sends reaches the command the hint names", () => {
   assert.equal(press("manga", "esc back   ", "esc back"), "manga.back");
   assert.equal(press("manga", "a add   ", "a add"), "manga.library");
   assert.equal(press("library", ": commands   ", ": commands"), "palette.open");
+  for (const view of ["library", "manga", "reader", "updates", "source"]) {
+    assert.equal(press(view, "new version   Q restart", "Q restart"), "window.restart", view);
+  }
 });
