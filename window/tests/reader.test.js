@@ -75,8 +75,7 @@ test("the save that first marks a chapter read asks the server to push progress 
   assert.equal(R.trackPayload(r), null, "not before the chapter is read");
   r = turn(r, 1);
   const push = R.trackPayload(r);
-  assert.match(push.query, /trackProgress\(input: \{ mangaId: \$id \}\)/);
-  assert.deepEqual(push.variables, { id: 5 });
+  assert.match(push.query, /trackProgress\(input: \{ mangaId: 5 \}\)/);
   r = R.reduce(r, { type: "saving" });
   assert.equal(R.trackPayload(turn(r, -1)), null, "only once per reading");
   assert.notEqual(R.trackPayload(R.reduce(r, { type: "save-failed", chapterId: 12 })), null, "a failed save pushes again with its retry");

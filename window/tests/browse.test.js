@@ -82,7 +82,7 @@ const mangaNode = (o) => Object.assign({
   source: { displayName: "MangaDex (EN)" },
   chapters: { nodes: [
     { id: 11, name: "Ch. 1", chapterNumber: 1, uploadDate: "1700000000000", isRead: true, isDownloaded: true, scanlator: "G", sourceOrder: 0 },
-    { id: 12, name: "Ch. 2", chapterNumber: 2, uploadDate: "1700049600000", isRead: false, scanlator: null, sourceOrder: 1 }
+    { id: 12, name: "Ch. 2", chapterNumber: 2, uploadDate: "1700049600000", isRead: false, lastPageRead: 4, scanlator: null, sourceOrder: 1 }
   ] }
 }, o);
 
@@ -97,6 +97,7 @@ test("a detail reads the cached manga and shows chapters newest first", () => {
   assert.equal(d.manga.source, "MangaDex (EN)");
   assert.deepEqual(d.chapters.map((c) => c.id), [12, 11]);
   assert.equal(d.chapters[1].read, true);
+  assert.deepEqual(d.chapters.map((c) => c.lastPage), [4, 0], "the page read, for a mark unread to reset");
   assert.equal(d.chapters[0].date, "2023-11-15");
   assert.equal(B.detailPayload(d), null, "an initialized manga with chapters needs no source fetch");
 });
@@ -286,4 +287,11 @@ test("a chapter knows whether it is downloaded, and a delete reply updates it", 
   assert.deepEqual(failed.chapters, d.chapters);
   const queued = B.reduceDetail(d, { type: "downloads-reply", reply: ok({ enqueueChapterDownloads: { downloadStatus: { state: "STARTED", queue: [] } } }) });
   assert.deepEqual(queued.chapters, d.chapters, "a reply without deletes changes no chapter");
+});
+
+test("a failed mark read shows its error, and the next one clears it", () => {
+  const d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode() }), config });
+  const failed = B.reduceDetail(d, { type: "mark-reply", reply: fail("Timed out") });
+  assert.equal(failed.libraryError, "Timed out");
+  assert.equal(B.reduceDetail(failed, { type: "mark-reply", reply: ok({ marked: { chapters: [] }, reset: { chapters: [] } }) }).libraryError, "");
 });

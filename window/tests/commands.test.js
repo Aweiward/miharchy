@@ -367,6 +367,20 @@ test("on a manga, d downloads, U downloads every unread chapter, x deletes downl
   assert.equal(C.dispatch(m, text("D")), "downloads.open");
 });
 
+test("on a manga, R marks read, u marks unread and P marks every chapter below the cursor read; R and u act on a selection too", () => {
+  const m = screen("manga");
+  assert.equal(C.dispatch(m, text("R")), "manga.markRead");
+  assert.equal(C.dispatch(m, text("u")), "manga.markUnread");
+  assert.equal(C.dispatch(m, text("P")), "manga.markPrevious");
+  assert.equal(C.dispatch(m, text("r")), "manga.refresh", "r still refreshes");
+  const s = screen("manga-select");
+  assert.equal(C.dispatch(s, text("R")), "manga.markRead");
+  assert.equal(C.dispatch(s, text("u")), "manga.markUnread");
+  assert.equal(C.dispatch(s, text("P")), null, "below the cursor means nothing in a selection");
+  assert.equal(C.dispatch(screen("updates"), text("u")), "updates.check");
+  assert.equal(C.dispatch(screen("reader"), text("u")), "reader.halfUp");
+});
+
 test("in a selection, j/k extend it, d and x act on it, and v or Esc ends it without leaving the manga", () => {
   const s = screen("manga-select");
   assert.equal(C.dispatch(s, text("j")), "manga.down");
