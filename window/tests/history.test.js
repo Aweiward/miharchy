@@ -96,3 +96,13 @@ test("a notice for an empty or failed history, none while entries show", () => {
   assert.equal(H.notice(loaded([chapter(31, 3, 300)]), "server.json"), null);
   assert.equal(H.notice(H.reduce(H.initial(), { type: "reply", reply: M.reply(401, ""), config }), "server.json").title, "The server rejected the credentials");
 });
+
+test("the search keeps the entries whose manga title holds it, ignoring case", () => {
+  const h = loaded([chapter(31, 3, 300), chapter(12, 12, 200), chapter(51, 5, 100)]);
+  assert.deepEqual(H.search(h.entries, "manga 1").map((e) => e.mangaId), [12]);
+  assert.deepEqual(H.search(h.entries, "  MANGA ").map((e) => e.mangaId), [3, 12, 5], "trimmed, any case");
+  assert.deepEqual(H.search(h.entries, ""), h.entries, "no search, every entry");
+  assert.equal(H.notice(h, "server.json", "manga 3"), null);
+  assert.deepEqual(H.notice(h, "server.json", "nothing "), { title: "No history matches \"nothing\"", detail: "Esc clears the search." });
+  assert.equal(H.notice(loaded([]), "server.json", "x").title, "No history yet", "an empty history says so, search or not");
+});

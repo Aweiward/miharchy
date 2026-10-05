@@ -117,9 +117,17 @@ function time(at) {
   return pad(d.getHours()) + ":" + pad(d.getMinutes())
 }
 
+// The entries whose manga title holds query, ignoring case, as Mihon's
+// history search (a LIKE on the title).
+function search(entries, query) {
+  var q = String(query || "").trim().toLowerCase()
+  return q ? entries.filter(function(e) { return e.title.toLowerCase().indexOf(q) !== -1 }) : entries
+}
+
 // { title, detail } in place of the list, or null when entries show.
-function notice(h, configPath) {
-  if (h.entries.length) return null
+function notice(h, configPath, query) {
+  if (h.entries.length && search(h.entries, query).length) return null
+  if (h.entries.length) return { title: "No history matches \"" + String(query).trim() + "\"", detail: "Esc clears the search." }
   if (h.state === "loading") return { title: "Loading the history", detail: "" }
   var p = Model.problem(h, configPath)
   if (p) return p
@@ -136,6 +144,7 @@ if (typeof module !== "undefined") {
     progress: progress,
     day: day,
     time: time,
+    search: search,
     notice: notice
   }
 }

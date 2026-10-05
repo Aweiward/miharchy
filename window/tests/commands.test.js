@@ -372,7 +372,11 @@ test("on History, j/k move, Enter resumes, x removes an entry, X clears it all a
   assert.equal(C.dispatch(h, text("x")), "history.remove");
   assert.equal(C.dispatch(h, text("X")), "history.clear");
   assert.equal(C.dispatch(h, text("r")), "history.reload");
-  assert.equal(C.dispatch(h, key(C.KEY.Escape)), "window.quit");
+  assert.equal(C.dispatch(h, text("/")), "history.search");
+  assert.equal(C.dispatch(h, key(C.KEY.Escape)), "history.clearSearch", "it clears a search; with none, shell.qml quits");
+  assert.equal(C.dispatch({ ...h, editing: "history" }, key(C.KEY.Escape)), "history.cancel");
+  assert.equal(C.dispatch({ ...h, editing: "history" }, key(C.KEY.Return)), "history.commit");
+  assert.equal(C.dispatch({ ...h, editing: "history" }, text("x")), null, "the field types x");
   assert.equal(C.dispatch(screen("library"), text("x")), "library.remove");
   assert.equal(C.dispatch(screen("settings"), text("x")), null);
   assert.equal(C.dispatch(screen("library"), text("r")), "library.reload");
