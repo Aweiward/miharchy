@@ -6,6 +6,7 @@ A manga reader for Omarchy (Arch + Hyprland). It reads Mihon's extension ecosyst
 
 - `CONTEXT.md` is the glossary. Use its terms in code, UI text and docs: **manga**, **source**, **read state**, **sync**, **view** and the rest. When a new term settles, add it there.
 - `docs/adr/` holds the architecture decisions. Read the ADRs before changing how the parts fit together. A change that contradicts one needs a new ADR that supersedes it.
+- Verify a change with the `verify-miharchy` skill (`.claude/skills/verify-miharchy/`): a scratch server, the real window driven offscreen, GraphQL read-backs. Use it before claiming a window, sync or server change works.
 
 ## Architecture
 
