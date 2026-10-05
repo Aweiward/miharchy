@@ -514,6 +514,28 @@ test("b bookmarks the chapter open, or takes its bookmark off, and the list keep
   assert.deepEqual(R.bookmarkPayload(two).variables, { ids: [12], bookmarked: false }, "the chapter's own bookmark comes from the list");
 });
 
+test("a saved page goes to a folder per manga under ~/Pictures/Miharchy, named as Mihon names it", () => {
+  const r = Object.assign(R.open(5, chapters, 12, "paged-rtl", false, "Kaguya: Love/War?"), { page: 4 });
+  assert.deepEqual(R.pageTarget(r, "", "/home/u", "image/png"), { dir: "/home/u/Pictures/Miharchy/Kaguya_ Love_War_", name: "Kaguya_ Love_War_ - Ch. 2 - 5.png" });
+  assert.equal(R.pageTarget(r, "/data/pics", "/home/u", "image/webp").dir, "/data/pics/Kaguya_ Love_War_", "the Save pages to setting wins");
+  assert.equal(R.pageTarget(r, "", "/home/u", "").name.slice(-4), ".jpg", "no type reads as JPEG");
+  assert.equal(R.validName("../.."), "_..", "no name climbs out of the folder");
+  assert.equal(R.validName("..."), "_");
+});
+
+test("save and copy pass the paths as arguments, never inside the script", () => {
+  const target = { dir: "/p/M $(rm -rf ~)", name: "a\"b.png" };
+  const save = R.saveCommand("/run/img", target);
+  assert.deepEqual(save.slice(3), ["sh", target.dir, "/run/img", target.name]);
+  assert.ok(!save[2].includes("rm -rf"));
+  assert.deepEqual(R.copyCommand("/run/img", "image/webp; charset=binary").slice(3), ["sh", "image/webp", "/run/img"]);
+  assert.match(R.copyCommand("/run/img", "")[2], /^\{ wl-copy --type "\$1" < "\$2"; \} 2>&1 && echo ok$/);
+  assert.equal(R.pageResult("ok\n", "Page copied", "Copying failed"), "Page copied");
+  assert.equal(R.pageResult("cp: No space left\n", "Saved", "Saving failed"), "Saving failed: cp: No space left");
+  assert.equal(R.pageResult("", "Saved", "Saving failed"), "Saving failed: no output");
+  assert.equal(R.copyCommand("/run/img", "text/html")[4], "image/jpeg", "a type that is no image reads as JPEG");
+});
+
 // Page sizes by URL, as ReaderView collects them; the pages at wideAt are
 // double pages.
 const sized = (r, wideAt) => Object.fromEntries(r.pages.map((u, i) => [u, wideAt.includes(i) ? { width: 1600, height: 1200 } : { width: 800, height: 1200 }]));

@@ -161,6 +161,9 @@ var ROWS = [
       { value: "never", label: "Never" }
     ]
   },
+  // Where S in the reader saves a page, in a folder per manga; empty is
+  // ~/Pictures/Miharchy.
+  { key: "pageFolder", label: "Save pages to", type: "folder", default: "", store: "meta", blank: "~/Pictures/Miharchy" },
   // Setup sets it too; the sync helper reads it from the server.
   { key: "syncFolder", label: "Sync folder", type: "folder", default: "", store: "meta", blank: "not set", notSameAs: "backupPath" },
   // Mihon's backup options. Manual and automatic backups share Suwayomi's
