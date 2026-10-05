@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# start-at <offset>: start the verify run's scratch server, reusing its database, with the JVM clock
+# shifted by libfaketime (offset as FAKETIME takes it: -5d, -3d, -1d). Offset 0 uses the real clock.
+# java runs directly because the suwayomi-server launcher overwrites LD_PRELOAD.
+set -euo pipefail
+[ $# = 1 ] || { echo "usage: start-at <offset>, e.g. start-at -5d or start-at 0" >&2; exit 2; }
+source "$(cd "$(dirname "$0")" && pwd)/../../.claude/skills/verify-miharchy/scripts/env.sh"
+FAKETIME_LIB=${FAKETIME_LIB:-/usr/lib/faketime/libfaketime.so.1}
+JAR_DIR=/usr/share/java/suwayomi-server
+if [ "$1" != 0 ] && [ ! -f "$FAKETIME_LIB" ]; then echo "no libfaketime at $FAKETIME_LIB; set FAKETIME_LIB (see README.md)" >&2; exit 1; fi
+if [ -f "$RUN/server.pid" ] && kill -0 "$(cat "$RUN/server.pid")" 2>/dev/null; then echo "$RUN already has a running server; run halt first" >&2; exit 1; fi
+ss -ltn | grep -q ":$PORT " && { echo "port $PORT is taken" >&2; exit 1; }
+install -d -m 700 "$RUN" "$SERVER_DIR" "$SERVER_DIR/tmp" "$EVIDENCE"
+[ -f "$SERVER_JSON" ] || (umask 077; printf '{"url":"http://127.0.0.1:%s","username":"verify","password":"%s"}\n' "$PORT" "$(openssl rand -hex 16)" > "$SERVER_JSON")
+pw=$(jq -r .password "$SERVER_JSON")
+printf 'server.ip = "127.0.0.1"\nserver.port = %s\nserver.webUIEnabled = false\nserver.systemTrayEnabled = false\nserver.authMode = "basic_auth"\nserver.authUsername = "verify"\nserver.authPassword = "%s"\n' "$PORT" "$pw" > "$SERVER_DIR/server.conf"
+pre=$JAR_DIR/bin/catch_abort.so
+if [ "$1" != 0 ]; then
+  pre=$pre:$FAKETIME_LIB
+  export FAKETIME="$1" FAKETIME_DONT_FAKE_MONOTONIC=1 FAKETIME_DONT_RESET=1
+fi
+( cd "$JAR_DIR" && LD_PRELOAD=$pre setsid /usr/bin/java -Dsuwayomi.tachidesk.config.server.rootDir="$SERVER_DIR" -Djava.io.tmpdir="$SERVER_DIR/tmp" -jar bin/Suwayomi-Server.jar > "$RUN/server.log" 2>&1 < /dev/null & )
+unset FAKETIME
+for _ in $(seq 150); do
+  v=$(curl -s -m 30 -u "verify:$pw" -H 'content-type: application/json' -d '{"query":"{aboutServer{version}}"}' "http://127.0.0.1:$PORT/api/graphql" | jq -r '.data.aboutServer.version // empty' 2>/dev/null || true)
+  if [ -n "$v" ]; then
+    ss -ltnp | grep ":$PORT " | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2 > "$RUN/server.pid"
+    echo "ready: Suwayomi $v on 127.0.0.1:$PORT, clock offset $1, pid $(cat "$RUN/server.pid")"; exit 0
+  fi
+  sleep 2
+done
+echo "no answer; see $RUN/server.log" >&2; exit 1

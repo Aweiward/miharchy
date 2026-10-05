@@ -1,0 +1,11 @@
+{
+  "name": "miharchy-site-render",
+  "private": true,
+  "description": "Renders site previews and the README banner with headless Chromium",
+  "scripts": {
+    "render": "node render.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}
