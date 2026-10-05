@@ -43,21 +43,23 @@ function failed(reply) {
 }
 
 // A sources reply -> { state, message, sources: [{ id, name, lang, icon,
-// warning, supportsLatest, configurable }] }. The local source is v1.1 work; NSFW sources
-// hide unless showNsfw, and only English and multi-language sources show
-// unless allLanguages, the same rules as their extensions.
+// warning, supportsLatest, configurable }] }. NSFW sources hide unless
+// showNsfw, and only English and multi-language sources show unless
+// allLanguages, the same rules as their extensions. The local source gets
+// Mihon's language "other" (Suwayomi says "localsourcelang"), so it shows
+// under Other and never as a Migrate target, as in Mihon.
 function sources(reply, config, showNsfw, allLanguages) {
   if (reply.state !== "ok") return { state: reply.state, message: reply.message, sources: [] }
   var nodes = (reply.data.sources && reply.data.sources.nodes) || []
   var list = nodes
     .filter(function(n) {
-      return String(n.id) !== LOCAL_SOURCE && (showNsfw || n.contentWarning !== "NSFW") && (allLanguages || n.lang === "en" || n.lang === "all")
+      return (showNsfw || n.contentWarning !== "NSFW") && (allLanguages || n.lang === "en" || n.lang === "all")
     })
     .map(function(n) {
       return {
         id: String(n.id),
         name: String(n.displayName || n.id),
-        lang: String(n.lang || ""),
+        lang: String(n.id) === LOCAL_SOURCE ? "other" : String(n.lang || ""),
         icon: Model.coverUrl(config, n.iconUrl),
         warning: String(n.contentWarning || "SAFE"),
         supportsLatest: n.supportsLatest === true,
@@ -100,15 +102,19 @@ function togglePin(prefs, id) {
 }
 
 function languageName(lang) {
-  return lang === "all" ? "Multi" : lang
+  return lang === "all" ? "Multi" : lang === "other" ? "Other" : lang
 }
 
 // The sources Sources and global search use: an enabled language, and not
-// hidden one by one (Mihon's GetEnabledSources).
-function enabled(sources, prefs) {
+// hidden one by one. Sources also lists the local source whatever the
+// languages (withLocal, Mihon's GetEnabledSources); global search does not
+// (Mihon's SearchViewModel).
+function enabled(sources, prefs, withLocal) {
   var langs = idList(prefs.enabledLanguages)
   var off = idList(prefs.disabledSources)
-  return sources.filter(function(s) { return langs.indexOf(s.lang) !== -1 && off.indexOf(s.id) === -1 })
+  return sources.filter(function(s) {
+    return (langs.indexOf(s.lang) !== -1 || (withLocal === true && s.id === LOCAL_SOURCE)) && off.indexOf(s.id) === -1
+  })
 }
 
 function toggled(list, item) {
@@ -124,6 +130,7 @@ function langOrder(lang) {
 // installed sources, the enabled ones first, Multi first among each, and
 // under each enabled one its sources, the hidden ones last.
 function languageRows(sources, prefs) {
+  sources = sources.filter(function(s) { return s.id !== LOCAL_SOURCE })
   var langs = idList(prefs.enabledLanguages)
   var off = idList(prefs.disabledSources)
   var all = sources.map(function(s) { return s.lang }).filter(function(l, i, a) { return a.indexOf(l) === i })
@@ -426,11 +433,14 @@ function continues(before, after) {
 }
 
 // { title, detail } for a listing or detail that failed or came back empty,
-// else null.
-function notice(s, configPath) {
+// else null. localFolder: where the local source reads, for its how-to.
+function notice(s, configPath, localFolder) {
   if (s.flare) return { title: "This source needs FlareSolverr", detail: "It sits behind Cloudflare. Turn FlareSolverr on in Setup or Settings, then press r." }
   var p = Model.problem(s, configPath)
   if (p) return p
+  if (s.state === "ok" && s.items && s.items.length === 0 && s.mode !== "search" && s.source && s.source.id === LOCAL_SOURCE) {
+    return { title: "No local manga", detail: "Put a folder per manga in " + localFolder + ", holding a folder of images or a .cbz per chapter. Then press p. Settings sets the folder." }
+  }
   if (s.state === "ok" && s.items && s.items.length === 0) return { title: "No manga found", detail: s.mode !== "search" ? "" : s.filters.length ? "Try other filters: F." : "Try another search." }
   return null
 }

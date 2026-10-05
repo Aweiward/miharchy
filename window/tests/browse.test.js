@@ -9,9 +9,8 @@ const fail = (message) => M.reply(200, JSON.stringify({ errors: [{ message }] })
 
 const src = (o) => Object.assign({ id: "1", name: "S", displayName: "S (EN)", lang: "en", iconUrl: "/api/v1/extension/icon/s", contentWarning: "SAFE", supportsLatest: true }, o);
 
-test("sources skip the local source, hide NSFW unless asked, and sort by name", () => {
+test("sources hide NSFW unless asked, and sort by name", () => {
   const data = { sources: { nodes: [
-    src({ id: "0", displayName: "Local source" }),
     src({ id: "2", displayName: "Weeb Central", contentWarning: "MIXED" }),
     src({ id: "3", displayName: "Adult", contentWarning: "NSFW" }),
     src({ id: "4", displayName: "Asura Scans" })
@@ -110,6 +109,33 @@ test("latest and search map to their fetch types; search sends the query", () =>
   const s = { id: "9", name: "S", supportsLatest: true };
   assert.equal(B.listingPayload(B.listing(s, "latest", "")).variables.type, "LATEST");
   assert.deepEqual(B.listingPayload(B.listing(s, "search", "one piece")).variables, { source: "9", type: "SEARCH", page: 1, query: "one piece", filters: [] });
+});
+
+test("the local source shows in Sources under Other whatever the languages, as Mihon, but not in global search, the languages panel or Migrate", () => {
+  const P = require("./load")("Prefs.js");
+  const data = { sources: { nodes: [
+    src({ id: "0", displayName: "Local source", lang: "localsourcelang" }),
+    src({ id: "1", displayName: "MangaDex", lang: "all" }),
+    src({ id: "2", displayName: "Weeb Central" })
+  ] } };
+  const list = B.sources(ok(data), config, false, true).sources;
+  let prefs = P.defaults(B.PREFS);
+  assert.deepEqual(B.sourceRows(B.enabled(list, prefs, true), prefs).map((r) => [r.header, r.name]), [["Multi", "MangaDex"], ["en", "Weeb Central"], ["Other", "Local source"]]);
+  prefs = { ...prefs, enabledLanguages: "[]" };
+  assert.deepEqual(B.enabled(list, prefs, true).map((s) => s.id), ["0"], "no language turns it off");
+  assert.deepEqual(B.enabled(list, P.defaults(B.PREFS)).map((s) => s.id), ["1", "2"], "global search leaves it out");
+  assert.deepEqual(B.languageRows(list, P.defaults(B.PREFS)).map((r) => r.label), ["Multi", "MangaDex", "en", "Weeb Central"]);
+  assert.deepEqual(B.sources(ok(data), config, false, false).sources.map((s) => s.id), ["1", "2"], "Migrate's English-and-Multi list leaves it out");
+});
+
+test("an empty local source says where to put manga; a search on it does not", () => {
+  const local = { id: "0", name: "Local source", supportsLatest: true };
+  const empty = (mode, query) => B.reduceListing(B.reduceListing(B.listing(local, mode, query), { type: "request" }), { type: "reply", reply: page([], false), config });
+  const n = B.notice(empty("popular", ""), "/c", "/srv/local");
+  assert.equal(n.title, "No local manga");
+  assert.match(n.detail, /\/srv\/local/);
+  assert.match(n.detail, /\.cbz/);
+  assert.equal(B.notice(empty("search", "zzz"), "/c", "/srv/local").title, "No manga found");
 });
 
 test("filters reach the source only in a search, as Suwayomi applies them only there", () => {

@@ -127,6 +127,10 @@ var ROWS = [
   { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
   // New downloads only; the server reads chapters on disk in either form.
   { key: "downloadAsCbz", label: "Save downloads as CBZ", type: "bool", default: false, store: "server" },
+  // The local source's folder (Mihon's local source): a folder per manga,
+  // a folder of images or a .cbz per chapter. The server refuses a folder
+  // that does not exist; empty means its root's local.
+  { key: "localSourcePath", label: "Local manga folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
   // Mihon's auto-download group, all server settings: the library update
   // queues the new chapters. d in Categories includes or excludes a
   // category. Skipping manga with unread chapters is Suwayomi's own; Mihon's
