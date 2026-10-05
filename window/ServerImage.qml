@@ -54,7 +54,8 @@ Image {
     var xhr = new XMLHttpRequest()
     xhr.responseType = "arraybuffer"
     xhr.onreadystatechange = function() {
-      if (xhr.readyState !== XMLHttpRequest.DONE || wanted !== image.url) return
+      // A grid change may destroy this image before its bytes arrive.
+      if (xhr.readyState !== XMLHttpRequest.DONE || !image || wanted !== image.url) return
       if (xhr.status !== 200) {
         image.fetchFailed = true
         return
