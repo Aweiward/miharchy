@@ -1,4 +1,5 @@
 .pragma library
+.import "Model.js" as Model
 .import "Browse.js" as Browse
 .import "GlobalSearch.js" as GlobalSearch
 
@@ -12,7 +13,7 @@ var OLD_QUERY = "query($id: Int!) { manga(id: $id) { id title categories { nodes
 var TARGET_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: true }) {"
   + " manga { id title } chapters { id chapterNumber isRead isBookmarked } } }"
 var LIBRARY_QUERY = "{ mangas(condition: { inLibrary: true }, orderBy: TITLE) { nodes { id title sourceId source { displayName } } }"
-  + " metas(condition: { key: \"" + Browse.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
+  + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
 var MODE_KEY = "miharchy.readingMode"
 // Mihon's BaseSmartSearchEngine.MIN_ELIGIBLE_THRESHOLD.
 var THRESHOLD = 0.4
@@ -144,17 +145,13 @@ function targets(sources, oldSourceId, oldName) {
 // LIBRARY_QUERY data -> each source with library manga, by name:
 // { id, name, sourceName, missing, manga: [{ id, title }] }.
 function librarySources(data) {
-  var node = ((data.metas && data.metas.nodes) || [])[0]
-  var names = {}
-  try {
-    names = JSON.parse(node ? node.value : "{}") || {}
-  } catch (e) {}
+  var names = Model.parseNames(data)
   var byId = {}
   var list = []
   ;((data.mangas && data.mangas.nodes) || []).forEach(function(n) {
     var id = String(n.sourceId)
     if (!byId[id]) {
-      var label = Browse.sourceLabel(n, names)
+      var label = Model.sourceLabel(n, names)
       byId[id] = { id: id, name: label, sourceName: n.source ? label : String(names[id] || ""), missing: !n.source, manga: [] }
       list.push(byId[id])
     }

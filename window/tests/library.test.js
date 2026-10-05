@@ -19,7 +19,7 @@ const shelf = [
 
 test("the defaults sort by title ascending with every filter off", () => {
   assert.deepEqual(P.defaults(L.PREFS), {
-    librarySort: "title", librarySortDirection: "asc",
+    librarySort: "title", librarySortDirection: "asc", libraryDisplay: "grid",
     libraryFilterDownloaded: "off", libraryFilterUnread: "off", libraryFilterStarted: "off",
     libraryFilterBookmarked: "off", libraryFilterCompleted: "off", libraryFilterTracked: "off"
   });
@@ -76,10 +76,11 @@ test("ties fall back to title ascending, even when the sort is descending, then 
   assert.deepEqual(ids(L.apply(tied, prefs({ librarySort: "total", librarySortDirection: "asc" }), "")), [6, 7, 5, 8]);
 });
 
-test("the panel lists the filters, then the sorts, with their states", () => {
+test("the panel lists the filters, then the sorts, then the display modes, with their states", () => {
   const rows = L.rows(prefs({ libraryFilterUnread: "exclude", librarySort: "added", librarySortDirection: "desc" }));
   assert.deepEqual(rows.map((r) => r.label), ["Downloaded", "Unread", "Started", "Bookmarked", "Completed", "Tracked",
-    "Title", "Total chapters", "Last read", "Last update", "Unread count", "Latest chapter", "Date added"]);
+    "Title", "Total chapters", "Last read", "Last update", "Unread count", "Latest chapter", "Date added", "Cover grid", "List"]);
+  assert.deepEqual(rows.filter((r) => r.kind === "display").map((r) => r.state), ["picked", "unpicked"]);
   assert.deepEqual(rows.filter((r) => r.kind === "filter").map((r) => r.state), ["off", "exclude", "off", "off", "off", "off"]);
   assert.deepEqual(rows.filter((r) => r.kind === "sort").map((r) => r.state), ["", "", "", "", "", "", "desc"]);
 });
@@ -104,6 +105,14 @@ test("choosing another sort keeps the direction; choosing the same sort again fl
   assert.deepEqual(L.choose(p, row("title")), { key: "librarySortDirection", value: "asc" });
   const title = L.rows(prefs()).find((r) => r.kind === "sort" && r.id === "title");
   assert.deepEqual(L.choose(prefs(), title), { key: "librarySortDirection", value: "desc" });
+});
+
+test("a display row picks its mode, and the toggle key switches between grid and list", () => {
+  const list = L.rows(prefs()).find((r) => r.kind === "display" && r.id === "list");
+  assert.deepEqual(L.choose(prefs(), list), { key: "libraryDisplay", value: "list" });
+  assert.deepEqual(L.toggleDisplay(prefs()), { key: "libraryDisplay", value: "list" });
+  assert.deepEqual(L.toggleDisplay(prefs({ libraryDisplay: "list" })), { key: "libraryDisplay", value: "grid" });
+  assert.deepEqual(L.apply(shelf, prefs({ libraryDisplay: "list" }), ""), L.apply(shelf, prefs(), ""), "the display mode hides nothing");
 });
 
 test("the header names the search, the active filters and a sort other than the default", () => {

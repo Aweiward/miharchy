@@ -14,10 +14,8 @@ var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaTy
 
 var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized sourceId source { displayName } categories { nodes { id } } meta { key value }"
 var CHAPTER_FIELDS = "id name chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder"
-// The sync helper stores source names from phone backups here, id -> name.
-var SOURCE_NAMES_META = "miharchy.sourceNames"
 var DETAIL_QUERY = "query($id: Int!) { manga(id: $id) { " + MANGA_FIELDS + " chapters { nodes { " + CHAPTER_FIELDS + " } } }"
-  + " metas(condition: { key: \"" + SOURCE_NAMES_META + "\" }) { nodes { value } } }"
+  + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
 var EXTENSION_QUERY = "query($name: String!) { extensions(filter: { name: { equalTo: $name } }) { nodes { name isInstalled } } }"
 var FETCH_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: true }) {"
   + " manga { " + MANGA_FIELDS + " } chapters { " + CHAPTER_FIELDS + " } } }"
@@ -164,14 +162,6 @@ function longStrip(genres, sourceName) {
   return /webtoon/i.test(sourceName) || genres.some(function(g) { return LONG_STRIP_GENRES.indexOf(String(g).toLowerCase()) !== -1 })
 }
 
-// n: a manga node with sourceId and source { displayName }, null when the
-// source is not installed. names: SOURCE_NAMES_META parsed.
-function sourceLabel(n, names) {
-  if (n.source) return String(n.source.displayName || n.sourceId)
-  var name = names[n.sourceId]
-  return name ? name + " (not installed)" : "Unknown source " + n.sourceId
-}
-
 // What to do about a manga whose source is not installed. extension: the
 // extension with the source's name, as { installed }, or null for none.
 // An installed one means the extension's source has a new id now.
@@ -184,18 +174,8 @@ function sourceHelp(manga, extension) {
   return "No extension in your repos is named " + name + ". Migrate this manga to another source: M."
 }
 
-function parseNames(data) {
-  var node = ((data.metas && data.metas.nodes) || [])[0]
-  try {
-    var names = JSON.parse(node ? node.value : "{}")
-    return names && typeof names === "object" ? names : {}
-  } catch (e) {
-    return {}
-  }
-}
-
 function toManga(config, n, names) {
-  var source = sourceLabel(n, names)
+  var source = Model.sourceLabel(n, names)
   var own = (n.meta || []).filter(function(m) { return m.key === "miharchy.readingMode" })[0]
   return {
     id: n.id,
@@ -245,7 +225,7 @@ function reduceDetail(d, event) {
       if (event.reply.state !== "ok") return copy(copy(d, failed(event.reply)), { step: null })
       if (d.step === "read") {
         var n = event.reply.data.manga
-        var names = parseNames(event.reply.data)
+        var names = Model.parseNames(event.reply.data)
         var manga = toManga(event.config, n, names)
         var chapters = toChapters(n.chapters && n.chapters.nodes)
         // A fetch goes through the source, so a missing one only fails.
@@ -323,7 +303,6 @@ if (typeof module !== "undefined") {
   module.exports = {
     continues: continues,
     SOURCES_QUERY: SOURCES_QUERY,
-    SOURCE_NAMES_META: SOURCE_NAMES_META,
     sources: sources,
     listing: listing,
     listingPayload: listingPayload,
@@ -332,7 +311,6 @@ if (typeof module !== "undefined") {
     detail: detail,
     detailPayload: detailPayload,
     reduceDetail: reduceDetail,
-    sourceLabel: sourceLabel,
     sourceHelp: sourceHelp,
     libraryPayload: libraryPayload,
     categoryPayload: categoryPayload,

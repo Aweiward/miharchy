@@ -12,8 +12,12 @@ var VIEWS = [
   { id: "settings", title: "Settings", key: "5" }
 ]
 
+// The sync helper stores source names from phone backups here, id -> name.
+var SOURCE_NAMES_META = "miharchy.sourceNames"
+
 var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDownload includeInUpdate } }"
-  + " mangas(condition: {inLibrary: true}) { nodes { id title author artist genre status thumbnailUrl source { id } unreadCount downloadCount bookmarkCount inLibraryAt"
+  + " metas(condition: { key: \"" + SOURCE_NAMES_META + "\" }) { nodes { value } }"
+  + " mangas(condition: {inLibrary: true}) { nodes { id title author artist genre status thumbnailUrl sourceId source { id displayName } unreadCount downloadCount bookmarkCount inLibraryAt"
   + " chapters { totalCount } lastReadChapter { lastReadAt } latestUploadedChapter { uploadDate } latestFetchedChapter { fetchedAt }"
   + " trackRecords { totalCount } categories { nodes { id } } } } }"
 
@@ -170,6 +174,25 @@ function errorText(message) {
   return first.replace(/^Exception while fetching data \([^)]*\) : /, "").trim() || "GraphQL error"
 }
 
+// Reply data with the SOURCE_NAMES_META node -> { sourceId: name }.
+function parseNames(data) {
+  var node = ((data.metas && data.metas.nodes) || [])[0]
+  try {
+    var names = JSON.parse(node ? node.value : "{}")
+    return names && typeof names === "object" ? names : {}
+  } catch (e) {
+    return {}
+  }
+}
+
+// n: a manga node with sourceId and source { displayName }, null when the
+// source is not installed. names: parseNames().
+function sourceLabel(n, names) {
+  if (n.source) return String(n.source.displayName || n.sourceId)
+  var name = names[n.sourceId]
+  return name ? name + " (not installed)" : "Unknown source " + n.sourceId
+}
+
 function fromResponse(status, body, config) {
   var r = reply(status, body)
   if (r.state !== "ok") return conn(r.state, { message: r.message })
@@ -178,6 +201,7 @@ function fromResponse(status, body, config) {
   var ids = function(list) { return ((list && list.nodes) || []).map(function(c) { return c.id }) }
   // Timestamps come as LongString; 0 means never.
   var time = function(chapter, field) { return Number(chapter && chapter[field]) || 0 }
+  var names = parseNames(r.data)
   return conn("ok", {
     manga: nodes.map(function(n) {
       var total = (n.chapters && n.chapters.totalCount) || 0
@@ -188,6 +212,7 @@ function fromResponse(status, body, config) {
         // The server fetches a cover through its source, so without one it only fails.
         cover: n.source ? coverUrl(config, n.thumbnailUrl) : "",
         categories: ids(n.categories),
+        source: sourceLabel(n, names),
         unread: unread,
         author: String(n.author || ""),
         artist: String(n.artist || ""),
@@ -278,7 +303,10 @@ function viewIndex(id) {
 if (typeof module !== "undefined") {
   module.exports = {
     VIEWS: VIEWS,
+    SOURCE_NAMES_META: SOURCE_NAMES_META,
     LIBRARY_QUERY: LIBRARY_QUERY,
+    parseNames: parseNames,
+    sourceLabel: sourceLabel,
     parseConfig: parseConfig,
     base64: base64,
     request: request,

@@ -453,6 +453,9 @@ ShellRoot {
       case "library.optionsDown":
         libraryOptionsCursor = Commands.moveCursor(libraryOptionsCursor, id === "library.optionsUp" ? -1 : 1, Library.rows(libraryPrefs).length)
         break
+      case "library.display":
+        libraryStore.set([Library.toggleDisplay(libraryPrefs)])
+        break
       case "library.optionsChoose":
         libraryStore.set([Library.choose(libraryPrefs, Library.rows(libraryPrefs)[libraryOptionsCursor])])
         break
@@ -768,7 +771,7 @@ ShellRoot {
         HintBar {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.libraryPrefs.libraryDisplay === "list" ? "L grid   " : "L list   ") + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           theme: theme
           onKey: function(event) { root.handleKey(event) }
         }
