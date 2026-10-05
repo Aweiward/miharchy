@@ -5,7 +5,7 @@
 // shell.qml polls the queue, and MangaDetail.qml and DownloadsView.qml send
 // the payloads built here.
 
-var STATUS = "downloadStatus { state queue { state progress tries chapter { id name mangaId } manga { id title } } }"
+var STATUS = "downloadStatus { state queue { state progress tries chapter { id name mangaId chapterNumber uploadDate } manga { id title } } }"
 var STATUS_QUERY = "{ " + STATUS + " }"
 var ENQUEUE_MUTATION = "mutation($ids: [Int!]!) { enqueueChapterDownloads(input: { ids: $ids }) { " + STATUS + " } }"
 var DEQUEUE_MUTATION = "mutation($ids: [Int!]!) { dequeueChapterDownloads(input: { ids: $ids }) { " + STATUS + " } }"
@@ -19,8 +19,8 @@ var STOP_MUTATION = "mutation { stopDownloader(input: {}) { " + STATUS + " } }"
 
 // queue.state: "loading" | "ok" | a failed connection state.
 // running: the downloader is started. items: in queue order, each
-// { chapterId, mangaId, manga, chapter, state, progress, tries } with
-// state "QUEUED" | "DOWNLOADING" | "FINISHED" | "ERROR" and progress 0..1.
+// { chapterId, mangaId, manga, chapter, chapterNumber, uploadDate (ms),
+// state, progress, tries } with state "QUEUED" | "DOWNLOADING" | "FINISHED" | "ERROR" and progress 0..1.
 function initial() {
   return { state: "loading", message: "", running: false, items: [] }
 }
@@ -49,6 +49,8 @@ function reduce(q, event) {
         mangaId: d.chapter.mangaId,
         manga: String(d.manga.title || ""),
         chapter: String(d.chapter.name || ""),
+        chapterNumber: Number(d.chapter.chapterNumber),
+        uploadDate: Number(d.chapter.uploadDate),
         state: d.state,
         progress: Number(d.progress) || 0,
         tries: d.tries
@@ -111,6 +113,47 @@ function dequeuePayload(chapterId) {
   return { query: DEQUEUE_MUTATION, variables: { ids: [chapterId] } }
 }
 
+function chapterIds(items) {
+  return items.map(function(i) { return i.chapterId })
+}
+
+// The queue's chapter ids with items[index] moved to position to, clamped:
+// Mihon's move up, down, to the top and to the bottom.
+function moved(q, index, to) {
+  var order = chapterIds(q.items)
+  var id = order.splice(index, 1)[0]
+  order.splice(Math.max(0, Math.min(order.length, to)), 0, id)
+  return order
+}
+
+// The queue's chapter ids sorted by key, "chapterNumber" or "uploadDate":
+// ascending, or descending when the queue already runs ascending. Mihon
+// offers both directions of each sort; here one key flips between them.
+function sorted(q, key) {
+  var by = function(sign) {
+    return chapterIds(q.items.slice().sort(function(a, b) { return sign * (a[key] - b[key]) }))
+  }
+  var up = by(1)
+  return String(up) === String(chapterIds(q.items)) ? by(-1) : up
+}
+
+// Puts the queue in order (chapter ids) with one reorderChapterDownload
+// per item out of place, all in one request; null when nothing moves.
+// Only the last move answers with the status, so a long queue does not
+// come back once per move.
+function orderPayload(q, order) {
+  var now = chapterIds(q.items)
+  var moves = []
+  order.forEach(function(id, to) {
+    if (now[to] === id) return
+    now.splice(now.indexOf(id), 1)
+    now.splice(to, 0, id)
+    moves.push("m" + to + ": reorderChapterDownload(input: { chapterId: " + id + ", to: " + to + " })")
+  })
+  if (!moves.length) return null
+  return { query: "mutation { " + moves.join(" { clientMutationId } ") + " { " + STATUS + " } }" }
+}
+
 function togglePayload(q) {
   return { query: q.running ? STOP_MUTATION : START_MUTATION }
 }
@@ -144,6 +187,9 @@ if (typeof module !== "undefined") {
     removePayload: removePayload,
     deletePayload: deletePayload,
     dequeuePayload: dequeuePayload,
+    moved: moved,
+    sorted: sorted,
+    orderPayload: orderPayload,
     togglePayload: togglePayload,
     progressText: progressText,
     marker: marker
