@@ -1,5 +1,6 @@
 .pragma library
 .import "Prefs.js" as Prefs
+.import "Chapters.js" as Chapters
 
 // The Library's search, filters and sort, after Mihon's library sheet and
 // toolbar search. Pure, so tests/library.test.js pins it; shell.qml runs
@@ -151,6 +152,13 @@ function tabLabel(entry, prefs, query) {
   return entry.name + (prefs.libraryTabCounts === "on" || words(query).length ? " (" + entry.manga.length + ")" : "")
 }
 
+// Mihon's continue reading button: the manga's next unread chapter, by its
+// own chapter filters and sort (Chapters.PREFS), or null. chapters: as
+// Browse.toChapters() builds them.
+function continueChapter(chapters, chapterPrefs) {
+  return Chapters.nextUnread(Chapters.apply(chapters, chapterPrefs), chapterPrefs)
+}
+
 // Whether the search or a filter may hide manga.
 function narrowed(prefs, query) {
   return words(query).length > 0 || FILTERS.some(function(f) { return prefs[filterKey(f)] !== "off" })
@@ -178,6 +186,7 @@ if (typeof module !== "undefined") {
     rows: rows,
     toggleDisplay: toggleDisplay,
     badges: badges,
+    continueChapter: continueChapter,
     tabLabel: tabLabel,
     choose: choose,
     narrowed: narrowed,
