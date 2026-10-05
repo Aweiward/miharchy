@@ -15,7 +15,12 @@ var NOT_BUILT = 127
 // The helper takes the sync folder from meta miharchy.syncFolder and holds
 // a lock, so the window and the popup start it the same way.
 function command(devHelper) {
-  return Setup.command("for h in \"$HOME/" + HELPER_DIR + "/bin/miharchy-sync\" \"$1\"; do test -x \"$h\" && exec \"$h\" sync --json; done\nexit " + NOT_BUILT, [devHelper])
+  return helperCommand(devHelper, ["sync", "--json"])
+}
+
+// The helper run with args, which reach it as arguments, never as shell text.
+function helperCommand(devHelper, args) {
+  return Setup.command("for h in \"$HOME/" + HELPER_DIR + "/bin/miharchy-sync\" \"$1\"; do test -x \"$h\" && shift && exec \"$h\" \"$@\"; done\nexit " + NOT_BUILT, [devHelper].concat(args))
 }
 
 // The helper's "type" for each change, as Main.kt counts them.
@@ -123,6 +128,7 @@ if (typeof module !== "undefined") {
     HELPER_DIR: HELPER_DIR,
     NOT_BUILT: NOT_BUILT,
     command: command,
+    helperCommand: helperCommand,
     initial: initial,
     reduce: reduce,
     report: report,

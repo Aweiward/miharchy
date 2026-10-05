@@ -20,7 +20,9 @@ import kotlin.io.path.name
 import kotlin.io.path.readBytes
 import kotlin.system.exitProcess
 
-private const val USAGE = "usage: miharchy-sync sync [--folder <sync folder>] [--dry-run] [--json]"
+private const val USAGE = """usage: miharchy-sync sync [--folder <sync folder>] [--dry-run] [--json]
+       miharchy-sync check <backup file>
+       miharchy-sync restore <backup file>"""
 
 /** Backups Miharchy writes to the sync folder start with this, so a sync never mistakes them for phone backups. */
 const val OWN_BACKUP_PREFIX = "miharchy-"
@@ -41,7 +43,12 @@ data class Summary(
 )
 
 fun main(args: Array<String>) {
-    if (args.firstOrNull() != "sync") usage()
+    when (args.firstOrNull()) {
+        "sync" -> {}
+        "check" -> return check(args.getOrNull(1) ?: usage())
+        "restore" -> return restore(args.getOrNull(1) ?: usage())
+        else -> usage()
+    }
     val folderArg = args.toList().zipWithNext().firstOrNull { it.first == "--folder" }?.second
     val dryRun = "--dry-run" in args
     val asJson = "--json" in args
@@ -88,6 +95,45 @@ private fun sync(folderArg: String?, dryRun: Boolean): Summary {
 
     val lost = (phoneNow ?: phoneBaseline)?.let { unreachable(it, decodeBackup(exported)) }.orEmpty()
     return Summary(config.url, folder.toString(), phoneFile?.toString(), false, changes, exportFile.toString(), lost)
+}
+
+@Serializable
+data class Check(val missingSources: List<String>, val missingTrackers: List<String>)
+
+@Serializable
+data class RestoreProgress(val state: String, val mangaProgress: Int, val totalManga: Int)
+
+private fun readBackupFile(file: String): ByteArray {
+    val path = Path.of(file)
+    if (!path.isRegularFile()) fail("$file is not a file.")
+    val bytes = path.readBytes()
+    runCatching { decodeBackup(bytes) }.onFailure { fail("$file is not a Mihon backup: ${it.message}") }
+    return bytes
+}
+
+/** What the backup needs that the server lacks, as one JSON line. Reads only, so it takes no lock. */
+private fun check(file: String) {
+    val bytes = readBackupFile(file)
+    val result = try { Desktop(ServerConfig.load()).validate(bytes) } catch (e: Exception) { fail(e.message ?: e.toString()) }
+    println(Json.encodeToString(result))
+}
+
+/**
+ * Restores the file into the server under the sync lock, one JSON line per progress step. The baselines stay:
+ * the restore only moves the desktop library, and the next sync reads that as a desktop change (ADR 0002).
+ */
+private fun restore(file: String) {
+    val bytes = readBackupFile(file)
+    lockState() ?: fail("A sync is already running.")
+    try {
+        val desktop = Desktop(ServerConfig.load())
+        desktop.restoreFile(bytes) { println(Json.encodeToString(it)) }
+        val stored = desktop.sourceNames()
+        val names = mergeSourceNames(stored, decodeBackup(bytes).backupSources)
+        if (names != stored) desktop.setSourceNames(names)
+    } catch (e: Exception) {
+        fail(e.message ?: e.toString())
+    }
 }
 
 // Reachable for the whole run: a collected channel closes its file, which drops the lock.
