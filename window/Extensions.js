@@ -223,11 +223,14 @@ function find(ext, pkgName) {
   return null
 }
 
-// What a command does to a row:
+// What a command does to a row, as in Mihon's extension list: a tap opens
+// an installed extension's details, and update is a button of its own.
 //   "extensions.activate" (Enter) installs an available extension and
-//   updates an updatable one; "extensions.remove" (x) uninstalls an
-//   installed extension or removes a repo.
-// Returns { action, pkgName }, { removeRepo }, or null for nothing.
+//   opens an installed one's details; "extensions.update" (u) updates an
+//   updatable one; "extensions.remove" (x) uninstalls an installed
+//   extension or removes a repo.
+// Returns { action, pkgName }, { details: pkgName }, { removeRepo }, or
+// null for nothing.
 function actionFor(ext, row, command) {
   if (!row) return null
   if (row.kind === "repo") {
@@ -236,10 +239,70 @@ function actionFor(ext, row, command) {
     return null
   }
   var e = find(ext, row.key)
-  if (!e || ext.busy[e.pkgName]) return null
+  if (!e) return null
+  if (command === "extensions.activate" && e.installed) return { details: e.pkgName }
+  if (ext.busy[e.pkgName]) return null
   if (command === "extensions.remove") return e.installed ? { action: "uninstall", pkgName: e.pkgName } : null
-  if (e.hasUpdate) return { action: "update", pkgName: e.pkgName }
+  if (command === "extensions.update") return e.hasUpdate ? { action: "update", pkgName: e.pkgName } : null
   return e.installed ? null : { action: "install", pkgName: e.pkgName }
+}
+
+// --- An installed extension's details: its sources ---
+
+var DETAILS_QUERY = "query($pkg: String!) { extension(pkgName: $pkg) { source { nodes { id displayName lang isConfigurable } } } }"
+
+// details.state: "loading" | "ok" | a failed connection state. sources:
+// [{ id, name, lang, configurable }], fields Browse.sources() gives too,
+// so BrowseView's settings panel takes one as it is.
+function details(pkgName) {
+  return { pkgName: pkgName, state: "loading", message: "", sources: [], cursor: 0 }
+}
+
+function detailsPayload(d) {
+  return { query: DETAILS_QUERY, variables: { pkg: d.pkgName } }
+}
+
+// event.type: "reply" { reply } | "move" { delta }.
+function reduceDetails(d, event) {
+  switch (event.type) {
+    case "reply":
+      var r = event.reply
+      if (r.state !== "ok") return copy(d, { state: r.state, message: r.message })
+      var nodes = (r.data.extension && r.data.extension.source && r.data.extension.source.nodes) || []
+      var sources = nodes.map(function(n) {
+        return { id: String(n.id), name: String(n.displayName || n.id), lang: String(n.lang || ""), configurable: n.isConfigurable === true }
+      }).sort(function(a, b) { return a.name.localeCompare(b.name) })
+      return copy(d, { state: "ok", message: "", sources: sources, cursor: Math.min(d.cursor, Math.max(0, sources.length - 1)) })
+    case "move":
+      return copy(d, { cursor: Math.max(0, Math.min(d.sources.length - 1, d.cursor + event.delta)) })
+  }
+  return d
+}
+
+// The lines above the sources, as Mihon's details header.
+function detailsHeader(ext, d) {
+  var e = find(ext, d.pkgName)
+  if (!e) return []
+  var warning = e.warning === "NSFW" ? "18+" : e.warning === "MIXED" ? "mixed content" : ""
+  return [
+    "Version " + e.version + (e.hasUpdate ? ", an update is available" : "") + (e.obsolete ? ", obsolete: its repo no longer has it" : ""),
+    "Language " + (e.lang === "all" ? "multiple" : e.lang) + (warning ? "   " + warning : ""),
+    e.pkgName
+  ]
+}
+
+// What a details command does: { settings: source }, { action, pkgName },
+// or null. Enter opens a source's settings only when it has some.
+function detailsAction(ext, d, command) {
+  if (command === "extension.settings") {
+    var s = d.sources[d.cursor]
+    return s && s.configurable ? { settings: s } : null
+  }
+  var e = find(ext, d.pkgName)
+  if (!e || ext.busy[e.pkgName]) return null
+  if (command === "extension.update") return e.hasUpdate ? { action: "update", pkgName: e.pkgName } : null
+  if (command === "extension.uninstall") return e.installed ? { action: "uninstall", pkgName: e.pkgName } : null
+  return null
 }
 
 var BUSY = { install: "installing", update: "updating", uninstall: "uninstalling" }
@@ -265,6 +328,12 @@ if (typeof module !== "undefined") {
     reduce: reduce,
     rows: rows,
     actionFor: actionFor,
-    status: status
+    status: status,
+    find: find,
+    details: details,
+    detailsPayload: detailsPayload,
+    reduceDetails: reduceDetails,
+    detailsHeader: detailsHeader,
+    detailsAction: detailsAction
   }
 }

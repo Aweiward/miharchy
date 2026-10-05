@@ -29,16 +29,29 @@ Item {
   property string armed: ""
   // Only the latest load request may advance the load.
   property int loadSeq: 0
+  // An installed extension's details (Extensions.details) over the list,
+  // or null.
+  property var details: null
+  property int detailsSeq: 0
 
   readonly property var rows: Extensions.rows(ext, { query: query, allLanguages: allLanguages, showNsfw: showNsfw })
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.key === view.cursorKey }))
   readonly property var problem: Model.problem(ext, configPath)
-  readonly property string hint: "j k move   enter install/update   x remove   a add repo   / filter   l languages   "
+  readonly property var detailsExtension: details ? Extensions.find(ext, details.pkgName) : null
+  readonly property string hint: !details ? "j k move   enter install/details   u update   x remove   a add repo   / filter   l languages   "
+    : "j k move   enter settings   " + (detailsExtension && detailsExtension.hasUpdate ? "u update   " : "") + "x uninstall   esc back   "
 
   signal key(var event)
   signal editEnded()
+  // Enter on a source in the details: BrowseView's settings panel opens.
+  signal openSettings(var source)
 
   // A click moves the cursor as j and k do; a double click then sends Enter.
+  function pointSource(index, twice) {
+    details = Extensions.reduceDetails(details, { type: "move", delta: index - details.cursor })
+    if (twice) key(Commands.enter())
+  }
+
   function point(rowKey, twice) {
     if (editing) return
     cursorKey = rowKey
@@ -49,6 +62,7 @@ Item {
   onConfigChanged: {
     if (editing) closeField()
     loadSeq++
+    closeDetails()
     ext = config ? Extensions.initial() : Extensions.reduce(Extensions.initial(), { type: "config-missing" })
     if (active) load()
   }
@@ -84,6 +98,19 @@ Item {
     })
   }
 
+  function showDetails(pkgName) {
+    details = Extensions.details(pkgName)
+    var seq = ++detailsSeq
+    send(Extensions.detailsPayload(details), function(reply) {
+      if (seq === view.detailsSeq && view.details) view.details = Extensions.reduceDetails(view.details, { type: "reply", reply: reply })
+    })
+  }
+
+  function closeDetails() {
+    detailsSeq++
+    details = null
+  }
+
   function act(a) {
     var cfg = config
     if (a.removeRepo) {
@@ -95,6 +122,9 @@ Item {
     ext = Extensions.reduce(ext, { type: "action", pkgName: a.pkgName, action: a.action })
     send(Extensions.actionPayload(a.pkgName, a.action), function(reply) {
       view.ext = Extensions.reduce(view.ext, { type: "action-reply", pkgName: a.pkgName, reply: reply, config: cfg })
+      // An uninstall from the details ends them.
+      var left = Extensions.find(view.ext, a.pkgName)
+      if (view.details && view.details.pkgName === a.pkgName && (!left || !left.installed)) view.closeDetails()
     })
   }
 
@@ -122,8 +152,27 @@ Item {
         if (rows.length) cursorKey = rows[Commands.moveCursor(cursor, id === "extensions.up" ? -1 : 1, rows.length)].key
         break
       case "extensions.activate":
+      case "extensions.update":
         var a = Extensions.actionFor(ext, row, id)
-        if (a && config) act(a)
+        if (!a || !config) break
+        if (a.details) showDetails(a.details)
+        else act(a)
+        break
+      case "extension.up":
+      case "extension.down":
+        details = Extensions.reduceDetails(details, { type: "move", delta: id === "extension.up" ? -1 : 1 })
+        break
+      case "extension.back":
+        closeDetails()
+        break
+      case "extension.settings":
+      case "extension.update":
+      case "extension.uninstall":
+        var da = Extensions.detailsAction(ext, details, id)
+        if (!da || !config) break
+        if (da.settings) openSettings(da.settings)
+        else if (id !== "extension.uninstall" || wasArmed === details.pkgName) act(da)
+        else armed = details.pkgName
         break
       case "extensions.remove":
         var r = Extensions.actionFor(ext, row, id)
@@ -166,6 +215,7 @@ Item {
 
   Column {
     id: head
+    visible: !view.details
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: parent.right
@@ -244,6 +294,7 @@ Item {
 
   ListView {
     id: list
+    visible: !view.details
     anchors.top: head.bottom
     anchors.bottom: parent.bottom
     anchors.left: parent.left
@@ -352,11 +403,134 @@ Item {
 
   Text {
     anchors.centerIn: list
-    visible: view.rows.length === 0 && view.problem === null
+    visible: !view.details && view.rows.length === 0 && view.problem === null
     text: view.ext.state === "loading" || view.ext.state === "idle" ? "Loading extensions"
       : view.ext.repos.length ? "No extension matches" : "No extension repo. Press a to add one by URL."
     color: view.theme.muted
     font.family: view.theme.fontFamily
     font.pixelSize: view.theme.fontSize
+  }
+
+  // Mihon's extension details: what the extension is, then its sources.
+  Item {
+    anchors.fill: parent
+    anchors.margins: view.theme.fontSize * 2
+    visible: view.details !== null
+
+    Column {
+      id: detailsHead
+      width: parent.width
+      spacing: view.theme.fontSize * 0.4
+
+      Row {
+        spacing: view.theme.fontSize * 0.75
+
+        ServerImage {
+          width: view.theme.fontSize * 2.4
+          height: width
+          config: view.config
+          url: view.detailsExtension ? view.detailsExtension.icon : ""
+          sourceSize.width: width
+          asynchronous: true
+        }
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: view.detailsExtension ? view.detailsExtension.name : ""
+          color: view.theme.foreground
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontHeading
+        }
+      }
+
+      Repeater {
+        model: view.details ? Extensions.detailsHeader(view.ext, view.details) : []
+
+        Text {
+          required property var modelData
+          width: detailsHead.width
+          elide: Text.ElideRight
+          text: modelData
+          color: view.theme.muted
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSmall
+        }
+      }
+
+      Text {
+        readonly property bool failed: view.details !== null && (["ok", "loading"].indexOf(view.details.state) === -1 || text === view.ext.errors[view.details.pkgName])
+        width: parent.width
+        visible: text !== ""
+        wrapMode: Text.Wrap
+        text: !view.details ? ""
+          : view.armed === view.details.pkgName ? "x again to uninstall"
+          : view.details.state === "loading" ? "Loading sources"
+          : view.details.state !== "ok" ? view.details.message || view.details.state
+          : Extensions.status(view.ext, { kind: "extension", key: view.details.pkgName })
+        color: failed ? view.theme.urgent : view.theme.muted
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      Text {
+        topPadding: view.theme.fontSize
+        text: view.details && view.details.state === "ok" ? (view.details.sources.length === 1 ? "1 source" : view.details.sources.length + " sources") : "Sources"
+        color: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+    }
+
+    ListView {
+      id: sourceList
+      anchors.top: detailsHead.bottom
+      anchors.topMargin: view.theme.fontSize * 0.5
+      anchors.bottom: parent.bottom
+      width: parent.width
+      clip: true
+      model: view.details ? view.details.sources : []
+      currentIndex: view.details ? view.details.cursor : -1
+      onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+
+      delegate: Rectangle {
+        id: source
+        required property var modelData
+        required property int index
+        readonly property bool current: view.details !== null && index === view.details.cursor
+        width: sourceList.width
+        height: view.theme.fontSize * 2.2
+        color: current ? view.theme.selected : "transparent"
+
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.pointSource(source.index, false)
+          onDoubleClicked: view.pointSource(source.index, true)
+        }
+
+        Text {
+          anchors.left: parent.left
+          anchors.leftMargin: view.theme.fontSize * 0.5
+          anchors.right: sourceDetail.left
+          anchors.rightMargin: view.theme.fontSize
+          anchors.verticalCenter: parent.verticalCenter
+          elide: Text.ElideRight
+          text: source.modelData.name
+          color: source.current ? view.theme.selectedText : view.theme.foreground
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+        }
+
+        Text {
+          id: sourceDetail
+          anchors.right: parent.right
+          anchors.rightMargin: view.theme.fontSize * 0.5
+          anchors.verticalCenter: parent.verticalCenter
+          text: source.modelData.lang + (source.modelData.configurable ? "   settings" : "")
+          color: source.current ? view.theme.selectedText : view.theme.muted
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSmall
+        }
+      }
+    }
   }
 }
