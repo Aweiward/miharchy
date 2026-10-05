@@ -25,7 +25,8 @@ var KEY = {
 // "Tab", "Backtab" (Shift-Tab), "Backspace" and the arrows match the key code.
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
-// sources, extensions, source, global; Library screen: categories; or
+// sources, extensions, source, global, or its panel: source-filters,
+// source-settings; Library screen: categories; or
 // overlay: library-options, manga, manga-categories, manga-options,
 // manga-select, manga-track,
 // manga-track-pick, downloads, reader, sync,
@@ -54,6 +55,9 @@ var commands = [
   // a migration runs.
   { id: "migrate.back", title: "Back", keys: ["Esc", "Backspace"], view: ["migrate-search", "migrate-from", "migrate-to", "migrate-match", "migrate-confirm", "migrate-busy", "migrate-done"], hidden: true },
   { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: ["source", "global"], hidden: true },
+  // F and S close the panel they open, as F does on the Library.
+  { id: "panel.closeFilters", title: "Close filters", keys: ["Esc", "Backspace", "F"], view: "source-filters", hidden: true },
+  { id: "panel.closeSettings", title: "Close source settings", keys: ["Esc", "Backspace", "S"], view: "source-settings", hidden: true },
   { id: "manga.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga", hidden: true },
   { id: "manga.categoriesClose", title: "Close categories", keys: ["Esc", "Backspace", "c"], view: "manga-categories", hidden: true },
   { id: "track.close", title: "Close tracking", keys: ["Esc", "Backspace", "t"], view: "manga-track", hidden: true },
@@ -95,6 +99,15 @@ var commands = [
   { id: "source.latest", title: "Latest", keys: ["n"], view: "source", hidden: true },
   { id: "source.search", title: "Search this source", keys: ["/"], view: "source", hidden: true },
   { id: "source.open", title: "Open manga", keys: ["Enter"], view: "source", hidden: true },
+  // F, as on the Library: f is fullscreen everywhere.
+  { id: "source.filters", title: "Filter this source", keys: ["F"], view: "source", hidden: true },
+  { id: "source.settings", title: "Source settings", keys: ["S"], view: ["sources", "source"], hidden: true },
+  { id: "panel.up", title: "Previous row", keys: ["k", "Up"], view: ["source-filters", "source-settings"], hidden: true },
+  { id: "panel.down", title: "Next row", keys: ["j", "Down"], view: ["source-filters", "source-settings"], hidden: true },
+  { id: "panel.choose", title: "Change or open a row", keys: ["Enter", "Space"], view: ["source-filters", "source-settings"], hidden: true },
+  // Settings save as they change; filters wait for a, as Mihon's Filter button.
+  { id: "panel.apply", title: "Apply the filters", keys: ["a"], view: "source-filters", hidden: true },
+  { id: "panel.reset", title: "Reset the filters", keys: ["x"], view: "source-filters", hidden: true },
   // / searches what the screen shows: one source there, every source here.
   { id: "global.search", title: "Search every source", keys: ["/"], view: ["sources", "global"], hidden: true },
   { id: "global.left", title: "Previous result", keys: ["h"], view: "global", hidden: true },

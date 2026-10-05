@@ -15,8 +15,8 @@ const answer = (s, i, reply) => G.reduce(s, i, { type: "reply", attempt: s.group
 test("one query asks every source for its first search page", () => {
   const s = G.search(sources(2), "berserk");
   assert.deepEqual(s.groups.map((g) => G.payload(g).variables), [
-    { source: "1", type: "SEARCH", page: 1, query: "berserk" },
-    { source: "2", type: "SEARCH", page: 1, query: "berserk" }
+    { source: "1", type: "SEARCH", page: 1, query: "berserk", filters: [] },
+    { source: "2", type: "SEARCH", page: 1, query: "berserk", filters: [] }
   ]);
 });
 

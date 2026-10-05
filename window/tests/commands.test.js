@@ -492,3 +492,36 @@ test("migrating: hjkl pick a result, / searches another title, Enter chooses; th
   assert.equal(C.dispatch(typing, key(C.KEY.Return)), "migrate.commit");
   assert.equal(C.dispatch(typing, key(C.KEY.Escape)), "migrate.cancel");
 });
+
+test("F on a source opens its filters; there j/k move, Enter or Space change a row, a applies, x resets, Esc or F closes", () => {
+  assert.equal(C.dispatch(screen("source"), text("F")), "source.filters");
+  const f = screen("source-filters");
+  assert.equal(C.dispatch(f, text("j")), "panel.down");
+  assert.equal(C.dispatch(f, key(C.KEY.Up)), "panel.up");
+  assert.equal(C.dispatch(f, key(C.KEY.Return)), "panel.choose");
+  assert.equal(C.dispatch(f, key(C.KEY.Space)), "panel.choose");
+  assert.equal(C.dispatch(f, text("a")), "panel.apply");
+  assert.equal(C.dispatch(f, text("x")), "panel.reset");
+  assert.equal(C.dispatch(f, key(C.KEY.Escape)), "panel.closeFilters");
+  assert.equal(C.dispatch(f, text("F")), "panel.closeFilters");
+  assert.equal(C.dispatch(f, text("S")), null);
+});
+
+test("S on the sources screen or a source opens its settings; there j/k move, Enter or Space change a row, Esc or S closes", () => {
+  assert.equal(C.dispatch(screen("sources"), text("S")), "source.settings");
+  assert.equal(C.dispatch(screen("source"), text("S")), "source.settings");
+  const s = screen("source-settings");
+  assert.equal(C.dispatch(s, text("k")), "panel.up");
+  assert.equal(C.dispatch(s, key(C.KEY.Return)), "panel.choose");
+  assert.equal(C.dispatch(s, key(C.KEY.Escape)), "panel.closeSettings");
+  assert.equal(C.dispatch(s, text("S")), "panel.closeSettings");
+  assert.equal(C.dispatch(s, text("a")), null, "settings save as they change");
+  assert.equal(C.dispatch(s, text("x")), null);
+});
+
+test("a panel's text field commits and cancels as panel.*", () => {
+  const e = { palette: false, view: "source-filters", editing: "panel" };
+  assert.equal(C.dispatch(e, key(C.KEY.Return)), "panel.commit");
+  assert.equal(C.dispatch(e, key(C.KEY.Escape)), "panel.cancel");
+  assert.equal(C.dispatch(e, text("F")), null);
+});

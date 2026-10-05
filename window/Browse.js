@@ -6,10 +6,10 @@
 // tests/browse.test.js pins it; BrowseView.qml sends the payloads built here
 // and feeds replies back through the reducers.
 
-var SOURCES_QUERY = "{ sources { nodes { id displayName lang iconUrl contentWarning supportsLatest } } }"
+var SOURCES_QUERY = "{ sources { nodes { id displayName lang iconUrl contentWarning supportsLatest isConfigurable } } }"
 
-var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaType!, $page: Int!, $query: String) {"
-  + " fetchSourceManga(input: { source: $source, type: $type, page: $page, query: $query }) {"
+var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaType!, $page: Int!, $query: String, $filters: [FilterChangeInput!]) {"
+  + " fetchSourceManga(input: { source: $source, type: $type, page: $page, query: $query, filters: $filters }) {"
   + " hasNextPage mangas { id title thumbnailUrl inLibrary } } }"
 
 var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized sourceId source { displayName } categories { nodes { id } } meta { key value }"
@@ -44,7 +44,7 @@ function failed(reply) {
 }
 
 // A sources reply -> { state, message, sources: [{ id, name, lang, icon,
-// warning, supportsLatest }] }. The local source is v1.1 work; NSFW sources
+// warning, supportsLatest, configurable }] }. The local source is v1.1 work; NSFW sources
 // hide unless showNsfw, and only English and multi-language sources show
 // unless allLanguages, the same rules as their extensions.
 function sources(reply, config, showNsfw, allLanguages) {
@@ -61,7 +61,8 @@ function sources(reply, config, showNsfw, allLanguages) {
         lang: String(n.lang || ""),
         icon: Model.coverUrl(config, n.iconUrl),
         warning: String(n.contentWarning || "SAFE"),
-        supportsLatest: n.supportsLatest === true
+        supportsLatest: n.supportsLatest === true,
+        configurable: n.isConfigurable === true
       }
     })
   list.sort(function(a, b) { return a.name.localeCompare(b.name) })
@@ -70,12 +71,16 @@ function sources(reply, config, showNsfw, allLanguages) {
 
 // listing.state: "idle" | "loading" | "ok" | a failed connection state.
 // page: the last page loaded. flare: the failure is Cloudflare without
-// FlareSolverr.
-function listing(source, mode, query) {
+// FlareSolverr. filters: Widgets.filterChanges of the applied filters;
+// Suwayomi hands them to the source only in a search, so only a search
+// keeps them.
+function listing(source, mode, query, filters) {
+  mode = mode === "latest" && !source.supportsLatest ? "popular" : mode
   return {
     source: source,
-    mode: mode === "latest" && !source.supportsLatest ? "popular" : mode,
+    mode: mode,
     query: query || "",
+    filters: mode === "search" ? filters || [] : [],
     page: 0,
     items: [],
     hasNext: true,
@@ -91,7 +96,7 @@ function listingPayload(l) {
   if (l.state === "loading" || !l.hasNext || (l.state !== "idle" && l.state !== "ok")) return null
   return {
     query: LISTING_MUTATION,
-    variables: { source: l.source.id, type: TYPES[l.mode], page: l.page + 1, query: l.mode === "search" ? l.query : null }
+    variables: { source: l.source.id, type: TYPES[l.mode], page: l.page + 1, query: l.mode === "search" ? l.query : null, filters: l.mode === "search" ? l.filters : null }
   }
 }
 
@@ -302,7 +307,7 @@ function notice(s, configPath) {
   if (s.flare) return { title: "This source needs FlareSolverr", detail: "It sits behind Cloudflare. Turn FlareSolverr on in Setup or Settings, then press r." }
   var p = Model.problem(s, configPath)
   if (p) return p
-  if (s.state === "ok" && s.items && s.items.length === 0) return { title: "No manga found", detail: s.mode === "search" ? "Try another search." : "" }
+  if (s.state === "ok" && s.items && s.items.length === 0) return { title: "No manga found", detail: s.mode !== "search" ? "" : s.filters.length ? "Try other filters: F." : "Try another search." }
   return null
 }
 
