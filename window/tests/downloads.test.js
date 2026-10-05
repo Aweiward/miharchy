@@ -120,3 +120,52 @@ test("an item's line shows its manga, chapter and state", () => {
   assert.equal(D.progressText(queue[0]), "50%");
   assert.equal(D.progressText(queue[1]), "queued");
 });
+
+const queued = (running, list) => polled(D.initial(), { downloadStatus: status(running ? "STARTED" : "STOPPED", list.map(([id, number, date]) => {
+  const i = item(id, "QUEUED", 0);
+  i.chapter.chapterNumber = number;
+  i.chapter.uploadDate = String(date);
+  return i;
+})) });
+// Replays a reorder payload's moves on the ids, as the server does.
+const replay = (ids, payload) => {
+  const out = ids.slice();
+  for (const [, id, to] of payload.query.matchAll(/chapterId: (\d+), to: (\d+)/g)) {
+    out.splice(out.indexOf(Number(id)), 1);
+    out.splice(Number(to), 0, Number(id));
+  }
+  return out;
+};
+
+test("a download moves up, down, to the top and to the bottom, and stays inside the queue", () => {
+  const q = queued(false, [[1, 1, 0], [2, 2, 0], [3, 3, 0]]);
+  assert.deepEqual(D.moved(q, 1, 0), [2, 1, 3]);
+  assert.deepEqual(D.moved(q, 1, 2), [1, 3, 2]);
+  assert.deepEqual(D.moved(q, 2, 0), [3, 1, 2]);
+  assert.deepEqual(D.moved(q, 0, 3), [2, 3, 1]);
+  assert.deepEqual(D.moved(q, 0, -1), [1, 2, 3]);
+});
+
+test("a sort orders the queue ascending, and descending once it already runs ascending", () => {
+  const q = queued(true, [[7, 3, 300], [8, 1, 100], [9, 2, 50]]);
+  assert.deepEqual(D.sorted(q, "chapterNumber"), [8, 9, 7]);
+  assert.deepEqual(D.sorted(q, "uploadDate"), [9, 8, 7]);
+  const asc = queued(true, [[8, 1, 100], [9, 2, 50], [7, 3, 300]]);
+  assert.deepEqual(D.sorted(asc, "chapterNumber"), [7, 9, 8]);
+});
+
+test("the reorder payload moves each item out of place in one request and lands on the order", () => {
+  const q = queued(true, [[1, 1, 0], [2, 2, 0], [3, 3, 0], [4, 4, 0]]);
+  const order = [4, 2, 1, 3];
+  assert.deepEqual(replay([1, 2, 3, 4], D.orderPayload(q, order)), order);
+  assert.equal(D.orderPayload(q, [1, 2, 3, 4]), null);
+});
+
+test("only the last move of a reorder answers with the queue, which the queue reads", () => {
+  const q = queued(true, [[1, 1, 0], [2, 2, 0], [3, 3, 0]]);
+  const query = D.orderPayload(q, [3, 2, 1]).query;
+  assert.equal(query.match(/downloadStatus/g).length, 1);
+  assert.match(query, /downloadStatus \{[^]*\} \}$/);
+  const data = { m2: { downloadStatus: status("STARTED", [item(3, "QUEUED", 0), item(2, "QUEUED", 0), item(1, "QUEUED", 0)]) }, m0: { clientMutationId: null } };
+  assert.deepEqual(polled(q, data).items.map((i) => i.chapterId), [3, 2, 1]);
+});

@@ -22,7 +22,7 @@ Rectangle {
   property int seq: 0
 
   readonly property var problem: Model.problem(queue, configPath)
-  readonly property string hint: "j k move   x take out   space " + (queue.running ? "pause" : "start") + "   esc close"
+  readonly property string hint: "j k move   J K reorder   t top   b bottom   n sort by number   u sort by upload date   x take out   space " + (queue.running ? "pause" : "start") + "   esc close"
 
   // Items gone from the queue since the last reply: finished or taken out.
   signal leftQueue(var items)
@@ -66,6 +66,15 @@ Rectangle {
     send({ query: Downloads.STATUS_QUERY })
   }
 
+  // The cursor stays on its download wherever the new order puts it.
+  function reorder(order) {
+    var item = queue.items[cursor]
+    var payload = Downloads.orderPayload(queue, order)
+    if (!payload) return
+    cursor = order.indexOf(item.chapterId)
+    send(payload)
+  }
+
   function run(id) {
     var item = queue.items[cursor]
     switch (id) {
@@ -79,6 +88,16 @@ Rectangle {
       case "downloads.up":
       case "downloads.down":
         cursor = Math.max(0, Math.min(queue.items.length - 1, cursor + (id === "downloads.up" ? -1 : 1)))
+        break
+      case "downloads.moveUp":
+      case "downloads.moveDown":
+      case "downloads.top":
+      case "downloads.bottom":
+        if (item) reorder(Downloads.moved(queue, cursor, { "downloads.moveUp": cursor - 1, "downloads.moveDown": cursor + 1, "downloads.top": 0, "downloads.bottom": queue.items.length }[id]))
+        break
+      case "downloads.sortNumber":
+      case "downloads.sortDate":
+        reorder(Downloads.sorted(queue, id === "downloads.sortNumber" ? "chapterNumber" : "uploadDate"))
         break
       case "downloads.dequeue":
         if (item) send(Downloads.dequeuePayload(item.chapterId))
