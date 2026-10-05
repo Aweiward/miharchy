@@ -168,6 +168,18 @@ test("the selection actions read every chapter of the chosen manga and remove th
   assert.deepEqual(L.removePayload([3, 4]).variables, { ids: [3, 4] });
 });
 
+test("an added manga goes to the default category, to none, or asks, as Mihon", () => {
+  const cats = [{ id: 2, name: "Action" }];
+  assert.equal(L.defaultCategory("2", cats), 2);
+  assert.equal(L.defaultCategory("0", cats), 0, "Default: no category");
+  assert.equal(L.defaultCategory("ask", cats), -1);
+  assert.equal(L.defaultCategory("7", cats), -1, "a deleted category asks");
+  assert.equal(L.defaultCategory("ask", []), 0, "with no categories there is nothing to ask");
+  const cats3 = [{ id: 2 }, { id: 3 }, { id: 4 }];
+  assert.deepEqual(L.moveToPayload(9, 3, cats3).variables, { ids: [9], add: [3], remove: [2, 4] }, "exactly the default category");
+  assert.deepEqual(L.moveToPayload(9, 0, cats3).variables, { ids: [9], add: [], remove: [2, 3, 4] }, "Default: out of every category");
+});
+
 test("the header names the search, the active filters and a sort other than the default", () => {
   assert.equal(L.summary(prefs(), ""), "");
   assert.equal(L.narrowed(prefs(), ""), false);

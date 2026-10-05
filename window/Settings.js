@@ -4,7 +4,7 @@
 // The Settings view's rows and state. Pure, so tests/settings.test.js pins
 // it; shell.qml sends the payloads built here and feeds replies back.
 //
-// A row: { key, label, type: "bool" | "choice" | "text" | "folder", default, store }.
+// A row: { key, label, type: "bool" | "choice" | "text" | "folder" | "category", default, store }.
 //   store "server": a Suwayomi server setting named key (settings/setSettings).
 //   store "meta":   a Miharchy preference in Suwayomi global meta under
 //                   META_PREFIX + key, stored as a string.
@@ -13,7 +13,8 @@
 //   a folder row is a text row that takes an absolute path or ~ (see
 //   commitFolder) and saves only once the folder exists;
 //   bool rows may add whenOn, extra server settings sent along when the
-//   row turns on.
+//   row turns on; a category row's options are the user's categories, so
+//   activate() and display() take them.
 // A later setting is one more entry here.
 
 var META_PREFIX = Prefs.PREFIX
@@ -71,6 +72,10 @@ var ROWS = [
   { key: "excludeUnreadChapters", label: "Skip manga with unread chapters", type: "bool", default: true, store: "server" },
   { key: "excludeNotStarted", label: "Skip manga not started", type: "bool", default: true, store: "server" },
   { key: "excludeCompleted", label: "Skip completed manga", type: "bool", default: true, store: "server" },
+  // Mihon's default category for manga added to the library: "ask", "0"
+  // (Default: no category) or a category id. The server's own default flag
+  // applies only to its REST add, so the window applies this one.
+  { key: "defaultCategory", label: "Default category", type: "category", default: "ask", store: "meta" },
   // The server refuses a folder that does not exist; empty means its own.
   { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
   // Suwayomi has no such setting, so the reader deletes a chapter it
@@ -159,10 +164,24 @@ function reduce(settings, event) {
   return settings
 }
 
-// What Enter or Space does to a row: { save: newValue } for bool and
-// choice rows, { edit: currentText } for text rows.
-function activate(row, value) {
+// A category row's values, in Mihon's order: always ask, Default, then
+// each user category. categories: [{ id, name }], as the library has them.
+function categoryOptions(categories) {
+  return [{ value: "ask", label: "Always ask" }, { value: "0", label: "Default" }].concat((categories || []).map(function(c) {
+    return { value: String(c.id), label: c.name }
+  }))
+}
+
+// What Enter or Space does to a row: { save: newValue } for bool, choice
+// and category rows, { edit: currentText } for text rows. categories: the
+// user's, for a category row.
+function activate(row, value, categories) {
   if (row.type === "bool") return { save: !value }
+  if (row.type === "category") {
+    var options = categoryOptions(categories)
+    var at = options.map(function(o) { return o.value }).indexOf(value)
+    return { save: options[(at + 1) % options.length].value }
+  }
   if (row.type === "choice") {
     var i = row.options.indexOf(option(row, value))
     return { save: row.options[(i + 1) % row.options.length].value }
@@ -186,8 +205,13 @@ function commit(row, text, home) {
   return { save: t }
 }
 
-function display(row, value) {
+// A deleted category shows as always ask, which is what adding then does.
+function display(row, value, categories) {
   if (row.type === "bool") return value ? "on" : "off"
+  if (row.type === "category") {
+    var found = categoryOptions(categories).filter(function(o) { return o.value === value })[0]
+    return found ? found.label : "Always ask"
+  }
   if (row.type === "choice") {
     var o = option(row, value)
     return o ? o.label : String(value)

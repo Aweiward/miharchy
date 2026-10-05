@@ -195,6 +195,25 @@ function categoryPayload(row, mangaIds) {
   return { query: CATEGORIES_MUTATION, variables: { ids: mangaIds, add: out ? [] : [row.id], remove: out ? [row.id] : [] } }
 }
 
+// Where Mihon puts a manga added to the library, from the default category
+// setting: a category id, 0 for none (Default), or -1 to ask. A deleted
+// category asks; with no categories there is nothing to ask.
+function defaultCategory(setting, categories) {
+  if (!categories.length || setting === "0") return 0
+  var id = Number(setting)
+  return categories.some(function(c) { return c.id === id }) ? id : -1
+}
+
+// Mihon moves an added manga to exactly that category, or to none for
+// Default: a manga that left the library keeps its old categories on the
+// server.
+function moveToPayload(mangaId, to, categories) {
+  return {
+    query: CATEGORIES_MUTATION,
+    variables: { ids: [mangaId], add: to > 0 ? [to] : [], remove: categories.map(function(c) { return c.id }).filter(function(id) { return id !== to }) }
+  }
+}
+
 // "the manga" for one, "3 manga" for more: what an armed x or X acts on.
 function count(n) {
   return n === 1 ? "the manga" : n + " manga"
@@ -233,6 +252,8 @@ if (typeof module !== "undefined") {
     categoryRows: categoryRows,
     categoryPayload: categoryPayload,
     count: count,
+    defaultCategory: defaultCategory,
+    moveToPayload: moveToPayload,
     tabLabel: tabLabel,
     choose: choose,
     narrowed: narrowed,
