@@ -388,7 +388,8 @@ ShellRoot {
       : view === "browse" ? (browseView.scope === "extensions" && extensionsView.details ? "extension" : browseView.scope) : view === "library" && libraryScreen === "categories" ? "categories"
       : view === "library" && libraryArmed === "remove" ? "library-remove"
       : view === "library" && libraryPickIds.length ? "library-categories"
-      : view === "library" && libraryOptions ? "library-options" : view
+      : view === "library" && libraryOptions ? "library-options"
+      : view === "updates" && updatesView.filterOpen ? "updates-filter" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
     // Any other key disarms a remove or a delete, even one no command takes.
     if (id !== "library.remove" && id !== "library.deleteDownloads") {
@@ -907,6 +908,7 @@ ShellRoot {
           configPath: root.configPath
           active: visible
           queue: downloadsView.queue.items
+          categories: root.connection.categories
           onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
           onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
           onDownloads: function(reply) { downloadsView.apply(reply) }

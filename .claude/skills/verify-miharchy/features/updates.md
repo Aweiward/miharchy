@@ -1,13 +1,15 @@
 # Updates
 
-The Updates view (key `2`): unread chapters fetched after the manga joined the library and uploaded in the last 3 months (Mihon's rule), and the library update check.
+The Updates view (key `2`): chapters fetched after the manga joined the library and uploaded in the last 3 months (Mihon's rule), through the user's filters, and the library update check.
 
 ## Sub-features
-- List grouped by fetch day; `Enter` opens the chapter in the reader.
+- List grouped by fetch day; `Enter` opens the chapter in the reader. A read update shows dimmed.
+- Downloaded only (see `library.md`) forces the Downloaded filter on (`Prefs.force`), over the stored choice, as in Mihon.
+- `F` opens the filters (Mihon's `UpdatesFilterDialog`, `Updates.PREFS` in global meta `miharchy.updates*`): Unread, Downloaded, Started, Bookmarked (each off, `[+]` include, `[-]` exclude), Hide excluded scanlators (each manga's `miharchy.excludedScanlators`), and with categories, Default (no category) and each category, off, include or exclude. Unread starts on include, so the list starts as the mark's; Mihon starts with every filter off. `j`/`k` move, `Enter`/`Space` change, `Esc`/`F` close; a click moves the cursor, a double click changes the row.
 - `u` starts a library update; progress polls `libraryUpdateStatus`; the header names skip reasons from the Settings filters. It skips manga in a category excluded from updates (see `library.md`).
-- The bar mark counts the same list (`Updates.rows`).
+- The bar mark counts unread updates only (`Updates.listPayload`, `Updates.rows` without prefs), whatever the view's filters.
 - Actions (Mihon's `UpdatesScreen` bottom bar): `Space` selects or deselects the update under the cursor, `A` selects all, `I` inverts, `Esc` clears the selection (with none, it quits). `R` read, `U` unread (not `u`: it checks here), `b` bookmark toggle, `d` download, `x` delete downloads; `x` asks first and the second `x` deletes (Mihon's `UpdatesDeleteConfirmationDialog`), any other key keeps them. Each acts on the selection, or on the cursor's update when nothing is selected, then ends the selection, as Mihon does.
-- The list holds only unread updates (showing read ones is #114), so `R` takes rows out of the list and the mark's count, and `U` changes only an update with a page read (back to page 1).
+- With the default Unread filter, `R` takes rows out of the list and the mark's count, and `U` changes only an update with a page read (back to page 1).
 - A row shows `★` for a bookmark and the download marker (`queued`, `42%`, `downloaded`) from the queue, as the manga detail does.
 
 ## How to get to it (user POV)

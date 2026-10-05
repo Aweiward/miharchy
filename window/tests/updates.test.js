@@ -47,9 +47,16 @@ test("downloaded only lists only the downloaded updates, with each day's header 
   ];
   const all = U.reduce(U.initial(), { type: "list", reply: list(nodes), config, now });
   assert.deepEqual(all.rows.map((r) => r.id), [2, 5, 1]);
-  const only = U.reduce(U.initial(), { type: "list", reply: list(nodes), config, now, downloadedOnly: true });
+  const Pr = require("./load")("Prefs.js");
+  const forced = Pr.force(Pr.defaults(U.PREFS), "updatesFilterDownloaded", "include", true);
+  const only = U.reduce(U.initial(), { type: "list", reply: list(nodes), config, now, prefs: forced });
   assert.deepEqual(only.rows.map((r) => [r.id, r.header]), [[5, "Today"], [1, all.rows[2].header]]);
   assert.equal(U.count(list(nodes).data, now), 3, "the bar mark still counts every update");
+  const withRead = [nodes[0], nodes[1], { ...nodes[2], isRead: true }];
+  const both = Pr.force({ ...Pr.defaults(U.PREFS), updatesFilterUnread: "off", updatesFilterDownloaded: "exclude" }, "updatesFilterDownloaded", "include", true);
+  assert.deepEqual(U.reduce(U.initial(), { type: "list", reply: list(withRead), config, now, prefs: both }).rows.map((r) => r.id), [5, 1],
+    "the forced filter wins over the stored one and works with the user's other filters");
+  assert.equal(U.count(list(withRead).data, now), 2, "the mark counts unread updates, unfiltered");
 });
 
 test("rows group by fetch day: Today, Yesterday, then the date", () => {
@@ -173,4 +180,102 @@ test("rows carry what the shared chapter actions need, across manga", () => {
   assert.deepEqual(D.enqueuePayload(rows).variables, { ids: [2, 3] });
   assert.deepEqual(D.removePayload(rows, []).variables, { ids: [1] });
   assert.equal(D.removePayload([rows[1]], []), null, "nothing on disk, nothing to confirm");
+});
+
+const P = require("./load")("Prefs.js");
+const prefs = (extra) => ({ ...P.defaults(U.PREFS), ...extra });
+const filtered = (nodes, extra) => U.reduce(U.initial(), { type: "list", reply: list(nodes), config, now, prefs: prefs(extra) });
+const ids = (u) => u.rows.map((r) => r.id);
+
+test("the view starts on unread updates, the bar mark's list, and shows read ones with unread off", () => {
+  const nodes = [
+    chapter(1, manga, at(2026, 10, 4, 14), { isRead: true }),
+    chapter(2, manga, at(2026, 10, 4, 13))
+  ];
+  assert.deepEqual(ids(filtered(nodes)), [2]);
+  const all = filtered(nodes, { updatesFilterUnread: "off" });
+  assert.deepEqual(ids(all), [1, 2]);
+  assert.equal(all.rows[0].read, true, "a read update says so, for the dim row and the actions");
+  assert.deepEqual(ids(filtered(nodes, { updatesFilterUnread: "exclude" })), [1]);
+  assert.equal(U.count(list(nodes).data, now), 1, "the mark still counts unread updates only");
+});
+
+test("downloaded, started and bookmarked filter as Mihon's updatesView.sq does", () => {
+  const nodes = [
+    chapter(1, manga, at(2026, 10, 4, 14), { isDownloaded: true }),
+    chapter(2, manga, at(2026, 10, 4, 13), { lastPageRead: 3 }),
+    chapter(3, manga, at(2026, 10, 4, 12), { isBookmarked: true, isRead: true, lastPageRead: 9 }),
+    chapter(4, manga, at(2026, 10, 4, 11))
+  ];
+  const off = { updatesFilterUnread: "off" };
+  assert.deepEqual(ids(filtered(nodes, { ...off, updatesFilterDownloaded: "include" })), [1]);
+  assert.deepEqual(ids(filtered(nodes, { ...off, updatesFilterDownloaded: "exclude" })), [2, 3, 4]);
+  assert.deepEqual(ids(filtered(nodes, { ...off, updatesFilterStarted: "include" })), [2], "started: some progress and not read");
+  assert.deepEqual(ids(filtered(nodes, { ...off, updatesFilterStarted: "exclude" })), [1, 4], "not started drops read chapters too, as in Mihon");
+  assert.deepEqual(ids(filtered(nodes, { ...off, updatesFilterBookmarked: "include" })), [3]);
+  assert.deepEqual(ids(filtered(nodes, { ...off, updatesFilterBookmarked: "exclude" })), [1, 2, 4]);
+});
+
+test("categories include or exclude manga, 0 standing for manga in no category", () => {
+  const inCat = (m, cats) => ({ ...m, categories: { nodes: cats.map((id) => ({ id })) } });
+  const nodes = [
+    chapter(1, inCat(manga, [3]), at(2026, 10, 4, 14)),
+    chapter(2, inCat(other, []), at(2026, 10, 4, 13)),
+    chapter(3, inCat({ ...manga, id: 9 }, [4]), at(2026, 10, 4, 12))
+  ];
+  assert.deepEqual(ids(filtered(nodes, { updatesIncludedCategories: "[3]" })), [1]);
+  assert.deepEqual(ids(filtered(nodes, { updatesIncludedCategories: "[0,4]" })), [2, 3]);
+  assert.deepEqual(ids(filtered(nodes, { updatesExcludedCategories: "[3]" })), [2, 3]);
+  assert.deepEqual(ids(filtered(nodes, { updatesExcludedCategories: "[0]" })), [1, 3]);
+  assert.deepEqual(ids(filtered(nodes, { updatesIncludedCategories: "not json" })), [1, 2, 3], "a broken value filters nothing");
+});
+
+test("hiding excluded scanlators drops the chapters a manga's own filter excludes", () => {
+  const meta = [{ key: "miharchy.excludedScanlators", value: JSON.stringify(["Bad Scans"]) }];
+  const nodes = [
+    chapter(1, { ...manga, meta }, at(2026, 10, 4, 14), { scanlator: "Bad Scans" }),
+    chapter(2, { ...manga, meta }, at(2026, 10, 4, 13), { scanlator: "Good Scans" }),
+    chapter(3, other, at(2026, 10, 4, 12), { scanlator: "Bad Scans" })
+  ];
+  assert.deepEqual(ids(filtered(nodes)), [1, 2, 3], "off by default, as in Mihon");
+  assert.deepEqual(ids(filtered(nodes, { updatesHideExcludedScanlators: "on" })), [2, 3]);
+});
+
+test("the filter panel cycles a filter and a category, and a change filters the loaded list again", () => {
+  const cats = [{ id: 3, name: "Action" }];
+  let p = prefs();
+  const rows = U.filterRows(p, cats);
+  assert.deepEqual(rows.map((r) => r.label), ["Unread", "Downloaded", "Started", "Bookmarked", "Hide excluded scanlators", "Categories", "Default", "Action"]);
+  assert.deepEqual(rows.map((r) => r.mark), ["[+]", "[ ]", "[ ]", "[ ]", "[ ]", "", "[ ]", "[ ]"]);
+  assert.equal(U.filterRows(p, []).length, 5, "no categories, no category rows");
+  const apply = (changes) => { changes.forEach((c) => { p = { ...p, [c.key]: c.value }; }); };
+  apply(U.choose(p, rows[0]));
+  assert.equal(p.updatesFilterUnread, "exclude");
+  apply(U.choose(p, U.filterRows(p, cats)[0]));
+  assert.equal(p.updatesFilterUnread, "off");
+  apply(U.choose(p, U.filterRows(p, cats)[4]));
+  assert.equal(p.updatesHideExcludedScanlators, "on");
+  assert.deepEqual(U.choose(p, U.filterRows(p, cats)[5]), [], "the header changes nothing");
+  apply(U.choose(p, U.filterRows(p, cats)[7]));
+  assert.deepEqual([p.updatesIncludedCategories, p.updatesExcludedCategories], ["[3]", "[]"]);
+  apply(U.choose(p, U.filterRows(p, cats)[7]));
+  assert.deepEqual([p.updatesIncludedCategories, p.updatesExcludedCategories], ["[]", "[3]"]);
+  apply(U.choose(p, U.filterRows(p, cats)[7]));
+  assert.deepEqual([p.updatesIncludedCategories, p.updatesExcludedCategories], ["[]", "[]"]);
+
+  const nodes = [chapter(1, manga, at(2026, 10, 4, 14), { isRead: true }), chapter(2, manga, at(2026, 10, 4, 13))];
+  const u = filtered(nodes);
+  assert.deepEqual(ids(u), [2]);
+  const again = U.reduce(u, { type: "filter", config, now, prefs: prefs({ updatesFilterUnread: "off" }) });
+  assert.deepEqual(ids(again), [1, 2]);
+  const none = U.reduce(u, { type: "filter", config, now, prefs: prefs({ updatesFilterBookmarked: "include" }) });
+  assert.deepEqual(U.notice(none, ""), { title: "No updates match the filters", detail: "Press F to change the filters." });
+});
+
+test("the view's query cuts at 3 months on the server and asks for what the filters test", () => {
+  const p = U.viewPayload(now);
+  assert.equal(p.variables.since, String(new Date(2026, 6, 4, 15).getTime()));
+  assert.match(U.VIEW_QUERY, /uploadDate: \{ greaterThan: \$since \}/);
+  assert.match(U.VIEW_QUERY, /scanlator manga \{ id title thumbnailUrl inLibraryAt categories \{ nodes \{ id \} \} meta \{ key value \} \}/);
+  assert.doesNotMatch(U.VIEW_QUERY, /isRead: \{/, "read updates come too");
 });
