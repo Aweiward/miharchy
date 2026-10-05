@@ -3,7 +3,7 @@
 Browse (key `4`): installed sources, a source's popular/latest/search lists, the manga detail overlay, and adding to the library.
 
 ## Sub-features
-- Sources screen (`Tab` toggles Extensions; `l` toggles languages; `/` global search).
+- Sources screen (`Tab` toggles Extensions; `l` toggles languages; `/` global search). The list is `browseView.sourceRows`, grouped as Mihon's `SourcesScreen`: Last used (the source last opened, global meta `miharchy.lastUsedSource`; it also keeps its own place), Pinned, then each language. `p` pins or unpins the source under the cursor (global meta `miharchy.pinnedSources`, a JSON list of ids); the cursor follows it. The cursor indexes `sourceRows`, not `src.sources`.
 - Source grid: `p` popular, `n` latest, `/` search, `hjkl` move, infinite scroll.
 - Source filters (`F` on a source, scope `source-filters`): `j`/`k` move, `Enter`/`Space` toggles a checkbox, cycles a tri-state, opens a group, select or sort, picks an option, or opens the text field; `a` applies, `x` resets, `Esc`/`F` closes. Applying always runs a SEARCH (Suwayomi passes filters only there), keeping the query of a search already showing. Panels live in `browseView.filterPanels` per source id for the window's life.
 - Source settings (`S` on the sources screen or a source, only when `isConfigurable`, scope `source-settings`): each change saves at once with `updateSourcePreference`; closing it over a source reloads the listing.
@@ -16,7 +16,7 @@ Press `4`, pick a source with `j`/`k`, `Enter`.
 ```js
 [
   [3000, function() { key("4") }],
-  [3000, function() { browseView.sourceCursor = browseView.src.sources.findIndex(function(s) { return s.name === "MangaDex (EN)" }); key("Enter") }],
+  [3000, function() { browseView.sourceCursor = browseView.sourceRows.findIndex(function(s) { return s.name === "MangaDex (EN)" }); key("Enter") }],
   [9000, function() { log("popular", browseView.listing.items.length); grab("source-grid"); key("Enter") }],
   [9000, function() { log("detail", [mangaDetail.detail.manga.title, mangaDetail.detail.chapters.length]); key("a") }],
   [3000, function() { log("inLibrary", mangaDetail.detail.manga.inLibrary); grab("detail-added"); done() }]
@@ -28,7 +28,7 @@ Filters and settings. Move to a row by label, not by count; a group or list adds
 ```js
 [
   [3000, function() { key("4") }],
-  [3000, function() { browseView.sourceCursor = browseView.src.sources.findIndex(function(s) { return s.name === "Weeb Central (EN)" }); key("Enter") }],
+  [3000, function() { browseView.sourceCursor = browseView.sourceRows.findIndex(function(s) { return s.name === "Weeb Central (EN)" }); key("Enter") }],
   [10000, function() { key("F") }],
   [4000, function() { key("Enter"); key("j"); key("j"); key("j"); key("j"); key("Enter") }],   // open Sort, pick option 3
   [500, function() { log("rows", browseView.panelRows.map(function(r) { return r.mark + " " + r.label + " " + r.detail })); key("a") }],

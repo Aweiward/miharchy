@@ -28,6 +28,9 @@ Item {
   property string screen: "sources"
   property var src: ({ state: "idle", message: "", sources: [] })
   property int sourceCursor: 0
+  // Browse.PREFS values, and the Sources list they group.
+  readonly property var prefs: store.values
+  readonly property var sourceRows: Browse.sourceRows(src.sources, prefs)
   property var listing: null
   property int gridCursor: 0
   property var global: null
@@ -53,11 +56,11 @@ Item {
   property var globalXhrs: []
 
   readonly property string settingsHint: {
-    var s = screen === "source" && listing ? listing.source : src.sources[sourceCursor]
+    var s = screen === "source" && listing ? listing.source : sourceRows[sourceCursor]
     return s && s.configurable ? "S settings   " : ""
   }
   readonly property var hint: ({
-    sources: "j k move   enter open   / search all   l languages   " + settingsHint + "r refresh   tab extensions   ",
+    sources: "j k move   enter open   / search all   " + (sourceRows[sourceCursor] && sourceRows[sourceCursor].pinned ? "p unpin   " : "p pin   ") + "l languages   " + settingsHint + "r refresh   tab extensions   ",
     extensions: "r refresh   tab sources   ",
     source: "hjkl move   enter open   p popular   n latest   / search   F filter   " + settingsHint + "r retry   esc back   ",
     global: "hjkl move   enter open   / search   r retry   esc back   ",
@@ -113,7 +116,7 @@ Item {
     send({ query: Browse.SOURCES_QUERY }, function(reply) {
       if (seq !== view.sourcesSeq) return
       view.src = Browse.sources(reply, cfg, view.showNsfw, view.allLanguages)
-      view.sourceCursor = Math.min(view.sourceCursor, Math.max(0, view.src.sources.length - 1))
+      view.sourceCursor = Math.min(view.sourceCursor, Math.max(0, view.sourceRows.length - 1))
       if (then) then()
     })
   }
@@ -264,14 +267,22 @@ Item {
         break
       case "sources.up":
       case "sources.down":
-        sourceCursor = Commands.moveCursor(sourceCursor, id === "sources.up" ? -1 : 1, src.sources.length)
+        sourceCursor = Commands.moveCursor(sourceCursor, id === "sources.up" ? -1 : 1, sourceRows.length)
         break
       case "sources.open":
-        var s = src.sources[sourceCursor]
+        var s = sourceRows[sourceCursor]
         if (!s) break
         listing = Browse.listing(s, "popular", "")
         screen = "source"
         openListing("popular", "")
+        store.set([{ key: "lastUsedSource", value: s.id }])
+        sourceCursor = Browse.rowIndex(sourceRows, s.id)
+        break
+      case "sources.pin":
+        var ps = sourceRows[sourceCursor]
+        if (!ps) break
+        store.set([Browse.togglePin(prefs, ps.id)])
+        sourceCursor = Browse.rowIndex(sourceRows, ps.id)
         break
       case "sources.languages":
         allLanguages = !allLanguages
@@ -315,7 +326,7 @@ Item {
         openPanel("filters", listing.source)
         break
       case "source.settings":
-        var ss = screen === "source" ? listing.source : src.sources[sourceCursor]
+        var ss = screen === "source" ? listing.source : sourceRows[sourceCursor]
         if (ss && ss.configurable) openPanel("preferences", ss)
         break
       case "panel.up":
@@ -410,6 +421,13 @@ Item {
     }
   }
 
+  PrefStore {
+    id: store
+    config: view.config
+    table: Browse.PREFS
+    onConfigChanged: load()
+  }
+
   Item {
     anchors.fill: parent
     visible: view.screen === "sources"
@@ -436,57 +454,72 @@ Item {
       anchors.right: parent.right
       anchors.margins: view.theme.fontSize * 2
       clip: true
-      model: view.src.sources
+      model: view.sourceRows
       currentIndex: view.sourceCursor
       highlightFollowsCurrentItem: false
       onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
 
-      delegate: Rectangle {
+      delegate: Column {
         id: row
         required property var modelData
         required property int index
         readonly property bool current: index === view.sourceCursor
         width: sourceList.width
-        height: view.theme.fontSize * 2.4
-        color: current ? view.theme.selected : "transparent"
 
-        MouseArea {
-          anchors.fill: parent
-          onClicked: view.point(function() { view.sourceCursor = row.index }, false)
-          onDoubleClicked: view.point(function() { view.sourceCursor = row.index }, true)
-        }
-
-        ServerImage {
-          id: sourceIcon
-          x: view.theme.fontSize * 0.5
-          anchors.verticalCenter: parent.verticalCenter
-          width: view.theme.fontSize * 1.7
-          height: width
-          config: view.config
-          url: row.modelData.icon
-          sourceSize.width: width
-          asynchronous: true
-        }
-
+        // Mihon's group headers: Last used, Pinned, then each language.
         Text {
-          id: sourceName
-          anchors.left: sourceIcon.right
-          anchors.leftMargin: view.theme.fontSize * 0.75
-          anchors.verticalCenter: parent.verticalCenter
-          text: row.modelData.name
-          color: row.current ? view.theme.selectedText : view.theme.foreground
-          font.family: view.theme.fontFamily
-          font.pixelSize: view.theme.fontSize
-        }
-
-        Text {
-          anchors.left: sourceName.right
-          anchors.leftMargin: view.theme.fontSize * 0.75
-          anchors.verticalCenter: parent.verticalCenter
-          text: row.modelData.lang + (row.modelData.warning === "NSFW" ? "   18+" : "")
-          color: view.theme.muted
+          visible: row.modelData.header !== ""
+          topPadding: row.index ? view.theme.fontSize : 0
+          bottomPadding: view.theme.fontSize * 0.4
+          text: row.modelData.header
+          color: view.theme.accent
           font.family: view.theme.fontFamily
           font.pixelSize: view.theme.fontSmall
+        }
+
+        Rectangle {
+          width: parent.width
+          height: view.theme.fontSize * 2.4
+          color: row.current ? view.theme.selected : "transparent"
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: view.point(function() { view.sourceCursor = row.index }, false)
+            onDoubleClicked: view.point(function() { view.sourceCursor = row.index }, true)
+          }
+
+          ServerImage {
+            id: sourceIcon
+            x: view.theme.fontSize * 0.5
+            anchors.verticalCenter: parent.verticalCenter
+            width: view.theme.fontSize * 1.7
+            height: width
+            config: view.config
+            url: row.modelData.icon
+            sourceSize.width: width
+            asynchronous: true
+          }
+
+          Text {
+            id: sourceName
+            anchors.left: sourceIcon.right
+            anchors.leftMargin: view.theme.fontSize * 0.75
+            anchors.verticalCenter: parent.verticalCenter
+            text: row.modelData.name
+            color: row.current ? view.theme.selectedText : view.theme.foreground
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSize
+          }
+
+          Text {
+            anchors.left: sourceName.right
+            anchors.leftMargin: view.theme.fontSize * 0.75
+            anchors.verticalCenter: parent.verticalCenter
+            text: row.modelData.lang + (row.modelData.warning === "NSFW" ? "   18+" : "") + (row.modelData.pinned ? "   pinned" : "")
+            color: view.theme.muted
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSmall
+          }
         }
       }
     }

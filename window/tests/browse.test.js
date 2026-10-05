@@ -23,6 +23,34 @@ test("sources skip the local source, hide NSFW unless asked, and sort by name", 
   assert.deepEqual(B.sources(ok(data), config, true).sources.map((x) => x.id), ["3", "4", "2"]);
 });
 
+test("the Sources list puts the last used source, then the pinned ones, then each language, as Mihon", () => {
+  const P = require("./load")("Prefs.js");
+  const list = B.sources(ok({ sources: { nodes: [
+    src({ id: "1", displayName: "MangaDex", lang: "all" }),
+    src({ id: "2", displayName: "Weeb Central" }),
+    src({ id: "3", displayName: "Asura Scans" }),
+    src({ id: "4", displayName: "Rawkuma", lang: "ja" })
+  ] } }), config, false, true).sources;
+  const show = (rows) => rows.map((r) => [r.header, r.id, r.pinned, r.lastUsed]);
+  let prefs = P.defaults(B.PREFS);
+  assert.deepEqual(show(B.sourceRows(list, prefs)), [
+    ["Multi", "1", false, false], ["en", "3", false, false], ["", "2", false, false], ["ja", "4", false, false]
+  ]);
+  prefs = { ...prefs, ...Object.fromEntries([B.togglePin(prefs, "2")].map((c) => [c.key, c.value])) };
+  prefs = { ...prefs, ...Object.fromEntries([B.togglePin(prefs, "4")].map((c) => [c.key, c.value])), lastUsedSource: "3" };
+  assert.deepEqual(B.pinned(prefs), ["2", "4"]);
+  const rows = B.sourceRows(list, prefs);
+  assert.deepEqual(show(rows), [
+    ["Last used", "3", false, true],
+    ["Pinned", "4", true, false], ["", "2", true, false],
+    ["Multi", "1", false, false],
+    ["en", "3", false, false]
+  ], "pinned sources leave their language; the last used one also keeps its place");
+  assert.equal(B.rowIndex(rows, "3"), 4, "the cursor follows a source to its own row, not the last used copy");
+  assert.deepEqual(B.togglePin(prefs, "2"), { key: "pinnedSources", value: "[\"4\"]" }, "p again unpins");
+  assert.deepEqual(B.pinned({ pinnedSources: "{bad" }), [], "a broken value pins nothing");
+});
+
 test("a failed sources reply keeps the connection state for Model.problem", () => {
   assert.equal(B.sources(M.reply(0, ""), config, false).state, "down");
 });

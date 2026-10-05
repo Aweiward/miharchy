@@ -127,6 +127,7 @@ var commands = [
   { id: "browse.tab", title: "Sources or extensions", keys: ["Tab"], view: ["sources", "extensions"], hidden: true },
   { id: "sources.up", title: "Previous source", keys: ["k", "Up"], view: "sources", hidden: true },
   { id: "sources.down", title: "Next source", keys: ["j", "Down"], view: "sources", hidden: true },
+  { id: "sources.pin", title: "Pin or unpin the source", keys: ["p"], view: "sources", hidden: true },
   { id: "sources.languages", title: "English or every language", keys: ["l"], view: "sources", hidden: true },
   { id: "sources.open", title: "Open source", keys: ["Enter"], view: "sources", hidden: true },
   { id: "source.left", title: "Previous manga", keys: ["h"], view: "source", hidden: true },
