@@ -45,6 +45,9 @@ Rectangle {
   property string busyText: ""
   // Bumped on close and on going back, so stale replies drop.
   property int seq: 0
+  // The searches' requests by group index, to abort.
+  property var searchXhrs: []
+  property var batchXhrs: []
 
   readonly property bool open: step !== ""
   readonly property var job: jobs.length ? jobs[0] : null
@@ -87,6 +90,12 @@ Rectangle {
   color: theme.background
 
   onConfigChanged: close()
+  // Frees the connections a dropped search still holds.
+  onSeqChanged: {
+    searchXhrs.concat(batchXhrs).forEach(function(x) { x.abort() })
+    searchXhrs = []
+    batchXhrs = []
+  }
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
 
   function send(payload, done) {
@@ -99,6 +108,7 @@ Rectangle {
     xhr.setRequestHeader("Content-Type", "application/json")
     xhr.setRequestHeader("Authorization", req.authorization)
     xhr.send(req.body)
+    return xhr
   }
 
   function close() {
@@ -166,10 +176,11 @@ Rectangle {
     var cfg = config
     GlobalSearch.due(search).forEach(function(i) {
       var payload = GlobalSearch.payload(view.search.groups[i])
-      view.search = GlobalSearch.reduce(view.search, i, { type: "request" })
-      send(payload, function(reply) {
+      view.search = GlobalSearch.reduce(view.search, i, { type: "request", now: Date.now() })
+      var attempt = view.search.groups[i].attempt
+      view.searchXhrs[i] = send(payload, function(reply) {
         if (s !== view.seq) return
-        view.search = GlobalSearch.reduce(view.search, i, { type: "reply", reply: reply, config: cfg })
+        view.search = GlobalSearch.reduce(view.search, i, { type: "reply", attempt: attempt, reply: reply, config: cfg })
         view.pumpSearch()
       })
     })
@@ -180,13 +191,30 @@ Rectangle {
     var cfg = config
     Migrate.due(batch).forEach(function(i) {
       var payload = GlobalSearch.payload(view.batch.search.groups[i])
-      view.batch = Migrate.reduceBatch(view.batch, i, { type: "request" })
-      send(payload, function(reply) {
+      view.batch = Migrate.reduceBatch(view.batch, i, { type: "request", now: Date.now() })
+      var attempt = view.batch.search.groups[i].attempt
+      view.batchXhrs[i] = send(payload, function(reply) {
         if (s !== view.seq) return
-        view.batch = Migrate.reduceBatch(view.batch, i, { type: "reply", reply: reply, config: cfg })
+        view.batch = Migrate.reduceBatch(view.batch, i, { type: "reply", attempt: attempt, reply: reply, config: cfg })
         view.pumpBatch()
       })
     })
+  }
+
+  // Times out before aborting: abort() answers at once with status 0,
+  // which would read as a server that is down.
+  function expire() {
+    var now = Date.now()
+    if (search) GlobalSearch.expired(search, now).forEach(function(i) {
+      view.search = GlobalSearch.reduce(view.search, i, { type: "timeout" })
+      view.searchXhrs[i].abort()
+    })
+    if (batch) GlobalSearch.expired(batch.search, now).forEach(function(i) {
+      view.batch = Migrate.reduceBatch(view.batch, i, { type: "timeout" })
+      view.batchXhrs[i].abort()
+    })
+    if (search) pumpSearch()
+    if (batch) pumpBatch()
   }
 
   function setJob(i, changes) {
@@ -290,6 +318,7 @@ Rectangle {
           step = "from"
         } else if (step === "match") {
           seq++
+          batch = null
           step = "to"
         } else {
           close()
@@ -379,6 +408,13 @@ Rectangle {
         deleteDownloads = !deleteDownloads
         break
     }
+  }
+
+  Timer {
+    interval: 1000
+    repeat: true
+    running: [view.search, view.batch && view.batch.search].some(function(s) { return s && s.groups.some(function(g) { return g.state === "loading" }) })
+    onTriggered: view.expire()
   }
 
   Text {

@@ -181,6 +181,7 @@ function due(b) {
 
 function reduceBatch(b, index, event) {
   var search = GlobalSearch.reduce(b.search, index, event)
+  if (search === b.search) return b
   var picks = b.picks
   if (event.type === "reply") {
     picks = b.picks.slice()

@@ -36,6 +36,8 @@ Item {
   property int sourcesSeq: 0
   property int listingSeq: 0
   property int globalSeq: 0
+  // The global search's requests by group index, to abort.
+  property var globalXhrs: []
 
   readonly property var hint: ({
     sources: "j k move   enter open   / search all   l languages   r refresh   tab extensions   ",
@@ -61,6 +63,11 @@ Item {
     if (active && config) loadSources()
   }
   onShowNsfwChanged: if (src.state !== "idle") loadSources()
+  // Frees the connections a dropped search still holds.
+  onGlobalSeqChanged: {
+    globalXhrs.forEach(function(x) { x.abort() })
+    globalXhrs = []
+  }
 
   function send(payload, done) {
     var req = Model.request(config, payload)
@@ -72,6 +79,7 @@ Item {
     xhr.setRequestHeader("Content-Type", "application/json")
     xhr.setRequestHeader("Authorization", req.authorization)
     xhr.send(req.body)
+    return xhr
   }
 
   function loadSources() {
@@ -113,22 +121,31 @@ Item {
     if (global) global = GlobalSearch.markInLibrary(global, mangaId, inLibrary)
   }
 
-  // Starts every group with a free slot; each reply starts the next.
-  // ponytail: QML's XHR ignores timeout, so a hung source holds its slot
-  // until Suwayomi's own HTTP timeouts fail it; abort from a Timer if that
-  // proves too slow.
+  // Starts every group with a free slot; each reply or timeout starts the
+  // next.
   function pumpGlobal() {
     var seq = globalSeq
     var cfg = config
     GlobalSearch.due(global).forEach(function(i) {
       var payload = GlobalSearch.payload(view.global.groups[i])
-      view.global = GlobalSearch.reduce(view.global, i, { type: "request" })
-      send(payload, function(reply) {
+      view.global = GlobalSearch.reduce(view.global, i, { type: "request", now: Date.now() })
+      var attempt = view.global.groups[i].attempt
+      view.globalXhrs[i] = send(payload, function(reply) {
         if (seq !== view.globalSeq) return
-        view.global = GlobalSearch.reduce(view.global, i, { type: "reply", reply: reply, config: cfg })
+        view.global = GlobalSearch.reduce(view.global, i, { type: "reply", attempt: attempt, reply: reply, config: cfg })
         view.pumpGlobal()
       })
     })
+  }
+
+  // Times out before aborting: abort() answers at once with status 0,
+  // which would read as a server that is down.
+  function expireGlobal() {
+    GlobalSearch.expired(global, Date.now()).forEach(function(i) {
+      view.global = GlobalSearch.reduce(view.global, i, { type: "timeout" })
+      view.globalXhrs[i].abort()
+    })
+    pumpGlobal()
   }
 
   function moveGrid(delta) {
@@ -352,6 +369,13 @@ Item {
     notice: view.listing ? Browse.notice(view.listing, view.configPath) : null
     onKey: function(event) { view.key(event) }
     onNearEnd: view.moreManga()
+  }
+
+  Timer {
+    interval: 1000
+    repeat: true
+    running: view.global !== null && view.global.groups.some(function(g) { return g.state === "loading" })
+    onTriggered: view.expireGlobal()
   }
 
   GlobalSearchView {

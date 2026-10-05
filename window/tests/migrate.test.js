@@ -127,10 +127,10 @@ test("a batch searches the target source once per manga, one at a time like Miho
     { source: "8", type: "SEARCH", page: 1, query: "Berserk" }
   ]);
   assert.deepEqual(Mi.due(b), [0]);
-  b = Mi.reduceBatch(b, 0, { type: "request" });
+  b = Mi.reduceBatch(b, 0, { type: "request", now: 0 });
   assert.deepEqual(Mi.due(b), [], "one search at a time against one source");
   const reply = ok({ fetchSourceManga: { hasNextPage: false, mangas: [{ id: 11, title: "Chainsaw Man (Color)" }, { id: 12, title: "Chainsaw Man" }] } });
-  b = Mi.reduceBatch(b, 0, { type: "reply", reply, config });
+  b = Mi.reduceBatch(b, 0, { type: "reply", attempt: 1, reply, config });
   assert.equal(b.picks[0], 1);
   assert.equal(Mi.chosen(b, 0).id, 12);
   assert.deepEqual(Mi.due(b), [1]);
@@ -139,9 +139,10 @@ test("a batch searches the target source once per manga, one at a time like Miho
 test("in a batch, h/l pick another result or skip, and only picked rows migrate", () => {
   const target = { id: "8", name: "S", supportsLatest: true };
   let b = Mi.batch(target, [{ id: 1, title: "X" }, { id: 2, title: "Y" }]);
-  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "request" }), 0, { type: "reply", reply: ok({ fetchSourceManga: { hasNextPage: false, mangas: [{ id: 11, title: "X" }, { id: 12, title: "X2" }] } }), config });
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "request", now: 0 }), 0, { type: "reply", attempt: 1, reply: ok({ fetchSourceManga: { hasNextPage: false, mangas: [{ id: 11, title: "X" }, { id: 12, title: "X2" }] } }), config });
   b = Mi.pick(b, 0, 1);
   assert.equal(Mi.chosen(b, 0).id, 12);
+  assert.equal(Mi.reduceBatch(b, 0, { type: "reply", attempt: 1, reply: ok({ fetchSourceManga: { hasNextPage: false, mangas: [] } }), config }), b, "a dropped reply keeps the pick");
   assert.equal(Mi.matchStatus(b, 0, "/c"), "X2   2 of 2");
   b = Mi.pick(b, 0, 1);
   assert.equal(Mi.chosen(b, 0), null, "past the last result is skip");

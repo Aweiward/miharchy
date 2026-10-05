@@ -30,9 +30,41 @@ function due(s, limit) {
   return out
 }
 
+// QML's XHR ignores its timeout, so the view gives up on a source itself.
+// 30 s is the connect and read timeout of Suwayomi's and Mihon's HTTP
+// clients; only their 2-minute call timeout would free the slot otherwise.
+var TIMEOUT = 30000
+
 // event: a Browse.reduceListing event for the group at index.
+// "request" also carries now (ms); it numbers the attempt and sets its
+// deadline. "reply" carries the attempt it answers and is dropped unless
+// that request is still waiting. "timeout" gives up on a waiting group.
 function reduce(s, index, event) {
-  return { query: s.query, groups: s.groups.map(function(g, i) { return i === index ? Browse.reduceListing(g, event) : g }) }
+  var g = s.groups[index]
+  var next
+  switch (event.type) {
+    case "request":
+      next = Object.assign(Browse.reduceListing(g, event), { attempt: (g.attempt || 0) + 1, deadline: event.now + TIMEOUT })
+      break
+    case "reply":
+      if (g.state !== "loading" || event.attempt !== g.attempt) return s
+      next = Browse.reduceListing(g, event)
+      break
+    case "timeout":
+      if (g.state !== "loading") return s
+      next = Object.assign({}, g, { state: "timeout", message: "" })
+      break
+    default:
+      next = Browse.reduceListing(g, event)
+  }
+  return { query: s.query, groups: s.groups.map(function(o, i) { return i === index ? next : o }) }
+}
+
+// The indexes of the waiting groups past their deadline at now (ms).
+function expired(s, now) {
+  var out = []
+  s.groups.forEach(function(g, i) { if (g.state === "loading" && g.deadline <= now) out.push(i) })
+  return out
 }
 
 function retry(s) {
@@ -43,10 +75,12 @@ function markInLibrary(s, mangaId, inLibrary) {
   return { query: s.query, groups: s.groups.map(function(g) { return Browse.markInLibrary(g, mangaId, inLibrary) }) }
 }
 
-// One line per group: "waiting", "searching", "N results", or its notice.
+// One line per group: "waiting", "searching", "timed out", "N results",
+// or its notice.
 function status(group, configPath) {
   if (group.state === "idle") return "waiting"
   if (group.state === "loading") return "searching"
+  if (group.state === "timeout") return "timed out. Press r to retry."
   var n = Browse.notice(group, configPath)
   if (n) return n.detail && group.state !== "ok" ? n.title + ". " + n.detail : n.title
   return group.items.length + (group.items.length === 1 ? " result" : " results")
@@ -68,10 +102,12 @@ function current(s, cursor) {
 if (typeof module !== "undefined") {
   module.exports = {
     LIMIT: LIMIT,
+    TIMEOUT: TIMEOUT,
     search: search,
     payload: payload,
     due: due,
     reduce: reduce,
+    expired: expired,
     retry: retry,
     markInLibrary: markInLibrary,
     status: status,
