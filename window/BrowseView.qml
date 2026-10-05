@@ -38,6 +38,12 @@ Item {
   property int gridCursor: 0
   property var global: null
   property var globalCursor: ({ row: 0, col: 0 })
+  // Mihon's global search filters: pinned sources only, for the window's
+  // life as Mihon keeps it for its screen; only sources with results, in
+  // Browse.PREFS as Mihon keeps it.
+  property bool globalPinnedOnly: false
+  readonly property bool globalOnlyResults: prefs.globalSearchHasResults === "on"
+  readonly property var globalShown: global ? GlobalSearch.shown(global, globalOnlyResults) : null
   // A source's filters or settings (Widgets.panel) over the screen, or null.
   property var panel: null
   // Each source's filter panel by source id, kept for the window's life
@@ -66,7 +72,7 @@ Item {
     sources: "j k move   enter open   / search all   " + (sourceRows[sourceCursor] && sourceRows[sourceCursor].pinned ? "p unpin   " : "p pin   ") + "l languages   " + settingsHint + "r refresh   tab extensions   ",
     extensions: "r refresh   tab sources   ",
     source: "hjkl move   enter open   p popular   n latest   / search   F filter   " + settingsHint + "r retry   esc back   ",
-    global: "hjkl move   enter open   / search   r retry   esc back   ",
+    global: "hjkl move   enter open   / search   " + (globalPinnedOnly ? "p every source   " : "p pinned only   ") + (globalOnlyResults ? "F every result   " : "F only results   ") + "r retry   esc back   ",
     "source-filters": "j k move   enter change   a apply   x reset   esc close   ",
     "source-settings": "j k move   enter change   esc close   ",
     "sources-languages": "j k move   enter show or hide   esc close   "
@@ -127,7 +133,7 @@ Item {
 
   function startGlobal(query) {
     globalSeq++
-    global = GlobalSearch.search(Browse.enabled(src.sources, prefs), query)
+    global = GlobalSearch.search(GlobalSearch.sources(Browse.enabled(src.sources, prefs), Browse.pinned(prefs), globalPinnedOnly), query)
     globalCursor = { row: 0, col: 0 }
     pumpGlobal()
   }
@@ -425,7 +431,16 @@ Item {
       case "global.right":
       case "global.up":
       case "global.down":
-        if (global) globalCursor = GlobalSearch.move(global, globalCursor, id === "global.up" ? -1 : id === "global.down" ? 1 : 0, id === "global.left" ? -1 : id === "global.right" ? 1 : 0)
+        if (global) globalCursor = GlobalSearch.move(globalShown, globalCursor, id === "global.up" ? -1 : id === "global.down" ? 1 : 0, id === "global.left" ? -1 : id === "global.right" ? 1 : 0)
+        break
+      // A new source set searches again, as Mihon's setSourceFilter.
+      case "global.pinnedOnly":
+        globalPinnedOnly = !globalPinnedOnly
+        if (global) startGlobal(global.query)
+        break
+      case "global.onlyResults":
+        store.set([{ key: "globalSearchHasResults", value: globalOnlyResults ? "off" : "on" }])
+        globalCursor = { row: 0, col: 0 }
         break
       case "global.retry":
         if (!global) break
@@ -433,7 +448,7 @@ Item {
         pumpGlobal()
         break
       case "global.open":
-        var gm = global && GlobalSearch.current(global, globalCursor)
+        var gm = global && GlobalSearch.current(globalShown, globalCursor)
         if (gm) openManga(gm.id)
         break
     }
@@ -580,10 +595,12 @@ Item {
     visible: view.screen === "global"
     theme: view.theme
     config: view.config
-    search: view.global
+    search: view.globalShown
     cursor: view.globalCursor
     editing: view.editing === "global"
     configPath: view.configPath
+    filters: GlobalSearch.filterLabel(view.globalPinnedOnly, view.globalOnlyResults)
+    empty: view.global ? GlobalSearch.empty(view.global, view.globalShown, view.globalPinnedOnly) : ""
     onKey: function(event) { view.key(event) }
     onPicked: function(row, col, twice) { view.point(function() { view.globalCursor = { row: row, col: Math.max(0, col) } }, twice) }
   }

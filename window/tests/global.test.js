@@ -104,3 +104,28 @@ test("a reply after the timeout is dropped, also once r has asked again", () => 
   s = answer(s, 0, ok([2]));
   assert.deepEqual(s.groups[0].items.map((m) => m.id), [2]);
 });
+
+test("pinned sources search first, or alone with pinned only", () => {
+  assert.deepEqual(G.sources(sources(4), ["3", "1"], false).map((s) => s.id), ["1", "3", "2", "4"]);
+  assert.deepEqual(G.sources(sources(4), ["3", "1"], true).map((s) => s.id), ["1", "3"]);
+  assert.equal(G.empty(G.search([], "x"), G.search([], "x"), true), "No pinned source. Press p to search every source.");
+  assert.equal(G.filterLabel(true, true), "pinned sources only, only sources with results");
+  assert.equal(G.filterLabel(false, false), "");
+});
+
+test("only sources with results shows the groups that finished with something, and the cursor walks those", () => {
+  let s = start(G.search(sources(4), "q"));
+  assert.deepEqual(G.shown(s, false), s, "off: every group");
+  assert.deepEqual(G.shown(s, true).groups, [], "nothing finished yet");
+  assert.equal(G.empty(s, G.shown(s, true), false), "Searching");
+  s = answer(s, 1, ok([]));
+  s = answer(s, 2, ok([7, 8]));
+  s = answer(s, 3, fail("boom"));
+  s = answer(s, 0, ok([5]));
+  const view = G.shown(s, true);
+  assert.deepEqual(view.groups.map((g) => g.source.id), ["1", "3"], "empty and failed sources hide, as Mihon's isVisible");
+  assert.deepEqual(G.move(view, { row: 0, col: 0 }, 1, 1), { row: 1, col: 1 });
+  assert.equal(G.current(view, { row: 1, col: 1 }).id, 8);
+  const none = answer(answer(start(G.search(sources(1), "q")), 0, ok([])), 0, ok([]));
+  assert.equal(G.empty(none, G.shown(none, true), false), "No source found anything. Press F to show every source.");
+});

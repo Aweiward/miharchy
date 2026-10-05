@@ -10,6 +10,34 @@
 // limitedParallelism(5)); each search is a live fetch from a site.
 var LIMIT = 5
 
+// The sources a search runs on, pinned first (Mihon's SearchViewModel),
+// or only the pinned ones (its PinnedOnly filter). pinned: source ids.
+function sources(list, pinned, pinnedOnly) {
+  var isPinned = function(s) { return pinned.indexOf(s.id) !== -1 }
+  var mine = list.filter(function(s) { return !pinnedOnly || isPinned(s) })
+  return mine.filter(isPinned).concat(mine.filter(function(s) { return !isPinned(s) }))
+}
+
+// What the list shows: with onlyResults, Mihon's has-results filter, only
+// the groups that finished with something; the rest wait out of sight.
+// Cursor moves and picks index this, not the search.
+function shown(s, onlyResults) {
+  if (!onlyResults) return s
+  return { query: s.query, groups: s.groups.filter(function(g) { return g.state === "ok" && g.items.length > 0 }) }
+}
+
+// The line in place of an empty list, or "".
+function empty(s, view, pinnedOnly) {
+  if (view.groups.length) return ""
+  if (!s.groups.length) return pinnedOnly ? "No pinned source. Press p to search every source." : "No source to search. Press esc, then tab to install an extension."
+  if (s.groups.some(function(g) { return g.state === "idle" || g.state === "loading" })) return "Searching"
+  return "No source found anything. Press F to show every source."
+}
+
+function filterLabel(pinnedOnly, onlyResults) {
+  return [pinnedOnly ? "pinned sources only" : "", onlyResults ? "only sources with results" : ""].filter(function(t) { return t }).join(", ")
+}
+
 function search(sources, query) {
   return { query: query, groups: sources.map(function(s) { return Browse.listing(s, "search", query) }) }
 }
@@ -103,6 +131,10 @@ if (typeof module !== "undefined") {
   module.exports = {
     LIMIT: LIMIT,
     TIMEOUT: TIMEOUT,
+    sources: sources,
+    shown: shown,
+    empty: empty,
+    filterLabel: filterLabel,
     search: search,
     payload: payload,
     due: due,

@@ -14,6 +14,10 @@ Item {
   property var cursor: ({ row: 0, col: 0 })
   property bool editing: false
   property string configPath: ""
+  // The filters on (GlobalSearch.filterLabel), and the line in place of
+  // an empty list (GlobalSearch.empty).
+  property string filters: ""
+  property string empty: ""
 
   readonly property alias searchField: field
 
@@ -63,6 +67,16 @@ Item {
       color: view.theme.foreground
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSize
+    }
+
+    Text {
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      visible: !view.editing
+      text: view.filters
+      color: view.theme.accent
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
     }
   }
 
@@ -184,8 +198,8 @@ Item {
 
   Text {
     anchors.centerIn: groups
-    visible: view.search !== null && view.search.groups.length === 0
-    text: "No source to search. Press esc, then tab to install an extension."
+    visible: text !== ""
+    text: view.empty
     color: view.theme.muted
     font.family: view.theme.fontFamily
     font.pixelSize: view.theme.fontSize
