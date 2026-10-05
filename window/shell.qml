@@ -14,7 +14,6 @@ import "Library.js" as Library
 import "Browse.js" as Browse
 import "Prefs.js" as Prefs
 import "Updates.js" as Updates
-import "Downloads.js" as Downloads
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
