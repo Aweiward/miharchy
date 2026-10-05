@@ -42,6 +42,12 @@ data class ServerConfig(val url: String, val username: String, val password: Str
 
 const val SOURCE_NAMES_KEY = "miharchy.sourceNames"
 
+private val SYNC_FLAGS = buildJsonObject {
+    listOf("Manga", "Chapters", "Categories", "History", "Tracking").forEach { put("include$it", true) }
+    put("includeClientData", false)
+    put("includeServerSettings", false)
+}
+
 /** Manga meta holding Mihon's notes; Suwayomi's backups have no notes field. */
 const val NOTES_KEY = "miharchy.notes"
 
@@ -86,20 +92,27 @@ class Desktop(private val config: ServerConfig) {
     }
 
     /**
-     * The desktop library as a Mihon backup. Client data and server settings stay out: the file lands in a
-     * shared folder, and the server settings hold the server password.
+     * What a backup made by hand holds: the library, and what Settings' backup rows (Suwayomi's automatic backup
+     * settings) include. Never the server settings, which hold the server password.
      */
-    fun export(): ByteArray {
+    fun backupFlags(): JsonObject {
+        val parts = listOf("Categories", "Chapters", "Tracking", "History", "ClientData")
+        val settings = query("{ settings { ${parts.joinToString(" ") { "autoBackupInclude$it" }} } }", buildJsonObject {}).obj("settings")
+        return buildJsonObject {
+            put("includeManga", true)
+            parts.forEach { put("include$it", settings.bool("autoBackupInclude$it")) }
+            put("includeServerSettings", false)
+        }
+    }
+
+    /**
+     * The desktop library as a Mihon backup. By default client data and server settings stay out: the file lands in
+     * a shared folder, and the server settings hold the server password.
+     */
+    fun export(flags: JsonObject = SYNC_FLAGS): ByteArray {
         val url = query(
-            """
-            mutation {
-              createBackup(input: { flags: {
-                includeManga: true, includeChapters: true, includeCategories: true, includeHistory: true,
-                includeTracking: true, includeClientData: false, includeServerSettings: false
-              } }) { url }
-            }
-            """,
-            buildJsonObject {},
+            "mutation(\$flags: PartialBackupFlagsInput!) { createBackup(input: { flags: \$flags }) { url } }",
+            buildJsonObject { put("flags", flags) },
         ).obj("createBackup").str("url")
         val response = http.send(
             HttpRequest.newBuilder(endpoint.resolve(url)).header("Authorization", auth).GET().build(),

@@ -24,14 +24,26 @@ private val EXPORT_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").wit
 
 fun exportName(now: Instant) = "$OWN_BACKUP_PREFIX${EXPORT_TIME.format(now)}.tachibk"
 
-fun exportsToPrune(names: List<String>, keep: Int = KEEP_EXPORTS): List<String> =
-    names.filter { it.startsWith(OWN_BACKUP_PREFIX) && it.endsWith(".tachibk") }.sorted().dropLast(keep)
-
 /**
- * Writes [bytes] as [name] in the sync folder, then prunes older exports. The temp file does not end in
- * `.tachibk`, so neither ingest nor Mihon's file picker sees a half-written backup.
+ * A backup made by hand. It starts with [OWN_BACKUP_PREFIX], so a sync never takes it for a phone backup, and it
+ * does not match [EXPORT_NAME], so a sync never prunes it.
  */
+fun backupName(now: Instant) = "${OWN_BACKUP_PREFIX}backup-${EXPORT_TIME.format(now)}.tachibk"
+
+private val EXPORT_NAME = Regex("^$OWN_BACKUP_PREFIX\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}\\.tachibk$")
+
+fun exportsToPrune(names: List<String>, keep: Int = KEEP_EXPORTS): List<String> =
+    names.filter { EXPORT_NAME.matches(it) }.sorted().dropLast(keep)
+
+/** Writes [bytes] as [name] in the sync folder, then prunes older exports. */
 fun writeExport(folder: Path, name: String, bytes: ByteArray): Path {
+    val target = writeBackup(folder, name, bytes)
+    exportsToPrune(folder.listDirectoryEntries().map { it.name }).forEach { folder.resolve(it).deleteIfExists() }
+    return target
+}
+
+/** The temp file does not end in `.tachibk`, so neither ingest nor Mihon's file picker sees a half-written backup. */
+fun writeBackup(folder: Path, name: String, bytes: ByteArray): Path {
     val target = folder.resolve(name)
     val temp = Files.createTempFile(folder, ".$name", ".tmp")
     try {
@@ -43,7 +55,6 @@ fun writeExport(folder: Path, name: String, bytes: ByteArray): Path {
     } finally {
         temp.deleteIfExists()
     }
-    exportsToPrune(folder.listDirectoryEntries().map { it.name }).forEach { folder.resolve(it).deleteIfExists() }
     return target
 }
 

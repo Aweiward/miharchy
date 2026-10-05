@@ -499,6 +499,12 @@ ShellRoot {
       return
     }
     switch (id) {
+      // Its row in Settings shows the outcome.
+      case "backup.create":
+        view = "settings"
+        settingsCursor = Settings.ROWS.map(function(r) { return r.command }).indexOf(id)
+        settingsView.createBackup()
+        break
       case "palette.open":
         paletteOpen = true
         palette.open()
@@ -531,7 +537,9 @@ ShellRoot {
         }
         var srow = Settings.ROWS[settingsCursor]
         var act = Settings.activate(srow, settingsState.values[srow.key], connection.categories)
-        if ("save" in act) {
+        if ("run" in act) {
+          run(act.run)
+        } else if ("save" in act) {
           saveSetting(srow, act.save)
         } else {
           settingsView.editStart = act.edit
@@ -540,7 +548,7 @@ ShellRoot {
         break
       case "settings.commit":
         var erow = Settings.ROWS[settingsCursor]
-        var done = Settings.commit(erow, settingsView.editValue, Quickshell.env("HOME"))
+        var done = Settings.commit(erow, settingsView.editValue, Quickshell.env("HOME"), settingsState.values)
         if ("error" in done) {
           settingsError = done.error
         } else if ("folder" in done) {

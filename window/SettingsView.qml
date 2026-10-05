@@ -4,8 +4,10 @@ import QtQuick
 import "Commands.js" as Commands
 import Quickshell
 import Quickshell.Io
+import "Backup.js" as Backup
 import "Model.js" as Model
 import "Settings.js" as Settings
+import "Sync.js" as Sync
 import "Storage.js" as Storage
 import "Trackers.js" as Trackers
 
@@ -48,6 +50,12 @@ Item {
     MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT"),
     MIHARCHY_SERVER_TMPDIR: Quickshell.env("MIHARCHY_SERVER_TMPDIR")
   }, downloadsPath)
+
+  // Create a backup: the helper job and its outcome, which the action row
+  // shows as its value.
+  property var backup: Backup.initial()
+  readonly property var notes: ({ createBackup: Backup.note(backup) })
+  readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
 
   signal key(var event)
   signal editEnded()
@@ -134,6 +142,23 @@ Item {
     })
   }
 
+  function createBackup() {
+    if (backupJob.running) return
+    backup = Backup.reduce(backup, { type: "start" })
+    backupJob.command = Backup.command(devHelper, Backup.folder(values.backupPath, {
+      HOME: Quickshell.env("HOME"),
+      MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT")
+    }))
+    backupJob.running = true
+  }
+
+  Process {
+    id: backupJob
+    stdout: StdioCollector {
+      onStreamFinished: view.backup = Backup.reduce(view.backup, { type: "finish", text: text })
+    }
+  }
+
   // du's exit code is 1 when a folder is missing; sizes() reads what it
   // listed.
   Process {
@@ -208,9 +233,32 @@ Item {
             readonly property bool current: index === view.cursor
             readonly property bool editingThis: current && view.editing
             width: parent.width
-            height: view.theme.fontSize * 2.4
+            height: band.height + (rowError.visible ? rowError.height : 0)
             color: current ? view.theme.selected : "transparent"
             onCurrentChanged: if (current) view.reveal(row)
+            // A commit's error shows under the row it is about.
+            onHeightChanged: if (current) view.reveal(row)
+
+            Item {
+              id: band
+              width: parent.width
+              height: view.theme.fontSize * 2.4
+            }
+
+            Text {
+              id: rowError
+              anchors.top: band.bottom
+              width: parent.width
+              leftPadding: view.theme.fontSize * 0.75
+              rightPadding: view.theme.fontSize * 0.75
+              bottomPadding: view.theme.fontSize * 0.5
+              visible: row.editingThis && view.editError !== ""
+              wrapMode: Text.Wrap
+              text: view.editError
+              color: view.theme.urgent
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSmall
+            }
 
             MouseArea {
               anchors.fill: parent
@@ -222,7 +270,7 @@ Item {
               id: label
               anchors.left: parent.left
               anchors.leftMargin: view.theme.fontSize * 0.75
-              anchors.verticalCenter: parent.verticalCenter
+              anchors.verticalCenter: band.verticalCenter
               text: row.modelData.label
               color: row.current ? view.theme.selectedText : view.theme.foreground
               font.family: view.theme.fontFamily
@@ -234,11 +282,11 @@ Item {
               anchors.leftMargin: view.theme.fontSize * 2
               anchors.right: parent.right
               anchors.rightMargin: view.theme.fontSize * 0.75
-              anchors.verticalCenter: parent.verticalCenter
+              anchors.verticalCenter: band.verticalCenter
               horizontalAlignment: Text.AlignRight
               elide: Text.ElideLeft
               visible: !row.editingThis
-              text: Settings.display(row.modelData, view.values[row.modelData.key], view.categories)
+              text: Settings.display(row.modelData, row.modelData.type === "action" ? view.notes[row.modelData.key] : view.values[row.modelData.key], view.categories)
               color: row.current ? view.theme.selectedText : view.theme.muted
               font.family: view.theme.fontFamily
               font.pixelSize: view.theme.fontSize
@@ -248,7 +296,7 @@ Item {
               id: field
               anchors.right: parent.right
               anchors.rightMargin: view.theme.fontSize * 0.75
-              anchors.verticalCenter: parent.verticalCenter
+              anchors.verticalCenter: band.verticalCenter
               width: parent.width / 2
               visible: row.editingThis
               horizontalAlignment: TextInput.AlignRight
@@ -270,15 +318,6 @@ Item {
             }
           }
         }
-      }
-
-      Text {
-        width: parent.width
-        visible: view.editError !== ""
-        text: view.editError
-        color: view.theme.urgent
-        font.family: view.theme.fontFamily
-        font.pixelSize: view.theme.fontSmall
       }
 
       Column {

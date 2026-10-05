@@ -86,6 +86,10 @@ _Avoid_: restore, import (these mean one-way overwrite)
 A one-way load of one backup file into the desktop library, as Mihon's restore does. It moves no baseline, so the next sync counts what it changed as desktop changes.
 _Avoid_: import, sync
 
+**Backup folder**:
+The folder that holds the backups made by hand and Suwayomi's automatic backups. It never is the sync folder.
+_Avoid_: export folder
+
 ### Surfaces
 
 **Mark**:

@@ -22,7 +22,8 @@ import kotlin.system.exitProcess
 
 private const val USAGE = """usage: miharchy-sync sync [--folder <sync folder>] [--dry-run] [--json]
        miharchy-sync check <backup file>
-       miharchy-sync restore <backup file>"""
+       miharchy-sync restore <backup file>
+       miharchy-sync backup <folder>"""
 
 /** Backups Miharchy writes to the sync folder start with this, so a sync never mistakes them for phone backups. */
 const val OWN_BACKUP_PREFIX = "miharchy-"
@@ -47,6 +48,7 @@ fun main(args: Array<String>) {
         "sync" -> {}
         "check" -> return check(args.getOrNull(1) ?: usage())
         "restore" -> return restore(args.getOrNull(1) ?: usage())
+        "backup" -> return backup(args.getOrNull(1) ?: usage())
         else -> usage()
     }
     val folderArg = args.toList().zipWithNext().firstOrNull { it.first == "--folder" }?.second
@@ -134,6 +136,30 @@ private fun restore(file: String) {
     } catch (e: Exception) {
         fail(e.message ?: e.toString())
     }
+}
+
+@Serializable
+data class BackupResult(val file: String)
+
+/**
+ * Writes a backup into [folder] under the sync lock, so it never reads a library a restore is halfway through.
+ * Never into the sync folder: there the phone would see it beside the exports for Mihon.
+ */
+private fun backup(folder: String) {
+    val dir = Path.of(folder)
+    if (!dir.isDirectory()) fail("$folder is not a folder.")
+    lockState() ?: fail("A sync is already running.")
+    val file = try {
+        val desktop = Desktop(ServerConfig.load())
+        val sync = desktop.syncFolder()?.let { Path.of(it) }
+        if (sync != null && sync.toAbsolutePath().normalize() == dir.toAbsolutePath().normalize()) {
+            fail("$folder is the sync folder. Choose another backup folder in Settings.")
+        }
+        writeBackup(dir, backupName(Instant.now()), forMihon(desktop.export(desktop.backupFlags()), desktop.notes()))
+    } catch (e: Exception) {
+        fail(e.message ?: e.toString())
+    }
+    println(Json.encodeToString(BackupResult(file.toString())))
 }
 
 // Reachable for the whole run: a collected channel closes its file, which drops the lock.
