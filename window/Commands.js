@@ -213,6 +213,9 @@ var commands = [
   { id: "reader.copyLink", title: "Copy the chapter's link", keys: ["y"], view: "reader", hidden: true },
   // b, as on a manga's chapter list.
   { id: "reader.bookmark", title: "Bookmark or unbookmark the chapter", keys: ["b"], view: "reader", hidden: true },
+  // Mihon's page actions. Y yanks the page as y yanks the link.
+  { id: "reader.savePage", title: "Save the page to Pictures", keys: ["S"], view: "reader", hidden: true },
+  { id: "reader.copyPage", title: "Copy the page image", keys: ["Y"], view: "reader", hidden: true },
   { id: "track.up", title: "Up", keys: ["k", "Up"], view: ["manga-track", "manga-track-pick"], hidden: true },
   { id: "track.down", title: "Down", keys: ["j", "Down"], view: ["manga-track", "manga-track-pick"], hidden: true },
   { id: "track.search", title: "Find the manga on the tracker", keys: ["Enter"], view: "manga-track", hidden: true },

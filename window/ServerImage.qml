@@ -15,6 +15,10 @@ Image {
   // The fetch or the file write failed, or the image did not decode.
   readonly property bool failed: fetchFailed || status === Image.Error
   property bool fetchFailed: false
+  // The file the bytes sit in and their Content-Type, once a server image
+  // loads: what the reader saves and copies.
+  readonly property string filePath: source.toString() !== "" && file.path ? file.path : ""
+  property string contentType: ""
   // Each instance writes its own files, so a file only ever holds one URL's
   // bytes and the pixmap cache, keyed by file URL, never shows stale ones.
   readonly property string key: Math.random().toString(36).slice(2)
@@ -62,6 +66,7 @@ Image {
       }
       file.path = image.dir + image.key + "-" + Qt.md5(req.url)
       file.setData(xhr.response)
+      image.contentType = xhr.getResponseHeader("Content-Type") || ""
       if (!image.fetchFailed) image.source = "file://" + file.path
     }
     xhr.open("GET", req.url)

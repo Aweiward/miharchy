@@ -337,6 +337,8 @@ test("in the reader, ] and [ change chapter, Home and End go to the first and la
   assert.equal(C.dispatch(r, text("-")), "reader.zoomOut");
   assert.equal(C.dispatch(r, text("0")), "reader.zoomReset");
   assert.equal(C.dispatch(r, text("b")), "reader.bookmark");
+  assert.equal(C.dispatch(r, text("S")), "reader.savePage");
+  assert.equal(C.dispatch(r, text("Y")), "reader.copyPage");
   assert.equal(C.dispatch(screen("library"), key(C.KEY.Home)), null);
   const field = { palette: false, view: "reader", editing: "reader" };
   assert.equal(C.dispatch(field, key(C.KEY.Return)), "reader.commit");

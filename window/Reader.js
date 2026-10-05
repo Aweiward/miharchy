@@ -117,9 +117,56 @@ function move(r, delta) {
 // incognito: Mihon's incognito mode, taken once as the reader opens. The
 // reader then saves no read state, so no history either, pushes nothing
 // to trackers and deletes nothing after reading.
-function open(mangaId, chapters, chapterId, readingMode, incognito) {
+// mangaTitle names the folder a saved page goes to.
+function open(mangaId, chapters, chapterId, readingMode, incognito, mangaTitle) {
   var l = relist(chapters, chapterId)
-  return at({ mangaId: mangaId, chapters: l.chapters, mode: readingMode, incognito: incognito === true }, l.index, false)
+  return at({ mangaId: mangaId, chapters: l.chapters, mode: readingMode, incognito: incognito === true, mangaTitle: mangaTitle || "" }, l.index, false)
+}
+
+// Saving and copying the page shown (Mihon's page actions). The page's
+// bytes are already in a file: ServerImage wrote them to show the page.
+
+// Mihon's DiskUtil.buildValidFilename: the characters a file name cannot
+// hold become _, and a name stays under 240 bytes or so.
+function validName(text) {
+  var name = String(text).replace(/[\u0000-\u001f"*/:<>?\\|]/g, "_").trim().replace(/^\.+/, "")
+  return (name || "_").slice(0, 200)
+}
+
+var IMAGE_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif", "image/jxl": "jxl", "image/heif": "heif" }
+
+// contentType: the page reply's Content-Type -> { type, ext }; a type the
+// server leaves out reads as JPEG, which most pages are.
+function imageType(contentType) {
+  var type = String(contentType || "").split(";")[0].trim().toLowerCase()
+  return IMAGE_TYPES[type] ? { type: type, ext: IMAGE_TYPES[type] } : { type: "image/jpeg", ext: "jpg" }
+}
+
+// Where the page shown saves: <folder>/<manga>/<manga> - <chapter> - <page>.<ext>,
+// Mihon's file name. folder: the pageFolder setting, empty for
+// ~/Pictures/Miharchy.
+function pageTarget(r, folder, home, contentType) {
+  var dir = (folder || home + "/Pictures/Miharchy") + "/" + validName(r.mangaTitle || "Manga")
+  var name = validName(r.mangaTitle + " - " + r.chapters[r.index].name) + " - " + (r.page + 1) + "." + imageType(contentType).ext
+  return { dir: dir, name: name }
+}
+
+// The commands, as argv: the paths go in as arguments, never into the
+// script, so no name can run as shell. Each prints "ok" when it worked,
+// else the error (pageResult()).
+function saveCommand(file, target) {
+  return ["sh", "-c", "{ mkdir -p -- \"$1\" && cp -- \"$2\" \"$1/$3\"; } 2>&1 && echo ok", "sh", target.dir, file, target.name]
+}
+
+function copyCommand(file, contentType) {
+  return ["sh", "-c", "{ wl-copy --type \"$1\" < \"$2\"; } 2>&1 && echo ok", "sh", imageType(contentType).type, file]
+}
+
+// A command's output -> the note: done when it ends in ok, else what went
+// wrong.
+function pageResult(output, done, failed) {
+  var text = String(output).trim()
+  return /(^|\n)ok$/.test(text) ? done : failed + ": " + (text || "no output")
 }
 
 function relist(chapters, chapterId) {
@@ -518,6 +565,12 @@ if (typeof module !== "undefined") {
     mode: mode,
     delta: delta,
     open: open,
+    validName: validName,
+    imageType: imageType,
+    pageTarget: pageTarget,
+    saveCommand: saveCommand,
+    copyCommand: copyCommand,
+    pageResult: pageResult,
     chapterId: chapterId,
     chapterName: chapterName,
     pagesPayload: pagesPayload,

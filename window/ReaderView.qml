@@ -123,7 +123,7 @@ Rectangle {
     var defaults = Prefs.defaults(table)
     source = { chapters: chapters, prefs: defaults }
     zoom = 1
-    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito)
+    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title)
     pageSizes = {}
     loadPages()
     var seq = ++startSeq
@@ -344,6 +344,10 @@ Rectangle {
       case "reader.settingsChoose":
         choose()
         return
+      case "reader.savePage":
+      case "reader.copyPage":
+        pageAction(id)
+        return
       case "reader.bookmark":
         var chapter = reader.chapters[reader.index]
         var payload = Reader.bookmarkPayload(reader)
@@ -428,6 +432,48 @@ Rectangle {
     if (id) run(id)
   }
 
+  // The image of the page shown (the first of a spread), in the pager or
+  // the strip, or null while it is not there.
+  function shownImage() {
+    if (!reader || reader.state !== "ok") return null
+    if (inStrip) return strip.itemAtIndex(reader.page)
+    return slotImages[Reader.slotOf(reader.page)] || null
+  }
+
+  // Each pager slot's image, by slot index, as the slots are made.
+  property var slotImages: []
+
+  // S saves the page shown, Y copies it (Mihon's page actions); the note
+  // says how it went.
+  function pageAction(id) {
+    var image = shownImage()
+    if (!image || !image.filePath) {
+      note = "The page has not loaded yet"
+      return
+    }
+    if (pageProcess.running) return
+    if (id === "reader.savePage") {
+      var target = Reader.pageTarget(reader, values.pageFolder, Quickshell.env("HOME"), image.contentType)
+      pageProcess.done = "Saved to " + target.dir + "/" + target.name
+      pageProcess.failed = "Saving failed"
+      pageProcess.command = Reader.saveCommand(image.filePath, target)
+    } else {
+      pageProcess.done = "Page copied"
+      pageProcess.failed = "Copying failed"
+      pageProcess.command = Reader.copyCommand(image.filePath, image.contentType)
+    }
+    pageProcess.running = true
+  }
+
+  Process {
+    id: pageProcess
+    property string done: ""
+    property string failed: ""
+    stdout: StdioCollector {
+      onStreamFinished: view.note = Reader.pageResult(text, pageProcess.done, pageProcess.failed)
+    }
+  }
+
   // ponytail: a default route stands for online; a network that routes but
   // reaches nothing still reads as online.
   Process {
@@ -473,11 +519,13 @@ Rectangle {
     // turn shows it at once. A slot shows its page where view.shown puts
     // it, and clips it: a split page is one half of its image.
     Repeater {
+      id: slots
       model: Reader.SLOTS
 
       Item {
         id: slot
         required property int index
+        Component.onCompleted: view.slotImages[index] = image
         readonly property var held: view.shown ? Reader.slots(view.reader)[index] : null
         readonly property var item: held && view.shown ? view.shown.items.filter(function(it) { return it.page === slot.held.page })[0] || null : null
         // A page out of view decodes at the size it would show alone.
