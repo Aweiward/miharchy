@@ -334,3 +334,11 @@ test("the settings panel shows the manga's reading mode first, then the reader's
   assert.equal(rows.find((r) => r.key === "skipRead").text, "on");
   assert.ok(R.PANEL_KEYS.every((k) => S.ROWS.some((r) => r.key === k)), "each key is a Settings row");
 });
+
+test("the reader background is black, Mihon's gray, white, or the theme's background", () => {
+  assert.equal(R.background("black", "#1a1b26"), "#000000");
+  assert.equal(R.background("gray", "#1a1b26"), "#202125");
+  assert.equal(R.background("white", "#1a1b26"), "#ffffff");
+  assert.equal(R.background("theme", "#1a1b26"), "#1a1b26");
+  assert.ok(R.PANEL_KEYS.includes("readerTheme"), "the reader's settings panel offers it");
+});
