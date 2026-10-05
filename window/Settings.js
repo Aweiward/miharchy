@@ -50,6 +50,19 @@ var ROWS = [
       { value: "original", label: "Original size" }
     ]
   },
+  // Mihon's dual page view, for right to left and left to right: two
+  // pages side by side, always or while the window is wider than tall.
+  {
+    key: "dualPageView", label: "Two-page spreads", type: "choice", default: "never", store: "meta",
+    options: [
+      { value: "never", label: "Never" },
+      { value: "always", label: "Always" },
+      { value: "wide", label: "When the window is wide" }
+    ]
+  },
+  // Mihon's split double pages: a wide page reads as two, one half at a
+  // time, outside spreads.
+  { key: "dualPageSplit", label: "Split wide pages", type: "bool", default: false, store: "meta" },
   // Mihon's webtoon side padding, the other way round: the strip's share
   // of the window width. + and - in the reader step it.
   {
