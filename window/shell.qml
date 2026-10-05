@@ -8,6 +8,8 @@ import "Commands.js" as Commands
 import "Settings.js" as Settings
 import "Setup.js" as Setup
 import "Chapters.js" as Chapters
+import "Library.js" as Library
+import "Prefs.js" as Prefs
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -26,7 +28,15 @@ ShellRoot {
   property int libraryCategory: -1
   // "grid" | "categories"
   property string libraryScreen: "grid"
-  readonly property var switcher: Model.switcher(connection)
+  property string libraryQuery: ""
+  // The Library's sort and filters, as server meta holds them (Prefs.js).
+  property var libraryPrefs: Prefs.defaults(Library.PREFS)
+  property bool libraryOptions: false
+  property int libraryOptionsCursor: 0
+  // Keys of libraryPrefs the server has yet to store, and whether a save is out.
+  property var libraryUnsaved: []
+  property bool librarySaving: false
+  readonly property var switcher: Model.switcher({ manga: Library.apply(connection.manga, libraryPrefs, libraryQuery), categories: connection.categories })
   readonly property int switcherIndex: Model.switcherIndex(switcher, libraryCategory)
   readonly property var shown: switcher[switcherIndex]
   property var settingsState: Settings.initial()
@@ -78,6 +88,7 @@ ShellRoot {
     }
     fetchLibrary()
     sendSettings(Settings.loadPayload())
+    loadLibraryPrefs()
     if (pendingChapter) openChapter(pendingChapter)
   }
 
@@ -114,6 +125,51 @@ ShellRoot {
     xhr.setRequestHeader("Content-Type", "application/json")
     xhr.setRequestHeader("Authorization", req.authorization)
     xhr.send(req.body)
+  }
+
+  function sendLibraryPrefs(payload, done) {
+    var req = Model.request(config, payload)
+    var xhr = new XMLHttpRequest()
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== XMLHttpRequest.DONE) return
+      var reply = Model.reply(xhr.status, xhr.responseText)
+      if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
+      done(reply)
+    }
+    xhr.open("POST", req.url)
+    xhr.setRequestHeader("Content-Type", "application/json")
+    xhr.setRequestHeader("Authorization", req.authorization)
+    xhr.send(req.body)
+  }
+
+  // A choice not yet saved wins over what the server holds.
+  function loadLibraryPrefs() {
+    sendLibraryPrefs(Prefs.loadPayload(Library.PREFS), function(reply) {
+      if (reply.state === "ok" && !root.librarySaving && !root.libraryUnsaved.length) root.libraryPrefs = Prefs.read(Library.PREFS, reply.data, root.libraryPrefs)
+    })
+  }
+
+  // One save at a time, each with the key's latest choice: the server
+  // applies saves sent together in any order.
+  function saveLibraryPrefs() {
+    if (librarySaving || !libraryUnsaved.length || !config) return
+    var key = libraryUnsaved[0]
+    libraryUnsaved = libraryUnsaved.slice(1)
+    librarySaving = true
+    sendLibraryPrefs(Prefs.savePayload(key, libraryPrefs[key]), function() {
+      root.librarySaving = false
+      root.saveLibraryPrefs()
+    })
+  }
+
+  // The grid follows at once; the server keeps it for the next start.
+  function setLibraryPref(change) {
+    var next = {}
+    for (var k in libraryPrefs) next[k] = libraryPrefs[k]
+    next[change.key] = change.value
+    libraryPrefs = next
+    if (libraryUnsaved.indexOf(change.key) === -1) libraryUnsaved = libraryUnsaved.concat([change.key])
+    saveLibraryPrefs()
   }
 
   function saveSetting(row, value) {
@@ -213,7 +269,7 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var editing = settingsEditing ? "settings" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
+    var editing = settingsEditing ? "settings" : libraryView.editing ? "library" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
     // An open sync result, download queue, reader, migration or manga
     // detail decides which keys apply, in that order; on Browse, the screen
     // does.
@@ -221,7 +277,8 @@ ShellRoot {
       : migrateView.open ? "migrate-" + migrateView.step
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.selecting ? "manga-select" : "manga")
-      : view === "browse" ? browseView.screen : view === "library" && libraryScreen === "categories" ? "categories" : view
+      : view === "browse" ? browseView.screen : view === "library" && libraryScreen === "categories" ? "categories"
+      : view === "library" && libraryOptions ? "library-options" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
     // Any other key disarms a remove, even one no command takes.
     if (id !== "library.remove") {
@@ -379,6 +436,33 @@ ShellRoot {
       case "library.categories":
         libraryScreen = "categories"
         break
+      case "library.search":
+        libraryView.openSearch()
+        break
+      case "library.commit":
+        libraryView.closeSearch()
+        break
+      case "library.cancel":
+        libraryQuery = ""
+        libraryView.closeSearch()
+        break
+      case "library.clearSearch":
+        if (libraryQuery) libraryQuery = ""
+        else run("window.quit")
+        break
+      case "library.options":
+        libraryOptions = true
+        break
+      case "library.optionsClose":
+        libraryOptions = false
+        break
+      case "library.optionsUp":
+      case "library.optionsDown":
+        libraryOptionsCursor = Commands.moveCursor(libraryOptionsCursor, id === "library.optionsUp" ? -1 : 1, Library.rows(libraryPrefs).length)
+        break
+      case "library.optionsChoose":
+        setLibraryPref(Library.choose(libraryPrefs, Library.rows(libraryPrefs)[libraryOptionsCursor]))
+        break
       case "library.remove":
         var r = shown.manga[libraryCursor]
         if (!r || !config) break
@@ -397,6 +481,7 @@ ShellRoot {
         if (config) {
           fetchLibrary()
           sendSettings(Settings.loadPayload())
+          loadLibraryPrefs()
           settingsView.loadTrackers()
           updatesView.load()
         }
@@ -487,7 +572,14 @@ ShellRoot {
           switcherIndex: root.switcherIndex
           cursor: root.libraryCursor
           armed: root.libraryArmed
-          notice: Model.notice(root.connection, root.configPath, root.shown)
+          notice: Model.notice(root.connection, root.configPath, root.shown, Library.narrowed(root.libraryPrefs, root.libraryQuery))
+          prefs: root.libraryPrefs
+          query: root.libraryQuery
+          optionsOpen: root.libraryOptions
+          optionsCursor: root.libraryOptionsCursor
+          onKey: function(event) { event.accepted = root.handleKey(event) }
+          onEditEnded: keyRoot.forceActiveFocus()
+          onSearched: function(text) { root.libraryQuery = text }
         }
 
         CategoriesView {
@@ -660,7 +752,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: syncView.open ? "" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: syncView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
