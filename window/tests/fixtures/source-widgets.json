@@ -1,0 +1,508 @@
+{
+  "mangadexFilters": [
+    {
+      "__typename": "CheckBoxFilter",
+      "name": "Has available chapters",
+      "checkBox": false
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Original language",
+      "filters": [
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Japanese (Manga)",
+          "checkBox": false
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Chinese (Manhua)",
+          "checkBox": false
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Korean (Manhwa)",
+          "checkBox": false
+        }
+      ]
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Content rating",
+      "filters": [
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Safe",
+          "checkBox": true
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Suggestive",
+          "checkBox": true
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Erotica",
+          "checkBox": false
+        }
+      ]
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Publication demographic",
+      "filters": [
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "None",
+          "checkBox": false
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Shounen",
+          "checkBox": false
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Shoujo",
+          "checkBox": false
+        }
+      ]
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Status",
+      "filters": [
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Ongoing",
+          "checkBox": false
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Completed",
+          "checkBox": false
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Hiatus",
+          "checkBox": false
+        }
+      ]
+    },
+    {
+      "__typename": "SortFilter",
+      "name": "Sort",
+      "values": [
+        "Alphabetic",
+        "Chapter uploaded at",
+        "Number of follows",
+        "Content created at",
+        "Content info updated at",
+        "Relevance",
+        "Year",
+        "Rating"
+      ],
+      "sort": {
+        "index": 5,
+        "ascending": false
+      }
+    },
+    {
+      "__typename": "SelectFilter",
+      "name": "Created within last",
+      "values": [
+        "Any",
+        "Day",
+        "Week",
+        "Month",
+        "Year"
+      ],
+      "select": 0
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Tags mode",
+      "filters": [
+        {
+          "__typename": "SelectFilter",
+          "name": "Included tags mode",
+          "values": [
+            "And",
+            "Or"
+          ],
+          "select": 0
+        },
+        {
+          "__typename": "SelectFilter",
+          "name": "Excluded tags mode",
+          "values": [
+            "And",
+            "Or"
+          ],
+          "select": 1
+        }
+      ]
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Content",
+      "filters": [
+        {
+          "__typename": "TriStateFilter",
+          "name": "Gore",
+          "triState": "IGNORE"
+        },
+        {
+          "__typename": "TriStateFilter",
+          "name": "Sexual violence",
+          "triState": "IGNORE"
+        }
+      ]
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Format",
+      "filters": [
+        {
+          "__typename": "TriStateFilter",
+          "name": "4-Koma",
+          "triState": "IGNORE"
+        },
+        {
+          "__typename": "TriStateFilter",
+          "name": "Adaptation",
+          "triState": "IGNORE"
+        },
+        {
+          "__typename": "TriStateFilter",
+          "name": "Anthology",
+          "triState": "IGNORE"
+        }
+      ]
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Genre",
+      "filters": [
+        {
+          "__typename": "TriStateFilter",
+          "name": "Action",
+          "triState": "IGNORE"
+        },
+        {
+          "__typename": "TriStateFilter",
+          "name": "Adventure",
+          "triState": "IGNORE"
+        },
+        {
+          "__typename": "TriStateFilter",
+          "name": "Boy's Love",
+          "triState": "IGNORE"
+        }
+      ]
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Theme",
+      "filters": [
+        {
+          "__typename": "TriStateFilter",
+          "name": "Aliens",
+          "triState": "IGNORE"
+        },
+        {
+          "__typename": "TriStateFilter",
+          "name": "Animals",
+          "triState": "IGNORE"
+        },
+        {
+          "__typename": "TriStateFilter",
+          "name": "Cooking",
+          "triState": "IGNORE"
+        }
+      ]
+    }
+  ],
+  "mangadexPreferences": [
+    {
+      "__typename": "ListPreference",
+      "key": "thumbnailQuality_en",
+      "title": "Cover quality",
+      "summary": "%s",
+      "visible": true,
+      "enabled": true,
+      "listValue": "",
+      "listDefault": "",
+      "entries": [
+        "Original",
+        "Medium",
+        "Low"
+      ],
+      "entryValues": [
+        "",
+        ".512.jpg",
+        ".256.jpg"
+      ]
+    },
+    {
+      "__typename": "SwitchPreference",
+      "key": "tryUsingFirstVolumeCover_en",
+      "title": "Attempt to use the first volume cover as cover",
+      "summary": "May need to manually refresh entries already in library. Otherwise, clear database to have new covers to show up.",
+      "visible": true,
+      "enabled": true,
+      "switchValue": false,
+      "switchDefault": false
+    },
+    {
+      "__typename": "SwitchPreference",
+      "key": "dataSaverV5_en",
+      "title": "Data saver",
+      "summary": "Enables smaller, more compressed images",
+      "visible": true,
+      "enabled": true,
+      "switchValue": false,
+      "switchDefault": false
+    },
+    {
+      "__typename": "SwitchPreference",
+      "key": "usePort443_en",
+      "title": "Use HTTPS port 443 only",
+      "summary": "Enable to only request image servers that use port 443. This allows users with stricter firewall restrictions to access MangaDex images",
+      "visible": true,
+      "enabled": true,
+      "switchValue": false,
+      "switchDefault": false
+    },
+    {
+      "__typename": "SwitchPreference",
+      "key": "altTitlesInDesc_en",
+      "title": "Alternative titles in description",
+      "summary": "Include a manga's alternative titles at the end of its description",
+      "visible": true,
+      "enabled": true,
+      "switchValue": false,
+      "switchDefault": false
+    },
+    {
+      "__typename": "SwitchPreference",
+      "key": "preferExtensionLangTitle_en",
+      "title": "Use alternative titles",
+      "summary": "If there is an alternative title available which matches the extension language, it will be used",
+      "visible": true,
+      "enabled": true,
+      "switchValue": true,
+      "switchDefault": true
+    },
+    {
+      "__typename": "SwitchPreference",
+      "key": "finalChapterInDesc_en",
+      "title": "Final chapter in description",
+      "summary": "Include a manga's final chapter number at the end of its description",
+      "visible": true,
+      "enabled": true,
+      "switchValue": true,
+      "switchDefault": true
+    },
+    {
+      "__typename": "SwitchPreference",
+      "key": "includeUnavailable_en",
+      "title": "Show unavailable chapters",
+      "summary": "Include chapters that have been marked as unavailable by the source in the chapter list",
+      "visible": true,
+      "enabled": true,
+      "switchValue": false,
+      "switchDefault": false
+    },
+    {
+      "__typename": "MultiSelectListPreference",
+      "key": "contentRating_en",
+      "title": "Default content rating",
+      "summary": "Show content with the selected ratings by default",
+      "visible": true,
+      "enabled": true,
+      "multiValue": [
+        "safe",
+        "suggestive"
+      ],
+      "multiDefault": [
+        "safe",
+        "suggestive"
+      ],
+      "entries": [
+        "Safe",
+        "Suggestive",
+        "Erotica",
+        "Pornographic"
+      ],
+      "entryValues": [
+        "safe",
+        "suggestive",
+        "erotica",
+        "pornographic"
+      ]
+    },
+    {
+      "__typename": "MultiSelectListPreference",
+      "key": "originalLanguage_en",
+      "title": "Filter original languages",
+      "summary": "Only show content that was originally published in the selected languages in both latest and browse",
+      "visible": true,
+      "enabled": true,
+      "multiValue": [],
+      "multiDefault": [],
+      "entries": [
+        "Japanese",
+        "Chinese",
+        "Korean"
+      ],
+      "entryValues": [
+        "ja",
+        "zh",
+        "ko"
+      ]
+    },
+    {
+      "__typename": "EditTextPreference",
+      "key": "blockedGroups_en",
+      "title": "Block groups by UUID",
+      "summary": "Chapters from blocked groups will not show up in Latest or Manga feed. Enter as a Comma-separated list of group UUIDs",
+      "visible": true,
+      "enabled": true,
+      "textValue": "",
+      "textDefault": null
+    },
+    {
+      "__typename": "EditTextPreference",
+      "key": "blockedUploader_en",
+      "title": "Block uploader by UUID",
+      "summary": "Chapters from blocked uploaders will not show up in Latest or Manga feed. Enter as a Comma-separated list of uploader UUIDs",
+      "visible": true,
+      "enabled": true,
+      "textValue": "",
+      "textDefault": null
+    }
+  ],
+  "weebCentralFilters": [
+    {
+      "__typename": "SelectFilter",
+      "name": "Sort",
+      "values": [
+        "Best Match",
+        "Alphabet",
+        "Popularity",
+        "Subscribers",
+        "Recently Added",
+        "Latest Updates"
+      ],
+      "select": 0
+    },
+    {
+      "__typename": "SelectFilter",
+      "name": "Sort Order",
+      "values": [
+        "Descending",
+        "Ascending"
+      ],
+      "select": 0
+    },
+    {
+      "__typename": "SelectFilter",
+      "name": "Official Translation",
+      "values": [
+        "Any",
+        "True",
+        "False"
+      ],
+      "select": 0
+    },
+    {
+      "__typename": "SelectFilter",
+      "name": "Anime Adaptation",
+      "values": [
+        "Any",
+        "True",
+        "False"
+      ],
+      "select": 0
+    },
+    {
+      "__typename": "SelectFilter",
+      "name": "Adult Content",
+      "values": [
+        "Any",
+        "True",
+        "False"
+      ],
+      "select": 0
+    },
+    {
+      "__typename": "TextFilter",
+      "name": "Author (Case-sensitive)",
+      "text": ""
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Series Status",
+      "filters": [
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Ongoing",
+          "checkBox": false
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Complete",
+          "checkBox": false
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Hiatus",
+          "checkBox": false
+        }
+      ]
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Series Type",
+      "filters": [
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Manga",
+          "checkBox": false
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Manhwa",
+          "checkBox": false
+        },
+        {
+          "__typename": "CheckBoxFilter",
+          "name": "Manhua",
+          "checkBox": false
+        }
+      ]
+    },
+    {
+      "__typename": "GroupFilter",
+      "name": "Tags",
+      "filters": [
+        {
+          "__typename": "TriStateFilter",
+          "name": "Action",
+          "triState": "IGNORE"
+        },
+        {
+          "__typename": "TriStateFilter",
+          "name": "Adult",
+          "triState": "IGNORE"
+        },
+        {
+          "__typename": "TriStateFilter",
+          "name": "Adventure",
+          "triState": "IGNORE"
+        }
+      ]
+    }
+  ]
+}
