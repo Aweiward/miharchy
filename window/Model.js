@@ -13,7 +13,9 @@ var VIEWS = [
 ]
 
 var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDownload } }"
-  + " mangas(condition: {inLibrary: true}, orderBy: TITLE) { nodes { id title thumbnailUrl source { id } unreadCount categories { nodes { id } } } } }"
+  + " mangas(condition: {inLibrary: true}) { nodes { id title author artist genre status thumbnailUrl source { id } unreadCount downloadCount bookmarkCount inLibraryAt"
+  + " chapters { totalCount } lastReadChapter { lastReadAt } latestUploadedChapter { uploadDate } latestFetchedChapter { fetchedAt }"
+  + " trackRecords { totalCount } categories { nodes { id } } } } }"
 
 var LIBRARY_MUTATION = "mutation($id: Int!, $inLibrary: Boolean!) { updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) { manga { id inLibrary } } }"
 
@@ -174,10 +176,35 @@ function fromResponse(status, body, config) {
   var nodes = r.data.mangas && r.data.mangas.nodes
   if (!Array.isArray(nodes)) return conn("error", { message: "The server's reply has no library." })
   var ids = function(list) { return ((list && list.nodes) || []).map(function(c) { return c.id }) }
+  // Timestamps come as LongString; 0 means never.
+  var time = function(chapter, field) { return Number(chapter && chapter[field]) || 0 }
   return conn("ok", {
     manga: nodes.map(function(n) {
-      // The server fetches a cover through its source, so without one it only fails.
-      return { id: n.id, title: String(n.title || ""), cover: n.source ? coverUrl(config, n.thumbnailUrl) : "", categories: ids(n.categories), unread: n.unreadCount || 0 }
+      var total = (n.chapters && n.chapters.totalCount) || 0
+      var unread = n.unreadCount || 0
+      return {
+        id: n.id,
+        title: String(n.title || ""),
+        // The server fetches a cover through its source, so without one it only fails.
+        cover: n.source ? coverUrl(config, n.thumbnailUrl) : "",
+        categories: ids(n.categories),
+        unread: unread,
+        author: String(n.author || ""),
+        artist: String(n.artist || ""),
+        genre: n.genre || [],
+        status: String(n.status || ""),
+        total: total,
+        // Suwayomi has no read count; Mihon's "started" means one is read.
+        read: Math.max(0, total - unread),
+        downloads: n.downloadCount || 0,
+        bookmarks: n.bookmarkCount || 0,
+        tracks: (n.trackRecords && n.trackRecords.totalCount) || 0,
+        lastRead: time(n.lastReadChapter, "lastReadAt"),
+        latestUpload: time(n.latestUploadedChapter, "uploadDate"),
+        // Mihon's last update is when the chapter list last changed.
+        lastUpdate: time(n.latestFetchedChapter, "fetchedAt"),
+        added: time(n, "inLibraryAt")
+      }
     }),
     categories: ((r.data.categories && r.data.categories.nodes) || [])
       .filter(function(c) { return c.id !== DEFAULT_CATEGORY })
@@ -208,12 +235,14 @@ function switcherIndex(list, id) {
 }
 
 // What the library view shows for a connection and its shown category: null
-// for the cover grid, otherwise { title, detail }.
-function notice(connection, configPath, shown) {
+// for the cover grid, otherwise { title, detail }. narrowed: a search or a
+// filter may be what empties the category (Library.narrowed()).
+function notice(connection, configPath, shown, narrowed) {
   if (connection.state === "loading") return connection.manga.length ? null : { title: "Loading the library", detail: "" }
   var p = problem(connection, configPath)
   if (p) return p
   if (!connection.manga.length) return { title: "Your library is empty", detail: "Manga you follow show up here." }
+  if (shown && !shown.manga.length && narrowed) return { title: "No manga match", detail: "Esc clears the search. F changes the filters." }
   if (shown && !shown.manga.length) return { title: shown.name + " is empty", detail: "Press c on a manga's detail to put it in a category." }
   return null
 }

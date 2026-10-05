@@ -26,7 +26,7 @@ var KEY = {
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, source, global; Library screen: categories; or
-// overlay: manga, manga-categories, manga-select, manga-track,
+// overlay: library-options, manga, manga-categories, manga-select, manga-track,
 // manga-track-pick, downloads, reader, sync,
 // or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
 // -done) shows;
@@ -58,6 +58,9 @@ var commands = [
   { id: "track.close", title: "Close tracking", keys: ["Esc", "Backspace", "t"], view: "manga-track", hidden: true },
   { id: "track.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga-track-pick", hidden: true },
   { id: "categories.back", title: "Back", keys: ["Esc", "Backspace"], view: "categories", hidden: true },
+  // Clears a search the field kept; with none, it quits like Esc elsewhere.
+  { id: "library.clearSearch", title: "Clear the search", keys: ["Esc"], view: "library", hidden: true },
+  { id: "library.optionsClose", title: "Close sort and filter", keys: ["Esc", "Backspace", "F"], view: "library-options", hidden: true },
   { id: "manga.selectEnd", title: "End the selection", keys: ["Esc", "v"], view: "manga-select", hidden: true },
   { id: "downloads.close", title: "Close the download queue", keys: ["Esc", "D"], view: "downloads", hidden: true },
   { id: "reader.close", title: "Close the reader", keys: ["Esc", "q"], view: "reader", hidden: true },
@@ -147,6 +150,12 @@ var commands = [
   { id: "library.previousCategory", title: "Previous category", keys: ["Backtab"], view: "library", hidden: true },
   { id: "library.categories", title: "Categories", keys: ["c"], view: "library", hidden: true },
   { id: "library.remove", title: "Remove from library", keys: ["x"], view: "library", hidden: true },
+  { id: "library.search", title: "Search the library", keys: ["/"], view: "library", hidden: true },
+  // F, not f: f is fullscreen everywhere.
+  { id: "library.options", title: "Sort and filter", keys: ["F"], view: "library", hidden: true },
+  { id: "library.optionsUp", title: "Previous row", keys: ["k", "Up"], view: "library-options", hidden: true },
+  { id: "library.optionsDown", title: "Next row", keys: ["j", "Down"], view: "library-options", hidden: true },
+  { id: "library.optionsChoose", title: "Change filter or sort", keys: ["Enter", "Space"], view: "library-options", hidden: true },
   { id: "categories.up", title: "Previous category", keys: ["k", "Up"], view: "categories", hidden: true },
   { id: "categories.down", title: "Next category", keys: ["j", "Down"], view: "categories", hidden: true },
   { id: "categories.moveUp", title: "Move category up", keys: ["K"], view: "categories", hidden: true },

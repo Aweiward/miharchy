@@ -4,7 +4,7 @@ One file per user-facing feature: how a user reaches it, how to drive it with `s
 
 | Feature | File | Proof is |
 |---|---|---|
-| Library | `library.md` | the grid shows the server's library, categories filter it, `x x` removes |
+| Library | `library.md` | the grid shows the server's library, categories, search and filters narrow it, the sort orders it, choices survive a restart, `x x` removes |
 | Browse and add | `browse.md` | a source lists manga, the detail opens, `a` toggles `inLibrary` |
 | Manga chapter actions | `manga.md` | `R`/`u`/`P` change `isRead`/`lastPageRead`, the Library badge follows |
 | Reader | `reader.md` | pages render, `lastPageRead`/`isRead` saved, quit flushes the save |

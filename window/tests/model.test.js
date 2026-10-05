@@ -82,12 +82,26 @@ test("the library answer becomes manga with absolute cover URLs", () => {
     { id: 9, title: "Remote", thumbnailUrl: "https://cdn.example/9.jpg", source: { id: "1" } },
     { id: 10, title: "Missing source", thumbnailUrl: "/api/v1/manga/10/thumbnail", source: null }
   ] } } };
-  assert.deepEqual(M.reduce(M.initial(), respond(200, body)).manga, [
+  assert.deepEqual(M.reduce(M.initial(), respond(200, body)).manga.map(({ id, title, cover, categories, unread }) => ({ id, title, cover, categories, unread })), [
     { id: 7, title: "Yotsuba&!", cover: "http://127.0.0.1:4590/api/v1/manga/7/thumbnail", categories: [], unread: 12 },
     { id: 8, title: "No cover", cover: "", categories: [], unread: 0 },
     { id: 9, title: "Remote", cover: "https://cdn.example/9.jpg", categories: [], unread: 0 },
     { id: 10, title: "Missing source", cover: "", categories: [], unread: 0 }
   ]);
+});
+
+test("a library manga carries what search, filters and sort read; LongString times become numbers", () => {
+  const body = { data: { mangas: { nodes: [
+    { id: 7, title: "Yotsuba&!", author: "Azuma", artist: null, genre: ["Comedy"], status: "COMPLETED", source: { id: "1" }, unreadCount: 3, downloadCount: 2, bookmarkCount: 1,
+      inLibraryAt: "1700000000", chapters: { totalCount: 10 }, lastReadChapter: { lastReadAt: "1700000500" }, latestUploadedChapter: { uploadDate: "1690000000000" },
+      latestFetchedChapter: { fetchedAt: "1700000100" }, trackRecords: { totalCount: 2 } },
+    { id: 8, title: "Bare" }
+  ] } } };
+  const [full, bare] = M.reduce(M.initial(), respond(200, body)).manga;
+  assert.deepEqual({ ...full, cover: undefined }, { id: 7, title: "Yotsuba&!", cover: undefined, categories: [], unread: 3, author: "Azuma", artist: "", genre: ["Comedy"], status: "COMPLETED",
+    total: 10, read: 7, downloads: 2, bookmarks: 1, tracks: 2, lastRead: 1700000500, latestUpload: 1690000000000, lastUpdate: 1700000100, added: 1700000000 });
+  assert.deepEqual([bare.read, bare.lastRead, bare.added, bare.genre, bare.status], [0, 0, 0, [], ""]);
+  assert.match(M.LIBRARY_QUERY, /chapters \{ totalCount \}/);
 });
 
 test("a cover shows the placeholder when it has no URL or fails to load", () => {
@@ -199,6 +213,14 @@ test("an empty category has its own notice; a filled library with an empty categ
   assert.equal(M.notice(c, "p", switcher[1]), null);
   const empty = library([], []);
   assert.equal(M.notice(empty, "p", M.switcher(empty)[0]).title, "Your library is empty");
+  assert.equal(M.notice(empty, "p", M.switcher(empty)[0], true).title, "Your library is empty", "a search over nothing still says empty");
+});
+
+test("a category a search or filter empties says nothing matches, not that it is empty", () => {
+  const c = library([{ id: 4, name: "Action", order: 1 }], [[1, [4]]]);
+  const hidden = { id: 4, name: "Action", manga: [] };
+  assert.equal(M.notice(c, "p", hidden, true).title, "No manga match");
+  assert.equal(M.notice(c, "p", hidden, false).title, "Action is empty");
 });
 
 test("a chapter to open at launch is two ids, else nothing", () => {

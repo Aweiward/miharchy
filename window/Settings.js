@@ -1,4 +1,5 @@
 .pragma library
+.import "Prefs.js" as Prefs
 
 // The Settings view's rows and state. Pure, so tests/settings.test.js pins
 // it; shell.qml sends the payloads built here and feeds replies back.
@@ -15,7 +16,7 @@
 //   row turns on.
 // A later setting is one more entry here.
 
-var META_PREFIX = "miharchy."
+var META_PREFIX = Prefs.PREFIX
 
 var ROWS = [
   { key: "showNsfw", label: "Show NSFW sources", type: "bool", default: false, store: "meta" },
@@ -79,12 +80,7 @@ function loadPayload() {
 // The mutation that stores value for row. Its reply carries the stored
 // value back, so reduce() reads saves and loads alike.
 function savePayload(row, value) {
-  if (row.store === "meta") {
-    return {
-      query: "mutation($key: String!, $value: String!) { setGlobalMeta(input: { meta: { key: $key, value: $value } }) { meta { key value } } }",
-      variables: { key: META_PREFIX + row.key, value: String(value) }
-    }
-  }
+  if (row.store === "meta") return Prefs.savePayload(row.key, value)
   var s = {}
   s[row.key] = value
   if (value === true && row.whenOn) for (var k in row.whenOn) s[k] = row.whenOn[k]

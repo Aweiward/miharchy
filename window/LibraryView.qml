@@ -1,10 +1,13 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Library.js" as Library
 
-// The Library view: the category switcher, then the shown category's cover
-// grid with its cursor, or a notice in its place. shell.qml owns the cursor
-// and the shown category.
+// The Library view: the category switcher with the search field and a note
+// of the search, filters and sort in use, then the shown category's cover
+// grid with its cursor, or a notice in its place, and the sort and filter
+// panel over it. shell.qml owns the cursor, the shown category, the search
+// and the choices.
 Item {
   id: view
 
@@ -20,20 +23,45 @@ Item {
   property int armed: -1
   // Model.notice(): null for the grid, otherwise { title, detail }.
   property var notice: null
+  // Prefs values for Library.PREFS, and the search text.
+  property var prefs: ({})
+  property string query: ""
+  property bool optionsOpen: false
+  property int optionsCursor: 0
+  // Whether the search field is open.
+  property bool editing: false
+  readonly property string summary: Library.summary(prefs, editing ? "" : query)
+  readonly property var optionRows: Library.rows(prefs)
+  readonly property alias searchField: field
 
   readonly property int columns: Math.max(1, Math.floor(grid.width / grid.cellWidth))
 
+  signal key(var event)
+  signal editEnded()
+  signal searched(string text)
+
   onCursorChanged: grid.positionViewAtIndex(cursor, GridView.Contain)
+
+  function openSearch() {
+    editing = true
+    field.text = query
+    field.forceActiveFocus()
+  }
+
+  function closeSearch() {
+    editing = false
+    editEnded()
+  }
 
   Row {
     id: names
     x: view.theme.fontSize * 2.5
-    height: view.switcher.length > 1 ? view.theme.fontSize * 2.5 : 0
+    height: visible ? view.theme.fontSize * 2.5 : 0
     spacing: view.theme.fontSize * 1.5
-    visible: view.switcher.length > 1
+    visible: view.switcher.length > 1 || view.editing || view.summary !== ""
 
     Repeater {
-      model: view.switcher
+      model: view.switcher.length > 1 ? view.switcher : []
 
       Text {
         required property var modelData
@@ -45,6 +73,37 @@ Item {
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
       }
+    }
+
+    Text {
+      anchors.bottom: parent.bottom
+      visible: view.editing
+      text: "/"
+      color: view.theme.accent
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
+    }
+
+    TextInput {
+      id: field
+      anchors.bottom: parent.bottom
+      width: view.theme.fontSize * 20
+      visible: view.editing
+      clip: true
+      color: view.theme.foreground
+      selectionColor: view.theme.selected
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
+      onTextChanged: if (view.editing) view.searched(text)
+      Keys.onPressed: function(event) { view.key(event) }
+    }
+
+    Text {
+      anchors.bottom: parent.bottom
+      text: view.summary
+      color: view.theme.accent
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
     }
   }
 
@@ -123,6 +182,56 @@ Item {
       color: view.theme.muted
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSize
+    }
+  }
+
+  Rectangle {
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: view.theme.fontSize * 22
+    height: options.implicitHeight + view.theme.fontSize * 2
+    visible: view.optionsOpen
+    color: view.theme.background
+    border.width: 1
+    border.color: view.theme.muted
+
+    Column {
+      id: options
+      x: view.theme.fontSize
+      y: view.theme.fontSize
+      width: parent.width - view.theme.fontSize * 2
+
+      Repeater {
+        model: view.optionRows
+
+        Column {
+          id: option
+          required property var modelData
+          required property int index
+          readonly property bool current: index === view.optionsCursor
+          readonly property bool on: modelData.state !== "" && modelData.state !== "off"
+          width: options.width
+
+          // A heading before the first filter and the first sort.
+          Text {
+            visible: option.index === 0 || option.modelData.kind !== view.optionRows[option.index - 1].kind
+            topPadding: option.index === 0 ? 0 : view.theme.fontSize * 0.8
+            text: option.modelData.kind === "filter" ? "Filter" : "Sort"
+            color: view.theme.muted
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSmall
+          }
+
+          Text {
+            width: parent.width
+            text: ({ off: "[ ] ", include: "[+] ", exclude: "[-] ", "": "    ", asc: " ↑  ", desc: " ↓  " })[option.modelData.state] + option.modelData.label
+            color: option.current ? view.theme.accent : option.on ? view.theme.foreground : view.theme.muted
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSize
+          }
+        }
+      }
     }
   }
 }

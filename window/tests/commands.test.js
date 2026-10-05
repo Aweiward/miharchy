@@ -110,7 +110,7 @@ test("on the extensions screen, keys drive the extension list", () => {
 test("r refreshes extensions on that screen and reloads the library elsewhere", () => {
   assert.equal(C.dispatch(browse, text("r")), "extensions.refresh");
   for (const v of ["library", "settings"]) assert.equal(C.dispatch({ palette: false, view: v }, text("r")), "library.reload", v);
-  for (const t of ["a", "/"]) assert.equal(C.dispatch({ palette: false, view: "library" }, text(t)), null, t);
+  for (const t of ["a", "/"]) assert.equal(C.dispatch({ palette: false, view: "settings" }, text(t)), null, t);
 });
 
 test("an open edit field gets its own commit and cancel", () => {
@@ -261,7 +261,27 @@ test("on the library, hjkl move the grid and Enter opens the manga", () => {
   assert.equal(C.dispatch(l, key(C.KEY.Down)), "library.down");
   assert.equal(C.dispatch(l, key(C.KEY.Return)), "library.open");
   assert.equal(C.dispatch(l, text("r")), "library.reload");
-  assert.equal(C.dispatch(l, key(C.KEY.Escape)), "window.quit");
+  assert.equal(C.dispatch(l, key(C.KEY.Escape)), "library.clearSearch");
+});
+
+test("on the library, / searches, Esc clears the search, and F opens sort and filter; there j/k move, Enter or Space change a row, Esc or F closes", () => {
+  const l = screen("library");
+  assert.equal(C.dispatch(l, text("/")), "library.search");
+  assert.equal(C.dispatch(l, text("F")), "library.options");
+  assert.equal(C.dispatch(l, text("f")), "window.fullscreen");
+  const typing = { palette: false, view: "library", editing: "library" };
+  assert.equal(C.dispatch(typing, key(C.KEY.Return)), "library.commit");
+  assert.equal(C.dispatch(typing, key(C.KEY.Escape)), "library.cancel");
+  assert.equal(C.dispatch(typing, text("x")), null);
+  const o = screen("library-options");
+  assert.equal(C.dispatch(o, text("j")), "library.optionsDown");
+  assert.equal(C.dispatch(o, key(C.KEY.Up)), "library.optionsUp");
+  assert.equal(C.dispatch(o, key(C.KEY.Return)), "library.optionsChoose");
+  assert.equal(C.dispatch(o, C.keyEvent(C.KEY.Space, " ", 0)), "library.optionsChoose");
+  assert.equal(C.dispatch(o, key(C.KEY.Escape)), "library.optionsClose");
+  assert.equal(C.dispatch(o, text("F")), "library.optionsClose");
+  assert.equal(C.dispatch(o, text("x")), null, "x does not remove a manga behind the panel");
+  assert.equal(C.dispatch(o, text("q")), "window.quit");
 });
 
 test("a source search field commits and cancels as source.*", () => {
