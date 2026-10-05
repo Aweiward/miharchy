@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Commands.js" as Commands
 import "Library.js" as Library
 
 // The Library view: the category switcher with the search field and a note
@@ -39,8 +40,20 @@ Item {
   signal key(var event)
   signal editEnded()
   signal searched(string text)
+  // A click puts shell.qml's cursor, category or options cursor there.
+  signal picked(int index)
+  signal categoryPicked(int index)
+  signal optionPicked(int index)
 
   onCursorChanged: grid.positionViewAtIndex(cursor, GridView.Contain)
+
+  // A cover click moves the cursor as h, j, k and l do; a double click then
+  // sends Enter. Not while the search field types.
+  function point(index, twice) {
+    if (editing) return
+    picked(index)
+    if (twice) key(Commands.enter())
+  }
 
   function openSearch() {
     editing = true
@@ -64,6 +77,7 @@ Item {
       model: view.switcher.length > 1 ? view.switcher : []
 
       Text {
+        id: tabName
         required property var modelData
         required property int index
         anchors.bottom: parent.bottom
@@ -72,6 +86,11 @@ Item {
         font.underline: index === view.switcherIndex
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
+
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.categoryPicked(tabName.index)
+        }
       }
     }
 
@@ -129,6 +148,12 @@ Item {
       width: grid.cellWidth
       height: grid.cellHeight
 
+      MouseArea {
+        anchors.fill: parent
+        onClicked: view.point(cell.index, false)
+        onDoubleClicked: view.point(cell.index, true)
+      }
+
       Cover {
         id: coverBox
         x: view.theme.fontSize / 2
@@ -185,6 +210,13 @@ Item {
     }
   }
 
+  // Under the open panel: a click outside it never reaches a cover, where a
+  // double click's Enter would change the option under the panel's cursor.
+  MouseArea {
+    anchors.fill: parent
+    visible: view.optionsOpen
+  }
+
   Rectangle {
     anchors.top: parent.top
     anchors.right: parent.right
@@ -229,6 +261,15 @@ Item {
             color: option.current ? view.theme.accent : option.on ? view.theme.foreground : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
+
+            MouseArea {
+              anchors.fill: parent
+              onClicked: view.optionPicked(option.index)
+              onDoubleClicked: {
+                view.optionPicked(option.index)
+                view.key(Commands.enter())
+              }
+            }
           }
         }
       }

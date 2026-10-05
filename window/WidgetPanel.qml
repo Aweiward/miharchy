@@ -21,12 +21,19 @@ Rectangle {
   readonly property alias field: field
 
   signal key(var event)
+  // A click on a row; twice: a double click.
+  signal picked(int index, bool twice)
 
   color: theme.background
   border.width: 1
   border.color: theme.muted
 
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
+
+  // A click on the panel never reaches the screen below.
+  MouseArea {
+    anchors.fill: parent
+  }
 
   Text {
     id: heading
@@ -74,6 +81,12 @@ Rectangle {
       width: list.width
       height: line.height + (summary.visible ? summary.height : 0) + view.theme.fontSize * 0.5
       color: current ? view.theme.selected : "transparent"
+
+      MouseArea {
+        anchors.fill: parent
+        onClicked: view.picked(row.index, false)
+        onDoubleClicked: view.picked(row.index, true)
+      }
 
       Item {
         id: line

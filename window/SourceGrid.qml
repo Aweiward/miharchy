@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Browse.js" as Browse
 
 // One source's manga as a cover grid: the list header (popular, latest or
 // a search), the grid with its cursor, and a notice in place of the grid
@@ -20,8 +21,19 @@ Item {
 
   signal key(var event)
   signal nearEnd()
+  // A click on a cover; twice: a double click.
+  signal picked(int index, bool twice)
 
   onCursorChanged: grid.positionViewAtIndex(cursor, GridView.Contain)
+
+  // Set here, not bound, so a page more keeps the grid's place.
+  readonly property var items: listing ? listing.items : []
+  onItemsChanged: {
+    var y = grid.contentY
+    var keep = Browse.continues(grid.model || [], items)
+    grid.model = items
+    if (keep) grid.contentY = y
+  }
 
   Item {
     id: head
@@ -50,13 +62,14 @@ Item {
 
       Repeater {
         model: [
-          { mode: "popular", label: "p popular" },
-          { mode: "latest", label: "n latest" },
-          { mode: "search", label: view.listing && view.listing.mode === "search" ? "/ " + (view.listing.query || "search") : "/ search" },
-          { mode: "filters", label: view.listing && view.listing.filters.length ? "F " + view.listing.filters.length + " filters" : "F filter" }
+          { mode: "popular", key: "p", label: "p popular" },
+          { mode: "latest", key: "n", label: "n latest" },
+          { mode: "search", key: "/", label: view.listing && view.listing.mode === "search" ? "/ " + (view.listing.query || "search") : "/ search" },
+          { mode: "filters", key: "F", label: view.listing && view.listing.filters.length ? "F " + view.listing.filters.length + " filters" : "F filter" }
         ]
 
         Text {
+          id: modeLabel
           required property var modelData
           readonly property bool on: view.listing !== null && (modelData.mode === "filters" ? view.listing.filters.length > 0 : view.listing.mode === modelData.mode)
           visible: modelData.mode !== "latest" || (view.listing && view.listing.source.supportsLatest)
@@ -64,6 +77,13 @@ Item {
           color: on ? view.theme.accent : view.theme.muted
           font.family: view.theme.fontFamily
           font.pixelSize: view.theme.fontSmall
+
+          // A click presses the key the label names.
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: view.key({ key: modeLabel.modelData.key.toUpperCase().charCodeAt(0), text: modeLabel.modelData.key, modifiers: 0 })
+          }
         }
       }
     }
@@ -114,7 +134,6 @@ Item {
     anchors.margins: view.theme.fontSize * 2
     visible: view.notice === null
     clip: true
-    model: view.listing ? view.listing.items : []
     cellWidth: view.theme.fontSize * 13
     cellHeight: cellWidth * 1.5 + view.theme.fontSize * 3
     onAtYEndChanged: if (atYEnd) view.nearEnd()
@@ -126,6 +145,12 @@ Item {
       readonly property bool current: index === view.cursor
       width: grid.cellWidth
       height: grid.cellHeight
+
+      MouseArea {
+        anchors.fill: parent
+        onClicked: view.picked(cell.index, false)
+        onDoubleClicked: view.picked(cell.index, true)
+      }
 
       Cover {
         id: coverBox

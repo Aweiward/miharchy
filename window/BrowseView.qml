@@ -170,6 +170,14 @@ Item {
     pumpGlobal()
   }
 
+  // A click moves the cursor as the keys do (move() makes the change); a
+  // double click then sends Enter. Not while a field types.
+  function point(move, twice) {
+    if (editing) return
+    move()
+    if (twice) key(Commands.enter())
+  }
+
   function moveGrid(delta) {
     if (!listing || !listing.items.length) return
     gridCursor = Math.max(0, Math.min(listing.items.length - 1, gridCursor + delta))
@@ -427,6 +435,12 @@ Item {
         height: view.theme.fontSize * 2.4
         color: current ? view.theme.selected : "transparent"
 
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.point(function() { view.sourceCursor = row.index }, false)
+          onDoubleClicked: view.point(function() { view.sourceCursor = row.index }, true)
+        }
+
         ServerImage {
           id: sourceIcon
           x: view.theme.fontSize * 0.5
@@ -484,6 +498,7 @@ Item {
     notice: view.listing ? Browse.notice(view.listing, view.configPath) : null
     onKey: function(event) { view.key(event) }
     onNearEnd: view.moreManga()
+    onPicked: function(index, twice) { view.point(function() { view.moveGrid(index - view.gridCursor) }, twice) }
   }
 
   Timer {
@@ -504,6 +519,14 @@ Item {
     editing: view.editing === "global"
     configPath: view.configPath
     onKey: function(event) { view.key(event) }
+    onPicked: function(row, col, twice) { view.point(function() { view.globalCursor = { row: row, col: Math.max(0, col) } }, twice) }
+  }
+
+  // Under the filter or settings panel: a click outside it never reaches
+  // the screen below, where a double click's Enter would act on the panel.
+  MouseArea {
+    anchors.fill: parent
+    visible: view.panel !== null
   }
 
   WidgetPanel {
@@ -529,5 +552,6 @@ Item {
       return view.panel.state === "ok" && view.panelRows.length === 0 ? (view.panel.kind === "filters" ? "This source has no filters." : "This source has no settings.") : ""
     }
     onKey: function(event) { view.key(event) }
+    onPicked: function(index, twice) { view.point(function() { view.panel = Widgets.reducePanel(view.panel, { type: "move", delta: index - view.panel.cursor }) }, twice) }
   }
 }

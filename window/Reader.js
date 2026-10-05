@@ -187,6 +187,32 @@ function action(r, id, atEnd, atStart) {
   return r.mode === "webtoon" ? { turn: forward ? 1 : -1, chapter: true } : { turn: forward ? 1 : -1 }
 }
 
+// Where a click on the reader lands, as the key command it stands for,
+// or null. x, y: the click; w, h: the reader's size. Paged follows
+// Mihon's default pager navigation (RightAndLeftNavigation): the left
+// third is reader.left and the right third reader.right, so the reading
+// direction decides the turn as it does for h and l. Webtoon follows
+// Mihon's default L layout: the top third and the left of the middle
+// scroll back, the bottom third and the right of the middle scroll on.
+// The middle opens Mihon's menu; Miharchy has none, so it does nothing.
+function tapZone(readingMode, x, y, w, h) {
+  var fx = x / w
+  var fy = y / h
+  if (readingMode !== "webtoon") return fx < 0.33 ? "reader.left" : fx >= 0.66 ? "reader.right" : null
+  if (fy < 0.33 || (fy < 0.66 && fx < 0.33)) return "reader.halfUp"
+  if (fy >= 0.66 || fx >= 0.66) return "reader.halfDown"
+  return null
+}
+
+// A paged wheel moves one notch (120 in Qt's angleDelta) at a time; a
+// touchpad sends small deltas that add up. acc: the delta not used yet.
+// Returns { steps, acc }: steps > 0 reads on, < 0 back.
+function wheel(acc, dy) {
+  var total = acc + dy
+  var notches = total < 0 ? Math.ceil(total / 120) : Math.floor(total / 120)
+  return { steps: -notches || 0, acc: total - notches * 120 }
+}
+
 // The go-to field's text -> a page index, NaN for no number.
 function pageNumber(text) {
   return parseInt(String(text).trim(), 10) - 1
@@ -274,6 +300,8 @@ if (typeof module !== "undefined") {
     deletePayload: deletePayload,
     modePayload: modePayload,
     action: action,
+    tapZone: tapZone,
+    wheel: wheel,
     pageNumber: pageNumber,
     fit: fit,
     stripWidth: stripWidth,

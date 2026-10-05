@@ -18,6 +18,9 @@ Item {
   readonly property alias searchField: field
 
   signal key(var event)
+  // A click on a source's row (col -1) or a cover; twice: a double click
+  // on a cover, which opens it.
+  signal picked(int row, int col, bool twice)
 
   onCursorChanged: groups.positionViewAtIndex(cursor.row, ListView.Contain)
 
@@ -87,6 +90,11 @@ Item {
         height: view.theme.fontSize * 2
         color: group.current ? view.theme.selected : "transparent"
 
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.picked(group.index, -1, false)
+        }
+
         Text {
           id: name
           x: view.theme.fontSize * 0.5
@@ -130,6 +138,12 @@ Item {
           readonly property bool current: group.current && index === view.cursor.col
           width: strip.cellWidth + view.theme.fontSize
           height: strip.height
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: view.picked(group.index, cell.index, false)
+            onDoubleClicked: view.picked(group.index, cell.index, true)
+          }
 
           Cover {
             id: coverBox

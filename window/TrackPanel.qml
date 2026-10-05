@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Commands.js" as Commands
 import "Model.js" as Model
 import "Trackers.js" as Trackers
 
@@ -118,6 +119,18 @@ Rectangle {
     field.forceActiveFocus()
   }
 
+  // A click on the panel never reaches the manga detail below.
+  MouseArea {
+    anchors.fill: parent
+  }
+
+  // A click moves the cursor there as j and k do; a double click sends Enter.
+  function point(index, cursor, twice) {
+    if (editing) return
+    act({ type: "move", delta: index - cursor })
+    if (twice) key(Commands.enter())
+  }
+
   Column {
     id: body
     anchors.left: parent.left
@@ -186,6 +199,12 @@ Rectangle {
         height: view.theme.fontSize * 3.6
         color: current ? view.theme.selected : "transparent"
 
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.point(row.index, view.panel.cursor, false)
+          onDoubleClicked: view.point(row.index, view.panel.cursor, true)
+        }
+
         Column {
           anchors.left: parent.left
           anchors.right: parent.right
@@ -248,6 +267,12 @@ Rectangle {
         width: pickList.width
         height: view.theme.fontSize * 2.2
         color: current ? view.theme.selected : "transparent"
+
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.point(item.index, view.panel.pick.cursor, false)
+          onDoubleClicked: view.point(item.index, view.panel.pick.cursor, true)
+        }
 
         Text {
           id: label

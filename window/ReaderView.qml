@@ -296,6 +296,12 @@ Rectangle {
     else go({ type: "turn", delta: act.turn, chapter: act.chapter === true })
   }
 
+  function tap(x, y) {
+    if (editing) return
+    var id = Reader.tapZone(reader.mode, x, y, width, height)
+    if (id) run(id)
+  }
+
   Timer {
     id: saveTimer
     interval: 1000
@@ -399,6 +405,31 @@ Rectangle {
       smooth: true
     }
 
+  }
+
+  // The mouse runs the reader's own commands: a click the one its zone
+  // stands for (Reader.tapZone), as h, l, d or u would; in paged mode the
+  // wheel j and k, so a tall page scrolls before it turns. In webtoon the
+  // wheel falls through to the strip, which scrolls. While the go-to field
+  // types, as for keys, neither acts. It also keeps clicks off the views
+  // below the reader.
+  MouseArea {
+    property real wheelRest: 0
+    anchors.fill: parent
+    enabled: view.open
+    onClicked: function(mouse) { view.tap(mouse.x, mouse.y) }
+    // Each click of a quick pair turns, as each tap does in Mihon.
+    onDoubleClicked: function(mouse) { view.tap(mouse.x, mouse.y) }
+    onWheel: function(wheel) {
+      if (view.editing) return
+      if (view.webtoon) {
+        wheel.accepted = false
+        return
+      }
+      var w = Reader.wheel(wheelRest, wheel.angleDelta.y)
+      wheelRest = w.acc
+      for (var i = 0; i < Math.abs(w.steps); i++) view.run(w.steps > 0 ? "reader.down" : "reader.up")
+    }
   }
 
   NumberAnimation {

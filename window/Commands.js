@@ -288,6 +288,31 @@ function dispatch(state, ev) {
   return null
 }
 
+// The Enter key as handleKey takes it. A double click on an item puts the
+// cursor there and sends this, so it runs what Enter runs on that screen.
+// A new object each time: the key handlers set accepted on it.
+function enter() {
+  return { key: KEY.Return, text: "\r", modifiers: 0 }
+}
+
+var HINT_KEYS = { enter: [KEY.Return, "\r"], esc: [KEY.Escape, "\u001b"], space: [KEY.Space, " "], tab: [KEY.Tab, "\t"] }
+
+// A hint line split into its parts ("x remove", "enter open"), each with
+// the key event a click on it sends, or key null. A part whose first word
+// is a named key or one character is a key; a run of single keys ("j k
+// move", "h l another match") is movement, which a click on the item
+// does instead; a digit is a count ("3 selected"), not a key.
+function hintParts(hint) {
+  return String(hint || "").split("   ").filter(function(p) { return p.trim() !== "" }).map(function(part) {
+    var words = part.trim().split(" ")
+    var named = HINT_KEYS[words[0]]
+    var single = words[0].length === 1 && !/[0-9]/.test(words[0]) && !(words.length > 1 && words[1].length === 1)
+    var key = named ? { key: named[0], text: named[1], modifiers: 0 }
+      : single ? { key: words[0].toUpperCase().charCodeAt(0), text: words[0], modifiers: 0 } : null
+    return { text: part.trim(), key: key }
+  })
+}
+
 // The palette's rows for a query: listed commands whose title contains it,
 // ignoring case, in table order.
 function paletteRows(query) {
@@ -309,6 +334,8 @@ if (typeof module !== "undefined") {
     commands: commands,
     keyEvent: keyEvent,
     dispatch: dispatch,
+    enter: enter,
+    hintParts: hintParts,
     paletteRows: paletteRows,
     moveCursor: moveCursor
   }

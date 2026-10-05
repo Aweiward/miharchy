@@ -557,3 +557,47 @@ test("a panel's text field commits and cancels as panel.*", () => {
   assert.equal(C.dispatch(e, key(C.KEY.Escape)), "panel.cancel");
   assert.equal(C.dispatch(e, text("F")), null);
 });
+
+test("a double click sends Enter, which opens the item on every list", () => {
+  const enter = (view) => C.dispatch({ palette: false, view }, C.keyEvent(C.enter().key, C.enter().text, C.enter().modifiers));
+  assert.equal(enter("library"), "library.open");
+  assert.equal(enter("updates"), "updates.open");
+  assert.equal(enter("history"), "history.open");
+  assert.equal(enter("sources"), "sources.open");
+  assert.equal(enter("source"), "source.open");
+  assert.equal(enter("global"), "global.open");
+  assert.equal(enter("extensions"), "extensions.activate");
+  assert.equal(enter("manga"), "manga.read");
+  assert.equal(enter("settings"), "settings.activate");
+  assert.equal(enter("setup"), "setup.activate");
+  assert.equal(enter("migrate-from"), "migrate.open");
+  assert.equal(C.dispatch({ palette: true }, C.enter()), "palette.run");
+});
+
+test("a hint part a click can press sends its key; movement and counts stay plain", () => {
+  const keys = (hint) => C.hintParts(hint).map((p) => p.key && p.key.text);
+  assert.deepEqual(keys("j k move   enter read   space select   A all   R read   x delete download   esc clear   "),
+    [null, "\r", " ", "A", "R", "x", "\u001b"]);
+  assert.deepEqual(keys("3 selected   space select   "), [null, " "], "a count is no key");
+  assert.deepEqual(keys("hjkl move   / search   F sort & filter   tab category   : commands   q quit"),
+    [null, "/", "F", "\t", ":", "q"]);
+  assert.deepEqual(keys("J K reorder   h l another match or skip   "), [null, null]);
+  assert.deepEqual(keys("x again to delete the downloads, any other key keeps them   "), ["x"]);
+  assert.deepEqual(keys("Checking Action for new chapters. Updates shows the progress.   "), [null]);
+  assert.deepEqual(C.hintParts("enter open   ").map((p) => p.text), ["enter open"]);
+  assert.deepEqual(keys(""), []);
+});
+
+test("every key a hint part sends reaches the command the hint names", () => {
+  const press = (view, hint, label) => {
+    const part = C.hintParts(hint).find((p) => p.text === label);
+    return C.dispatch({ palette: false, view }, C.keyEvent(part.key.key, part.key.text, 0));
+  };
+  assert.equal(press("library", "x remove   F sort & filter   ", "x remove"), "library.remove");
+  assert.equal(press("library", "F sort & filter   ", "F sort & filter"), "library.options");
+  assert.equal(press("updates", "space select   ", "space select"), "updates.select");
+  assert.equal(press("library", "tab category   ", "tab category"), "library.nextCategory");
+  assert.equal(press("manga", "esc back   ", "esc back"), "manga.back");
+  assert.equal(press("manga", "a add   ", "a add"), "manga.library");
+  assert.equal(press("library", ": commands   ", ": commands"), "palette.open");
+});

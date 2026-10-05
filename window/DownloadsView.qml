@@ -26,6 +26,8 @@ Rectangle {
 
   // Items gone from the queue since the last reply: finished or taken out.
   signal leftQueue(var items)
+  // A click on a key in the hint sends that key, as typed.
+  signal key(var event)
 
   visible: open
   color: theme.background
@@ -94,6 +96,11 @@ Rectangle {
     onTriggered: view.poll()
   }
 
+  // Over the whole window: a click never reaches the view below.
+  MouseArea {
+    anchors.fill: parent
+  }
+
   Text {
     id: title
     anchors.top: parent.top
@@ -134,6 +141,12 @@ Rectangle {
       width: list.width
       height: view.theme.fontSize * 2.4
       color: current ? view.theme.selected : "transparent"
+
+      // The queue has no Enter, so a double click only moves the cursor.
+      MouseArea {
+        anchors.fill: parent
+        onClicked: view.cursor = row.index
+      }
 
       Text {
         anchors.left: parent.left
@@ -182,14 +195,13 @@ Rectangle {
     font.pixelSize: view.theme.fontSize
   }
 
-  Text {
+  HintBar {
     id: hintText
     anchors.bottom: parent.bottom
     anchors.right: parent.right
     anchors.margins: view.theme.fontSize * 2
+    theme: view.theme
     text: view.hint
-    color: view.theme.muted
-    font.family: view.theme.fontFamily
-    font.pixelSize: view.theme.fontSmall
+    onKey: function(event) { view.key(event) }
   }
 }

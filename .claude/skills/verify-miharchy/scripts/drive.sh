@@ -19,7 +19,9 @@ view, shell = sys.argv[1:]
 s = open(view).read(); s = s.replace("  function offer() {\n", "  function offer() {\n    return\n", 1); open(view, "w").write(s)
 s = open(shell).read()
 assert 'onNeeded: if (root.view === "library") root.view = "setup"' in s, "shell.qml onNeeded changed; update drive.sh"
-s = s.replace('onNeeded: if (root.view === "library") root.view = "setup"', "onNeeded: {}", 1); open(shell, "w").write(s)
+s = s.replace('onNeeded: if (root.view === "library") root.view = "setup"', "onNeeded: {}", 1)
+# The driver's click(), dblclick() and wheel() send real mouse events through QtTest's TestEvent.
+s = s.replace("import QtQuick\n", "import QtQuick\nimport QtTest\n", 1); open(shell, "w").write(s)
 PY
 python3 - "$copy/window/shell.qml" "$here/driver.qml.part" "$steps" "$EVIDENCE" <<'PY'
 import sys

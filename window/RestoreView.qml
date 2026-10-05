@@ -135,11 +135,10 @@ Rectangle {
         }
       }
 
-      Text {
+      HintBar {
+        theme: view.theme
         text: Restore.hint(view.restore)
-        color: view.theme.muted
-        font.family: view.theme.fontFamily
-        font.pixelSize: view.theme.fontSmall
+        onKey: function(event) { view.key(event) }
       }
     }
   }
