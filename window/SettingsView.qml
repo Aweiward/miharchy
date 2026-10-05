@@ -164,249 +164,270 @@ Item {
     Qt.callLater(loginField.forceActiveFocus)
   }
 
-  Column {
+  // The rows outgrow the window, so the list scrolls: with the wheel, and
+  // to keep the cursor's row in view.
+  function reveal(item) {
+    var y = item.mapToItem(content, 0, 0).y
+    if (y < flick.contentY) flick.contentY = y
+    else if (y + item.height > flick.contentY + flick.height) flick.contentY = y + item.height - flick.height
+  }
+
+  Flickable {
+    id: flick
     anchors.fill: parent
     anchors.margins: view.theme.fontSize * 2
-    spacing: view.theme.fontSize
-
-    Text {
-      width: parent.width
-      visible: view.problem !== null
-      wrapMode: Text.Wrap
-      text: view.problem ? view.problem.title + ". " + view.problem.detail : ""
-      color: view.theme.urgent
-      font.family: view.theme.fontFamily
-      font.pixelSize: view.theme.fontSize
-    }
+    contentHeight: content.implicitHeight
+    boundsBehavior: Flickable.StopAtBounds
+    clip: true
 
     Column {
-      width: Math.min(parent.width, view.theme.fontSize * 60)
+      id: content
+      width: flick.width
+      spacing: view.theme.fontSize
 
-      Repeater {
-        model: Settings.ROWS
+      Text {
+        width: parent.width
+        visible: view.problem !== null
+        wrapMode: Text.Wrap
+        text: view.problem ? view.problem.title + ". " + view.problem.detail : ""
+        color: view.theme.urgent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSize
+      }
+
+      Column {
+        width: Math.min(parent.width, view.theme.fontSize * 60)
+
+        Repeater {
+          model: Settings.ROWS
+
+          Rectangle {
+            id: row
+            required property var modelData
+            required property int index
+            readonly property bool current: index === view.cursor
+            readonly property bool editingThis: current && view.editing
+            width: parent.width
+            height: view.theme.fontSize * 2.4
+            color: current ? view.theme.selected : "transparent"
+            onCurrentChanged: if (current) view.reveal(row)
+
+            MouseArea {
+              anchors.fill: parent
+              onClicked: view.point(row.index, false)
+              onDoubleClicked: view.point(row.index, true)
+            }
+
+            Text {
+              id: label
+              anchors.left: parent.left
+              anchors.leftMargin: view.theme.fontSize * 0.75
+              anchors.verticalCenter: parent.verticalCenter
+              text: row.modelData.label
+              color: row.current ? view.theme.selectedText : view.theme.foreground
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSize
+            }
+
+            Text {
+              anchors.left: label.right
+              anchors.leftMargin: view.theme.fontSize * 2
+              anchors.right: parent.right
+              anchors.rightMargin: view.theme.fontSize * 0.75
+              anchors.verticalCenter: parent.verticalCenter
+              horizontalAlignment: Text.AlignRight
+              elide: Text.ElideLeft
+              visible: !row.editingThis
+              text: Settings.display(row.modelData, view.values[row.modelData.key], view.categories)
+              color: row.current ? view.theme.selectedText : view.theme.muted
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSize
+            }
+
+            TextInput {
+              id: field
+              anchors.right: parent.right
+              anchors.rightMargin: view.theme.fontSize * 0.75
+              anchors.verticalCenter: parent.verticalCenter
+              width: parent.width / 2
+              visible: row.editingThis
+              horizontalAlignment: TextInput.AlignRight
+              clip: true
+              color: view.theme.selectedText
+              selectionColor: view.theme.accent
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSize
+              onTextChanged: if (row.editingThis) view.editValue = text
+              Keys.onPressed: function(event) { view.key(event) }
+            }
+
+            onEditingThisChanged: {
+              if (!editingThis) return
+              field.text = view.editStart
+              view.editValue = field.text
+              field.selectAll()
+              field.forceActiveFocus()
+            }
+          }
+        }
+      }
+
+      Text {
+        width: parent.width
+        visible: view.editError !== ""
+        text: view.editError
+        color: view.theme.urgent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      Column {
+        width: Math.min(parent.width, view.theme.fontSize * 60)
+
+        Text {
+          leftPadding: view.theme.fontSize * 0.75
+          bottomPadding: view.theme.fontSize * 0.5
+          text: "Storage   downloads " + (view.storage ? Storage.format(view.storage.downloads) : "measuring")
+          color: view.theme.accent
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSmall
+        }
 
         Rectangle {
-          id: row
-          required property var modelData
-          required property int index
-          readonly property bool current: index === view.cursor
-          readonly property bool editingThis: current && view.editing
+          id: clearRow
+          readonly property bool current: view.cursor === Settings.ROWS.length
           width: parent.width
           height: view.theme.fontSize * 2.4
           color: current ? view.theme.selected : "transparent"
+          onCurrentChanged: if (current) view.reveal(clearRow)
 
           MouseArea {
             anchors.fill: parent
-            onClicked: view.point(row.index, false)
-            onDoubleClicked: view.point(row.index, true)
+            onClicked: view.point(Settings.ROWS.length, false)
+            onDoubleClicked: view.point(Settings.ROWS.length, true)
           }
 
           Text {
-            id: label
             anchors.left: parent.left
             anchors.leftMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
-            text: row.modelData.label
-            color: row.current ? view.theme.selectedText : view.theme.foreground
+            text: "Clear the cache"
+            color: parent.current ? view.theme.selectedText : view.theme.foreground
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
           }
 
           Text {
-            anchors.left: label.right
-            anchors.leftMargin: view.theme.fontSize * 2
             anchors.right: parent.right
             anchors.rightMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
-            horizontalAlignment: Text.AlignRight
-            elide: Text.ElideLeft
-            visible: !row.editingThis
-            text: Settings.display(row.modelData, view.values[row.modelData.key], view.categories)
-            color: row.current ? view.theme.selectedText : view.theme.muted
+            text: view.clearing ? "clearing" : (view.storageNote ? view.storageNote + "   " : "") + (view.storage ? Storage.format(view.storage.cache) : "measuring")
+            color: parent.current ? view.theme.selectedText : view.theme.muted
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSize
+          }
+        }
+      }
+
+      Column {
+        id: trackerRows
+        width: Math.min(parent.width, view.theme.fontSize * 60)
+
+        Text {
+          leftPadding: view.theme.fontSize * 0.75
+          bottomPadding: view.theme.fontSize * 0.5
+          text: view.trackers.state === "loading" && !view.trackers.list.length ? "Trackers   loading" : "Trackers"
+          color: view.theme.accent
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSmall
+        }
+
+        Repeater {
+          model: view.trackers.list
+
+          Rectangle {
+            id: tracker
+            required property var modelData
+            required property int index
+            readonly property bool current: index + Settings.ROWS.length + 1 === view.cursor
+            width: parent.width
+            height: view.theme.fontSize * 2.4
+            color: current ? view.theme.selected : "transparent"
+            onCurrentChanged: if (current) view.reveal(tracker)
+
+            MouseArea {
+              anchors.fill: parent
+              onClicked: view.point(tracker.index + Settings.ROWS.length + 1, false)
+              onDoubleClicked: view.point(tracker.index + Settings.ROWS.length + 1, true)
+            }
+
+            Text {
+              anchors.left: parent.left
+              anchors.leftMargin: view.theme.fontSize * 0.75
+              anchors.verticalCenter: parent.verticalCenter
+              text: tracker.modelData.name
+              color: tracker.current ? view.theme.selectedText : view.theme.foreground
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSize
+            }
+
+            Text {
+              anchors.right: parent.right
+              anchors.rightMargin: view.theme.fontSize * 0.75
+              anchors.verticalCenter: parent.verticalCenter
+              text: Trackers.status(view.trackers, tracker.index)
+              color: tracker.current ? view.theme.selectedText : tracker.modelData.loggedIn ? view.theme.accent : view.theme.muted
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSize
+            }
+          }
+        }
+
+        Row {
+          visible: view.loginEditing
+          width: parent.width
+          height: view.theme.fontSize * 2.4
+          leftPadding: view.theme.fontSize * 0.75
+          spacing: view.theme.fontSize
+
+          Text {
+            id: loginPrompt
+            anchors.verticalCenter: parent.verticalCenter
+            text: view.loginEditing ? view.trackers.login.name + " " + Trackers.prompt(view.trackers.login) : ""
+            color: view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
           }
 
           TextInput {
-            id: field
-            anchors.right: parent.right
-            anchors.rightMargin: view.theme.fontSize * 0.75
+            id: loginField
             anchors.verticalCenter: parent.verticalCenter
-            width: parent.width / 2
-            visible: row.editingThis
-            horizontalAlignment: TextInput.AlignRight
+            width: parent.width - loginPrompt.width - parent.spacing - parent.leftPadding * 2
             clip: true
+            echoMode: view.loginStep === "password" ? TextInput.Password : TextInput.Normal
             color: view.theme.selectedText
             selectionColor: view.theme.accent
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
-            onTextChanged: if (row.editingThis) view.editValue = text
             Keys.onPressed: function(event) { view.key(event) }
           }
-
-          onEditingThisChanged: {
-            if (!editingThis) return
-            field.text = view.editStart
-            view.editValue = field.text
-            field.selectAll()
-            field.forceActiveFocus()
-          }
-        }
-      }
-    }
-
-    Text {
-      width: parent.width
-      visible: view.editError !== ""
-      text: view.editError
-      color: view.theme.urgent
-      font.family: view.theme.fontFamily
-      font.pixelSize: view.theme.fontSmall
-    }
-
-    Column {
-      width: Math.min(parent.width, view.theme.fontSize * 60)
-
-      Text {
-        leftPadding: view.theme.fontSize * 0.75
-        bottomPadding: view.theme.fontSize * 0.5
-        text: "Storage   downloads " + (view.storage ? Storage.format(view.storage.downloads) : "measuring")
-        color: view.theme.accent
-        font.family: view.theme.fontFamily
-        font.pixelSize: view.theme.fontSmall
-      }
-
-      Rectangle {
-        readonly property bool current: view.cursor === Settings.ROWS.length
-        width: parent.width
-        height: view.theme.fontSize * 2.4
-        color: current ? view.theme.selected : "transparent"
-
-        MouseArea {
-          anchors.fill: parent
-          onClicked: view.point(Settings.ROWS.length, false)
-          onDoubleClicked: view.point(Settings.ROWS.length, true)
         }
 
-        Text {
-          anchors.left: parent.left
-          anchors.leftMargin: view.theme.fontSize * 0.75
-          anchors.verticalCenter: parent.verticalCenter
-          text: "Clear the cache"
-          color: parent.current ? view.theme.selectedText : view.theme.foreground
-          font.family: view.theme.fontFamily
-          font.pixelSize: view.theme.fontSize
-        }
-
-        Text {
-          anchors.right: parent.right
-          anchors.rightMargin: view.theme.fontSize * 0.75
-          anchors.verticalCenter: parent.verticalCenter
-          text: view.clearing ? "clearing" : (view.storageNote ? view.storageNote + "   " : "") + (view.storage ? Storage.format(view.storage.cache) : "measuring")
-          color: parent.current ? view.theme.selectedText : view.theme.muted
-          font.family: view.theme.fontFamily
-          font.pixelSize: view.theme.fontSize
-        }
-      }
-    }
-
-    Column {
-      id: trackerRows
-      width: Math.min(parent.width, view.theme.fontSize * 60)
-
-      Text {
-        leftPadding: view.theme.fontSize * 0.75
-        bottomPadding: view.theme.fontSize * 0.5
-        text: view.trackers.state === "loading" && !view.trackers.list.length ? "Trackers   loading" : "Trackers"
-        color: view.theme.accent
-        font.family: view.theme.fontFamily
-        font.pixelSize: view.theme.fontSmall
-      }
-
-      Repeater {
-        model: view.trackers.list
-
-        Rectangle {
-          id: tracker
-          required property var modelData
-          required property int index
-          readonly property bool current: index + Settings.ROWS.length + 1 === view.cursor
+        // Selectable, so the login link can be copied when no browser opens.
+        TextEdit {
           width: parent.width
-          height: view.theme.fontSize * 2.4
-          color: current ? view.theme.selected : "transparent"
-
-          MouseArea {
-            anchors.fill: parent
-            onClicked: view.point(tracker.index + Settings.ROWS.length + 1, false)
-            onDoubleClicked: view.point(tracker.index + Settings.ROWS.length + 1, true)
-          }
-
-          Text {
-            anchors.left: parent.left
-            anchors.leftMargin: view.theme.fontSize * 0.75
-            anchors.verticalCenter: parent.verticalCenter
-            text: tracker.modelData.name
-            color: tracker.current ? view.theme.selectedText : view.theme.foreground
-            font.family: view.theme.fontFamily
-            font.pixelSize: view.theme.fontSize
-          }
-
-          Text {
-            anchors.right: parent.right
-            anchors.rightMargin: view.theme.fontSize * 0.75
-            anchors.verticalCenter: parent.verticalCenter
-            text: Trackers.status(view.trackers, tracker.index)
-            color: tracker.current ? view.theme.selectedText : tracker.modelData.loggedIn ? view.theme.accent : view.theme.muted
-            font.family: view.theme.fontFamily
-            font.pixelSize: view.theme.fontSize
-          }
-        }
-      }
-
-      Row {
-        visible: view.loginEditing
-        width: parent.width
-        height: view.theme.fontSize * 2.4
-        leftPadding: view.theme.fontSize * 0.75
-        spacing: view.theme.fontSize
-
-        Text {
-          id: loginPrompt
-          anchors.verticalCenter: parent.verticalCenter
-          text: view.loginEditing ? view.trackers.login.name + " " + Trackers.prompt(view.trackers.login) : ""
-          color: view.theme.muted
-          font.family: view.theme.fontFamily
-          font.pixelSize: view.theme.fontSize
-        }
-
-        TextInput {
-          id: loginField
-          anchors.verticalCenter: parent.verticalCenter
-          width: parent.width - loginPrompt.width - parent.spacing - parent.leftPadding * 2
-          clip: true
-          echoMode: view.loginStep === "password" ? TextInput.Password : TextInput.Normal
-          color: view.theme.selectedText
+          visible: text !== ""
+          leftPadding: view.theme.fontSize * 0.75
+          topPadding: view.theme.fontSize * 0.5
+          readOnly: true
+          selectByMouse: true
+          wrapMode: TextEdit.WrapAnywhere
+          text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, "server.json") || { title: "" }).title : Trackers.note(view.trackers)
+          color: view.trackers.error || (view.trackers.login && view.trackers.login.error) ? view.theme.urgent : view.theme.muted
           selectionColor: view.theme.accent
           font.family: view.theme.fontFamily
-          font.pixelSize: view.theme.fontSize
-          Keys.onPressed: function(event) { view.key(event) }
+          font.pixelSize: view.theme.fontSmall
         }
-      }
-
-      // Selectable, so the login link can be copied when no browser opens.
-      TextEdit {
-        width: parent.width
-        visible: text !== ""
-        leftPadding: view.theme.fontSize * 0.75
-        topPadding: view.theme.fontSize * 0.5
-        readOnly: true
-        selectByMouse: true
-        wrapMode: TextEdit.WrapAnywhere
-        text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, "server.json") || { title: "" }).title : Trackers.note(view.trackers)
-        color: view.trackers.error || (view.trackers.login && view.trackers.login.error) ? view.theme.urgent : view.theme.muted
-        selectionColor: view.theme.accent
-        font.family: view.theme.fontFamily
-        font.pixelSize: view.theme.fontSmall
       }
     }
   }
