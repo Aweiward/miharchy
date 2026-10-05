@@ -147,6 +147,29 @@ var ROWS = [
   // server settings hold the server password, so they stay out of a
   // folder the user picks.
   { key: "backupPath", label: "Backup folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default", notSameAs: "syncFolder", with: { autoBackupIncludeServerSettings: false } },
+  // Mihon's automatic backups. Suwayomi counts the interval in days and runs
+  // it at backupTime; it deletes its own backups by age, not by count.
+  {
+    key: "backupInterval", label: "Automatic backups", type: "choice", default: 1, store: "server",
+    options: [
+      { value: 0, label: "Off" },
+      { value: 1, label: "Daily" },
+      { value: 2, label: "Every 2 days" },
+      { value: 3, label: "Every 3 days" },
+      { value: 7, label: "Weekly" }
+    ]
+  },
+  { key: "backupTime", label: "Automatic backup time", type: "text", default: "00:00", store: "server", pattern: /^([01]\d|2[0-3]):[0-5]\d$/, hint: "Enter a time as HH:MM, such as 21:30." },
+  {
+    key: "backupTTL", label: "Keep automatic backups", type: "choice", default: 14, store: "server",
+    options: [
+      { value: 7, label: "1 week" },
+      { value: 14, label: "2 weeks" },
+      { value: 30, label: "1 month" },
+      { value: 90, label: "3 months" },
+      { value: 0, label: "Forever" }
+    ]
+  },
   { key: "autoBackupIncludeCategories", label: "Backups include categories", type: "bool", default: true, store: "server" },
   { key: "autoBackupIncludeChapters", label: "Backups include chapters", type: "bool", default: true, store: "server" },
   { key: "autoBackupIncludeTracking", label: "Backups include tracking", type: "bool", default: true, store: "server" },

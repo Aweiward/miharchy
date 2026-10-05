@@ -2,6 +2,8 @@
 
 The window makes a backup by hand, as Mihon's Create backup does, and Suwayomi makes automatic ones. Both land in the backup folder: the Settings row "Backup folder" (server setting `backupPath`), or the server's own `<root>/backups` when it is blank. The include rows ("Backups include categories", "chapters", "tracking", "history") are Suwayomi's `autoBackupInclude*` settings and decide what both kinds hold. Server settings never go in a backup made by hand, and saving the backup folder turns them off for automatic ones (`autoBackupIncludeServerSettings: false`): they hold the server password.
 
+Automatic backups are Suwayomi's own schedule, set from Settings: "Automatic backups" (`backupInterval`, in days, 0 off), "Automatic backup time" (`backupTime`, HH:MM, local time) and "Keep automatic backups" (`backupTTL`, in days, 0 forever). Suwayomi names them `org.suwayomi.tachidesk.auto*_<yyyy-MM-dd_HH-mm>.tachibk` and deletes only its own names by age, so backups made by hand in the same folder stay.
+
 ## Sub-features
 - `miharchy-sync backup <folder>` writes `miharchy-backup-<UTC yyyy-MM-dd_HH-mm-ss>.tachibk` under `sync.lock` and prints `{"file": ...}`. It refuses the sync folder.
 - The name starts with `miharchy-`, so a sync never takes it for a phone backup, and it does not match the export pattern, so a sync never prunes it.
@@ -25,5 +27,7 @@ The window runs the helper Setup installs under `$HOME`; give the drive its own 
 ]
 ```
 Read back: `settings { backupPath autoBackupIncludeServerSettings }`, and the file in the folder. `gunzip -c <file> | grep -a -o '/chapter/' | wc -l` counts MangaDex chapter URLs: 0 with "Backups include chapters" off.
+
+Automatic backups: set "Automatic backup time" two minutes ahead (compute it in the step: `new Date(Date.now() + 120000)`), then poll the backup folder from the shell for `org.suwayomi.tachidesk.auto*`. Suwayomi reschedules on the settings change; no restart. Check the sync folder stays empty of them.
 
 The lock: the JVM takes a POSIX (fcntl) lock, which `flock(1)` does not see. Hold `sync.lock` with `python3 -c 'import fcntl,sys,time; f=open(sys.argv[1],"w"); fcntl.lockf(f, fcntl.LOCK_EX); time.sleep(20)' <home>/.local/share/miharchy/sync/sync.lock &`, then run the helper: "A sync is already running."
