@@ -9,6 +9,7 @@ Rectangle {
   id: cover
 
   required property Theme theme
+  property var config: null
   property string source: ""
   property string title: ""
   property bool current: false
@@ -20,12 +21,13 @@ Rectangle {
   border.color: theme.accent
   clip: true
 
-  Image {
+  ServerImage {
     id: image
     anchors.fill: parent
     anchors.margins: cover.border.width
     visible: !placeholder.visible
-    source: cover.source
+    config: cover.config
+    url: cover.source
     fillMode: Image.PreserveAspectCrop
     asynchronous: true
     sourceSize.width: width
@@ -35,7 +37,7 @@ Rectangle {
     id: placeholder
     anchors.fill: parent
     anchors.margins: Math.min(cover.theme.fontSize * 0.5, cover.width / 10)
-    visible: Model.placeholder(cover.source, image.status === Image.Error)
+    visible: Model.placeholder(cover.source, image.failed)
     text: cover.title
     color: cover.theme.muted
     font.family: cover.theme.fontFamily

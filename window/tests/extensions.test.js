@@ -78,7 +78,7 @@ test("rows: repos, then updates, installed and available, each by name", () => {
     ["Installed", "Asura Scans"],
     ["Available", "Weeb Central"]
   ]);
-  assert.equal(r[1].icon, "http://u:p@127.0.0.1:4590/api/v1/extension/icon/pkg.MangaDex", "icons get the cover credentials");
+  assert.equal(r[1].icon, "http://127.0.0.1:4590/api/v1/extension/icon/pkg.MangaDex");
   assert.equal(r[3].marker, "mixed");
   assert.match(r[1].detail, /all\s+1\.6\.1/);
 });

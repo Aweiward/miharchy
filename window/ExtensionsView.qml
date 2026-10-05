@@ -274,13 +274,14 @@ Item {
         height: view.theme.fontSize * 2.4
         color: entry.current ? view.theme.selected : "transparent"
 
-        Image {
+        ServerImage {
           id: icon
           x: view.theme.fontSize * 0.5
           anchors.verticalCenter: parent.verticalCenter
           width: entry.modelData.kind === "repo" ? 0 : view.theme.fontSize * 1.7
           height: width
-          source: entry.modelData.icon
+          config: view.config
+          url: entry.modelData.icon
           sourceSize.width: width
           asynchronous: true
         }

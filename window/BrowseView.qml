@@ -314,13 +314,14 @@ Item {
         height: view.theme.fontSize * 2.4
         color: current ? view.theme.selected : "transparent"
 
-        Image {
+        ServerImage {
           id: sourceIcon
           x: view.theme.fontSize * 0.5
           anchors.verticalCenter: parent.verticalCenter
           width: view.theme.fontSize * 1.7
           height: width
-          source: row.modelData.icon
+          config: view.config
+          url: row.modelData.icon
           sourceSize.width: width
           asynchronous: true
         }
@@ -363,6 +364,7 @@ Item {
     anchors.fill: parent
     visible: view.screen === "source"
     theme: view.theme
+    config: view.config
     listing: view.listing
     cursor: view.gridCursor
     editing: view.editing === "source"
@@ -383,6 +385,7 @@ Item {
     anchors.fill: parent
     visible: view.screen === "global"
     theme: view.theme
+    config: view.config
     search: view.global
     cursor: view.globalCursor
     editing: view.editing === "global"

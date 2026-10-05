@@ -75,7 +75,7 @@ test("a reload keeps the shown library; a failed one drops it", () => {
   assert.deepEqual(M.reduce(M.reduce(M.initial(), respond(401, "")), { type: "request" }).manga, []);
 });
 
-test("the library answer becomes manga with authenticated cover URLs", () => {
+test("the library answer becomes manga with absolute cover URLs", () => {
   const body = { data: { mangas: { nodes: [
     { id: 7, title: "Yotsuba&!", thumbnailUrl: "/api/v1/manga/7/thumbnail", source: { id: "1" }, unreadCount: 12 },
     { id: 8, title: "No cover", thumbnailUrl: null, source: { id: "1" } },
@@ -83,7 +83,7 @@ test("the library answer becomes manga with authenticated cover URLs", () => {
     { id: 10, title: "Missing source", thumbnailUrl: "/api/v1/manga/10/thumbnail", source: null }
   ] } } };
   assert.deepEqual(M.reduce(M.initial(), respond(200, body)).manga, [
-    { id: 7, title: "Yotsuba&!", cover: "http://miharchy:s3cret@127.0.0.1:4590/api/v1/manga/7/thumbnail", categories: [], unread: 12 },
+    { id: 7, title: "Yotsuba&!", cover: "http://127.0.0.1:4590/api/v1/manga/7/thumbnail", categories: [], unread: 12 },
     { id: 8, title: "No cover", cover: "", categories: [], unread: 0 },
     { id: 9, title: "Remote", cover: "https://cdn.example/9.jpg", categories: [], unread: 0 },
     { id: 10, title: "Missing source", cover: "", categories: [], unread: 0 }
@@ -102,28 +102,48 @@ test("the library payload sets inLibrary and nothing else", () => {
   assert.deepEqual(p.variables, { id: 7, inLibrary: false });
 });
 
-test("coverUrl gives credentials to the server's own origin only", () => {
-  const creds = "miharchy:s3cret@";
-  assert.equal(M.coverUrl(config, "http://127.0.0.1:4590/api/v1/manga/1/thumbnail"), "http://" + creds + "127.0.0.1:4590/api/v1/manga/1/thumbnail");
-  for (const hostile of [
-    "http://127.0.0.1:4590.evil.com/x",
-    "http://127.0.0.1:45901/x",
-    "http://127.0.0.1:4590@evil.com/x",
-    "http://other:pw@127.0.0.1:4590/x",
-    "https://cdn.example/9.jpg",
-    "https://127.0.0.1:4590/x",
-    "//evil.com/x",
-    "evil.com/x",
-    "javascript:alert(1)"
-  ]) {
-    const out = M.coverUrl(config, hostile);
-    assert.equal(out, hostile, hostile);
-    assert.ok(!out.includes("s3cret"), hostile);
+const hostile = [
+  "http://127.0.0.1:4590.evil.com/x",
+  "http://127.0.0.1:45901/x",
+  "http://127.0.0.1:4590@evil.com/x",
+  "http://other:pw@127.0.0.1:4590/x",
+  "https://cdn.example/9.jpg",
+  "https://127.0.0.1:4590/x",
+  "//evil.com/x",
+  "evil.com/x",
+  "javascript:alert(1)"
+];
+
+test("coverUrl makes server paths absolute and leaves other hosts untouched", () => {
+  assert.equal(M.coverUrl(config, "/api/v1/manga/1/thumbnail"), "http://127.0.0.1:4590/api/v1/manga/1/thumbnail");
+  assert.equal(M.coverUrl(config, "HTTP://127.0.0.1:4590/x"), "http://127.0.0.1:4590/x");
+  for (const url of hostile) assert.equal(M.coverUrl(config, url), url, url);
+});
+
+test("no image URL carries userinfo, whatever the password", () => {
+  const userinfo = /^[a-z]+:\/\/[^\/?#]*@/i;
+  const cfg = { ...config, password: "a@b:c" };
+  const library = M.reduce(M.initial(), { ...respond(200, { data: { categories: { nodes: [] }, mangas: { nodes: [
+    { id: 1, title: "A", thumbnailUrl: "/api/v1/manga/1/thumbnail", source: { id: "1" }, unreadCount: 0, categories: { nodes: [] } },
+    { id: 2, title: "B", thumbnailUrl: "http://127.0.0.1:4590/api/v1/manga/2/thumbnail", source: { id: "1" }, unreadCount: 0, categories: { nodes: [] } }
+  ] } } }), config: cfg });
+  const urls = library.manga.map((m) => m.cover);
+  for (const url of ["/x", "http://127.0.0.1:4590/x"]) urls.push(M.coverUrl(cfg, url), M.imageRequest(cfg, url).url);
+  assert.equal(urls.length, 6);
+  for (const url of urls) {
+    assert.ok(url.startsWith("http://127.0.0.1:4590/"), url);
+    assert.doesNotMatch(url, userinfo);
   }
 });
 
-test("coverUrl percent-encodes credentials", () => {
-  assert.equal(M.coverUrl({ ...config, password: "a@b:c" }, "/x"), "http://miharchy:a%40b%3Ac@127.0.0.1:4590/x");
+test("imageRequest sends the credentials in a header, to the server's own origin only", () => {
+  assert.deepEqual(M.imageRequest(config, "http://127.0.0.1:4590/api/v1/manga/1/thumbnail"), {
+    url: "http://127.0.0.1:4590/api/v1/manga/1/thumbnail",
+    authorization: M.libraryRequest(config).authorization
+  });
+  for (const url of hostile) assert.equal(M.imageRequest(config, url), null, url);
+  assert.equal(M.imageRequest(config, ""), null);
+  assert.equal(M.imageRequest(null, "/x"), null);
 });
 
 test("notice: a clear message per state, none over a filled library", () => {

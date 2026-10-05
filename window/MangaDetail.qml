@@ -202,6 +202,7 @@ Rectangle {
     width: view.theme.fontSize * 16
     height: width * 1.5
     theme: view.theme
+    config: view.config
     source: view.manga ? view.manga.cover : ""
     title: view.manga ? view.manga.title : ""
   }

@@ -43,6 +43,7 @@ A manga reader for Omarchy (Arch + Hyprland). It reads Mihon's extension ecosyst
 - Suwayomi-Server runs as the systemd user service `miharchy-server`, from `~/.local/share/miharchy/suwayomi` (mode 700), on `127.0.0.1:4590` with `basic_auth`. `server/miharchy-server` sets it up and is safe to rerun.
 - Every component reads the server address and credentials from `~/.config/miharchy/server.json` (mode 600): `{url, username, password}`. Never hard-code them.
 - Suwayomi rewrites its `server.conf` with mode 644, so the 700 folder is what keeps the password private.
+- No URL carries the credentials. QML `Image` cannot send an Authorization header, and it does not share the cookies of an XHR. So every image from the server goes through `window/ServerImage.qml`: an XHR with the header fetches the bytes, a `FileView` writes them to `$XDG_RUNTIME_DIR/miharchy/images/`, and the `Image` shows that file. Each instance owns its files and empties them when its image changes or it is destroyed. `Model.imageRequest` decides what is the server's: an image from any other host loads as a plain `Image`, without the header.
 - Miharchy-only preferences live in Suwayomi global meta under `miharchy.<key>` (`metas` / `setGlobalMeta`), never in a local file, so the window, plugin and sync helper read one place. Settings that belong to Suwayomi stay server settings. `window/Settings.js` holds the row table: a new setting is one entry there.
 - A preference for one manga lives in its manga meta under the same prefix (`setMangaMeta`). The reading mode `m` picks is `miharchy.readingMode`. It wins over a long strip detected from genre tags or a Webtoons source (`Browse.longStrip`), which wins over the default reading mode setting.
 - Migrate (`window/Migrate.js`) follows Mihon's `MigrateMangaUseCase`: every target chapter up to the highest chapter number read on the old manga is read, a bookmark moves to the chapters with its number, and the target gets exactly the old categories and reading mode. It reads the old manga from the server's database only, so a manga whose source is gone still migrates. The target write goes first; only after it succeeds does the old manga leave the library (Migrate, not Copy) and lose its downloads.
@@ -53,7 +54,7 @@ A manga reader for Omarchy (Arch + Hyprland). It reads Mihon's extension ecosyst
 
 ## Current work
 
-v1 is built: every v1 ticket (#1 to #17, plus #21 to #23 and #35) is merged. Since then: Migrate (#52), window focus (#45) and the reader's save on quit (#46) are merged. The open GitHub issues are the follow-ups: trackers and local manga (v1.1), the AUR package, credential-free image URLs and the global search timeout. Work them through `ready-for-agent` issues.
+v1 is built: every v1 ticket (#1 to #17, plus #21 to #23 and #35) is merged. Since then: Migrate (#52), window focus (#45) and the reader's save on quit (#46) are merged. The open GitHub issues are the follow-ups: trackers and local manga (v1.1), the AUR package and the global search timeout. Work them through `ready-for-agent` issues.
 
 Verified on the user's phone (2026-10-04): stock Mihon restores a `miharchy-*.tachibk` export from a real 216-manga library without issues. The FlareSolverr Setup step ran on the user's machine; `docs/spikes/cloudflare-solvers.md` compares it with Byparr.
 

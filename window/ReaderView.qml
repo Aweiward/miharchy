@@ -215,13 +215,14 @@ Rectangle {
   Repeater {
     model: Reader.SLOTS
 
-    Image {
+    ServerImage {
       id: slot
       required property int index
       readonly property var held: view.reader && view.reader.state === "ok" && !view.webtoon ? Reader.slots(view.reader)[index] : null
       anchors.fill: parent
       visible: held !== null && held.page === view.reader.page
-      source: held ? held.url : ""
+      config: view.config
+      url: held ? held.url : ""
       // Decoded at the size shown, not the scan's: six full-size scans
       // would hold hundreds of megabytes.
       sourceSize: Qt.size(width, height)
@@ -255,13 +256,14 @@ Rectangle {
     onContentHeightChanged: if (pinToEnd) positionViewAtEnd()
     onMovementStarted: pinToEnd = false
 
-    delegate: Image {
+    delegate: ServerImage {
       required property string modelData
       width: strip.width
       // A page still loading takes room, so the strip never asks for every
       // page at once.
       height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : width * 1.4
-      source: modelData
+      config: view.config
+      url: modelData
       sourceSize.width: width
       fillMode: Image.PreserveAspectFit
       asynchronous: true

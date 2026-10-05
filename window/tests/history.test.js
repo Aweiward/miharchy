@@ -37,7 +37,7 @@ test("one entry per manga, its most recent chapter, in the server's order", () =
   const e = h.entries[0];
   assert.equal(e.title, "Manga 3");
   assert.equal(e.chapter, "Ch. 31");
-  assert.equal(e.cover, "http://u:p@127.0.0.1:4590/api/v1/manga/3/thumbnail");
+  assert.equal(e.cover, "http://127.0.0.1:4590/api/v1/manga/3/thumbnail");
   assert.equal(e.page, 4);
   assert.equal(e.pages, 20);
   assert.equal(e.read, false);

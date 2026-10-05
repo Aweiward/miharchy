@@ -49,7 +49,7 @@ test("rows group by fetch day: Today, Yesterday, then the date", () => {
   assert.deepEqual(u.rows.map((r) => r.header), ["Today", "", "Yesterday", "2026-09-28"]);
   assert.deepEqual(u.rows[0], {
     id: 1, mangaId: 7, title: "Maid to Skate", chapter: "Ch.1", date: "2026-09-30", header: "Today",
-    cover: "http://u:p@127.0.0.1:4590/api/v1/manga/7/thumbnail"
+    cover: "http://127.0.0.1:4590/api/v1/manga/7/thumbnail"
   });
 });
 

@@ -80,25 +80,34 @@ function splitUrl(url) {
   return m ? { origin: (m[1] + "://" + m[2]).toLowerCase(), authority: m[2], rest: m[3] } : null
 }
 
-// QML Image can't send an Authorization header, so covers carry the
-// credentials in the URL's userinfo. Thumbnail URLs come from sources, so
-// only a server-relative path or an exact match of the server's scheme,
-// host and port gets them; anything else passes through untouched.
+// An image URL's path on the server, or null when it is not the server's.
+// Thumbnail URLs come from sources, so only a server-relative path or an
+// exact match of the server's scheme, host and port counts.
+function serverPath(config, url) {
+  if (url.charAt(0) === "/" && url.charAt(1) !== "/") return url
+  var server = splitUrl(config.url)
+  var u = splitUrl(url)
+  if (!server || !u || u.authority.indexOf("@") !== -1 || u.origin !== server.origin) return null
+  return u.rest
+}
+
+// The URL an image loads from: a server path made absolute, anything else
+// untouched. It never carries credentials; see imageRequest.
 function coverUrl(config, thumbnailUrl) {
   if (!thumbnailUrl) return ""
-  var server = splitUrl(config.url)
   var url = String(thumbnailUrl)
-  var path
-  if (url.charAt(0) === "/" && url.charAt(1) !== "/") {
-    path = url
-  } else {
-    var u = splitUrl(url)
-    if (!server || !u || u.authority.indexOf("@") !== -1 || u.origin !== server.origin) return url
-    path = u.rest
-  }
-  if (!server || server.authority.indexOf("@") !== -1) return config.url + path
-  var userinfo = encodeURIComponent(config.username) + ":" + encodeURIComponent(config.password) + "@"
-  return config.url.replace(/^(https?:\/\/)/i, "$1" + userinfo) + path
+  var path = serverPath(config, url)
+  return path === null ? url : config.url + path
+}
+
+// QML Image can't send an Authorization header, so ServerImage.qml fetches
+// a server image itself: { url, authorization } for the server's own
+// images, null for any other host, which gets no credentials and loads
+// as a plain Image.
+function imageRequest(config, url) {
+  if (!config || !url) return null
+  var path = serverPath(config, String(url))
+  return path === null ? null : { url: config.url + path, authorization: request(config, {}).authorization }
 }
 
 // Whether a cover shows the title tile instead of the image.
@@ -249,6 +258,7 @@ if (typeof module !== "undefined") {
     placeholder: placeholder,
     reply: reply,
     coverUrl: coverUrl,
+    imageRequest: imageRequest,
     initial: initial,
     reduce: reduce,
     switcher: switcher,
