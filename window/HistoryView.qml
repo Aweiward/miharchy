@@ -29,16 +29,24 @@ Item {
   // Only the latest request may update the history or the resume.
   property int seq: 0
 
-  readonly property var entries: history.entries
-  readonly property var notice: History.notice(history, configPath)
-  readonly property string hint: "j k move   enter resume   x remove   X clear all   "
+  // The search text, and whether its field is open. It does not persist,
+  // as in Mihon.
+  property string query: ""
+  property bool editing: false
+  readonly property alias searchField: field
+
+  readonly property var entries: History.search(history.entries, query)
+  readonly property var notice: History.notice(history, configPath, query)
+  readonly property string hint: "j k move   enter resume   x remove   X clear all   " + (query ? "esc clear search   " : "/ search   ")
 
   // chapters: newest first, as the manga detail holds them.
   signal resume(var manga, var chapters, int chapterId)
   // A double click sends Enter, as typed.
   signal key(var event)
+  signal editEnded()
 
   onActiveChanged: if (active) reload()
+  onQueryChanged: cursor = 0
   onConfigChanged: {
     seq++
     opening = null
@@ -126,17 +134,64 @@ Item {
         if (wasArmed === String(entry.mangaId)) mutate(History.removePayload(entry))
         else armed = String(entry.mangaId)
         break
+      // All of it, whatever the search shows: the cutoff is the newest entry.
       case "history.clear":
-        if (!entries.length) break
-        if (wasArmed === "clear") mutate(History.clearPayload(entries))
+        if (!history.entries.length) break
+        if (wasArmed === "clear") mutate(History.clearPayload(history.entries))
         else armed = "clear"
         break
+      case "history.search":
+        editing = true
+        field.text = query
+        field.forceActiveFocus()
+        break
+      case "history.commit":
+        editing = false
+        editEnded()
+        break
+      case "history.cancel":
+        query = ""
+        editing = false
+        editEnded()
+        break
+      case "history.clearSearch":
+        query = ""
+        break
+    }
+  }
+
+  Row {
+    id: searchRow
+    x: view.theme.fontSize * 2.5
+    y: view.theme.fontSize
+    height: visible ? view.theme.fontSize * 1.5 : 0
+    spacing: view.theme.fontSize * 0.5
+    visible: view.editing || view.query !== ""
+
+    Text {
+      text: "/"
+      color: view.theme.accent
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
+    }
+
+    TextInput {
+      id: field
+      width: view.theme.fontSize * 30
+      enabled: view.editing
+      clip: true
+      color: view.theme.foreground
+      selectionColor: view.theme.selected
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
+      onTextChanged: if (view.editing) view.query = text
+      Keys.onPressed: function(event) { view.key(event) }
     }
   }
 
   Text {
     id: head
-    anchors.top: parent.top
+    anchors.top: searchRow.visible ? searchRow.bottom : parent.top
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.margins: view.theme.fontSize * 2
@@ -150,7 +205,7 @@ Item {
 
   ListView {
     id: list
-    anchors.top: head.visible ? head.bottom : parent.top
+    anchors.top: head.visible ? head.bottom : searchRow.visible ? searchRow.bottom : parent.top
     anchors.bottom: parent.bottom
     anchors.left: parent.left
     anchors.right: parent.right
@@ -187,6 +242,8 @@ Item {
 
         MouseArea {
           anchors.fill: parent
+          // Not while the search field types, as the keys do.
+          enabled: !view.editing
           onClicked: view.cursor = entry.index
           onDoubleClicked: {
             view.cursor = entry.index

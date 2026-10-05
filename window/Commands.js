@@ -102,6 +102,8 @@ var commands = [
   // q too: in the reader, q never quits the window.
   { id: "reader.settingsClose", title: "Close reader settings", keys: ["Esc", "Backspace", "s", "q"], view: "reader-settings", hidden: true },
   { id: "history.reload", title: "Reload history", keys: ["r"], view: "history", hidden: true },
+  // With no search, shell.qml quits, as Esc does elsewhere.
+  { id: "history.clearSearch", title: "Clear the search", keys: ["Esc"], view: "history", hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },
   { id: "window.quit", title: "Quit", keys: ["q", "Esc"] },
   { id: "window.fullscreen", title: "Fullscreen", keys: ["f"] },  { id: "palette.open", title: "Command palette", keys: [":"], hidden: true },
@@ -284,6 +286,7 @@ var commands = [
   { id: "history.open", title: "Resume chapter", keys: ["Enter"], view: "history", hidden: true },
   { id: "history.remove", title: "Remove from history", keys: ["x"], view: "history", hidden: true },
   { id: "history.clear", title: "Clear history", keys: ["X"], view: "history", hidden: true },
+  { id: "history.search", title: "Search the history", keys: ["/"], view: "history", hidden: true },
   { id: "updates.up", title: "Previous update", keys: ["k", "Up"], view: "updates", hidden: true },
   { id: "updates.down", title: "Next update", keys: ["j", "Down"], view: "updates", hidden: true },
   { id: "updates.open", title: "Read chapter", keys: ["Enter"], view: "updates", hidden: true },
