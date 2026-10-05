@@ -52,7 +52,7 @@ Item {
   readonly property var targets: Updates.chosen(rows, selected, cursor)
   readonly property string hint: armed ? "x again to delete the downloads, any other key keeps them   "
     : (selected.length ? selected.length + " selected   space select   A all   I invert   " : "j k move   enter read   space select   A all   ")
-      + "R read   U unread   b bookmark   d download   x delete download   " + (selected.length ? "esc clear   " : "F filter   u check   s sync   ")
+      + "R read   U unread   b bookmark   d download   x delete download   " + (selected.length ? "esc clear   " : "F filter   " + (updates.running || updates.checking ? "C stop   " : "u check   ") + "s sync   ")
 
   signal read(var manga, var chapters, int chapterId)
   // action: "read", "unread" or "bookmark".
@@ -127,6 +127,22 @@ Item {
     return true
   }
 
+  // A poll in flight could still say the run goes on, so it is dropped.
+  function stop() {
+    if (!config || !(updates.running || updates.checking)) return
+    send(Updates.stopPayload(), function(reply) {
+      if (reply.state !== "ok") {
+        view.error = reply.message || Model.problem(reply, view.configPath).title
+        return
+      }
+      view.pollSeq++
+      view.polling = false
+      var before = view.updates
+      view.updates = Updates.reduce(before, { type: "stopped" })
+      if (Updates.finished(before, view.updates)) view.load()
+    })
+  }
+
   // The reader needs the manga's reading mode and every chapter, which the
   // manga detail's first read brings; no source fetch.
   function open() {
@@ -188,6 +204,9 @@ Item {
         break
       case "updates.check":
         check()
+        break
+      case "updates.stop":
+        stop()
         break
       case "updates.select":
         if (rows[cursor]) selected = Updates.toggle(selected, rows[cursor].id)
