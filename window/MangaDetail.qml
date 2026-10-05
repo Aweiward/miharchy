@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import "Model.js" as Model
 import "Browse.js" as Browse
 import "Downloads.js" as Downloads
@@ -43,6 +44,8 @@ Rectangle {
   // The skipFiltered reader setting, which the download menu follows as Mihon's does.
   property bool skipFiltered: true
   readonly property bool editing: counting
+  // What the last o or y did, until the next manga command.
+  property string note: ""
 
   readonly property bool open: detail !== null
   readonly property var manga: detail ? detail.manga : null
@@ -60,7 +63,7 @@ Rectangle {
     : optionsOpen ? "j k move   enter change   esc close   "
     : downloadsOpen ? "j k move   enter download   esc close   "
     : selecting ? "j k extend   R read   u unread   b bookmark   d download   x delete download   esc end   "
-    : "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   r refresh   esc back   "
+    : (note ? note + "   " : "") + "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   o browser   y copy link   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
@@ -243,7 +246,17 @@ Rectangle {
   }
 
   function run(id) {
+    note = ""
     switch (id) {
+      case "manga.openWeb":
+      case "manga.copyLink":
+        if (!manga || !manga.url) note = "The server has no link for this manga"
+        else if (id === "manga.openWeb") Quickshell.execDetached(["xdg-open", manga.url])
+        else {
+          Quickshell.execDetached(["wl-copy", "--", manga.url])
+          note = "Link copied"
+        }
+        break
       case "manga.categories":
         picking = true
         pickCursor = 0
@@ -651,7 +664,7 @@ Rectangle {
     anchors.margins: view.theme.fontSize * 2
     width: view.theme.fontSize * 30
     // A manga with many scanlators scrolls the rows rather than run off.
-    height: Math.min(parent.height - view.theme.fontSize * 4, options.contentHeight + note.height + view.theme.fontSize * 2)
+    height: Math.min(parent.height - view.theme.fontSize * 4, options.contentHeight + optionsNoteText.height + view.theme.fontSize * 2)
     visible: view.optionsOpen
     color: Qt.alpha(view.theme.panel, 1)
     border.width: 1
@@ -662,7 +675,7 @@ Rectangle {
       x: view.theme.fontSize
       y: view.theme.fontSize
       width: parent.width - view.theme.fontSize * 2
-      height: parent.height - note.height - view.theme.fontSize * 2
+      height: parent.height - optionsNoteText.height - view.theme.fontSize * 2
       clip: true
       model: view.optionRows
       currentIndex: view.optionsCursor
@@ -706,7 +719,7 @@ Rectangle {
     }
 
     Text {
-      id: note
+      id: optionsNoteText
       anchors.top: options.bottom
       x: options.x
       width: options.width

@@ -109,7 +109,7 @@ function open(mangaId, chapters, chapterId, readingMode) {
 }
 
 function relist(chapters, chapterId) {
-  var list = chapters.slice().reverse().map(function(c) { return { id: c.id, name: c.name, number: c.number, downloaded: c.downloaded === true, scanlator: c.scanlator || "" } })
+  var list = chapters.slice().reverse().map(function(c) { return { id: c.id, name: c.name, url: c.url, number: c.number, downloaded: c.downloaded === true, scanlator: c.scanlator || "" } })
   var index = 0
   for (var i = 0; i < list.length; i++) if (list[i].id === chapterId) index = i
   return { chapters: list, index: index }

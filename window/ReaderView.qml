@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import "Chapters.js" as Chapters
 import "Commands.js" as Commands
@@ -45,6 +46,8 @@ Rectangle {
   // Only the latest page fetch may update the reader.
   property int pagesSeq: 0
   property var exit: Reader.EXIT
+  // What the last o or y did, until the next reader command.
+  property string note: ""
 
   readonly property bool open: reader !== null
   readonly property bool webtoon: open && reader.mode === "webtoon"
@@ -278,6 +281,7 @@ Rectangle {
   }
 
   function run(id) {
+    note = ""
     switch (id) {
       case "reader.settings":
         panelOpen = true
@@ -291,6 +295,16 @@ Rectangle {
         return
       case "reader.settingsChoose":
         choose()
+        return
+      case "reader.openWeb":
+      case "reader.copyLink":
+        var url = reader.chapters[reader.index].url
+        if (!url) note = "The server has no link for this chapter"
+        else if (id === "reader.openWeb") Quickshell.execDetached(["xdg-open", url])
+        else {
+          Quickshell.execDetached(["wl-copy", "--", url])
+          note = "Link copied"
+        }
         return
       case "reader.retry":
         reader = Reader.reduce(reader, { type: "retry" })
@@ -663,7 +677,7 @@ Rectangle {
     anchors.left: parent.left
     anchors.bottom: parent.bottom
     anchors.margins: view.theme.fontSize
-    text: view.reader ? Reader.chapterName(view.reader) + ({ first: "   no previous chapter", last: "   no next chapter" }[view.reader.edge] || "") : ""
+    text: view.reader ? Reader.chapterName(view.reader) + ({ first: "   no previous chapter", last: "   no next chapter" }[view.reader.edge] || "") + (view.note ? "   " + view.note : "") : ""
     color: view.theme.muted
     font.family: view.theme.fontFamily
     font.pixelSize: view.theme.fontSmall
