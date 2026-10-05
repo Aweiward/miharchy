@@ -92,6 +92,17 @@ function apply(chapters, prefs) {
   })
 }
 
+// The reader's chapter list, like Mihon's ReaderViewModel: every chapter (a
+// filter never hides one from the reader) in the manga's chosen sort, read
+// ascending whatever the list's direction. Newest first, because the reader
+// reverses its input.
+function readingOrder(chapters, prefs) {
+  var sort = sortOf(prefs)
+  return chapters.slice().sort(function(a, b) {
+    return (sort.value(b) - sort.value(a)) || (b.sourceOrder - a.sourceOrder)
+  })
+}
+
 // The panel: each filter with its state, each sort with "asc" or "desc" on
 // the chosen one and "" on the rest, then the two ways to save as default.
 function rows(prefs) {
@@ -142,6 +153,7 @@ if (typeof module !== "undefined") {
     bookmarkPayload: bookmarkPayload,
     trackPayload: trackPayload,
     apply: apply,
+    readingOrder: readingOrder,
     rows: rows,
     choose: choose,
     previous: previous,

@@ -121,3 +121,11 @@ test("a bookmark sets every chapter when any is unset, else clears them all, and
   assert.deepEqual(Ch.bookmarkPayload([list[1], list[3]]).variables, { ids: [3, 1], bookmarked: false });
   assert.equal(Ch.bookmarkPayload([]), null);
 });
+
+test("the reader reads every chapter in the manga's chosen sort, oldest first, like Mihon", () => {
+  // The reader reverses its input, so readingOrder hands it newest first.
+  const hidden = prefs({ chapterFilterUnread: "include" });
+  assert.deepEqual(ids(Ch.readingOrder(list, hidden)), [4, 3, 2, 1], "filters never hide chapters from the reader");
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs({ chapterSort: "uploadDate", chapterSortDirection: "asc" }))), [4, 2, 1, 3], "upload date, ties on source order");
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs({ chapterSort: "uploadDate", chapterSortDirection: "desc" }))), [4, 2, 1, 3], "the list's direction does not change the reading order");
+});
