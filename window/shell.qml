@@ -15,12 +15,18 @@ import "Browse.js" as Browse
 import "Storage.js" as Storage
 import "Prefs.js" as Prefs
 import "Updates.js" as Updates
+import "Restart.js" as Restart
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
 // file wires them to the server, the theme and the views.
 ShellRoot {
   id: root
+
+  // Quickshell would reload the window in place when its files change. An
+  // update writes them one at a time, so a reload can catch half of it, and
+  // it drops the reader without the quit path's save. Q restarts instead.
+  settings.watchFiles: false
 
   readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
 
@@ -88,6 +94,27 @@ ShellRoot {
   }
 
   Theme { id: theme }
+
+  // Whether the window's code on disk differs from what this process loaded,
+  // as after `omarchy plugin update`. Q restarts on the new code.
+  property var code: Restart.INITIAL
+  property bool restarting: false
+
+  Process {
+    id: codeCheck
+    command: Restart.fingerprintCommand(Quickshell.shellDir)
+    stdout: StdioCollector {
+      onStreamFinished: root.code = Restart.check(root.code, text)
+    }
+  }
+
+  Timer {
+    interval: 30000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: if (!codeCheck.running) codeCheck.running = true
+  }
 
   FileView {
     id: configFile
@@ -719,6 +746,14 @@ ShellRoot {
       case "window.quit":
         reader.quit()
         break
+      case "window.restart":
+        // The new window starts once this process is gone, after the quit
+        // path's saves.
+        if (restarting) break
+        restarting = true
+        Quickshell.execDetached(Restart.relaunchCommand(Quickshell.processId, Quickshell.shellPath("miharchy")))
+        reader.quit()
+        break
     }
   }
 
@@ -1038,7 +1073,19 @@ ShellRoot {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
           text: root.trackAsk ? "y update   n keep" : syncView.open || restoreView.open ? "" : libraryView.editing || historyView.editing ? "enter keep   esc clear" : mangaDetail.writing ? "enter save   shift+enter new line   esc cancel" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || mangaDetail.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryHint, updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: browseView.panel || browseView.screen !== "extensions" ? browseView.hint : extensionsView.hint + (extensionsView.details ? "" : browseView.hint), setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
-          maxWidth: parent.width - connectionText.width - theme.fontSize * 2
+          maxWidth: parent.width - connectionText.width - theme.fontSize * 2 - (codeHint.visible ? codeHint.width + theme.fontSize * 2 : 0)
+          theme: theme
+          onKey: function(event) { root.handleKey(event) }
+        }
+
+        HintBar {
+          id: codeHint
+          anchors.left: connectionText.right
+          anchors.leftMargin: theme.fontSize * 2
+          anchors.verticalCenter: parent.verticalCenter
+          visible: root.code.changed
+          text: root.code.changed ? "new version   Q restart" : ""
+          color: theme.accent
           theme: theme
           onKey: function(event) { root.handleKey(event) }
         }

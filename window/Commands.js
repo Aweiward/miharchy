@@ -116,6 +116,8 @@ var commands = [
   { id: "history.clearSearch", title: "Clear the search", keys: ["Esc"], view: "history", hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },
   { id: "window.quit", title: "Quit", keys: ["q", "Esc"] },
+  // Q, as q quits: quits, then starts a window on the code now on disk.
+  { id: "window.restart", title: "Restart the window", keys: ["Q"] },
   { id: "window.fullscreen", title: "Fullscreen", keys: ["f"] },  { id: "palette.open", title: "Command palette", keys: [":"], hidden: true },
   { id: "settings.up", title: "Previous setting", keys: ["k", "Up"], view: "settings", hidden: true },
   { id: "settings.down", title: "Next setting", keys: ["j", "Down"], view: "settings", hidden: true },
