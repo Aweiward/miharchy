@@ -183,6 +183,8 @@ var commands = [
   { id: "library.nextCategory", title: "Next category", keys: ["Tab"], view: "library", hidden: true },
   { id: "library.previousCategory", title: "Previous category", keys: ["Backtab"], view: "library", hidden: true },
   { id: "library.categories", title: "Categories", keys: ["c"], view: "library", hidden: true },
+  // u, as Check for new chapters on Updates: Mihon's Update category.
+  { id: "library.update", title: "Check this category for new chapters", keys: ["u"], view: "library", hidden: true },
   { id: "library.remove", title: "Remove from library", keys: ["x"], view: "library", hidden: true },
   { id: "library.search", title: "Search the library", keys: ["/"], view: "library", hidden: true },
   // F, not f: f is fullscreen everywhere.
@@ -209,6 +211,7 @@ var commands = [
   // source.
   { id: "updates.check", title: "Check for new chapters", keys: ["u"], view: "updates", hidden: true },
   { id: "categories.autoDownload", title: "Auto-download new chapters", keys: ["d"], view: "categories", hidden: true },
+  { id: "categories.update", title: "Include in or exclude from updates", keys: ["u"], view: "categories", hidden: true },
   { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
   { id: "setup.down", title: "Next step", keys: ["j", "Down"], view: "setup", hidden: true },
   // M, not m: m is the reader's reading mode, and a migration is a big step.

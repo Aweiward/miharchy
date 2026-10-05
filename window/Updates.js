@@ -22,7 +22,10 @@ var UPDATES_QUERY = "{ chapters(filter: { inLibrary: { equalTo: true }, isRead: 
   + " nodes { id name uploadDate fetchedAt sourceOrder isRead manga { id title thumbnailUrl inLibraryAt } } } " + STATUS_FIELDS + " }"
 var STATUS_QUERY = "{ " + STATUS_FIELDS + " }"
 // Its own reply holds the status from before the run, so the view polls.
-var CHECK_MUTATION = "mutation { updateLibrary(input: {}) { clientMutationId } }"
+// With no categories the server skips the excluded ones (Categories.js);
+// with categories it updates every manga in them, as Mihon's per-category
+// update does.
+var CHECK_MUTATION = "mutation($categories: [Int!]) { updateLibrary(input: { categories: $categories }) { clientMutationId } }"
 
 function copy(o, changes) {
   var c = {}
@@ -69,8 +72,9 @@ function statusPayload() {
   return { query: STATUS_QUERY }
 }
 
-function checkPayload() {
-  return { query: CHECK_MUTATION }
+// categories: ids to update, or none for the whole library.
+function checkPayload(categories) {
+  return { query: CHECK_MUTATION, variables: { categories: categories || null } }
 }
 
 function pad(n) {

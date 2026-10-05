@@ -4,7 +4,7 @@ The Updates view (key `2`): unread chapters fetched after the manga joined the l
 
 ## Sub-features
 - List grouped by fetch day; `Enter` opens the chapter in the reader.
-- `u` starts a library update; progress polls `libraryUpdateStatus`; the header names skip reasons from the Settings filters.
+- `u` starts a library update; progress polls `libraryUpdateStatus`; the header names skip reasons from the Settings filters. It skips manga in a category excluded from updates (see `library.md`).
 - The bar mark counts the same list (`Updates.rows`).
 
 ## How to get to it (user POV)

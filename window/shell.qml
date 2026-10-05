@@ -47,6 +47,8 @@ ShellRoot {
   // The id of the manga a second x removes from the library, or -1.
   property int libraryArmed: -1
   property string libraryError: ""
+  // What u on the Library started; in place of the hint until the next key.
+  property string libraryNote: ""
 
   onSwitcherIndexChanged: libraryCursor = 0
   // A removed manga leaves the grid, so the cursor may point past its end.
@@ -244,6 +246,7 @@ ShellRoot {
       libraryArmed = -1
       libraryError = ""
     }
+    libraryNote = ""
     if (id !== null) run(id)
     return id !== null
   }
@@ -394,6 +397,12 @@ ShellRoot {
         break
       case "library.categories":
         libraryScreen = "categories"
+        break
+      case "library.update":
+        // All is the whole library, which skips excluded categories.
+        if (!config) break
+        var ids = shown.id === Model.ALL ? null : [shown.id]
+        libraryNote = updatesView.check(ids) ? "Checking " + (ids ? shown.name : "the library") + " for new chapters. Updates shows the progress." : "A check for new chapters is already running."
         break
       case "library.search":
         libraryView.openSearch()
@@ -712,7 +721,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: syncView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.switcher.length > 1 ? "tab category   " : "") + "c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: syncView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall

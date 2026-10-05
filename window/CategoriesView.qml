@@ -5,8 +5,8 @@ import "Commands.js" as Commands
 import "Model.js" as Model
 import "Categories.js" as Categories
 
-// The Library's categories screen: add, rename, reorder, delete and flag
-// for auto-download. It
+// The Library's categories screen: add, rename, reorder, delete, flag
+// for auto-download and include in or exclude from updates. It
 // sends the mutations itself; Categories.js decides. shell.qml forwards
 // every "categories." command to run() and reloads the library on
 // edited, which brings the new list back in categories.
@@ -30,7 +30,7 @@ Item {
 
   readonly property var rows: Categories.rows(categories, manga)
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.id === view.cursorId }))
-  readonly property string hint: "j k move   J K reorder   a add   enter rename   d auto-download   x delete   esc back   "
+  readonly property string hint: "j k move   J K reorder   a add   enter rename   d auto-download   u updates   x delete   esc back   "
 
   signal key(var event)
   signal editEnded()
@@ -105,6 +105,9 @@ Item {
         break
       case "categories.autoDownload":
         if (row) mutate(Categories.autoDownloadPayload(categories, row.id))
+        break
+      case "categories.update":
+        if (row) mutate(Categories.updatePayload(categories, row.id))
         break
       case "categories.commit":
         var checked = Categories.checkName(field.text, categories, editing === "rename" && row ? row.id : undefined)
@@ -221,7 +224,7 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.75
         anchors.verticalCenter: parent.verticalCenter
-        text: view.armed === entry.modelData.id ? "x again to delete" : (entry.modelData.download ? "auto-download   " : "") + entry.modelData.count + " manga"
+        text: view.armed === entry.modelData.id ? "x again to delete" : ({ INCLUDE: "in updates   ", EXCLUDE: "excluded from updates   " }[entry.modelData.update] || "") + (entry.modelData.download ? "auto-download   " : "") + entry.modelData.count + " manga"
         color: view.armed === entry.modelData.id ? view.theme.urgent : view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall

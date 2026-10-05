@@ -73,7 +73,9 @@ test("the notice: loading, a failed connection, or no updates", () => {
 test("a check runs until a status poll says the server finished it", () => {
   const idle = loaded([], status({ finishedJobs: 2, totalJobs: 2 }), at(2026, 10, 4, 3));
   assert.equal(idle.running, false);
-  assert.equal(U.checkPayload().query.includes("updateLibrary"), true);
+  assert.match(U.checkPayload().query, /updateLibrary\(input: \{ categories: \$categories \}\)/);
+  assert.deepEqual(U.checkPayload().variables, { categories: null }, "no categories: the whole library, without the excluded ones");
+  assert.deepEqual(U.checkPayload([4]).variables, { categories: [4] });
   const asked = U.reduce(idle, { type: "checking" });
   assert.equal(U.progress(asked, now), "Checking for new chapters");
   const running = U.reduce(asked, { type: "status", reply: ok({ libraryUpdateStatus: status({ isRunning: true, finishedJobs: 1, totalJobs: 4 }), lastUpdateTimestamp: { timestamp: String(at(2026, 10, 4, 14, 59)) } }) });
