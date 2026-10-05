@@ -22,8 +22,8 @@ test("every row is complete, and a choice's default is one of its options", () =
 });
 
 test("the first rows and their defaults", () => {
-  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "Page fit", "Webtoon width", "Reader background", "Keep the screen on", "Always show chapter transition", "Skip read chapters", "Skip filtered chapters", "Skip duplicate chapters", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Default category", "Download folder", "Save downloads as CBZ", "Auto-download new chapters", "Auto-download only for manga with no unread chapters", "Auto-download skips re-uploaded chapters", "Delete downloads marked read", "Delete after reading", "Delete bookmarked chapters", "Update trackers after reading", "Update trackers when marking chapters read", "Sync folder", "Backup folder", "Backups include categories", "Backups include chapters", "Backups include tracking", "Backups include history", "Create a backup"]);
-  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, autoDownloadNewChapters: false, excludeEntryWithUnreadChapters: true, autoDownloadIgnoreReUploads: false, deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, trackAfterReading: true, trackOnMarkRead: "always", syncFolder: "", backupPath: "", autoBackupIncludeCategories: true, autoBackupIncludeChapters: true, autoBackupIncludeTracking: true, autoBackupIncludeHistory: true });
+  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "Page fit", "Webtoon width", "Reader background", "Keep the screen on", "Always show chapter transition", "Skip read chapters", "Skip filtered chapters", "Skip duplicate chapters", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Default category", "Download folder", "Save downloads as CBZ", "Auto-download new chapters", "Auto-download only for manga with no unread chapters", "Auto-download skips re-uploaded chapters", "Delete downloads marked read", "Delete after reading", "Delete bookmarked chapters", "Update trackers after reading", "Update trackers when marking chapters read", "Sync folder", "Backup folder", "Automatic backups", "Automatic backup time", "Keep automatic backups", "Backups include categories", "Backups include chapters", "Backups include tracking", "Backups include history", "Create a backup"]);
+  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, autoDownloadNewChapters: false, excludeEntryWithUnreadChapters: true, autoDownloadIgnoreReUploads: false, deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, trackAfterReading: true, trackOnMarkRead: "always", syncFolder: "", backupPath: "", backupInterval: 1, backupTime: "00:00", backupTTL: 14, autoBackupIncludeCategories: true, autoBackupIncludeChapters: true, autoBackupIncludeTracking: true, autoBackupIncludeHistory: true });
   assert.deepEqual(row("defaultReadingMode").options.map((o) => o.label), ["Paged right-to-left", "Paged left-to-right", "Webtoon"]);
 });
 
@@ -43,7 +43,7 @@ test("a load reply sets server values and namespaced meta, defaults fill the res
     ] }
   }));
   assert.equal(s.state, "ok");
-  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, autoDownloadNewChapters: false, excludeEntryWithUnreadChapters: true, autoDownloadIgnoreReUploads: false, deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, trackAfterReading: true, trackOnMarkRead: "always", syncFolder: "", backupPath: "", autoBackupIncludeCategories: true, autoBackupIncludeChapters: true, autoBackupIncludeTracking: true, autoBackupIncludeHistory: true });
+  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, autoDownloadNewChapters: false, excludeEntryWithUnreadChapters: true, autoDownloadIgnoreReUploads: false, deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, trackAfterReading: true, trackOnMarkRead: "always", syncFolder: "", backupPath: "", backupInterval: 1, backupTime: "00:00", backupTTL: 14, autoBackupIncludeCategories: true, autoBackupIncludeChapters: true, autoBackupIncludeTracking: true, autoBackupIncludeHistory: true });
 });
 
 test("the page fit and webtoon width come back from meta after a restart; an unknown one reads as the default", () => {
@@ -184,6 +184,22 @@ test("the backup folder never is the sync folder, and the sync folder never the 
 test("saving the backup folder keeps the server password out of automatic backups", () => {
   assert.deepEqual(S.savePayload(row("backupPath"), "/home/u/Backups").variables.s, { backupPath: "/home/u/Backups", autoBackupIncludeServerSettings: false });
   assert.equal(S.display(row("backupPath"), ""), "server default");
+});
+
+test("automatic backups are the server's own schedule: an interval in days, a time and an age to keep", () => {
+  const every = row("backupInterval");
+  assert.equal(S.display(every, 0), "Off");
+  assert.deepEqual(S.activate(every, 1), { save: 2 });
+  assert.deepEqual(S.activate(every, 7), { save: 0 });
+  assert.deepEqual(S.savePayload(every, 7).variables.s, { backupInterval: 7 });
+  const time = row("backupTime");
+  assert.deepEqual(S.commit(time, " 21:30 "), { save: "21:30" });
+  for (const bad of ["", "24:00", "9:30", "21:60", "noon"]) assert.ok(S.commit(time, bad).error, bad);
+  const keep = row("backupTTL");
+  assert.equal(S.display(keep, 0), "Forever");
+  assert.deepEqual(S.activate(keep, 0), { save: 7 });
+  assert.equal(S.reduce(S.initial(), ok({ settings: { backupInterval: 3, backupTime: "06:15", backupTTL: 30 }, metas: { nodes: [] } })).values.backupTTL, 30);
+  for (const key of ["backupInterval", "backupTime", "backupTTL"]) assert.match(S.loadPayload().query, new RegExp("settings \\{[^}]*\\b" + key + "\\b"));
 });
 
 test("the backup include rows are the server's automatic backup settings", () => {
