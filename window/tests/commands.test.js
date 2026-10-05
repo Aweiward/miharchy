@@ -452,13 +452,28 @@ test("an armed remove takes x to keep the downloads and d to delete them; Esc ke
   assert.equal(C.dispatch(screen("library"), text("d")), "library.download", "unarmed, d downloads");
 });
 
-test("on a manga, d downloads, U downloads every unread chapter, x deletes downloads and v starts a selection", () => {
+test("on a manga, d downloads, U opens the download menu, x deletes downloads and v starts a selection", () => {
   const m = screen("manga");
   assert.equal(C.dispatch(m, text("d")), "manga.download");
-  assert.equal(C.dispatch(m, text("U")), "manga.downloadUnread");
+  assert.equal(C.dispatch(m, text("U")), "manga.downloads");
   assert.equal(C.dispatch(m, text("x")), "manga.deleteDownload");
   assert.equal(C.dispatch(m, text("v")), "manga.select");
   assert.equal(C.dispatch(m, text("D")), "downloads.open");
+});
+
+test("in the download menu j/k move, Enter or Space downloads, Esc or U closes; its number field commits on Enter", () => {
+  const d = screen("manga-download");
+  assert.equal(C.dispatch(d, text("j")), "manga.downloadsDown");
+  assert.equal(C.dispatch(d, text("k")), "manga.downloadsUp");
+  assert.equal(C.dispatch(d, key(C.KEY.Return)), "manga.downloadsChoose");
+  assert.equal(C.dispatch(d, C.keyEvent(C.KEY.Space, " ", 0)), "manga.downloadsChoose");
+  assert.equal(C.dispatch(d, key(C.KEY.Escape)), "manga.downloadsClose");
+  assert.equal(C.dispatch(d, text("U")), "manga.downloadsClose");
+  assert.equal(C.dispatch(d, text("R")), null, "the chapter keys wait while the menu shows");
+  const field = { palette: false, view: "manga-download", editing: "manga" };
+  assert.equal(C.dispatch(field, key(C.KEY.Return)), "manga.commit");
+  assert.equal(C.dispatch(field, key(C.KEY.Escape)), "manga.cancel");
+  assert.equal(C.dispatch(field, text("7")), null, "digits type into the field");
 });
 
 test("on a manga, R marks read, u marks unread and P marks every chapter below the cursor read; R and u act on a selection too", () => {

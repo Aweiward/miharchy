@@ -31,7 +31,7 @@ var KEY = {
 // sources, extensions, source, global, or its panel: source-filters,
 // source-settings; Library screen: categories; or
 // overlay: library-options, library-categories, library-remove, manga, manga-categories, manga-options,
-// manga-select, manga-track,
+// manga-download, manga-select, manga-track,
 // manga-track-pick, downloads, reader, reader-settings, sync,
 // or a restore step: restore-confirm, -checking, -running, -done, -failed,
 // or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
@@ -80,6 +80,7 @@ var commands = [
   { id: "library.optionsClose", title: "Close sort and filter", keys: ["Esc", "Backspace", "F"], view: "library-options", hidden: true },
   { id: "manga.selectEnd", title: "End the selection", keys: ["Esc", "v"], view: "manga-select", hidden: true },
   { id: "manga.optionsClose", title: "Close chapter filter and sort", keys: ["Esc", "Backspace", "F"], view: "manga-options", hidden: true },
+  { id: "manga.downloadsClose", title: "Close the download menu", keys: ["Esc", "Backspace", "U"], view: "manga-download", hidden: true },
   { id: "downloads.close", title: "Close the download queue", keys: ["Esc", "D"], view: "downloads", hidden: true },
   { id: "reader.close", title: "Close the reader", keys: ["Esc", "q"], view: "reader", hidden: true },
   { id: "sync.close", title: "Close the sync result", keys: ["Esc", "q", "Enter"], view: "sync", hidden: true },
@@ -139,7 +140,12 @@ var commands = [
   { id: "manga.download", title: "Download chapters", keys: ["d"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.deleteDownload", title: "Delete downloads", keys: ["x"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.select", title: "Select chapters", keys: ["v"], view: "manga", hidden: true },
-  { id: "manga.downloadUnread", title: "Download unread chapters", keys: ["U"], view: "manga", hidden: true },
+  // Mihon's download menu: the next 1, 5, 10, 25 or a typed number of
+  // unread chapters, all unread, or the bookmarked ones.
+  { id: "manga.downloads", title: "Download next, unread or bookmarked chapters", keys: ["U"], view: "manga", hidden: true },
+  { id: "manga.downloadsUp", title: "Previous row", keys: ["k", "Up"], view: "manga-download", hidden: true },
+  { id: "manga.downloadsDown", title: "Next row", keys: ["j", "Down"], view: "manga-download", hidden: true },
+  { id: "manga.downloadsChoose", title: "Download these chapters", keys: ["Enter", "Space"], view: "manga-download", hidden: true },
   // Shift, as r refreshes: R and P write read state.
   { id: "manga.markRead", title: "Mark read", keys: ["R"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.markUnread", title: "Mark unread", keys: ["u"], view: ["manga", "manga-select"], hidden: true },

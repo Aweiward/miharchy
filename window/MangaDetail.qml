@@ -35,6 +35,14 @@ Rectangle {
   property bool optionsOpen: false
   property int optionsCursor: 0
   property string optionsNote: ""
+  // The download menu (Chapters.DOWNLOADS); counting: its number field is open.
+  property bool downloadsOpen: false
+  property int downloadsCursor: 0
+  property bool counting: false
+  property string downloadsNote: ""
+  // The skipFiltered reader setting, which the download menu follows as Mihon's does.
+  property bool skipFiltered: true
+  readonly property bool editing: counting
 
   readonly property bool open: detail !== null
   readonly property var manga: detail ? detail.manga : null
@@ -50,8 +58,9 @@ Rectangle {
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
   readonly property string hint: picking ? "j k move   space in or out   esc close   "
     : optionsOpen ? "j k move   enter change   esc close   "
+    : downloadsOpen ? "j k move   enter download   esc close   "
     : selecting ? "j k extend   R read   u unread   b bookmark   d download   x delete download   esc end   "
-    : "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download unread   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   r refresh   esc back   "
+    : "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
@@ -63,6 +72,8 @@ Rectangle {
   signal downloads(var reply)
   // A double click sends Enter, a click on a key label its key, as typed.
   signal key(var event)
+  // The number field closed; the window takes the keys back.
+  signal editEnded()
 
   visible: open
   color: theme.background
@@ -111,6 +122,8 @@ Rectangle {
   function close() {
     picking = false
     optionsOpen = false
+    downloadsOpen = false
+    endCount()
     anchor = -1
     detailSeq++
     detail = null
@@ -184,6 +197,31 @@ Rectangle {
     }
     chapterPrefs.saveDefault(row.id === "defaultAll" ? libraryIds : [])
     optionsNote = row.id === "defaultAll" ? "Saved as the default for every manga" : "Saved as the default"
+  }
+
+  function endCount() {
+    if (!counting) return
+    counting = false
+    editEnded()
+  }
+
+  // Queues what the menu row picks, and closes the menu, as Mihon's does.
+  // A queued chapter counts as on its way, as Mihon's download state does.
+  function downloadRow(row, n) {
+    var waiting = detail.chapters.filter(function(c) { return !Downloads.find(view.queue, c.id) })
+    var list = Chapters.toDownload(waiting, prefs, skipFiltered, row, n)
+    if (!list.length) {
+      downloadsNote = "Nothing to download"
+      return
+    }
+    downloadsOpen = false
+    sendDownloads(Downloads.enqueuePayload(list))
+  }
+
+  onCountingChanged: {
+    if (!counting) return
+    countField.text = ""
+    countField.forceActiveFocus()
   }
 
   function markReply(reply) {
@@ -260,8 +298,36 @@ Rectangle {
       case "manga.download":
         sendDownloads(Downloads.enqueuePayload(Downloads.marked(shown, cursor, anchor)))
         break
-      case "manga.downloadUnread":
-        sendDownloads(Downloads.enqueuePayload(Downloads.unread(detail.chapters)))
+      case "manga.downloads":
+        downloadsOpen = true
+        downloadsCursor = 0
+        downloadsNote = ""
+        break
+      case "manga.downloadsClose":
+        downloadsOpen = false
+        break
+      case "manga.downloadsUp":
+      case "manga.downloadsDown":
+        downloadsCursor = Math.max(0, Math.min(Chapters.DOWNLOADS.length - 1, downloadsCursor + (id === "manga.downloadsUp" ? -1 : 1)))
+        downloadsNote = ""
+        break
+      case "manga.downloadsChoose":
+        var row = Chapters.DOWNLOADS[downloadsCursor]
+        downloadsNote = ""
+        if (row.id === "next" && !row.count) counting = true
+        else downloadRow(row, row.count)
+        break
+      case "manga.commit":
+        var n = Chapters.count(countField.text)
+        if (!n) {
+          downloadsNote = "Type a whole number above 0"
+          break
+        }
+        endCount()
+        downloadRow(Chapters.DOWNLOADS[downloadsCursor], n)
+        break
+      case "manga.cancel":
+        endCount()
         break
       case "manga.deleteDownload":
         sendDownloads(Downloads.removePayload(Downloads.marked(shown, cursor, anchor), queue))
@@ -486,7 +552,96 @@ Rectangle {
   // Under an open panel: a click outside it never reaches a chapter.
   MouseArea {
     anchors.fill: parent
-    visible: view.optionsOpen || view.picking
+    visible: view.optionsOpen || view.picking || view.downloadsOpen
+  }
+
+  // Mihon's download menu.
+  Rectangle {
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: view.theme.fontSize * 30
+    height: downloadRows.implicitHeight + view.theme.fontSize * 2
+    visible: view.downloadsOpen
+    color: Qt.alpha(view.theme.panel, 1)
+    border.width: 1
+    border.color: view.theme.panelBorder
+
+    Column {
+      id: downloadRows
+      x: view.theme.fontSize
+      y: view.theme.fontSize
+      width: parent.width - view.theme.fontSize * 2
+
+      Text {
+        bottomPadding: view.theme.fontSize * 0.5
+        text: "Download"
+        color: view.theme.muted
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      Repeater {
+        model: Chapters.DOWNLOADS
+
+        Text {
+          id: downloadRow
+          required property var modelData
+          required property int index
+          readonly property bool current: index === view.downloadsCursor
+          width: downloadRows.width
+          elide: Text.ElideRight
+          text: modelData.label
+          color: current ? view.theme.accent : view.theme.foreground
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+
+          MouseArea {
+            anchors.fill: parent
+            enabled: !view.counting
+            onClicked: view.downloadsCursor = downloadRow.index
+            onDoubleClicked: {
+              view.downloadsCursor = downloadRow.index
+              view.key(Commands.enter())
+            }
+          }
+        }
+      }
+
+      Row {
+        visible: view.counting
+        topPadding: view.theme.fontSize * 0.5
+        spacing: view.theme.fontSize
+
+        Text {
+          text: "How many"
+          color: view.theme.muted
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+        }
+
+        TextInput {
+          id: countField
+          width: view.theme.fontSize * 8
+          color: view.theme.foreground
+          selectionColor: view.theme.selected
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+          Keys.onPressed: function(event) { view.key(event) }
+        }
+      }
+
+      Text {
+        width: parent.width
+        visible: text !== ""
+        topPadding: view.theme.fontSize * 0.8
+        wrapMode: Text.Wrap
+        text: view.downloadsNote
+        color: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+    }
   }
 
   // The chapter filter and sort, drawn as the Library's panel.

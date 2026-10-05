@@ -77,10 +77,6 @@ function marked(chapters, cursor, anchor) {
   return chapters.slice(Math.min(cursor, anchor), Math.max(cursor, anchor) + 1)
 }
 
-function unread(chapters) {
-  return chapters.filter(function(c) { return !c.read && !c.downloaded })
-}
-
 function ids(chapters) {
   return chapters.map(function(c) { return c.id })
 }
@@ -144,7 +140,6 @@ if (typeof module !== "undefined") {
     left: left,
     polling: polling,
     marked: marked,
-    unread: unread,
     enqueuePayload: enqueuePayload,
     removePayload: removePayload,
     deletePayload: deletePayload,

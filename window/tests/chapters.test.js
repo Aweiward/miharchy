@@ -195,3 +195,42 @@ test("excluded scanlators are never a chapter default, and unreadable meta exclu
   assert.ok(!Ch.PREFS.some((p) => p.key === "excludedScanlators"), "save as default must not copy or reset them");
   assert.deepEqual(ids(Ch.apply(scanlated, Object.assign(prefs(), { excludedScanlators: "not json" }))), [34, 33, 32, 31]);
 });
+
+const shelf = [
+  { id: 46, sourceOrder: 6, number: 6, read: false, downloaded: false, bookmarked: false, scanlator: "A" },
+  { id: 45, sourceOrder: 5, number: 5, read: false, downloaded: true, bookmarked: true, scanlator: "A" },
+  { id: 44, sourceOrder: 4, number: 4, read: false, downloaded: false, bookmarked: true, scanlator: "B" },
+  { id: 43, sourceOrder: 3, number: 3, read: false, downloaded: false, bookmarked: false, scanlator: "A" },
+  { id: 42, sourceOrder: 2, number: 2, read: true, downloaded: false, bookmarked: true, scanlator: "A" },
+  { id: 41, sourceOrder: 1, number: 1, read: false, downloaded: false, bookmarked: false, scanlator: "A" }
+];
+const row = (id, count) => Ch.DOWNLOADS.find((r) => r.id === id && (count === undefined || r.count === count));
+
+test("the download menu offers Mihon's rows: next 1, 5, 10, 25, a typed number, unread, bookmarked", () => {
+  assert.deepEqual(Ch.DOWNLOADS.map((r) => [r.id, r.count]), [["next", 1], ["next", 5], ["next", 10], ["next", 25], ["next", 0], ["unread", undefined], ["bookmarked", undefined]]);
+});
+
+test("next N takes the first unread chapters not on disk, in reading order, whatever the list's direction", () => {
+  assert.deepEqual(ids(Ch.toDownload(shelf, prefs(), true, row("next", 1), 1)), [41]);
+  assert.deepEqual(ids(Ch.toDownload(shelf, prefs(), true, row("next", 5), 5)), [41, 43, 44, 46], "a read or downloaded chapter is skipped, not counted");
+  assert.deepEqual(ids(Ch.toDownload(shelf, prefs({ chapterSortDirection: "asc" }), true, row("next", 0), 2)), [41, 43]);
+});
+
+test("unread and bookmarked take every such chapter not on disk", () => {
+  assert.deepEqual(ids(Ch.toDownload(shelf, prefs(), true, row("unread"))), [46, 44, 43, 41]);
+  assert.deepEqual(ids(Ch.toDownload(shelf, prefs(), true, row("bookmarked"))), [44, 42]);
+});
+
+test("the menu never takes an excluded scanlator's chapters, and follows the filters only while skip filtered is on (Mihon)", () => {
+  const noB = Object.assign(prefs(), { excludedScanlators: JSON.stringify(["B"]) });
+  assert.deepEqual(ids(Ch.toDownload(shelf, noB, false, row("next", 5), 5)), [41, 43, 46]);
+  const hideBookmarks = prefs({ chapterFilterBookmarked: "exclude" });
+  assert.deepEqual(ids(Ch.toDownload(shelf, hideBookmarks, true, row("next", 5), 5)), [41, 43, 46]);
+  assert.deepEqual(ids(Ch.toDownload(shelf, hideBookmarks, false, row("next", 5), 5)), [41, 43, 44, 46]);
+});
+
+test("the typed amount is a whole number above 0, or 0", () => {
+  assert.equal(Ch.count("7"), 7);
+  assert.equal(Ch.count(" 12 "), 12);
+  for (const t of ["0", "-3", "2.5", "abc", ""]) assert.equal(Ch.count(t), 0, t);
+});
