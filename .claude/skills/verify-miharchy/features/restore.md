@@ -12,12 +12,12 @@ The window restores one `.tachibk` file into the server, as Mihon's Restore back
 Palette (`:`) → "Restore a backup" → type the path → Enter checks → Enter restores. Esc closes at any step; a running restore goes on.
 
 ## Driving it with drive.sh
-The window runs the helper Setup installs under `$HOME`, which on this machine is the real one. Give the drive its own home, with the checkout's build installed there:
+The window runs the helper Setup installs under `$HOME`; `drive.sh` sets `HOME=$RUN/home`, so install the checkout's build there:
 ```sh
 mkdir -p $RUN/home/.local/share/miharchy/helper
 cp -r sync/build/install/miharchy-sync/. $RUN/home/.local/share/miharchy/helper/
 cp <fixture>.tachibk $RUN/home/r.tachibk
-HOME=$RUN/home JAVA_OPTS=-Duser.home=$RUN/home $S/drive.sh steps.js 60
+$S/drive.sh steps.js 60
 ```
 Steps: `root.run("restore.open")`, set `restoreView.pathField.text = "~/r.tachibk"`, `key("Enter")`, wait for `restoreView.restore.step === "confirm"`, `key("Enter")`, wait for `"done"`. Log `restoreView.restore`.
 

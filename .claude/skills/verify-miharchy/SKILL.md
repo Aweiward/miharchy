@@ -24,9 +24,9 @@ $S/seed.sh --library 2                  # Keiyoushi repo + MangaDex, 2 popular m
 $S/seed.sh eu.kanade.tachiyomi.extension.en.weebcentral   # more extensions by pkgName
 ```
 
-The server is `/usr/bin/suwayomi-server` (AUR `suwayomi-server-bin`) with `-Dsuwayomi.tachidesk.config.server.rootDir=$RUN/server` and `-Djava.io.tmpdir=$RUN/server/tmp` (its page and cover cache; the default `/tmp/Tachidesk` is the user's server's too), `basic_auth` with random credentials written to `$RUN/server.json`. Ready = `aboutServer{version}` answers with those credentials. A fresh server downloads JCEF (~250 MB) on first start into its root dir; that is normal.
+The server is `/usr/bin/suwayomi-server` (AUR `suwayomi-server-bin`) with `-Dsuwayomi.tachidesk.config.server.rootDir=$RUN/server` and `-Djava.io.tmpdir=$RUN/server/tmp` (its page and cover cache; the default `/tmp/Tachidesk` is the user's server's too), `basic_auth` with random credentials written to `$RUN/server.json`. Ready = `aboutServer{version}` answers with those credentials. `start` returns then: the server runs detached (`setsid -f`, its own session, output in `$RUN/server.log`), so `server.sh start | tee` and a backgrounded `start` both end. A fresh server downloads JCEF (~250 MB) on first start into its root dir; that is normal.
 
-The sync helper builds once per checkout: `(cd sync && ./gradlew installDist)` → `sync/build/install/miharchy-sync/bin/miharchy-sync`. Run it against the scratch server with `JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json`.
+The sync helper builds once per checkout: `(cd sync && ./gradlew installDist)` → `sync/build/install/miharchy-sync/bin/miharchy-sync`. Run it against the scratch server with `JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json`. For the window's sync, backup and restore, copy the build into `$RUN/home/.local/share/miharchy/helper/` (`cp -r sync/build/install/miharchy-sync/. $RUN/home/.local/share/miharchy/helper/`).
 
 ## Doctor
 
@@ -40,6 +40,8 @@ Run it first whenever anything looks off. It fails if the PID file is missing, t
 ```sh
 $S/drive.sh steps.js 90     # copies window/ into $RUN/app, appends the driver, runs it offscreen for ≤ 90 s
 ```
+`drive.sh` runs the window with `HOME=$RUN/home` and `JAVA_OPTS=-Duser.home=$RUN/home`. The window runs the sync helper from `$HOME/.local/share/miharchy/helper`, and this machine has a real one at `~/.local/share/miharchy/helper` whose baselines live in the real home; the run home keeps a drive that syncs, backs up or restores away from both. The run home has no Omarchy theme, so the window draws its default palette; for themed captures copy a theme in first (`site/tools/README.md`, step 1). `PATH` passes through: put logging stubs for `xdg-open`, `wl-copy` and `notify-send` first on it before any drive that opens a link, copies or notifies. Text reaches `wl-copy` as arguments (`wl-copy -- <text>`), and the reader's `Y` sends the page as `wl-copy --type <mime>` with the image on stdin; a `wl-copy` stub reads stdin only on that `--type` call, so a text call never waits on an open stdin. The offscreen window is 1280×800 and does not resize.
+
 `steps.js` is a JS array of `[delayMs, function]` pairs, run in order inside the window (`delayMs` waits before that step). Helpers available in steps (see `scripts/driver.qml.part`):
 - `key("j")`, `key("Enter")`, `key("Esc")`, `key("Tab")`, `key("Backspace")`, `key(" ")` — go through `root.handleKey`, the window's one key path.
 - `root.run("view.library")` — run a command id from `window/Commands.js` directly (the palette path).
@@ -64,8 +66,8 @@ Proof standard:
 - Capture the action and the resulting state, not just the final screen.
 - Check the side effect on the server (read state, library flag, categories, settings, meta), not only what is drawn.
 - For sync: check the files written to the sync folder and the baselines in `$RUN/home/.local/share/miharchy/sync`.
-- `grabToImage` of `keyRoot` omits the window background color; a black or white background in captures is expected.
-- `grab()` captures after the step returns, so a key or click later in the same step shows in the capture. End the step with the `grab`.
+- `grabToImage` of `keyRoot` omits the window's own color, so the driver puts a `theme.background` fill under `keyRoot` (`vBackground` in `driver.qml.part`); captures show the background the window draws.
+- `grab()` captures after the step returns, so a key or click later in the same step shows in the capture. End the step with the `grab`, and quit (`done()`, `window.quit`) in a later step: a quit in the same step exits before the file is written.
 
 ## Cleanup
 
