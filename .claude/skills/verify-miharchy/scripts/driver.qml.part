@@ -1,0 +1,19 @@
+
+  // ---- verify-miharchy driver (appended to a scratch copy of shell.qml) ----
+  property int vStep: 0
+  readonly property var vKeys: ({ Enter: [0x01000004, "\r"], Esc: [0x01000000, "\u001b"], Tab: [0x01000001, "\t"], Backspace: [0x01000003, "\b"] })
+  function key(t) { var k = vKeys[t]; root.handleKey({ key: k ? k[0] : t.toUpperCase().charCodeAt(0), text: k ? k[1] : t, modifiers: 0 }) }
+  function grab(name) { keyRoot.grabToImage(function(r) { r.saveToFile("@EVIDENCE@/" + name + ".png") }) }
+  function log(label, value) { console.log("DRIVER " + label + " " + JSON.stringify(value)) }
+  function done() { Qt.quit() }
+  readonly property var vSteps: @STEPS@
+  property Timer vTimer: Timer {
+    interval: 100; running: true
+    onTriggered: {
+      if (root.vStep > 0) root.vSteps[root.vStep - 1][1]()
+      if (root.vStep >= root.vSteps.length) return
+      interval = root.vSteps[root.vStep][0]
+      root.vStep++
+      start()
+    }
+  }
