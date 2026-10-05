@@ -58,7 +58,7 @@ _Avoid_: service, site, list
 
 **Track**:
 The link between a manga and its entry on one tracker, with that entry's status, chapters read and score.
-_Avoid_: binding, sync, record
+_Avoid_: sync (Suwayomi's API names, bind and track record, stay in code)
 
 **Download**:
 A chapter stored on disk for offline reading.
