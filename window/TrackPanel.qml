@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import "Commands.js" as Commands
 import "Model.js" as Model
 import "Trackers.js" as Trackers
@@ -19,14 +20,16 @@ Rectangle {
   property var panel: null
   // Only the latest panel load may update it.
   property int loadSeq: 0
+  // What the last link key did, until the next key.
+  property string note: ""
 
   readonly property bool open: panel !== null
-  readonly property bool editing: open && (panel.mode === "query" || panel.mode === "progress")
+  readonly property bool editing: open && ["query", "progress", "start", "finish"].indexOf(panel.mode) !== -1
   readonly property bool picking: open && panel.mode === "pick"
   readonly property var problem: open ? Model.problem(panel, configPath) : null
   readonly property string hint: !open ? ""
     : picking ? "j k move   enter choose   esc back   "
-    : "j k trackers   enter find the manga   s status   c chapters   S score   x stop tracking   esc close   "
+    : "j k trackers   enter find the manga   s status   c chapters   S score   d started   D finished   p private   o open   y copy link   x stop tracking   esc close   "
 
   signal key(var event)
   signal editEnded()
@@ -82,6 +85,7 @@ Rectangle {
   }
 
   function run(id) {
+    note = ""
     switch (id) {
       case "track.close":
         close()
@@ -99,10 +103,23 @@ Rectangle {
       case "track.chapters":
       case "track.unbind":
       case "track.choose":
+      case "track.start":
+      case "track.finish":
+      case "track.private":
         act({ type: id.slice(6) })
         break
+      case "track.openWeb":
+      case "track.copyLink":
+        var url = Trackers.link(panel)
+        if (!url) note = "This tracker has no link for the manga"
+        else if (id === "track.openWeb") Quickshell.execDetached(["xdg-open", url])
+        else {
+          Quickshell.execDetached(["wl-copy", "--", url])
+          note = "Link copied"
+        }
+        break
       case "track.commit":
-        act({ type: panel.mode === "query" ? "query" : "progress", text: field.text })
+        act({ type: ({ query: "query", progress: "progress" })[panel.mode] || "date", text: field.text })
         if (!editing) editEnded()
         break
       case "track.cancel":
@@ -169,7 +186,7 @@ Rectangle {
 
       Text {
         id: prompt
-        text: view.open && view.panel.mode === "progress" ? "Chapters read" : "Search"
+        text: !view.open ? "" : ({ progress: "Chapters read", start: "Started (YYYY-MM-DD)", finish: "Finished (YYYY-MM-DD)" })[view.panel.mode] || "Search"
         color: view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSize
@@ -305,8 +322,8 @@ Rectangle {
       width: parent.width
       wrapMode: Text.Wrap
       visible: text !== ""
-      text: !view.open ? "" : view.panel.busy ? "saving" : view.panel.error
-      color: view.open && view.panel.busy ? view.theme.muted : view.theme.urgent
+      text: !view.open ? "" : view.panel.busy ? "saving" : view.panel.error || view.note
+      color: view.open && (view.panel.busy || !view.panel.error) ? view.theme.muted : view.theme.urgent
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSmall
     }

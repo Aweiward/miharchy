@@ -167,7 +167,7 @@ const onRow = (p, name) => run(p, { type: "move", delta: p.rows.findIndex((r) =>
 
 test("the panel lists logged-in trackers and any tracker holding a track of the manga", () => {
   const p = open([record({ id: 40, trackerId: 1, status: 2, displayScore: "0", lastChapterRead: 380 }), record()]);
-  assert.match(T.panelPayload(p).query, /manga\(id: \$id\) \{ trackRecords \{ nodes \{ id trackerId remoteId title status displayScore lastChapterRead totalChapters remoteUrl \} \} \}/);
+  assert.match(T.panelPayload(p).query, /manga\(id: \$id\) \{ trackRecords \{ nodes \{ id trackerId remoteId title status displayScore lastChapterRead totalChapters remoteUrl startDate finishDate private \} \} \}/);
   assert.deepEqual(T.panelPayload(p).variables, { id: 5 });
   assert.deepEqual(p.rows.map((r) => r.tracker.name), ["MyAnimeList", "AniList", "Kitsu"], "MangaUpdates is logged out with no track");
   assert.deepEqual(p.rows.map(T.summary), ["log in under Settings to change it", "Reading   12 / 380 chapters   score 8", "not tracked"]);
@@ -278,6 +278,48 @@ test("Esc in a pick list goes back to the trackers", () => {
   const back = run(p, { type: "back" }).panel;
   assert.equal(back.mode, "list");
   assert.equal(back.pick, null);
+});
+
+const dated = () => [trackersNode(1, "MyAnimeList", true), Object.assign(trackersNode(2, "AniList", true), { supportsReadingDates: true, supportsPrivateTracking: true })];
+
+test("reading dates: a YYYY-MM-DD field saved as UTC midnight, empty clears, only where the tracker keeps them", () => {
+  const p = onRow(open([record({ startDate: "1767225600000", finishDate: "0", private: true })], dated()), "AniList");
+  assert.equal(T.summary(p.rows[p.cursor]), "Reading   12 / 380 chapters   score 8   started 2026-01-01   private");
+  const field = run(p, { type: "start" }).panel;
+  assert.equal(field.mode, "start");
+  assert.equal(T.fieldStart(field), "2026-01-01", "the field starts on the date set");
+  assert.equal(T.fieldStart(run(p, { type: "finish" }).panel), "", "no finish date yet");
+  assert.deepEqual(run(field, { type: "date", text: " 2026-02-03 " }).payload.variables, { input: { recordId: 31, startDate: String(Date.UTC(2026, 1, 3)) } });
+  assert.deepEqual(run(run(p, { type: "finish" }).panel, { type: "date", text: "2026-03-01" }).payload.variables, { input: { recordId: 31, finishDate: String(Date.UTC(2026, 2, 1)) } });
+  assert.deepEqual(run(field, { type: "date", text: "" }).payload.variables, { input: { recordId: 31, startDate: "0" } }, "empty clears it");
+  for (const bad of ["2026-02-30", "3/2/2026", "2026-2-3"]) {
+    const r = run(field, { type: "date", text: bad });
+    assert.equal(r.payload, null, bad);
+    assert.match(r.panel.error, /2026-01-31/, bad);
+  }
+  const mal = run(onRow(open([record({ trackerId: 1 })], dated()), "MyAnimeList"), { type: "start" });
+  assert.equal(mal.panel.mode, "list");
+  assert.match(mal.panel.error, /keeps no reading dates/);
+  assert.match(run(onRow(open([], dated()), "AniList"), { type: "finish" }).panel.error, /first/);
+});
+
+test("private turns on and off where the tracker has it", () => {
+  const p = onRow(open([record({ private: false })], dated()), "AniList");
+  const r = run(p, { type: "private" });
+  assert.match(r.payload.query, /updateTrack/);
+  assert.deepEqual(r.payload.variables, { input: { recordId: 31, private: true } });
+  const done = run(r.panel, { type: "written", trackerId: 2, reply: ok({ updateTrack: { trackRecord: record({ private: true }) } }) }).panel;
+  assert.match(T.summary(done.rows[done.cursor]), /private$/);
+  assert.deepEqual(run(done, { type: "private" }).payload.variables, { input: { recordId: 31, private: false } });
+  const mal = run(onRow(open([record({ trackerId: 1 })], dated()), "MyAnimeList"), { type: "private" });
+  assert.equal(mal.payload, null);
+  assert.match(mal.panel.error, /no private tracking/);
+});
+
+test("the link is the track's page, on a logged-out tracker too", () => {
+  const p = open([record({ trackerId: 1, remoteUrl: "https://myanimelist.net/manga/2" })]);
+  assert.equal(T.link(p), "https://myanimelist.net/manga/2");
+  assert.equal(T.link(onRow(p, "AniList")), "", "no track, no link");
 });
 
 test("a panel load that fails carries the connection state", () => {
