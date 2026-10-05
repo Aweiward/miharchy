@@ -348,10 +348,10 @@ function normalizePath(path) {
 // An edited text -> { save: value } or { error: message }. A folder row
 // gives { folder } instead: the caller checks that it exists, then saves.
 // values: the rows' current values, for notSameAs. A text row with
-// notSameAs is a path, saved normalized.
+// notSameAs is a path: when not blank it is a { folder } too, normalized.
 function commit(row, text, home, values) {
   var t = String(text).trim()
-  var done = row.type === "folder" ? commitFolder(text, home) : row.pattern && !row.pattern.test(t) ? { error: row.hint } : { save: row.notSameAs && t ? normalizePath(t) : t }
+  var done = row.type === "folder" ? commitFolder(text, home) : row.pattern && !row.pattern.test(t) ? { error: row.hint } : row.notSameAs && t ? { folder: normalizePath(t) } : { save: t }
   var path = "folder" in done ? done.folder : done.save
   var other = row.notSameAs && values ? values[row.notSameAs] : ""
   if (path && other && path === normalizePath(other)) {
