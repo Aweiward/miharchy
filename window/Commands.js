@@ -106,6 +106,11 @@ var commands = [
   { id: "manga.deleteDownload", title: "Delete downloads", keys: ["x"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.select", title: "Select chapters", keys: ["v"], view: "manga", hidden: true },
   { id: "manga.downloadUnread", title: "Download unread chapters", keys: ["U"], view: "manga", hidden: true },
+  // Shift, as r refreshes: R and P write read state. u is free wherever a
+  // chapter can be unmarked; Updates lists only unread chapters.
+  { id: "manga.markRead", title: "Mark read", keys: ["R"], view: ["manga", "manga-select"], hidden: true },
+  { id: "manga.markUnread", title: "Mark unread", keys: ["u"], view: ["manga", "manga-select"], hidden: true },
+  { id: "manga.markPrevious", title: "Mark every chapter below read", keys: ["P"], view: "manga", hidden: true },
   { id: "downloads.open", title: "Download queue", keys: ["D"], view: ["library", "manga"], hidden: true },
   // The views a sync changes; the palette runs it from anywhere.
   { id: "sync.now", title: "Sync now", keys: ["s"], view: ["library", "updates"], hidden: true },

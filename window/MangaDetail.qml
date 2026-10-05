@@ -4,6 +4,7 @@ import QtQuick
 import "Model.js" as Model
 import "Browse.js" as Browse
 import "Downloads.js" as Downloads
+import "Chapters.js" as Chapters
 
 // A manga's detail over the view that opened it, Library or Browse: cover
 // and metadata beside the chapter list, newest first. It talks to the
@@ -33,11 +34,13 @@ Rectangle {
   readonly property bool selecting: anchor >= 0
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
   readonly property string hint: picking ? "j k move   space in or out   esc close   "
-    : selecting ? "j k extend   d download   x delete download   esc end   "
-    : "j k chapters   enter read   d download   v select   U unread   x delete   D queue   " + (manga && manga.inLibrary ? "a remove from library   M migrate" : "a add to library") + "   c categories   t tracking   r refresh   esc back   "
+    : selecting ? "j k extend   R read   u unread   d download   x delete download   esc end   "
+    : "j k chapters   enter read   R read   u unread   P read below   d download   v select   U download unread   x delete   D queue   " + (manga && manga.inLibrary ? "a remove from library   M migrate" : "a add to library") + "   c categories   t tracking   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
+  // shell.qml's markChapters() applies it and answers with markReply().
+  signal mark(var chapters, bool read, int mangaId)
   signal categorized()
   // A download mutation's reply, which carries the queue.
   signal downloads(var reply)
@@ -129,6 +132,17 @@ Rectangle {
     })
   }
 
+  function sendMark(list, read) {
+    anchor = -1
+    mark(list, read, detail.mangaId)
+  }
+
+  function markReply(reply) {
+    if (!detail) return
+    detail = Browse.reduceDetail(detail, { type: "mark-reply", reply: reply })
+    reload()
+  }
+
   function toggleCategory() {
     var c = categories[pickCursor]
     var payload = c ? Browse.categoryPayload(detail, c.id) : null
@@ -185,6 +199,13 @@ Rectangle {
         break
       case "manga.deleteDownload":
         sendDownloads(Downloads.removePayload(Downloads.marked(detail.chapters, cursor, anchor), queue))
+        break
+      case "manga.markRead":
+      case "manga.markUnread":
+        sendMark(Downloads.marked(detail.chapters, cursor, anchor), id === "manga.markRead")
+        break
+      case "manga.markPrevious":
+        sendMark(Chapters.previous(detail.chapters, cursor), true)
         break
       case "manga.refresh":
         detailSeq++

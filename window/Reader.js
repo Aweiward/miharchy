@@ -1,6 +1,7 @@
 .pragma library
 .import "Model.js" as Model
 .import "Downloads.js" as Downloads
+.import "Chapters.js" as Chapters
 
 // The reader: one chapter's pages, the page shown, and the read state to
 // save. Pure, so tests/reader.test.js pins it; ReaderView.qml fetches pages,
@@ -10,10 +11,6 @@ var PAGES_MUTATION = "mutation($id: Int!) { fetchChapterPages(input: { chapterId
 // Setting lastPageRead also stamps lastReadAt, which is what puts the
 // chapter in the history; isRead alone does not.
 var SAVE_MUTATION = "mutation($id: Int!, $patch: UpdateChapterPatchInput!) { updateChapter(input: { id: $id, patch: $patch }) { chapter { id isRead lastPageRead } } }"
-// The GraphQL updateChapter leaves the trackers alone (only Suwayomi's REST
-// call pushes), so the reader asks for the push. The server sends each
-// tracker the highest read chapter number, when it is above the tracker's.
-var TRACK_MUTATION = "mutation($id: Int!) { trackProgress(input: { mangaId: $id }) { trackRecords { id lastChapterRead } } }"
 
 // The page shown, the next three and the previous two.
 var SLOTS = 6
@@ -143,7 +140,7 @@ function savePayload(r) {
 // first marks the chapter read. Take it before "saving" records the save.
 function trackPayload(r) {
   if (r.state !== "ok" || !r.read || r.wasRead || (r.saved && r.saved.read)) return null
-  return { query: TRACK_MUTATION, variables: { id: r.mangaId } }
+  return Chapters.trackPayload([r.mangaId])
 }
 
 // on: the delete after read setting. Called as the reader leaves the

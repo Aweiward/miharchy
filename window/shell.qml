@@ -7,6 +7,7 @@ import "Model.js" as Model
 import "Commands.js" as Commands
 import "Settings.js" as Settings
 import "Setup.js" as Setup
+import "Chapters.js" as Chapters
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -165,6 +166,32 @@ ShellRoot {
     xhr.setRequestHeader("Content-Type", "application/json")
     xhr.setRequestHeader("Authorization", req.authorization)
     xhr.send(req.body)
+  }
+
+  function send(payload, done) {
+    var req = Model.request(config, payload)
+    var xhr = new XMLHttpRequest()
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === XMLHttpRequest.DONE) done(Model.reply(xhr.status, xhr.responseText))
+    }
+    xhr.open("POST", req.url)
+    xhr.setRequestHeader("Content-Type", "application/json")
+    xhr.setRequestHeader("Authorization", req.authorization)
+    xhr.send(req.body)
+  }
+
+  // The one path that marks chapters read or unread, from any view: the
+  // trackers hear of a mark read, and every view showing read state reloads.
+  function markChapters(chapters, read, mangaIds) {
+    var payload = Chapters.markPayload(chapters, read)
+    if (!payload || !config) return
+    send(payload, function(reply) {
+      // The push waits for the mark: the server reads the chapters it marked.
+      if (reply.state === "ok" && read) root.send(Chapters.trackPayload(mangaIds), function() {})
+      mangaDetail.markReply(reply)
+      updatesView.load()
+      root.fetchLibrary()
+    })
   }
 
   function fetchLibrary() {
@@ -580,6 +607,7 @@ ShellRoot {
           queue: downloadsView.queue.items
           onDownloads: function(reply) { downloadsView.apply(reply) }
           onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+          onMark: function(chapters, read, mangaId) { root.markChapters(chapters, read, [mangaId]) }
         }
 
         TrackPanel {
@@ -649,6 +677,7 @@ ShellRoot {
         onClosed: function(chapterId) {
           mangaDetail.reread(chapterId)
           updatesView.load()
+          if (root.config) root.fetchLibrary()
         }
         onDeleted: mangaDetail.reload()
       }
