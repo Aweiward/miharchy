@@ -56,6 +56,9 @@ var ROWS = [
       { value: "white", label: "White" }
     ]
   },
+  // Off, the transition page between chapters shows only past either end,
+  // on a gap in the chapter numbers, or when the chapter cannot load.
+  { key: "alwaysShowChapterTransition", label: "Always show chapter transition", type: "bool", default: true, store: "meta" },
   // Mihon's reader skips, applied as a chapter opens; the chapter opened
   // always stays.
   { key: "skipRead", label: "Skip read chapters", type: "bool", default: false, store: "meta" },

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell.Io
 import "Chapters.js" as Chapters
 import "Commands.js" as Commands
 import "Model.js" as Model
@@ -35,6 +36,9 @@ Rectangle {
   property bool panelOpen: false
   property int panelCursor: 0
   readonly property var panelRows: reader ? Reader.panelRows(reader, values) : []
+  // No default route, checked as each chapter loads: the transition page
+  // then warns of a chapter not downloaded.
+  property bool offline: false
   // Whether the go-to-page field is open.
   property bool editing: false
   readonly property alias pageField: field
@@ -120,6 +124,7 @@ Rectangle {
   function loadPages() {
     var payload = Reader.pagesPayload(reader)
     if (!payload) return
+    route.running = true
     var seq = ++pagesSeq
     var cfg = config
     send(payload, function(reply) {
@@ -332,13 +337,23 @@ Rectangle {
     var act = Reader.action(reader, id, f.atYEnd, f.atYBeginning)
     if (!act) return
     if ("scroll" in act) scroll(act.scroll)
-    else go({ type: "turn", delta: act.turn, chapter: act.chapter === true })
+    else go({ type: "turn", delta: act.turn, chapter: act.chapter === true, always: values.alwaysShowChapterTransition, offline: offline })
   }
 
   function tap(x, y) {
     if (editing) return
     var id = Reader.tapZone(reader.mode, x, y, width, height)
     if (id) run(id)
+  }
+
+  // ponytail: a default route stands for online; a network that routes but
+  // reaches nothing still reads as online.
+  Process {
+    id: route
+    command: ["sh", "-c", "command -v ip >/dev/null || echo unknown; ip route show default; ip -6 route show default"]
+    stdout: StdioCollector {
+      onStreamFinished: view.offline = text.trim() === ""
+    }
   }
 
   Timer {
@@ -444,6 +459,72 @@ Rectangle {
       smooth: true
     }
 
+  }
+
+  // The transition page, over the page it follows: Mihon's
+  // ChapterTransition. A turn its way reads on; any click zone or key
+  // turns as on a page.
+  Rectangle {
+    anchors.fill: parent
+    visible: view.reader !== null && view.reader.transition !== null
+    color: view.color
+
+    Rectangle {
+      anchors.centerIn: parent
+      width: Math.min(parent.width - view.theme.fontSize * 4, view.theme.fontSize * 34)
+      height: lines.implicitHeight + view.theme.fontSize * 3
+      color: Qt.alpha(view.theme.panel, 1)
+      border.width: 1
+      border.color: view.theme.panelBorder
+
+      Column {
+        id: lines
+        x: view.theme.fontSize * 1.5
+        y: view.theme.fontSize * 1.5
+        width: parent.width - view.theme.fontSize * 3
+        spacing: view.theme.fontSize * 1.5
+
+        Repeater {
+          model: view.reader && view.reader.transition ? Reader.transitionLines(view.reader.transition) : []
+
+          Column {
+            id: line
+            required property var modelData
+            width: lines.width
+            spacing: view.theme.fontSize * 0.3
+
+            Text {
+              visible: line.modelData.label !== undefined
+              text: line.modelData.label || ""
+              color: view.theme.muted
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSmall
+            }
+
+            Text {
+              width: parent.width
+              wrapMode: Text.Wrap
+              maximumLineCount: 5
+              elide: Text.ElideRight
+              text: line.modelData.chapter ? line.modelData.chapter.name : line.modelData.warning || line.modelData.none
+              color: line.modelData.warning ? view.theme.urgent : line.modelData.none ? view.theme.muted : view.theme.foreground
+              font.family: view.theme.fontFamily
+              font.pixelSize: line.modelData.chapter ? view.theme.fontSize * 1.3 : view.theme.fontSize
+            }
+
+            Text {
+              width: parent.width
+              visible: text !== ""
+              elide: Text.ElideRight
+              text: line.modelData.chapter ? [line.modelData.chapter.scanlator, line.modelData.chapter.downloaded ? "downloaded" : ""].filter(function(s) { return s !== "" }).join("   ") : ""
+              color: view.theme.muted
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSmall
+            }
+          }
+        }
+      }
+    }
   }
 
   // The mouse runs the reader's own commands: a click the one its zone

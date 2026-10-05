@@ -55,8 +55,51 @@ function delta(readingMode, side) {
 // saved: { page, read } last sent for this chapter, null until a save goes
 // out. toEnd: entered backwards, so it opens on its last page.
 // edge: "first" | "last" when a turn ran past the first or last chapter.
+// transition: the transition page shown past either end, or null (see
+// transition()).
 function at(r, index, toEnd) {
-  return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", pages: [], page: 0, read: false, wasRead: false, saved: null, edge: "" })
+  return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", pages: [], page: 0, read: false, wasRead: false, saved: null, edge: "", transition: null })
+}
+
+// Mihon's calculateChapterGap: how many whole chapter numbers lie between
+// two chapters; 0 when either number is unknown (below 0).
+function gap(higher, lower) {
+  if (!higher || !lower || !(higher.number >= 0) || !(lower.number >= 0)) return 0
+  return Math.max(0, Math.floor(higher.number) - Math.floor(lower.number) - 1)
+}
+
+// Mihon's chapter transition between the chapter open (from) and the one
+// dir ("next" | "prev") leads to (to, null past either end). gap: the
+// chapters missing between them; missing: to is not downloaded while
+// offline, so its pages cannot load.
+function transition(r, dir, offline) {
+  var from = r.chapters[r.index]
+  var to = r.chapters[r.index + (dir === "next" ? 1 : -1)] || null
+  return { dir: dir, from: from, to: to, gap: dir === "next" ? gap(to, from) : gap(from, to), missing: to !== null && offline === true && !to.downloaded }
+}
+
+// always: the alwaysShowChapterTransition setting. Mihon also shows it at
+// either end, and on a gap; here also when the chapter cannot load.
+function showsTransition(t, always) {
+  return always || t.to === null || t.gap > 0 || t.missing
+}
+
+// What the transition page says, top to bottom, as Mihon's: each chapter
+// { label, chapter }, a warning { warning }, or { none } past either end.
+function transitionLines(t) {
+  var top = t.dir === "next" ? { label: "Finished", chapter: t.from } : { label: "Previous", chapter: t.to }
+  var bottom = t.dir === "next" ? { label: "Next", chapter: t.to } : { label: "Current", chapter: t.from }
+  var none = { none: t.dir === "next" ? "There's no next chapter" : "There's no previous chapter" }
+  var lines = [top.chapter ? top : none]
+  if (!bottom.chapter) return lines.concat([none])
+  if (t.gap > 0) lines.push({ warning: t.gap === 1 ? "There is 1 missing chapter" : "There are " + t.gap + " missing chapters" })
+  if (t.missing) lines.push({ warning: "You are offline and " + (t.dir === "next" ? "the next" : "the previous") + " chapter is not downloaded" })
+  return lines.concat([bottom])
+}
+
+function move(r, delta) {
+  if (delta > 0) return r.index + 1 < r.chapters.length ? at(r, r.index + 1, false) : copy(r, { edge: "last", transition: null })
+  return r.index > 0 ? at(r, r.index - 1, true) : copy(r, { edge: "first", transition: null })
 }
 
 // chapters: newest first, as Chapters.readingOrder() hands them.
@@ -66,7 +109,7 @@ function open(mangaId, chapters, chapterId, readingMode) {
 }
 
 function relist(chapters, chapterId) {
-  var list = chapters.slice().reverse().map(function(c) { return { id: c.id, name: c.name } })
+  var list = chapters.slice().reverse().map(function(c) { return { id: c.id, name: c.name, number: c.number, downloaded: c.downloaded === true, scanlator: c.scanlator || "" } })
   var index = 0
   for (var i = 0; i < list.length; i++) if (list[i].id === chapterId) index = i
   return { chapters: list, index: index }
@@ -90,8 +133,11 @@ function last(r) {
 
 // event.type:
 //   "pages"        { reply, config } for the chapter open
-//   "turn"         { delta, chapter? } by one page; past either end, or
-//                  at once with chapter, to the next or previous chapter
+//   "turn"         { delta, chapter?, always, offline } by one page; past
+//                  either end, or at once with chapter, to the transition
+//                  page (see showsTransition) or else the next or previous
+//                  chapter. On the transition page a turn its way leaves
+//                  the chapter, a turn back returns to the page.
 //   "scroll"       { page, start, end } in webtoon: the page at the middle
 //                  of the view, and whether the strip is at its top or end
 //   "chapter"      { delta } to the next or previous chapter, where it
@@ -115,15 +161,21 @@ function reduce(r, event) {
       return copy(r, { state: "ok", pages: pages, page: page, read: c.isRead === true || page === pages.length - 1, wasRead: c.isRead === true })
     case "turn":
       if (r.state === "loading") return r
+      var dir = event.delta > 0 ? "next" : "prev"
+      if (r.transition) return r.transition.dir === dir ? move(r, event.delta) : copy(r, { transition: null })
       var p = event.chapter ? -1 : r.page + event.delta
       if (r.state === "ok" && p >= 0 && p <= last(r)) return copy(r, { page: p, read: r.read || p === last(r), edge: "" })
-      if (event.delta > 0) return r.index + 1 < r.chapters.length ? at(r, r.index + 1, false) : copy(r, { edge: "last" })
-      return r.index > 0 ? at(r, r.index - 1, true) : copy(r, { edge: "first" })
+      var t = transition(r, dir, event.offline)
+      if (r.state === "ok" && showsTransition(t, event.always)) return copy(r, { transition: t, edge: "" })
+      return move(r, event.delta)
     case "scroll":
       if (r.state !== "ok") return r
       // A last page shorter than half the view never reaches the middle.
       var shown = event.end ? last(r) : event.start ? 0 : Math.max(0, Math.min(last(r), event.page))
-      return shown === r.page ? r : copy(r, { page: shown, read: r.read || shown === last(r), edge: "" })
+      // The transition page stays while the strip stays at its end.
+      var stays = r.transition !== null && (r.transition.dir === "next" ? event.end : event.start)
+      if (shown === r.page && (stays || !r.transition)) return r
+      return copy(r, { page: shown, read: r.read || shown === last(r), edge: "", transition: stays ? r.transition : null })
     case "chapter":
       var i = r.index + event.delta
       if (i < 0) return copy(r, { edge: "first" })
@@ -131,7 +183,7 @@ function reduce(r, event) {
     case "goto":
       if (r.state !== "ok" || isNaN(event.page)) return r
       var g = Math.max(0, Math.min(last(r), event.page))
-      return copy(r, { page: g, read: r.read || g === last(r), edge: "" })
+      return copy(r, { page: g, read: r.read || g === last(r), edge: "", transition: null })
     case "mode":
       return copy(r, { mode: MODES[(MODES.indexOf(r.mode) + 1) % MODES.length] })
     case "saving":
@@ -139,7 +191,8 @@ function reduce(r, event) {
     case "save-failed":
       return event.chapterId === chapterId(r) ? copy(r, { saved: null }) : r
     case "chapters":
-      return copy(r, relist(event.chapters, chapterId(r)))
+      var l = relist(event.chapters, chapterId(r))
+      return copy(r, { chapters: l.chapters, index: l.index, transition: null })
     case "retry":
       return r.state === "loading" || r.state === "ok" ? r : copy(r, { state: "loading", message: "" })
   }
@@ -181,6 +234,11 @@ function modePayload(r) {
 // the chapter, since the page at either end is the first or the last.
 function action(r, id, atEnd, atStart) {
   var side = { "reader.left": "left", "reader.right": "right" }[id]
+  // On the transition page every key that reads on or back turns at once.
+  if (r.transition) {
+    var d = side ? (r.mode === "webtoon" ? 0 : delta(r.mode, side)) : SCROLL[id] ? (SCROLL[id] > 0 ? 1 : -1) : 0
+    return d ? { turn: d } : null
+  }
   if (side) return r.mode === "webtoon" ? null : { turn: delta(r.mode, side) }
   if (!SCROLL[id]) return null
   var forward = SCROLL[id] > 0
@@ -256,7 +314,7 @@ function step(options, value, dir) {
 // The settings panel (s), Mihon's reader settings sheet: the manga's own
 // reading mode, then the Settings rows the reader reads, which apply to
 // every manga. A later reader setting is one more key here.
-var PANEL_KEYS = ["pageFit", "webtoonWidth", "readerTheme", "skipRead", "skipFiltered", "skipDupe"]
+var PANEL_KEYS = ["pageFit", "webtoonWidth", "readerTheme", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
 
 // The readerTheme setting -> the reader's background; themeColor for
 // "theme". Gray is Mihon's ReaderGrayBackgroundColor.
@@ -331,6 +389,10 @@ if (typeof module !== "undefined") {
     fit: fit,
     stripWidth: stripWidth,
     step: step,
+    gap: gap,
+    transition: transition,
+    showsTransition: showsTransition,
+    transitionLines: transitionLines,
     PANEL_KEYS: PANEL_KEYS,
     background: background,
     settingRow: settingRow,

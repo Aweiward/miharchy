@@ -104,12 +104,89 @@ test("before the first page the previous chapter opens at its last page", () => 
   assert.equal(R.reduce(r, { type: "pages", reply: pages(11, 4), config }).page, 3);
 });
 
-test("the first and last chapters stop at their edge and say so", () => {
-  const last = turn(loaded(13, 1), 1);
+test("past the last or first chapter the transition page says there is none; a turn on stops at the edge and says so", () => {
+  const end = turn(loaded(13, 1), 1);
+  assert.equal(end.transition.to, null);
+  assert.deepEqual(R.transitionLines(end.transition), [{ label: "Finished", chapter: end.chapters[2] }, { none: "There's no next chapter" }]);
+  const last = turn(end, 1);
   assert.equal(R.chapterName(last), "Ch. 3");
   assert.equal(last.edge, "last");
+  assert.equal(last.transition, null);
   assert.equal(turn(last, -1).edge, "", "turning back clears the edge");
-  assert.equal(turn(loaded(11, 2), -1).edge, "first");
+  const start = turn(loaded(11, 2), -1);
+  assert.deepEqual(R.transitionLines(start.transition), [{ none: "There's no previous chapter" }, { label: "Current", chapter: start.chapters[0] }]);
+  assert.equal(turn(start, -1).edge, "first");
+});
+
+// Newest first, numbered, as Browse.detail holds them: chapter 3 is missing.
+const numbered = [
+  { id: 24, name: "Ch. 4", number: 4, downloaded: false, scanlator: "Kumo" },
+  { id: 22, name: "Ch. 2", number: 2, downloaded: true, scanlator: "Kumo" },
+  { id: 21, name: "Ch. 1", number: 1, downloaded: false, scanlator: "" }
+];
+const onLast = (id, n) => R.reduce(R.open(5, numbered, id, "paged-ltr"), { type: "pages", reply: pages(id, n), config });
+const readOn = (r, o) => R.reduce(r, Object.assign({ type: "turn", delta: 1 }, o));
+
+test("with always show on, turning past the last page shows the finished and the next chapter; a turn back returns to the page, a turn on opens the next", () => {
+  const r = R.reduce(onLast(21, 2), { type: "goto", page: 1 });
+  const t = readOn(r, { always: true, offline: false });
+  assert.equal(t.index, r.index, "still in the chapter");
+  assert.equal(t.page, 1);
+  assert.deepEqual(R.transitionLines(t.transition), [
+    { label: "Finished", chapter: { id: 21, name: "Ch. 1", number: 1, downloaded: false, scanlator: "" } },
+    { label: "Next", chapter: { id: 22, name: "Ch. 2", number: 2, downloaded: true, scanlator: "Kumo" } }
+  ]);
+  const back = R.reduce(t, { type: "turn", delta: -1 });
+  assert.equal(back.transition, null);
+  assert.equal(back.page, 1);
+  const next = readOn(t, {});
+  assert.equal(R.chapterId(next), 22);
+  assert.equal(next.state, "loading");
+  assert.equal(next.transition, null);
+});
+
+test("with always show off, the reader goes straight on unless the numbers skip a chapter or the next one cannot load", () => {
+  const r = R.reduce(onLast(21, 2), { type: "goto", page: 1 });
+  assert.equal(R.chapterId(readOn(r, { always: false, offline: false })), 22, "no gap: straight on");
+  assert.equal(R.chapterId(readOn(r, { always: false, offline: true })), 22, "offline but downloaded: straight on");
+  const gap = readOn(R.reduce(onLast(22, 2), { type: "goto", page: 1 }), { always: false, offline: false });
+  assert.equal(gap.transition.gap, 1);
+  assert.deepEqual(R.transitionLines(gap.transition).map((l) => l.warning || l.label), ["Finished", "There is 1 missing chapter", "Next"]);
+  const offline = readOn(R.reduce(onLast(22, 2), { type: "goto", page: 1 }), { always: false, offline: true });
+  assert.deepEqual(R.transitionLines(offline.transition).map((l) => l.warning || l.label), ["Finished", "There is 1 missing chapter", "You are offline and the next chapter is not downloaded", "Next"]);
+});
+
+test("going back past the first page shows the previous and the current chapter, with the gap between them", () => {
+  const t = R.reduce(onLast(24, 3), { type: "turn", delta: -1, always: false, offline: false });
+  assert.deepEqual(R.transitionLines(t.transition).map((l) => l.warning || l.label), ["Previous", "There is 1 missing chapter", "Current"]);
+  const prev = R.reduce(t, { type: "turn", delta: -1 });
+  assert.equal(R.chapterId(prev), 22);
+  assert.equal(prev.toEnd, true, "the previous chapter opens on its last page");
+});
+
+test("the chapter gap is Mihon's: whole numbers between, none when a number is unknown", () => {
+  assert.equal(R.gap({ number: 5 }, { number: 2 }), 2);
+  assert.equal(R.gap({ number: 3.5 }, { number: 2.1 }), 0);
+  assert.equal(R.gap({ number: 5 }, { number: -1 }), 0);
+  assert.equal(R.gap({ number: 2 }, { number: 2 }), 0, "a duplicate is no gap");
+  assert.equal(R.gap(null, { number: 1 }), 0);
+});
+
+test("] and [ skip the transition page, and a go-to leaves it", () => {
+  const t = readOn(R.reduce(onLast(21, 2), { type: "goto", page: 1 }), { always: true });
+  assert.equal(R.chapterId(R.reduce(t, { type: "chapter", delta: 1 })), 22);
+  assert.equal(R.reduce(t, { type: "goto", page: 0 }).transition, null);
+});
+
+test("on the transition page every key that reads on or back turns; in webtoon the strip's end keeps it", () => {
+  const t = readOn(R.reduce(onLast(21, 2), { type: "goto", page: 1 }), { always: true });
+  assert.deepEqual(R.action(t, "reader.down", false, false), { turn: 1 }, "j turns at once, wherever the page is");
+  assert.deepEqual(R.action(t, "reader.halfUp", false, false), { turn: -1 });
+  assert.deepEqual(R.action(t, "reader.right", false, false), { turn: 1 }, "left to right: right reads on");
+  const w = Object.assign({}, t, { mode: "webtoon" });
+  assert.equal(R.action(w, "reader.left", true, false), null, "h and l do nothing in webtoon");
+  assert.equal(R.reduce(w, { type: "scroll", page: 1, start: false, end: true }), w, "at the end the page stays");
+  assert.equal(R.reduce(w, { type: "scroll", page: 1, start: false, end: false }).transition, null, "scrolling up leaves it");
 });
 
 test("turns wait while pages load", () => {
