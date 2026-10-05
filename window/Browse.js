@@ -68,6 +68,70 @@ function sources(reply, config, showNsfw, allLanguages) {
   return { state: "ok", message: "", sources: list }
 }
 
+// Mihon's SourcePreferences, in global meta through Prefs: pinned sources
+// as a JSON list of ids, and the last source opened.
+var PREFS = [
+  { key: "pinnedSources", default: "[]" },
+  { key: "lastUsedSource", default: "" }
+]
+
+function idList(json) {
+  try {
+    var list = JSON.parse(json || "[]")
+    return Array.isArray(list) ? list.map(String) : []
+  } catch (e) {
+    return []
+  }
+}
+
+function pinned(prefs) {
+  return idList(prefs.pinnedSources)
+}
+
+// The { key, value } that pins the source, or unpins a pinned one.
+function togglePin(prefs, id) {
+  var list = pinned(prefs)
+  return { key: "pinnedSources", value: JSON.stringify(list.indexOf(id) === -1 ? list.concat([id]) : list.filter(function(p) { return p !== id })) }
+}
+
+function languageName(lang) {
+  return lang === "all" ? "Multi" : lang
+}
+
+// The Sources list as Mihon's SourcesScreen groups it: the last used
+// source, the pinned ones, then each language, Multi first. The last used
+// source also shows in its own group. Each row is a source with header
+// (the group's name on its first row, else ""), pinned and lastUsed.
+function sourceRows(sources, prefs) {
+  var pins = pinned(prefs)
+  var groups = {}
+  var order = []
+  var add = function(key, label, s, lastUsed) {
+    if (!groups[key]) {
+      groups[key] = { label: label, rows: [] }
+      order.push(key)
+    }
+    groups[key].rows.push(copy(s, { pinned: pins.indexOf(s.id) !== -1, lastUsed: lastUsed }))
+  }
+  sources.forEach(function(s) {
+    if (s.id === prefs.lastUsedSource) add("1", "Last used", s, true)
+    if (pins.indexOf(s.id) !== -1) add("2", "Pinned", s, false)
+    else add(s.lang === "all" ? "3" : "4" + s.lang, languageName(s.lang), s, false)
+  })
+  var out = []
+  order.sort().forEach(function(key) {
+    groups[key].rows.forEach(function(r, i) { out.push(copy(r, { header: i ? "" : groups[key].label })) })
+  })
+  return out
+}
+
+// Where a source sits in rows, past its last used copy: the cursor follows
+// a source that moves on a pin.
+function rowIndex(rows, id) {
+  for (var i = 0; i < rows.length; i++) if (rows[i].id === id && !rows[i].lastUsed) return i
+  return 0
+}
+
 // listing.state: "idle" | "loading" | "ok" | a failed connection state.
 // page: the last page loaded. flare: the failure is Cloudflare without
 // FlareSolverr. filters: Widgets.filterChanges of the applied filters;
@@ -311,6 +375,11 @@ if (typeof module !== "undefined") {
     continues: continues,
     SOURCES_QUERY: SOURCES_QUERY,
     sources: sources,
+    PREFS: PREFS,
+    pinned: pinned,
+    togglePin: togglePin,
+    sourceRows: sourceRows,
+    rowIndex: rowIndex,
     listing: listing,
     listingPayload: listingPayload,
     reduceListing: reduceListing,
