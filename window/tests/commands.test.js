@@ -484,6 +484,12 @@ test("o opens and y copies the link: the manga's on a manga, the chapter's in th
   assert.equal(C.dispatch(screen("library"), text("o")), null);
 });
 
+test("on a manga, Y copies the title and / searches every source for it", () => {
+  assert.equal(C.dispatch(screen("manga"), text("Y")), "manga.copyTitle");
+  assert.equal(C.dispatch(screen("manga"), text("/")), "manga.searchTitle");
+  assert.equal(C.dispatch(screen("sources"), text("/")), "global.search", "/ on Browse still opens the search field");
+});
+
 test("on a manga, R marks read, u marks unread and P marks every chapter below the cursor read; R and u act on a selection too", () => {
   const m = screen("manga");
   assert.equal(C.dispatch(m, text("R")), "manga.markRead");

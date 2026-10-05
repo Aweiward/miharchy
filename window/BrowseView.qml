@@ -104,7 +104,8 @@ Item {
     return xhr
   }
 
-  function loadSources() {
+  // then: runs once the sources have loaded.
+  function loadSources(then) {
     if (!config) return
     var seq = ++sourcesSeq
     var cfg = config
@@ -113,7 +114,24 @@ Item {
       if (seq !== view.sourcesSeq) return
       view.src = Browse.sources(reply, cfg, view.showNsfw, view.allLanguages)
       view.sourceCursor = Math.min(view.sourceCursor, Math.max(0, view.src.sources.length - 1))
+      if (then) then()
     })
+  }
+
+  function startGlobal(query) {
+    globalSeq++
+    global = GlobalSearch.search(src.sources, query)
+    globalCursor = { row: 0, col: 0 }
+    pumpGlobal()
+  }
+
+  // A manga's title searched in every source, as a tap on the title does in
+  // Mihon. Browse may not have loaded its sources yet.
+  function searchEverywhere(query) {
+    if (editing) closeSearch()
+    screen = "global"
+    if (src.state === "ok") startGlobal(query)
+    else loadSources(function() { if (view.screen === "global") view.startGlobal(query) })
   }
 
   function openListing(mode, query, filters) {
@@ -365,10 +383,7 @@ Item {
         var gq = globalView.searchField.text.trim()
         closeSearch()
         if (gq) {
-          globalSeq++
-          global = GlobalSearch.search(src.sources, gq)
-          globalCursor = { row: 0, col: 0 }
-          pumpGlobal()
+          startGlobal(gq)
         } else if (!global) {
           screen = "sources"
         }
