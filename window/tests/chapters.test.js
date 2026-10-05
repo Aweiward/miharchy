@@ -77,14 +77,14 @@ test("apply never reorders the chapters it is given, which the reader reads in s
 });
 
 test("choosing a filter row moves it to the next state; a new sort starts ascending, the same sort flips (Mihon)", () => {
-  const rows = Ch.rows(prefs());
+  const rows = Ch.rows(prefs(), []);
   const row = (id) => rows.find((r) => r.id === id);
   assert.deepEqual(rows.map((r) => r.kind), ["filter", "filter", "filter", "sort", "sort", "sort", "default", "default"]);
   assert.equal(row("source").state, "desc");
   assert.equal(row("number").state, "");
   assert.deepEqual(Ch.choose(prefs(), row("unread")), [{ key: "chapterFilterUnread", value: "include" }]);
   const excluded = prefs({ chapterFilterUnread: "exclude" });
-  assert.deepEqual(Ch.choose(excluded, Ch.rows(excluded).find((r) => r.id === "unread")), [{ key: "chapterFilterUnread", value: "off" }]);
+  assert.deepEqual(Ch.choose(excluded, Ch.rows(excluded, []).find((r) => r.id === "unread")), [{ key: "chapterFilterUnread", value: "off" }]);
   assert.deepEqual(Ch.choose(prefs(), row("number")), [{ key: "chapterSort", value: "number" }, { key: "chapterSortDirection", value: "asc" }]);
   assert.deepEqual(Ch.choose(prefs(), row("source")), [{ key: "chapterSortDirection", value: "asc" }]);
   assert.deepEqual(Ch.choose(prefs(), row("default")), []);
@@ -158,4 +158,40 @@ test("skip duplicates keeps one chapter per number: the one opened, else its sca
   assert.deepEqual(ids(Ch.readingOrder(dupes, prefs(), 22, skip)), [25, 22], "scanlator B throughout");
   assert.deepEqual(ids(Ch.readingOrder(dupes, prefs(), 23, skip)), [24, 23], "no C for chapter 2: the first in reading order");
   assert.deepEqual(ids(Ch.readingOrder(dupes, prefs(), 23, noSkip)), [25, 24, 23, 22, 21], "off keeps every chapter");
+});
+
+const scanlated = [
+  { id: 34, sourceOrder: 4, number: 3, scanlator: "beta", read: false },
+  { id: 33, sourceOrder: 3, number: 3, scanlator: "Alpha", read: false },
+  { id: 32, sourceOrder: 2, number: 2, scanlator: "", read: false },
+  { id: 31, sourceOrder: 1, number: 1, scanlator: "beta", read: true }
+];
+const without = (names) => Object.assign(prefs(), P.read(Ch.SCANLATOR_PREFS, { manga: { meta: [{ key: "miharchy.excludedScanlators", value: JSON.stringify(names) }] } }, P.defaults(Ch.SCANLATOR_PREFS)));
+
+test("the scanlators listed are the manga's, A to Z ignoring case, without a blank one", () => {
+  assert.deepEqual(Ch.scanlators(scanlated), ["Alpha", "beta"]);
+});
+
+test("an excluded scanlator's chapters leave the list; a chapter with no scanlator stays", () => {
+  assert.deepEqual(ids(Ch.apply(scanlated, without(["beta"]))), [33, 32]);
+  assert.deepEqual(ids(Ch.apply(scanlated, without([]))), [34, 33, 32, 31]);
+  assert.equal(Ch.nextUnread(Ch.apply(scanlated, without(["Alpha"])), prefs()).id, 32, "the next chapter skips them too");
+});
+
+test("the reader drops an excluded scanlator's chapters even without skip filtered, but keeps the one opened (Mihon)", () => {
+  assert.deepEqual(ids(Ch.readingOrder(scanlated, without(["beta"]), 33, noSkip)), [33, 32]);
+  assert.deepEqual(ids(Ch.readingOrder(scanlated, without(["beta"]), 31, noSkip)), [33, 32, 31]);
+});
+
+test("each scanlator is a panel row; choosing one excludes it, choosing it again lets it back", () => {
+  const rows = Ch.rows(without(["beta"]), Ch.scanlators(scanlated));
+  assert.deepEqual(rows.filter((r) => r.kind === "scanlator").map((r) => [r.label, r.state]), [["Alpha", "off"], ["beta", "exclude"]]);
+  assert.deepEqual(rows.slice(2, 6).map((r) => r.kind), ["filter", "scanlator", "scanlator", "sort"], "between the filters and the sorts");
+  assert.deepEqual(Ch.choose(without(["beta"]), rows.find((r) => r.id === "Alpha")), [{ key: "excludedScanlators", value: JSON.stringify(["beta", "Alpha"]) }]);
+  assert.deepEqual(Ch.choose(without(["beta"]), rows.find((r) => r.id === "beta")), [{ key: "excludedScanlators", value: "[]" }]);
+});
+
+test("excluded scanlators are never a chapter default, and unreadable meta excludes nothing", () => {
+  assert.ok(!Ch.PREFS.some((p) => p.key === "excludedScanlators"), "save as default must not copy or reset them");
+  assert.deepEqual(ids(Ch.apply(scanlated, Object.assign(prefs(), { excludedScanlators: "not json" }))), [34, 33, 32, 31]);
 });

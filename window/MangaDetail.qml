@@ -41,10 +41,12 @@ Rectangle {
   readonly property bool selecting: anchor >= 0
   // The chapters as listed; cursor and anchor index it. detail.chapters
   // stays in source order, newest first, for the reader.
-  readonly property var shown: detail ? Chapters.apply(detail.chapters, chapterPrefs.values) : []
-  readonly property var next: Chapters.nextUnread(shown, chapterPrefs.values)
+  // The chapter choices and the excluded scanlators, as Chapters.js takes them.
+  readonly property var prefs: Object.assign({}, chapterPrefs.values, scanlatorPrefs.values)
+  readonly property var shown: detail ? Chapters.apply(detail.chapters, prefs) : []
+  readonly property var next: Chapters.nextUnread(shown, prefs)
   readonly property string resume: detail ? Chapters.resumeLabel(detail.chapters, next) : ""
-  readonly property var optionRows: Chapters.rows(chapterPrefs.values)
+  readonly property var optionRows: Chapters.rows(prefs, detail ? Chapters.scanlators(detail.chapters) : [])
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
   readonly property string hint: picking ? "j k move   space in or out   esc close   "
     : optionsOpen ? "j k move   enter change   esc close   "
@@ -77,6 +79,13 @@ Rectangle {
     onFailed: function(reply) { view.optionsNote = reply.message || reply.state }
   }
 
+  PrefStore {
+    id: scanlatorPrefs
+    config: view.config
+    table: Chapters.SCANLATOR_PREFS
+    onFailed: function(reply) { view.optionsNote = reply.message || reply.state }
+  }
+
   function send(payload, done) {
     var req = Model.request(config, payload)
     var xhr = new XMLHttpRequest()
@@ -93,6 +102,7 @@ Rectangle {
   function openManga(mangaId, fromSource) {
     detail = Browse.detail(mangaId, fromSource)
     chapterPrefs.open(mangaId)
+    scanlatorPrefs.open(mangaId)
     cursor = 0
     detailSeq++
     advance()
@@ -169,7 +179,7 @@ Rectangle {
     var row = optionRows[optionsCursor]
     optionsNote = ""
     if (row.kind !== "default") {
-      chapterPrefs.set(Chapters.choose(chapterPrefs.values, row))
+      (row.kind === "scanlator" ? scanlatorPrefs : chapterPrefs).set(Chapters.choose(prefs, row))
       return
     }
     chapterPrefs.saveDefault(row.id === "defaultAll" ? libraryIds : [])
@@ -264,7 +274,7 @@ Rectangle {
         sendMark(Downloads.marked(shown, cursor, anchor), "bookmark")
         break
       case "manga.markPrevious":
-        sendMark(Chapters.previous(shown, cursor, chapterPrefs.values), "read")
+        sendMark(Chapters.previous(shown, cursor, prefs), "read")
         break
       case "manga.refresh":
         detailSeq++
@@ -485,68 +495,73 @@ Rectangle {
     anchors.right: parent.right
     anchors.margins: view.theme.fontSize * 2
     width: view.theme.fontSize * 30
-    height: options.implicitHeight + view.theme.fontSize * 2
+    // A manga with many scanlators scrolls the rows rather than run off.
+    height: Math.min(parent.height - view.theme.fontSize * 4, options.contentHeight + note.height + view.theme.fontSize * 2)
     visible: view.optionsOpen
     color: Qt.alpha(view.theme.panel, 1)
     border.width: 1
     border.color: view.theme.panelBorder
 
-    Column {
+    ListView {
       id: options
       x: view.theme.fontSize
       y: view.theme.fontSize
       width: parent.width - view.theme.fontSize * 2
+      height: parent.height - note.height - view.theme.fontSize * 2
+      clip: true
+      model: view.optionRows
+      currentIndex: view.optionsCursor
+      onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
 
-      Repeater {
-        model: view.optionRows
+      delegate: Column {
+        id: option
+        required property var modelData
+        required property int index
+        readonly property bool current: index === view.optionsCursor
+        readonly property bool on: modelData.state !== "" && modelData.state !== "off"
+        width: options.width
 
-        Column {
-          id: option
-          required property var modelData
-          required property int index
-          readonly property bool current: index === view.optionsCursor
-          readonly property bool on: modelData.state !== "" && modelData.state !== "off"
-          width: options.width
+        Text {
+          visible: option.index === 0 || option.modelData.kind !== view.optionRows[option.index - 1].kind
+          topPadding: option.index === 0 ? 0 : view.theme.fontSize * 0.8
+          text: ({ filter: "Filter", scanlator: "Scanlators (exclude)", sort: "Sort", "default": "Default" })[option.modelData.kind]
+          color: view.theme.muted
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSmall
+        }
 
-          Text {
-            visible: option.index === 0 || option.modelData.kind !== view.optionRows[option.index - 1].kind
-            topPadding: option.index === 0 ? 0 : view.theme.fontSize * 0.8
-            text: ({ filter: "Filter", sort: "Sort", "default": "Default" })[option.modelData.kind]
-            color: view.theme.muted
-            font.family: view.theme.fontFamily
-            font.pixelSize: view.theme.fontSmall
-          }
+        Text {
+          width: parent.width
+          elide: Text.ElideRight
+          text: ({ off: "[ ] ", include: "[+] ", exclude: "[-] ", "": "    ", asc: " ↑  ", desc: " ↓  " })[option.modelData.state] + option.modelData.label
+          color: option.current ? view.theme.accent : option.on || option.modelData.kind === "default" ? view.theme.foreground : view.theme.muted
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
 
-          Text {
-            width: parent.width
-            elide: Text.ElideRight
-            text: ({ off: "[ ] ", include: "[+] ", exclude: "[-] ", "": "    ", asc: " ↑  ", desc: " ↓  " })[option.modelData.state] + option.modelData.label
-            color: option.current ? view.theme.accent : option.on || option.modelData.kind === "default" ? view.theme.foreground : view.theme.muted
-            font.family: view.theme.fontFamily
-            font.pixelSize: view.theme.fontSize
-
-            MouseArea {
-              anchors.fill: parent
-              onClicked: view.optionsCursor = option.index
-              onDoubleClicked: {
-                view.optionsCursor = option.index
-                view.key(Commands.enter())
-              }
+          MouseArea {
+            anchors.fill: parent
+            onClicked: view.optionsCursor = option.index
+            onDoubleClicked: {
+              view.optionsCursor = option.index
+              view.key(Commands.enter())
             }
           }
         }
       }
+    }
 
-      Text {
-        width: parent.width
-        visible: text !== ""
-        topPadding: view.theme.fontSize * 0.8
-        wrapMode: Text.Wrap
-        text: view.optionsNote
-        color: view.theme.accent
-        font.family: view.theme.fontFamily
-        font.pixelSize: view.theme.fontSmall
-      }
+    Text {
+      id: note
+      anchors.top: options.bottom
+      x: options.x
+      width: options.width
+      height: text === "" ? 0 : implicitHeight
+      topPadding: view.theme.fontSize * 0.8
+      wrapMode: Text.Wrap
+      text: view.optionsNote
+      color: view.theme.accent
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
     }
   }
 

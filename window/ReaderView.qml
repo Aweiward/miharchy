@@ -88,14 +88,15 @@ Rectangle {
   // setting: miharchy.defaultReadingMode. The pages load at once with the
   // default chapter choices; the manga's own sort and filters follow.
   function start(manga, chapters, chapterId, setting) {
-    var defaults = Prefs.defaults(Chapters.PREFS)
+    var table = Chapters.PREFS.concat(Chapters.SCANLATOR_PREFS)
+    var defaults = Prefs.defaults(table)
     source = { chapters: chapters, prefs: defaults }
     reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting))
     loadPages()
     var seq = ++startSeq
-    send(Prefs.loadPayload(Chapters.PREFS, manga.id), function(reply) {
+    send(Prefs.loadPayload(table, manga.id), function(reply) {
       if (seq !== view.startSeq || !view.reader || reply.state !== "ok") return
-      view.source = { chapters: chapters, prefs: Prefs.read(Chapters.PREFS, reply.data, defaults) }
+      view.source = { chapters: chapters, prefs: Prefs.read(table, reply.data, defaults) }
       view.relist()
     })
   }
