@@ -10,6 +10,10 @@ var PAGES_MUTATION = "mutation($id: Int!) { fetchChapterPages(input: { chapterId
 // Setting lastPageRead also stamps lastReadAt, which is what puts the
 // chapter in the history; isRead alone does not.
 var SAVE_MUTATION = "mutation($id: Int!, $patch: UpdateChapterPatchInput!) { updateChapter(input: { id: $id, patch: $patch }) { chapter { id isRead lastPageRead } } }"
+// The GraphQL updateChapter leaves the trackers alone (only Suwayomi's REST
+// call pushes), so the reader asks for the push. The server sends each
+// tracker the highest read chapter number, when it is above the tracker's.
+var TRACK_MUTATION = "mutation($id: Int!) { trackProgress(input: { mangaId: $id }) { trackRecords { id lastChapterRead } } }"
 
 // The page shown, the next three and the previous two.
 var SLOTS = 6
@@ -135,6 +139,13 @@ function savePayload(r) {
   return { query: SAVE_MUTATION, variables: { id: chapterId(r), patch: patch } }
 }
 
+// The tracker push due after savePayload()'s reply: only for the save that
+// first marks the chapter read. Take it before "saving" records the save.
+function trackPayload(r) {
+  if (r.state !== "ok" || !r.read || r.wasRead || (r.saved && r.saved.read)) return null
+  return { query: TRACK_MUTATION, variables: { id: r.mangaId } }
+}
+
 // on: the delete after read setting. Called as the reader leaves the
 // chapter, so its pages stay on disk while it shows.
 function deletePayload(r, on) {
@@ -197,6 +208,7 @@ if (typeof module !== "undefined") {
     pagesPayload: pagesPayload,
     reduce: reduce,
     savePayload: savePayload,
+    trackPayload: trackPayload,
     deletePayload: deletePayload,
     modePayload: modePayload,
     action: action,

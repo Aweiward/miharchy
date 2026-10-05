@@ -70,6 +70,20 @@ test("the last page marks the chapter read, and nothing ever marks it unread", (
   assert.deepEqual(R.savePayload(r).variables, { id: 12, patch: { lastPageRead: 1, isRead: true } });
 });
 
+test("the save that first marks a chapter read asks the server to push progress to the trackers", () => {
+  let r = R.reduce(loaded(12, 3, { lastPageRead: 1 }), { type: "saving" });
+  assert.equal(R.trackPayload(r), null, "not before the chapter is read");
+  r = turn(r, 1);
+  const push = R.trackPayload(r);
+  assert.match(push.query, /trackProgress\(input: \{ mangaId: \$id \}\)/);
+  assert.deepEqual(push.variables, { id: 5 });
+  r = R.reduce(r, { type: "saving" });
+  assert.equal(R.trackPayload(turn(r, -1)), null, "only once per reading");
+  assert.notEqual(R.trackPayload(R.reduce(r, { type: "save-failed", chapterId: 12 })), null, "a failed save pushes again with its retry");
+  assert.equal(R.trackPayload(loaded(12, 3, { isRead: true })), null, "rereading a read chapter raises nothing");
+  assert.equal(R.trackPayload(R.open(5, chapters, 12, "paged-rtl")), null, "nothing before the pages load");
+});
+
 test("a failed save goes out again; a stale failure from another chapter does not", () => {
   const r = R.reduce(loaded(12, 3), { type: "saving" });
   assert.notEqual(R.savePayload(R.reduce(r, { type: "save-failed", chapterId: 12 })), null);

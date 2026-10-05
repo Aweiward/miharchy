@@ -1,15 +1,23 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell.Io
+import "Model.js" as Model
 import "Settings.js" as Settings
+import "Trackers.js" as Trackers
 
-// The Settings view: one row per Settings.ROWS entry. Its edit field sends
-// every key to `key` first, so the window's one dispatcher decides what Esc
-// and Enter do.
+// The Settings view: one row per Settings.ROWS entry, then one per tracker
+// the server offers. Its edit fields send every key to `key` first, so the
+// window's one dispatcher decides what Esc and Enter do. The tracker rows
+// talk to the server themselves; Trackers.js decides.
 Item {
   id: view
 
   required property Theme theme
+  property var config: null
+  property var trackers: Trackers.initial()
+  readonly property bool loginEditing: Trackers.editing(trackers)
+  readonly property string loginStep: loginEditing ? trackers.login.step : ""
   property var values: ({})
   property int cursor: 0
   property bool editing: false
@@ -21,6 +29,71 @@ Item {
   property string editValue: ""
 
   signal key(var event)
+  signal editEnded()
+
+  onVisibleChanged: if (visible) loadTrackers()
+  onConfigChanged: {
+    trackers = Trackers.initial()
+    loadTrackers()
+  }
+
+  function send(payload, done) {
+    var req = Model.request(config, payload)
+    var xhr = new XMLHttpRequest()
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === XMLHttpRequest.DONE) done(Model.reply(xhr.status, xhr.responseText))
+    }
+    xhr.open("POST", req.url)
+    xhr.setRequestHeader("Content-Type", "application/json")
+    xhr.setRequestHeader("Authorization", req.authorization)
+    xhr.send(req.body)
+  }
+
+  // Never during a login: reading the trackers makes a new MyAnimeList
+  // link, and the old one the browser holds stops working.
+  function loadTrackers() {
+    if (!config || !visible || trackers.login) return
+    trackers = Trackers.reduce(trackers, { type: "request" })
+    send(Trackers.listPayload(), function(reply) {
+      view.trackers = Trackers.reduce(view.trackers, { type: "list", reply: reply })
+    })
+  }
+
+  function startLogin(i) {
+    trackers = Trackers.begin(trackers, i)
+    advance()
+  }
+
+  function advance() {
+    var payload = Trackers.loginPayload(trackers)
+    if (!payload) return
+    var answer = trackers.login.step === "link" ? "link" : "reply"
+    trackers = Trackers.reduce(trackers, { type: "sent" })
+    send(payload, function(reply) {
+      view.trackers = Trackers.reduce(view.trackers, { type: answer, reply: reply })
+      var l = view.trackers.login
+      if (answer === "link" && l && l.step === "paste") {
+        browser.command = ["xdg-open", l.url]
+        browser.running = true
+      }
+    })
+  }
+
+  function run(id) {
+    trackers = Trackers.reduce(trackers, id === "login.commit" ? { type: "commit", text: loginField.text } : { type: "cancel" })
+    advance()
+    if (!loginEditing) editEnded()
+  }
+
+  // The user's browser, opened by the Enter that started the login.
+  Process { id: browser }
+
+  // Each step of a login starts with an empty field.
+  onLoginStepChanged: {
+    if (!loginStep) return
+    loginField.text = ""
+    Qt.callLater(loginField.forceActiveFocus)
+  }
 
   Column {
     anchors.fill: parent
@@ -114,6 +187,100 @@ Item {
       color: view.theme.urgent
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSmall
+    }
+
+    Column {
+      id: trackerRows
+      width: Math.min(parent.width, view.theme.fontSize * 60)
+
+      Text {
+        leftPadding: view.theme.fontSize * 0.75
+        bottomPadding: view.theme.fontSize * 0.5
+        text: view.trackers.state === "loading" && !view.trackers.list.length ? "Trackers   loading" : "Trackers"
+        color: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      Repeater {
+        model: view.trackers.list
+
+        Rectangle {
+          id: tracker
+          required property var modelData
+          required property int index
+          readonly property bool current: index + Settings.ROWS.length === view.cursor
+          width: parent.width
+          height: view.theme.fontSize * 2.4
+          color: current ? view.theme.selected : "transparent"
+
+          Text {
+            anchors.left: parent.left
+            anchors.leftMargin: view.theme.fontSize * 0.75
+            anchors.verticalCenter: parent.verticalCenter
+            text: tracker.modelData.name
+            color: tracker.current ? view.theme.selectedText : view.theme.foreground
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSize
+          }
+
+          Text {
+            anchors.right: parent.right
+            anchors.rightMargin: view.theme.fontSize * 0.75
+            anchors.verticalCenter: parent.verticalCenter
+            text: Trackers.status(view.trackers, tracker.index)
+            color: tracker.current ? view.theme.selectedText : tracker.modelData.loggedIn ? view.theme.accent : view.theme.muted
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSize
+          }
+        }
+      }
+
+      Row {
+        visible: view.loginEditing
+        width: parent.width
+        height: view.theme.fontSize * 2.4
+        leftPadding: view.theme.fontSize * 0.75
+        spacing: view.theme.fontSize
+
+        Text {
+          id: loginPrompt
+          anchors.verticalCenter: parent.verticalCenter
+          text: view.loginEditing ? view.trackers.login.name + " " + Trackers.prompt(view.trackers.login) : ""
+          color: view.theme.muted
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+        }
+
+        TextInput {
+          id: loginField
+          anchors.verticalCenter: parent.verticalCenter
+          width: parent.width - loginPrompt.width - parent.spacing - parent.leftPadding * 2
+          clip: true
+          echoMode: view.loginStep === "password" ? TextInput.Password : TextInput.Normal
+          color: view.theme.selectedText
+          selectionColor: view.theme.accent
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+          Keys.onPressed: function(event) { view.key(event) }
+        }
+      }
+
+      // Selectable, so the login link can be copied when no browser opens.
+      TextEdit {
+        width: parent.width
+        visible: text !== ""
+        leftPadding: view.theme.fontSize * 0.75
+        topPadding: view.theme.fontSize * 0.5
+        readOnly: true
+        selectByMouse: true
+        wrapMode: TextEdit.WrapAnywhere
+        text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, "server.json") || { title: "" }).title : Trackers.note(view.trackers)
+        color: view.trackers.error || (view.trackers.login && view.trackers.login.error) ? view.theme.urgent : view.theme.muted
+        selectionColor: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
     }
   }
 }

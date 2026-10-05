@@ -52,6 +52,14 @@ _Avoid_: notification, release
 To move a library manga to another source: the new manga joins the library with the old one's categories and read state, matched by chapter number, and the old one leaves it. **Copy** does the same but keeps the old one.
 _Avoid_: move, transfer, switch source
 
+**Tracker**:
+An outside list service, such as AniList or MyAnimeList, that keeps the user's reading status, chapters read and score per manga. The server holds the login.
+_Avoid_: service, site, list
+
+**Track**:
+The link between a manga and its entry on one tracker, with that entry's status, chapters read and score.
+_Avoid_: binding, sync, record
+
 **Download**:
 A chapter stored on disk for offline reading.
 _Avoid_: cache, offline copy
@@ -113,6 +121,7 @@ _Avoid_: layout, direction
 
 - The **mark** opens the **popup**. The **popup** and the **mark** can open the **window**.
 - Each **manga** has one **reading mode**, which defaults from its source.
+- A **manga** has at most one **track** per **tracker**. Reading a **chapter** raises the chapters read on each of its **tracks**, never lowers it.
 
 ## Flagged ambiguities
 

@@ -88,10 +88,16 @@ Rectangle {
     var payload = Reader.savePayload(reader)
     if (!payload) return
     var id = Reader.chapterId(reader)
+    var push = Reader.trackPayload(reader)
     reader = Reader.reduce(reader, { type: "saving" })
     exitStep("write")
     send(payload, function(reply) {
       if (reply.state !== "ok" && view.reader) view.reader = Reader.reduce(view.reader, { type: "save-failed", chapterId: id })
+      // The push waits for the save: the server reads the chapters it marked.
+      if (reply.state === "ok" && push) {
+        view.exitStep("write")
+        view.send(push, function() { view.exitStep("wrote") })
+      }
       view.exitStep("wrote")
     })
   }

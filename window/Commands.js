@@ -26,7 +26,8 @@ var KEY = {
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, source, global; Library screen: categories; or
-// overlay: manga, manga-categories, manga-select, downloads, reader, sync,
+// overlay: manga, manga-categories, manga-select, manga-track,
+// manga-track-pick, downloads, reader, sync,
 // or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
 // -done) shows;
 // an array allows several.
@@ -54,6 +55,8 @@ var commands = [
   { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: ["source", "global"], hidden: true },
   { id: "manga.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga", hidden: true },
   { id: "manga.categoriesClose", title: "Close categories", keys: ["Esc", "Backspace", "c"], view: "manga-categories", hidden: true },
+  { id: "track.close", title: "Close tracking", keys: ["Esc", "Backspace", "t"], view: "manga-track", hidden: true },
+  { id: "track.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga-track-pick", hidden: true },
   { id: "categories.back", title: "Back", keys: ["Esc", "Backspace"], view: "categories", hidden: true },
   { id: "manga.selectEnd", title: "End the selection", keys: ["Esc", "v"], view: "manga-select", hidden: true },
   { id: "downloads.close", title: "Close the download queue", keys: ["Esc", "D"], view: "downloads", hidden: true },
@@ -110,6 +113,15 @@ var commands = [
   { id: "downloads.down", title: "Next download", keys: ["j", "Down"], view: "downloads", hidden: true },
   { id: "downloads.dequeue", title: "Take out of the queue", keys: ["x"], view: "downloads", hidden: true },
   { id: "downloads.toggle", title: "Start or stop downloading", keys: ["Space"], view: "downloads", hidden: true },
+  { id: "manga.track", title: "Tracking", keys: ["t"], view: "manga", hidden: true },
+  { id: "track.up", title: "Up", keys: ["k", "Up"], view: ["manga-track", "manga-track-pick"], hidden: true },
+  { id: "track.down", title: "Down", keys: ["j", "Down"], view: ["manga-track", "manga-track-pick"], hidden: true },
+  { id: "track.search", title: "Find the manga on the tracker", keys: ["Enter"], view: "manga-track", hidden: true },
+  { id: "track.status", title: "Reading status", keys: ["s"], view: "manga-track", hidden: true },
+  { id: "track.chapters", title: "Chapters read", keys: ["c"], view: "manga-track", hidden: true },
+  { id: "track.score", title: "Score", keys: ["S"], view: "manga-track", hidden: true },
+  { id: "track.unbind", title: "Stop tracking", keys: ["x"], view: "manga-track", hidden: true },
+  { id: "track.choose", title: "Choose", keys: ["Enter"], view: "manga-track-pick", hidden: true },
   { id: "manga.categoryUp", title: "Previous category", keys: ["k", "Up"], view: "manga-categories", hidden: true },
   { id: "manga.categoryDown", title: "Next category", keys: ["j", "Down"], view: "manga-categories", hidden: true },
   { id: "manga.categoryToggle", title: "In or out of category", keys: ["Space", "Enter"], view: "manga-categories", hidden: true },
