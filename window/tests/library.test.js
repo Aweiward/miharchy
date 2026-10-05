@@ -151,6 +151,23 @@ test("continue reading takes the next unread chapter by the manga's own chapter 
   assert.equal(L.continueChapter(chapters.map((c) => ({ ...c, read: true })), cp()), null);
 });
 
+test("the change category rows say whether all, some or none of the chosen manga are in each category", () => {
+  const cats = [{ id: 1, name: "Action" }, { id: 2, name: "Drama" }, { id: 3, name: "Later" }];
+  const chosen = [manga(1, "a", { categories: [1, 2] }), manga(2, "b", { categories: [1] })];
+  const rows = L.categoryRows(cats, chosen);
+  assert.deepEqual(rows.map((r) => [r.name, r.state]), [["Action", "all"], ["Drama", "some"], ["Later", "none"]]);
+  assert.deepEqual(L.categoryPayload(rows[0], [1, 2]).variables, { ids: [1, 2], add: [], remove: [1] }, "all in: choosing takes them out");
+  assert.deepEqual(L.categoryPayload(rows[1], [1, 2]).variables, { ids: [1, 2], add: [2], remove: [] }, "some in: choosing puts every one in");
+  assert.deepEqual(L.categoryPayload(rows[2], [1, 2]).variables, { ids: [1, 2], add: [3], remove: [] });
+});
+
+test("the selection actions read every chapter of the chosen manga and remove them in one mutation", () => {
+  assert.match(L.chaptersPayload([1, 2]).query, /chapters\(filter: \{ mangaId: \{ in: \$ids \} \}\)/);
+  assert.deepEqual(L.chaptersPayload([1, 2]).variables, { ids: [1, 2] });
+  assert.match(L.removePayload([3]).query, /updateMangas\(input: \{ ids: \$ids, patch: \{ inLibrary: false \} \}\)/);
+  assert.deepEqual(L.removePayload([3, 4]).variables, { ids: [3, 4] });
+});
+
 test("the header names the search, the active filters and a sort other than the default", () => {
   assert.equal(L.summary(prefs(), ""), "");
   assert.equal(L.narrowed(prefs(), ""), false);

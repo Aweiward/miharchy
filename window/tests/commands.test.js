@@ -407,7 +407,27 @@ test("on Updates, Space selects, A selects all, I inverts, and R U b d x act on 
   assert.equal(C.dispatch(updates, text("b")), "updates.bookmark");
   assert.equal(C.dispatch(updates, text("d")), "updates.download");
   assert.equal(C.dispatch(updates, text("x")), "updates.deleteDownload");
-  assert.equal(C.dispatch(screen("library"), text("R")), null);
+  assert.equal(C.dispatch(screen("library"), text("R")), "library.markRead");
+});
+
+test("on the Library, Space reads on, v selects, and the selection keys act; the categories panel takes j k and Esc", () => {
+  const lib = screen("library");
+  assert.equal(C.dispatch(lib, key(C.KEY.Space)), "library.continue");
+  assert.equal(C.dispatch(lib, text("v")), "library.select");
+  assert.equal(C.dispatch(lib, text("A")), "library.selectAll");
+  assert.equal(C.dispatch(lib, text("I")), "library.invert");
+  assert.equal(C.dispatch(lib, text("U")), "library.markUnread");
+  assert.equal(C.dispatch(lib, text("u")), "library.update", "u still checks for new chapters");
+  assert.equal(C.dispatch(lib, text("d")), "library.download");
+  assert.equal(C.dispatch(lib, text("X")), "library.deleteDownloads");
+  assert.equal(C.dispatch(lib, text("x")), "library.remove");
+  assert.equal(C.dispatch(lib, text("C")), "library.setCategories");
+  assert.equal(C.dispatch(lib, text("c")), "library.categories");
+  const pick = screen("library-categories");
+  assert.equal(C.dispatch(pick, text("j")), "library.pickDown");
+  assert.equal(C.dispatch(pick, key(C.KEY.Space)), "library.pickToggle");
+  assert.equal(C.dispatch(pick, key(C.KEY.Escape)), "library.pickClose");
+  assert.equal(C.dispatch(pick, text("x")), null, "no library action runs under the panel");
 });
 
 test("on a manga, d downloads, U downloads every unread chapter, x deletes downloads and v starts a selection", () => {
