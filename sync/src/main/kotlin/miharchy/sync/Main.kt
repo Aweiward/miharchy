@@ -131,6 +131,9 @@ fun describe(summary: Summary): String {
         c.count { it is AddBookmark } to "bookmarked %d chapters",
         c.count { it is RemoveBookmark } to "removed %d bookmarks",
         c.count { it is SetLastPage } to "set the last page read on %d chapters",
+        c.count { it is BindTrack } to "bound %d tracks",
+        c.count { it is UpdateTrack } to "updated %d tracks",
+        c.count { it is UnbindTrack } to "unbound %d tracks",
     ).filter { it.first > 0 }.map { (n, text) -> text.format(n) }
     val lines = mutableListOf("Sync folder ${summary.folder}, server ${summary.server}")
     if (summary.backup == null) {
@@ -142,7 +145,7 @@ fun describe(summary: Summary): String {
     summary.export?.let { lines += "Wrote $it. Restore it in Mihon to bring the desktop's changes to the phone." }
     if (summary.unreachable.isNotEmpty()) {
         lines += "A restore in Mihon cannot apply these. Repeat them on the phone:"
-        lines += summary.unreachable.map { u -> "  ${u.manga}${u.chapter?.let { ", $it" }.orEmpty()}: ${u.change.text}" }
+        lines += summary.unreachable.map { u -> "  ${u.manga}${(u.chapter ?: u.tracker)?.let { ", $it" }.orEmpty()}: ${u.change.text}" }
     }
     return lines.joinToString("\n")
 }

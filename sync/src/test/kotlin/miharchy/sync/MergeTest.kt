@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupTracking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -14,18 +15,35 @@ private val N = MangaKey(SOURCE, "/manga/n")
 private fun chapter(url: String, read: Boolean = false, page: Long = 0, bookmark: Boolean = false) =
     BackupChapter(url = url, name = url, read = read, lastPageRead = page, bookmark = bookmark)
 
-private fun manga(key: MangaKey, vararg chapters: BackupChapter, favorite: Boolean = true, categories: List<String> = emptyList()) =
-    key to Triple(chapters.toList(), favorite, categories)
+private class TestManga(val chapters: List<BackupChapter>, val favorite: Boolean, val categories: List<String>, val tracks: List<BackupTracking>)
+
+private fun manga(
+    key: MangaKey,
+    vararg chapters: BackupChapter,
+    favorite: Boolean = true,
+    categories: List<String> = emptyList(),
+    tracks: List<BackupTracking> = emptyList(),
+) = key to TestManga(chapters.toList(), favorite, categories, tracks)
+
+private const val MAL = 1
+private const val ANILIST = 2
+
+private fun track(tracker: Int = ANILIST, read: Float = 0F, status: Int = 1, score: Float = 0F, start: Long = 0, finish: Long = 0, remoteId: Long = 30013) =
+    BackupTracking(
+        syncId = tracker, libraryId = 0, mediaId = remoteId, title = "Remote $remoteId", trackingUrl = "https://anilist.co/manga/$remoteId",
+        lastChapterRead = read, status = status, score = score, startedReadingDate = start, finishedReadingDate = finish,
+    )
 
 /** Builds a backup the way Mihon does (categories referenced by order) and reads it back through the real codec. */
-private fun library(vararg manga: Pair<MangaKey, Triple<List<BackupChapter>, Boolean, List<String>>>, categories: List<String> = emptyList()): Library {
-    val names = (categories + manga.flatMap { it.second.third }).distinct()
+private fun library(vararg manga: Pair<MangaKey, TestManga>, categories: List<String> = emptyList()): Library {
+    val names = (categories + manga.flatMap { it.second.categories }).distinct()
     val backup = Backup(
         backupManga = manga.map { (key, m) ->
             BackupManga(
                 source = key.source, url = key.url, title = key.url,
-                chapters = m.first, favorite = m.second,
-                categories = m.third.map { names.indexOf(it).toLong() * 10 },
+                chapters = m.chapters, favorite = m.favorite,
+                categories = m.categories.map { names.indexOf(it).toLong() * 10 },
+                tracking = m.tracks,
             )
         },
         backupCategories = names.mapIndexed { i, name -> BackupCategory(name, order = i.toLong() * 10) },
@@ -190,5 +208,88 @@ class MergeTest {
         val phone = library(manga(M, chapter("/c1"), favorite = false), manga(N, chapter("/c9", read = true)))
         val applied = library(manga(M, chapter("/c1"), favorite = false), manga(N, chapter("/c9", read = true)))
         assertEquals(emptyList(), merge(base, phone, applied, null))
+    }
+
+    @Test fun `first sync binds the phone's tracks, on a new manga and on a known one`() {
+        val phone = library(manga(M, tracks = listOf(track(read = 4F))), manga(N, tracks = listOf(track(MAL, read = 2F, remoteId = 2))))
+        val desktop = library(manga(N))
+        assertEquals(
+            listOf(ImportManga(M, "/manga/m"), BindTrack(M, ANILIST, track(read = 4F).toTrackState()), BindTrack(N, MAL, track(MAL, read = 2F, remoteId = 2).toTrackState())),
+            merge(null, phone, desktop, null),
+        )
+    }
+
+    @Test fun `a tracker Suwayomi does not support is ignored`() {
+        val phone = library(manga(M, tracks = listOf(track(tracker = 6, read = 4F))))
+        assertEquals(emptyList(), merge(null, phone, library(manga(M)), null))
+    }
+
+    @Test fun `a track changed on the phone only wins, chapters read only ever going up`() {
+        val base = library(manga(M, tracks = listOf(track(read = 4F, status = 1, score = 6F))))
+        val phone = library(manga(M, tracks = listOf(track(read = 7F, status = 2, score = 8F))))
+        assertEquals(listOf(UpdateTrack(M, ANILIST, track(read = 7F, status = 2, score = 8F).toTrackState())), merge(base, phone, base, base))
+        val lowered = library(manga(M, tracks = listOf(track(read = 1F, status = 2, score = 6F))))
+        assertEquals(listOf(UpdateTrack(M, ANILIST, track(read = 4F, status = 2, score = 6F).toTrackState())), merge(base, lowered, base, base))
+    }
+
+    @Test fun `a track changed on the desktop only is kept`() {
+        val base = library(manga(M, tracks = listOf(track(read = 4F))))
+        val desktop = library(manga(M, tracks = listOf(track(read = 9F, status = 2))))
+        assertEquals(emptyList(), merge(base, base, desktop, base))
+    }
+
+    @Test fun `both sides changed a track - most read, earliest start, latest finish, the rest from the side that read further`() {
+        val base = library(manga(M, tracks = listOf(track(read = 4F, status = 1, score = 5F, start = 300))))
+        val phone = library(manga(M, tracks = listOf(track(read = 6F, status = 1, score = 7F, start = 200))))
+        val desktop = library(manga(M, tracks = listOf(track(read = 9F, status = 2, score = 5F, start = 300, finish = 900))))
+        // The desktop read further, so its status wins; only the phone changed the score, so the phone's stands.
+        assertEquals(
+            listOf(UpdateTrack(M, ANILIST, track(read = 9F, status = 2, score = 7F, start = 200, finish = 900).toTrackState())),
+            merge(base, phone, desktop, base),
+        )
+        // The phone read further but left the status alone, so the desktop's status stands.
+        val behind = library(manga(M, tracks = listOf(track(read = 5F, status = 3, score = 2F, start = 300))))
+        assertEquals(
+            listOf(UpdateTrack(M, ANILIST, track(read = 6F, status = 3, score = 7F, start = 200).toTrackState())),
+            merge(base, phone, behind, base),
+        )
+    }
+
+    @Test fun `both sides bound the same tracker on first sync - merged, the phone leading on a tie`() {
+        val phone = library(manga(M, tracks = listOf(track(read = 3F, status = 1, remoteId = 7))))
+        val desktop = library(manga(M, tracks = listOf(track(read = 3F, status = 2, remoteId = 8))))
+        assertEquals(listOf(UpdateTrack(M, ANILIST, track(read = 3F, status = 1, remoteId = 7).toTrackState())), merge(null, phone, desktop, null))
+    }
+
+    @Test fun `a phone unbind propagates when the desktop did not change the track`() {
+        val base = library(manga(M, tracks = listOf(track(read = 4F), track(MAL, remoteId = 2))))
+        val phone = library(manga(M, tracks = listOf(track(MAL, remoteId = 2))))
+        assertEquals(listOf(UnbindTrack(M, ANILIST)), merge(base, phone, base, base))
+    }
+
+    @Test fun `an unbind on one side loses to a change on the other`() {
+        val base = library(manga(M, tracks = listOf(track(read = 4F))))
+        val unbound = library(manga(M))
+        val raised = library(manga(M, tracks = listOf(track(read = 6F))))
+        assertEquals(emptyList(), merge(base, unbound, raised, base))
+        assertEquals(listOf(BindTrack(M, ANILIST, track(read = 6F).toTrackState())), merge(base, raised, unbound, base))
+    }
+
+    @Test fun `a desktop unbind survives when the phone did not change the track`() {
+        val base = library(manga(M, tracks = listOf(track(read = 4F))))
+        assertEquals(emptyList(), merge(base, base, library(manga(M)), base))
+    }
+
+    @Test fun `a track edit on the desktop keeps a phone removal from propagating`() {
+        val base = library(manga(M, tracks = listOf(track(read = 4F))))
+        val phone = library(manga(M, favorite = false, tracks = listOf(track(read = 4F))))
+        val desktop = library(manga(M, tracks = listOf(track(read = 5F))))
+        assertEquals(emptyList(), merge(base, phone, desktop, base))
+    }
+
+    @Test fun `track merging is idempotent once applied`() {
+        val base = library(manga(M, tracks = listOf(track(read = 4F))))
+        val phone = library(manga(M, tracks = listOf(track(read = 6F, score = 8F))))
+        assertEquals(emptyList(), merge(base, phone, phone, null))
     }
 }

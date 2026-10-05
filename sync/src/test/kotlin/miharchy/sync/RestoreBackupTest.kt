@@ -84,4 +84,34 @@ class RestoreBackupTest {
                 .map { it.isAppliedTo(after) },
         )
     }
+
+    @Test fun `each manga carries exactly its tracks to bind or update, a track-only manga with no chapters`() {
+        val bound = TrackState(remoteId = 30013, lastChapterRead = 4F)
+        val updated = TrackState(remoteId = 2, lastChapterRead = 7F, status = 2)
+        val tracked = restoreBackup(
+            phone,
+            listOf(BindTrack(IDLE, 2, bound), UpdateTrack(KNOWN, 1, updated), UnbindTrack(KNOWN, 2), MarkRead(KNOWN, "/c0")),
+            desktop,
+        ).backupManga.associateBy { MangaKey(it.source, it.url) }
+        assertEquals(setOf(IDLE, KNOWN), tracked.keys)
+        assertEquals(emptyList(), tracked.getValue(IDLE).chapters)
+        assertFalse(tracked.getValue(IDLE).favorite)
+        assertEquals(listOf(2 to bound), tracked.getValue(IDLE).tracking.map { it.syncId to it.toTrackState() })
+        assertEquals(listOf(1 to updated), tracked.getValue(KNOWN).tracking.map { it.syncId to it.toTrackState() })
+    }
+
+    @Test fun `restore reaches a desktop track only through the entry's ids and higher chapters read`() {
+        val desktopTrack = TrackState(remoteId = 1, title = "Old", lastChapterRead = 9F, status = 1)
+        assertEquals(desktopTrack.copy(remoteId = 2), desktopTrack.restoredWith(TrackState(remoteId = 2, title = "New", lastChapterRead = 3F, status = 2)))
+    }
+
+    @Test fun `a track change counts as applied only once the desktop shows it`() {
+        val track = TrackState(remoteId = 30013, lastChapterRead = 4F)
+        val after = Library(mapOf(IDLE to MangaState("idle", true, emptySet(), emptyMap(), mapOf(2 to track))))
+        assertEquals(
+            listOf(true, true, false, false, true),
+            listOf(BindTrack(IDLE, 2, track), UpdateTrack(IDLE, 2, track), UpdateTrack(IDLE, 2, track.copy(score = 1F)), UnbindTrack(IDLE, 2), UnbindTrack(IDLE, 1))
+                .map { it.isAppliedTo(after) },
+        )
+    }
 }

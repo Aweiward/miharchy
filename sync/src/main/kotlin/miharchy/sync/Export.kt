@@ -58,21 +58,25 @@ fun forMihon(suwayomiBackup: ByteArray): ByteArray {
 
 /** A desktop state the phone keeps after restoring the export, so the user repeats it in Mihon. */
 @Serializable
-data class Unreachable(val change: Kind, val manga: String, val chapter: String? = null) {
+data class Unreachable(val change: Kind, val manga: String, val chapter: String? = null, val tracker: String? = null) {
     enum class Kind(val text: String) {
         @SerialName("removedFromLibrary") REMOVED_FROM_LIBRARY("removed from the library"),
         @SerialName("categoriesCleared") CATEGORIES_CLEARED("taken out of every category"),
         @SerialName("markedUnread") MARKED_UNREAD("marked unread"),
         @SerialName("bookmarkRemoved") BOOKMARK_REMOVED("bookmark removed"),
         @SerialName("pageLowered") PAGE_LOWERED("last page read lowered"),
+        @SerialName("trackRemoved") TRACK_REMOVED("track removed"),
+        @SerialName("trackLowered") TRACK_LOWERED("chapters read lowered"),
+        @SerialName("trackChanged") TRACK_CHANGED("status, score, dates or entry changed"),
     }
 }
 
 /**
  * What a stock Mihon restore of [export] cannot apply over the state in [phone], the newest phone backup.
  * Mihon's restore (RestoreRepositoryImpl) keeps `favorite || backup`, `read || backup`, `bookmark || backup`
- * and `max(lastPageRead, backup)`, and replaces a manga's categories only with a non-empty list. Measured against
- * the phone's own backup, a change stays listed until the phone has it.
+ * and `max(lastPageRead, backup)`, and replaces a manga's categories only with a non-empty list. It never deletes a
+ * track, and on a track the phone has it only raises chapters read. Measured against the phone's own backup, a
+ * change stays listed until the phone has it.
  */
 fun unreachable(phone: Backup, export: Backup): List<Unreachable> {
     val exported = export.backupManga.associateBy { MangaKey(it.source, it.url) }
@@ -81,7 +85,19 @@ fun unreachable(phone: Backup, export: Backup): List<Unreachable> {
         if (e == null || !e.favorite) return@flatMap listOf(Unreachable(Unreachable.Kind.REMOVED_FROM_LIBRARY, p.title))
         val cleared = Unreachable(Unreachable.Kind.CATEGORIES_CLEARED, p.title).takeIf { p.categories.isNotEmpty() && e.categories.isEmpty() }
         val chapters = e.chapters.associateBy { it.url }
-        listOfNotNull(cleared) + p.chapters.flatMap { pc ->
+        // Only what the user sets: the title, url and total come from the tracker, and each app names them its own way.
+        fun TrackState.userSet() = listOf(remoteId, status, score, startDate, finishDate, private)
+        val tracks = e.tracking.associate { it.syncId to it.toTrackState() }
+        val lostTracks = p.tracking.filter { it.syncId in TRACKER_NAMES }.flatMap { pt ->
+            val phoneTrack = pt.toTrackState()
+            val et = tracks[pt.syncId]
+            listOfNotNull(
+                Unreachable.Kind.TRACK_REMOVED.takeIf { et == null },
+                Unreachable.Kind.TRACK_LOWERED.takeIf { et != null && et.lastChapterRead < phoneTrack.lastChapterRead },
+                Unreachable.Kind.TRACK_CHANGED.takeIf { et != null && et.userSet() != phoneTrack.userSet() },
+            ).map { Unreachable(it, p.title, tracker = TRACKER_NAMES[pt.syncId]) }
+        }
+        listOfNotNull(cleared) + lostTracks + p.chapters.flatMap { pc ->
             val ec = chapters[pc.url] ?: return@flatMap emptyList()
             listOfNotNull(
                 Unreachable.Kind.MARKED_UNREAD.takeIf { pc.read && !ec.read },
