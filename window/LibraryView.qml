@@ -9,6 +9,7 @@ Item {
   id: view
 
   required property Theme theme
+  property var config: null
   // Model.switcher(); one entry means no categories, so it hides.
   property var switcher: []
   property int switcherIndex: 0
@@ -75,6 +76,7 @@ Item {
         width: cell.width - view.theme.fontSize
         height: width * 1.5
         theme: view.theme
+        config: view.config
         source: cell.modelData.cover
         title: cell.modelData.title
         current: cell.current

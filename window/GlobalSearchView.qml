@@ -9,6 +9,7 @@ Item {
   id: view
 
   required property Theme theme
+  property var config: null
   property var search: null
   property var cursor: ({ row: 0, col: 0 })
   property bool editing: false
@@ -135,6 +136,7 @@ Item {
             width: strip.cellWidth
             height: width * 1.5
             theme: view.theme
+            config: view.config
             source: cell.modelData.cover
             title: cell.modelData.title
             current: cell.current

@@ -437,6 +437,7 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "library" && root.libraryScreen === "grid"
           theme: theme
+          config: root.config
           switcher: root.switcher
           switcherIndex: root.switcherIndex
           cursor: root.libraryCursor

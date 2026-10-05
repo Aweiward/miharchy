@@ -403,6 +403,7 @@ Rectangle {
     anchors.right: parent.right
     visible: view.step === "search"
     theme: view.theme
+    config: view.config
     search: view.search
     cursor: view.searchCursor
     editing: view.editing

@@ -35,7 +35,7 @@ test("h and l follow the screen: in right-to-left, left is the next page", () =>
   assert.equal(R.delta("paged-ltr", "right"), 1);
 });
 
-test("opening a chapter asks for its pages, which load with credentials", () => {
+test("opening a chapter asks for its pages, which load from the server", () => {
   const r = R.open(5, chapters, 12, "paged-rtl");
   assert.equal(r.state, "loading");
   assert.equal(R.chapterName(r), "Ch. 2");
@@ -43,7 +43,7 @@ test("opening a chapter asks for its pages, which load with credentials", () => 
   assert.equal(R.savePayload(r), null, "nothing saves before the pages are fetched: the server clamps to pageCount");
   const l = loaded(12, 3);
   assert.equal(l.state, "ok");
-  assert.equal(l.pages[0], "http://u:p@127.0.0.1:4590/api/v1/manga/5/chapter/12/page/0");
+  assert.equal(l.pages[0], "http://127.0.0.1:4590/api/v1/manga/5/chapter/12/page/0");
   assert.equal(R.indicator(l), "1 / 3   right to left");
   assert.equal(R.pagesPayload(l), null);
 });

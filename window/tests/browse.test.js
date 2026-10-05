@@ -19,7 +19,7 @@ test("sources skip the local source, hide NSFW unless asked, and sort by name", 
   const s = B.sources(ok(data), config, false);
   assert.equal(s.state, "ok");
   assert.deepEqual(s.sources.map((x) => x.name), ["Asura Scans", "Weeb Central"]);
-  assert.equal(s.sources[0].icon, "http://u:p@127.0.0.1:4590/api/v1/extension/icon/s");
+  assert.equal(s.sources[0].icon, "http://127.0.0.1:4590/api/v1/extension/icon/s");
   assert.deepEqual(B.sources(ok(data), config, true).sources.map((x) => x.id), ["3", "4", "2"]);
 });
 
@@ -38,7 +38,7 @@ test("a listing asks for page 1, then the next page, and appends without duplica
   l = B.reduceListing(l, { type: "reply", reply: page([1, 2], true), config });
   assert.deepEqual(l.items.map((m) => m.id), [1, 2]);
   assert.equal(l.items[1].inLibrary, true);
-  assert.equal(l.items[0].cover, "http://u:p@127.0.0.1:4590/api/v1/manga/1/thumbnail");
+  assert.equal(l.items[0].cover, "http://127.0.0.1:4590/api/v1/manga/1/thumbnail");
   assert.equal(B.listingPayload(l).variables.page, 2);
   l = B.reduceListing(B.reduceListing(l, { type: "request" }), { type: "reply", reply: page([2, 3], false), config });
   assert.deepEqual(l.items.map((m) => m.id), [1, 2, 3]);

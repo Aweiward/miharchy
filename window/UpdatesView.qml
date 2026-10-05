@@ -189,6 +189,7 @@ Item {
           height: parent.height - view.theme.fontSize * 0.6
           width: height / 1.5
           theme: view.theme
+          config: view.config
           source: entry.modelData.cover
           title: entry.modelData.title
         }
