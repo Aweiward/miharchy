@@ -13,7 +13,7 @@ Hard rules, from incidents on this project:
 - Never kill by process name. `pkill -f <pattern>` matches its own command line and has killed the shell running it here. `server.sh stop` kills by PID file and by this run's server dir only.
 - Never edit `~/.config/omarchy/` or restart the live shell.
 
-All scripts live in `scripts/` and read `scripts/env.sh`: `MIHARCHY_VERIFY_DIR` (run dir, default `${TMPDIR:-/tmp}/miharchy-verify/run`) and `MIHARCHY_VERIFY_PORT`. Use a fresh run dir per task, e.g. `export MIHARCHY_VERIFY_DIR=$TMPDIR/miharchy-verify/$(date +%s)` (inside Claude Code, prefer the session scratchpad over /tmp).
+All scripts live in `scripts/` and read `scripts/env.sh`: `MIHARCHY_VERIFY_DIR` (run dir, default `${TMPDIR:-/tmp}/miharchy-verify/run`) and `MIHARCHY_VERIFY_PORT`. Use a fresh run dir **and port** per task, e.g. `export MIHARCHY_VERIFY_DIR=$TMPDIR/miharchy-verify/<task>-$(date +%s) MIHARCHY_VERIFY_PORT=46xx` (inside Claude Code, prefer the session scratchpad over /tmp). Agents running in parallel must never share a run dir: `stop` kills whatever server that dir recorded, and the window copy in `$RUN/app` would be overwritten. `start` refuses a dir whose recorded server is still running.
 
 ## Launch
 
