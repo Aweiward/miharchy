@@ -49,7 +49,8 @@ test("rows group by fetch day: Today, Yesterday, then the date", () => {
   assert.deepEqual(u.rows.map((r) => r.header), ["Today", "", "Yesterday", "2026-09-28"]);
   assert.deepEqual(u.rows[0], {
     id: 1, mangaId: 7, title: "Maid to Skate", chapter: "Ch.1", date: "2026-09-30", header: "Today",
-    cover: "http://127.0.0.1:4590/api/v1/manga/7/thumbnail"
+    cover: "http://127.0.0.1:4590/api/v1/manga/7/thumbnail",
+    read: false, lastPage: 0, bookmarked: false, downloaded: false
   });
 });
 
@@ -123,4 +124,40 @@ test("only chapters uploaded in the last 3 months are updates, as in Mihon", () 
   assert.deepEqual(U.updates(data, now).map((c) => c.id), [1]);
   assert.equal(U.count(data, now), 1);
   assert.deepEqual(U.rows(data, config, now).map((r) => r.id), [1], "the list and the bar mark use the same rule");
+});
+
+const Ch = require("./load")("Chapters.js");
+const D = require("./load")("Downloads.js");
+
+test("the selection: toggle, invert, and a reload drops what left the list", () => {
+  const rows = loaded([chapter(1, manga, at(2026, 10, 4, 14)), chapter(2, other, at(2026, 10, 4, 13)), chapter(3, manga, at(2026, 10, 4, 12))]).rows;
+  assert.deepEqual(U.toggle([], 2), [2]);
+  assert.deepEqual(U.toggle([2, 3], 2), [3]);
+  assert.deepEqual(U.invert([2], rows), [1, 3]);
+  assert.deepEqual(U.invert([], rows), [1, 2, 3], "invert of nothing selects all, as Mihon's select all");
+  assert.deepEqual(U.keep([1, 2, 9], rows), [1, 2]);
+});
+
+test("an action takes the selection, or the row under the cursor when none is selected", () => {
+  const rows = loaded([chapter(1, manga, at(2026, 10, 4, 14)), chapter(2, other, at(2026, 10, 4, 13)), chapter(3, manga, at(2026, 10, 4, 12))]).rows;
+  assert.deepEqual(U.chosen(rows, [], 1).map((r) => r.id), [2]);
+  assert.deepEqual(U.chosen(rows, [3, 1], 1).map((r) => r.id), [1, 3], "list order, whatever the order chosen");
+  assert.deepEqual(U.chosen([], [], 0), []);
+  assert.deepEqual(U.mangaIds(U.chosen(rows, [1, 2, 3], 0)), [7, 8], "each manga once, for the tracker push");
+});
+
+test("rows carry what the shared chapter actions need, across manga", () => {
+  const rows = loaded([
+    chapter(1, manga, at(2026, 10, 4, 14), { lastPageRead: 4, isDownloaded: true }),
+    chapter(2, other, at(2026, 10, 4, 13), { isBookmarked: true }),
+    chapter(3, manga, at(2026, 10, 4, 12))
+  ]).rows;
+  assert.match(U.UPDATES_QUERY, /lastPageRead isBookmarked isDownloaded/);
+  assert.deepEqual(Ch.markPayload(rows, true).variables, { ids: [1, 2, 3], started: [], read: true });
+  assert.deepEqual(Ch.markPayload(rows, false).variables, { ids: [], started: [1], read: false }, "unread only sends a started update back to page 1");
+  assert.deepEqual(Ch.bookmarkPayload(rows).variables, { ids: [1, 3], bookmarked: true });
+  assert.deepEqual(Ch.bookmarkPayload([rows[1]]).variables, { ids: [2], bookmarked: false });
+  assert.deepEqual(D.enqueuePayload(rows).variables, { ids: [2, 3] });
+  assert.deepEqual(D.removePayload(rows, []).variables, { ids: [1] });
+  assert.equal(D.removePayload([rows[1]], []), null, "nothing on disk, nothing to confirm");
 });

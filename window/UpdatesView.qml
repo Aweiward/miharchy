@@ -4,10 +4,13 @@ import QtQuick
 import "Model.js" as Model
 import "Browse.js" as Browse
 import "Updates.js" as Updates
+import "Downloads.js" as Downloads
 
 // The Updates view: unread updates grouped by fetch day, and the library
 // update run. It talks to the server itself; Updates.js decides. shell.qml
 // forwards every "updates." command to run() and starts the reader on read.
+// Read state goes through shell.qml's markChapters() (mark), downloads
+// through the queue (downloads), as on a manga.
 Item {
   id: view
 
@@ -24,19 +27,36 @@ Item {
   property int openSeq: 0
   property int pollSeq: 0
   property bool polling: false
+  // Chapter ids; actions take these, or the cursor's update with none.
+  property var selected: []
+  // x asked once; the next x deletes the downloads, as Mihon's
+  // UpdatesDeleteConfirmationDialog. shell.qml disarms it on any other key.
+  property bool armed: false
+  // The download queue's items, for each update's marker.
+  property var queue: []
 
   readonly property var rows: updates.rows
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.id === view.cursorId }))
   readonly property var notice: Updates.notice(updates, configPath)
+  readonly property var targets: Updates.chosen(rows, selected, cursor)
+  readonly property string hint: armed ? "x again to delete the downloads, any other key keeps them   "
+    : (selected.length ? selected.length + " selected   space select   A all   I invert   " : "j k move   enter read   space select   A all   ")
+      + "R read   U unread   b bookmark   d download   x delete download   " + (selected.length ? "esc clear   " : "u check   s sync   ")
 
   signal read(var manga, var chapters, int chapterId)
+  // action: "read", "unread" or "bookmark".
+  signal mark(var chapters, string action, var mangaIds)
+  // A download mutation's reply, which carries the queue.
+  signal downloads(var reply)
 
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
   onActiveChanged: load()
+  onRowsChanged: selected = Updates.keep(selected, rows)
   onConfigChanged: {
     listSeq++
     openSeq++
     updates = Updates.initial()
+    selected = []
     load()
   }
 
@@ -116,6 +136,33 @@ Item {
     })
   }
 
+  // Mihon ends the selection after every action.
+  function act(action) {
+    var list = targets
+    selected = []
+    if (list.length) mark(list, action, Updates.mangaIds(list))
+  }
+
+  function sendDownloads(payload) {
+    selected = []
+    if (!payload) return
+    send(payload, function(reply) {
+      view.downloads(reply)
+      view.load()
+    })
+  }
+
+  function deleteDownloads() {
+    var payload = Downloads.removePayload(targets, queue)
+    if (!payload) return
+    if (!armed) {
+      armed = true
+      return
+    }
+    armed = false
+    sendDownloads(payload)
+  }
+
   function run(id) {
     switch (id) {
       case "updates.up":
@@ -127,6 +174,31 @@ Item {
         break
       case "updates.check":
         check()
+        break
+      case "updates.select":
+        if (rows[cursor]) selected = Updates.toggle(selected, rows[cursor].id)
+        break
+      case "updates.clearSelection":
+        selected = []
+        break
+      case "updates.selectAll":
+        selected = rows.map(function(r) { return r.id })
+        break
+      case "updates.invert":
+        selected = Updates.invert(selected, rows)
+        break
+      case "updates.markRead":
+      case "updates.markUnread":
+        act(id === "updates.markRead" ? "read" : "unread")
+        break
+      case "updates.bookmark":
+        act("bookmark")
+        break
+      case "updates.download":
+        sendDownloads(Downloads.enqueuePayload(targets))
+        break
+      case "updates.deleteDownload":
+        deleteDownloads()
         break
     }
   }
@@ -168,6 +240,8 @@ Item {
       required property var modelData
       required property int index
       readonly property bool current: index === view.cursor
+      readonly property bool chosen: view.selected.indexOf(modelData.id) !== -1
+      readonly property string marker: Downloads.marker(modelData, view.queue)
       width: list.width
 
       Text {
@@ -183,7 +257,14 @@ Item {
       Rectangle {
         width: parent.width
         height: view.theme.fontSize * 4
-        color: entry.current ? view.theme.selected : "transparent"
+        color: entry.current || entry.chosen ? view.theme.selected : "transparent"
+
+        Rectangle {
+          visible: entry.chosen
+          width: view.theme.fontSize * 0.25
+          height: parent.height
+          color: view.theme.accent
+        }
 
         Cover {
           id: coverBox
@@ -200,7 +281,7 @@ Item {
         Column {
           anchors.left: coverBox.right
           anchors.leftMargin: view.theme.fontSize
-          anchors.right: date.left
+          anchors.right: downloadMark.left
           anchors.rightMargin: view.theme.fontSize
           anchors.verticalCenter: parent.verticalCenter
 
@@ -216,11 +297,23 @@ Item {
           Text {
             width: parent.width
             elide: Text.ElideRight
-            text: entry.modelData.chapter
-            color: entry.current ? view.theme.selectedText : view.theme.muted
+            // Mihon marks a bookmark with an icon and the accent color.
+            text: (entry.modelData.bookmarked ? "★ " : "") + entry.modelData.chapter
+            color: entry.current ? view.theme.selectedText : entry.modelData.bookmarked ? view.theme.accent : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSmall
           }
+        }
+
+        Text {
+          id: downloadMark
+          anchors.right: date.left
+          anchors.rightMargin: text ? view.theme.fontSize * 1.5 : 0
+          anchors.verticalCenter: parent.verticalCenter
+          text: entry.marker
+          color: entry.marker === "failed" ? view.theme.urgent : view.theme.accent
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSmall
         }
 
         Text {

@@ -40,7 +40,9 @@ function bookmarkPayload(chapters) {
 // The GraphQL updateChapters leaves the trackers alone (only Suwayomi's REST
 // call pushes), so a mark read asks for the push. The server sends each
 // tracker the highest read chapter number, when it is above the tracker's.
+// null for no manga: an empty mutation is a GraphQL error.
 function trackPayload(mangaIds) {
+  if (!mangaIds.length) return null
   var fields = mangaIds.filter(function(id, i) { return mangaIds.indexOf(id) === i }).map(function(id) {
     return "m" + id + ": trackProgress(input: { mangaId: " + Number(id) + " }) { trackRecords { id lastChapterRead } }"
   })
