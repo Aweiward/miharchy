@@ -10,6 +10,10 @@ Miharchy is a manga reader for Omarchy. It reads from Mihon's extension ecosyste
 One website that serves manga, as exposed by an extension.
 _Avoid_: site, provider
 
+**Local source**:
+The built-in source (id 0) that reads manga from a folder on disk: a folder per manga, a folder of images or a `.cbz` per chapter. Its manga are **local manga**.
+_Avoid_: local library, offline source
+
 **Extension**:
 A package from a Mihon extension repo that provides one or more sources.
 _Avoid_: plugin, addon

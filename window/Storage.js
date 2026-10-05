@@ -12,9 +12,18 @@
 // env: { HOME, MIHARCHY_SERVER_ROOT, MIHARCHY_SERVER_TMPDIR }; the last two
 // name a scratch server's -D values, so a test never measures the real one.
 function dirs(env, downloadsPath) {
-  var root = env.MIHARCHY_SERVER_ROOT || env.HOME + "/.local/share/miharchy/suwayomi"
   var temp = (env.MIHARCHY_SERVER_TMPDIR || "/tmp") + "/Tachidesk"
-  return { downloads: downloadsPath || root + "/downloads", cache: [temp + "/manga-cache", temp + "/thumbnails"] }
+  return { downloads: downloadsPath || root(env) + "/downloads", cache: [temp + "/manga-cache", temp + "/thumbnails"] }
+}
+
+function root(env) {
+  return env.MIHARCHY_SERVER_ROOT || env.HOME + "/.local/share/miharchy/suwayomi"
+}
+
+// Where the local source reads its manga: localSourcePath, or the root's
+// local when that is blank (the server creates it).
+function localFolder(env, localSourcePath) {
+  return localSourcePath || root(env) + "/local"
 }
 
 // Bytes on disk. A missing folder makes du fail but still print the rest,
@@ -65,6 +74,7 @@ function format(bytes) {
 if (typeof module !== "undefined") {
   module.exports = {
     dirs: dirs,
+    localFolder: localFolder,
     command: command,
     sizes: sizes,
     clearPayload: clearPayload,

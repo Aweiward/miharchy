@@ -22,6 +22,8 @@ Item {
   property string configPath: ""
   property bool active: false
   property bool showNsfw: false
+  // Where the local source reads, for its empty how-to.
+  property string localFolder: ""
 
   // "sources" | "extensions" | "source" | "global"
   property string screen: "sources"
@@ -29,7 +31,7 @@ Item {
   property int sourceCursor: 0
   // Browse.PREFS values, and the Sources list they group.
   readonly property var prefs: store.values
-  readonly property var sourceRows: Browse.sourceRows(Browse.enabled(src.sources, prefs), prefs)
+  readonly property var sourceRows: Browse.sourceRows(Browse.enabled(src.sources, prefs, true), prefs)
   // The languages panel (l) over the Sources list.
   property bool languagesOpen: false
   property int languagesCursor: 0
@@ -576,7 +578,7 @@ Item {
     listing: view.listing
     cursor: view.gridCursor
     editing: view.editing === "source"
-    notice: view.listing ? Browse.notice(view.listing, view.configPath) : null
+    notice: view.listing ? Browse.notice(view.listing, view.configPath, view.localFolder) : null
     onKey: function(event) { view.key(event) }
     onNearEnd: view.moreManga()
     onPicked: function(index, twice) { view.point(function() { view.moveGrid(index - view.gridCursor) }, twice) }

@@ -12,6 +12,7 @@ import "Chapters.js" as Chapters
 import "Downloads.js" as Downloads
 import "Library.js" as Library
 import "Browse.js" as Browse
+import "Storage.js" as Storage
 import "Prefs.js" as Prefs
 import "Updates.js" as Updates
 
@@ -890,6 +891,7 @@ ShellRoot {
           configPath: root.configPath
           active: root.view === "browse"
           showNsfw: root.settingsState.values.showNsfw
+          localFolder: Storage.localFolder({ HOME: Quickshell.env("HOME"), MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT") }, root.settingsState.values.localSourcePath)
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, true) }

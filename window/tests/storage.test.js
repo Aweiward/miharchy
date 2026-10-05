@@ -12,6 +12,12 @@ test("the folders are the server's: its root's downloads and the JVM's /tmp cach
   assert.equal(S.dirs(home, "/mnt/manga").downloads, "/mnt/manga", "a download folder setting wins");
 });
 
+test("the local folder is the setting, or the server root's local", () => {
+  assert.equal(S.localFolder(home, ""), "/home/u/.local/share/miharchy/suwayomi/local");
+  assert.equal(S.localFolder({ HOME: "/home/u", MIHARCHY_SERVER_ROOT: "/s/server" }, undefined), "/s/server/local");
+  assert.equal(S.localFolder(home, "/mnt/comics"), "/mnt/comics");
+});
+
 test("a scratch server's root and tmpdir replace the real ones", () => {
   const d = S.dirs({ HOME: "/home/u", MIHARCHY_SERVER_ROOT: "/s/server", MIHARCHY_SERVER_TMPDIR: "/s/server/tmp" }, "");
   assert.deepEqual(d, { downloads: "/s/server/downloads", cache: ["/s/server/tmp/Tachidesk/manga-cache", "/s/server/tmp/Tachidesk/thumbnails"] });
