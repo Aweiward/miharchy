@@ -393,7 +393,8 @@ test("on Updates, j/k move, Enter reads the chapter, u checks for updates and r 
   assert.equal(C.dispatch(updates, text("r")), "library.reload");
   assert.equal(C.dispatch(updates, key(C.KEY.Escape)), "window.quit");
   assert.equal(C.dispatch(screen("reader"), text("u")), "reader.halfUp", "u still goes half a view up in the reader");
-  assert.equal(C.dispatch(screen("library"), text("u")), null);
+  assert.equal(C.dispatch(screen("library"), text("u")), "library.update", "u on the Library checks the shown category");
+  assert.equal(C.dispatch(screen("categories"), text("u")), "categories.update");
 });
 
 test("on a manga, d downloads, U downloads every unread chapter, x deletes downloads and v starts a selection", () => {

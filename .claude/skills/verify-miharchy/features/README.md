@@ -9,6 +9,7 @@ One file per user-facing feature: how a user reaches it, how to drive it with `s
 | Manga chapter actions | `manga.md` | `R`/`u`/`P` change `isRead`/`lastPageRead`, the Library badge follows; `b` sets `isBookmarked`; `F` filter and sort land in manga meta `miharchy.chapter*`; Space resumes |
 | Reader | `reader.md` | pages render, `lastPageRead`/`isRead` saved, quit flushes the save |
 | Updates | `updates.md` | the list matches the 3-month update rule, `u` runs a library update |
+| Settings storage | `settings.md` | downloads and cache sizes match `du` on the scratch server, Enter on "Clear the cache" empties its cache and reports the bytes freed, downloads keep their size |
 | Sync | `sync.md` | the helper merges a phone backup and writes `miharchy-*.tachibk` |
 
-Not yet mapped: Settings, Setup, Extensions, Global search, Migrate, Trackers, Downloads, History, the bar plugin (`plugin/Mark.qml`, rendered offscreen with the shell's `Commons`/`Ui` copied into a scratch Quickshell config).
+Not yet mapped: the rest of Settings, Setup, Extensions, Global search, Migrate, Trackers, Downloads, History, the bar plugin (`plugin/Mark.qml`, rendered offscreen with the shell's `Commons`/`Ui` copied into a scratch Quickshell config).

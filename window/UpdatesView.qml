@@ -76,18 +76,21 @@ Item {
     })
   }
 
-  function check() {
-    if (!config || updates.running || updates.checking) return
+  // categories: ids for Updates.checkPayload(). Returns whether a run
+  // started; one runs at a time.
+  function check(categories) {
+    if (!config || updates.running || updates.checking) return false
     updates = Updates.reduce(updates, { type: "checking" })
     error = ""
     // A poll sent before the run started would end the check.
     pollSeq++
     polling = false
-    send(Updates.checkPayload(), function(reply) {
+    send(Updates.checkPayload(categories), function(reply) {
       if (reply.state === "ok") return view.poll()
       view.updates = Updates.reduce(view.updates, { type: "status", reply: reply })
       view.error = reply.message || Model.problem(reply, view.configPath).title
     })
+    return true
   }
 
   // The reader needs the manga's reading mode and every chapter, which the

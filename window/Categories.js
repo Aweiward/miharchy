@@ -14,6 +14,12 @@ var AUTO_SETTING = "setSettings(input: { settings: { autoDownloadNewChapters: $o
 var DELETE_MUTATION = "mutation($id: Int!, $on: Boolean!) { deleteCategory(input: { categoryId: $id }) { category { id } } " + AUTO_SETTING + " }"
 var AUTO_DOWNLOAD_MUTATION = "mutation($id: Int!, $include: IncludeOrExclude!, $on: Boolean!) {"
   + " updateCategory(input: { id: $id, patch: { includeInDownload: $include } }) { category { id } } " + AUTO_SETTING + " }"
+var UPDATE_MUTATION = "mutation($id: Int!, $include: IncludeOrExclude!) { updateCategory(input: { id: $id, patch: { includeInUpdate: $include } }) { category { id } } }"
+// Mihon's library update categories: once one is included, the update
+// takes only the included ones; an excluded one always stays out, even for
+// a manga that is also in an included one. Suwayomi's updateLibrary
+// applies the same rule.
+var UPDATE_STATES = ["UNSET", "INCLUDE", "EXCLUDE"]
 var MOVE_MUTATION = "mutation($id: Int!, $position: Int!) { updateCategoryOrder(input: { id: $id, position: $position }) { categories { id } } }"
 
 // -> { name } or { error }. The sync helper matches categories by name, and
@@ -51,6 +57,11 @@ function autoDownloadPayload(categories, id) {
   return { query: AUTO_DOWNLOAD_MUTATION, variables: { id: id, include: flag ? "INCLUDE" : "UNSET", on: anyFlagged(categories, id, flag) } }
 }
 
+function updatePayload(categories, id) {
+  var state = categories.filter(function(c) { return c.id === id })[0].update
+  return { query: UPDATE_MUTATION, variables: { id: id, include: UPDATE_STATES[(UPDATE_STATES.indexOf(state) + 1) % UPDATE_STATES.length] } }
+}
+
 // Moves categories[index] by delta (-1 or 1), or null past either end.
 // Positions count from 1, after Default at 0.
 function movePayload(categories, index, delta) {
@@ -59,11 +70,11 @@ function movePayload(categories, index, delta) {
   return { query: MOVE_MUTATION, variables: { id: categories[index].id, position: to + 1 } }
 }
 
-// Each category as { id, name, download, count } with its number of
+// Each category as { id, name, download, update, count } with its number of
 // library manga.
 function rows(categories, manga) {
   return categories.map(function(c) {
-    return { id: c.id, name: c.name, download: c.download === true, count: manga.filter(function(m) { return m.categories.indexOf(c.id) !== -1 }).length }
+    return { id: c.id, name: c.name, download: c.download === true, update: c.update || "UNSET", count: manga.filter(function(m) { return m.categories.indexOf(c.id) !== -1 }).length }
   })
 }
 
@@ -74,6 +85,7 @@ if (typeof module !== "undefined") {
     renamePayload: renamePayload,
     deletePayload: deletePayload,
     autoDownloadPayload: autoDownloadPayload,
+    updatePayload: updatePayload,
     movePayload: movePayload,
     rows: rows
   }

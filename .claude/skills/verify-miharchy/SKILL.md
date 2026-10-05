@@ -24,7 +24,7 @@ $S/seed.sh --library 2                  # Keiyoushi repo + MangaDex, 2 popular m
 $S/seed.sh eu.kanade.tachiyomi.extension.en.weebcentral   # more extensions by pkgName
 ```
 
-The server is `/usr/bin/suwayomi-server` (AUR `suwayomi-server-bin`) with `-Dsuwayomi.tachidesk.config.server.rootDir=$RUN/server`, `basic_auth` with random credentials written to `$RUN/server.json`. Ready = `aboutServer{version}` answers with those credentials. A fresh server downloads JCEF (~250 MB) on first start into its root dir; that is normal.
+The server is `/usr/bin/suwayomi-server` (AUR `suwayomi-server-bin`) with `-Dsuwayomi.tachidesk.config.server.rootDir=$RUN/server` and `-Djava.io.tmpdir=$RUN/server/tmp` (its page and cover cache; the default `/tmp/Tachidesk` is the user's server's too), `basic_auth` with random credentials written to `$RUN/server.json`. Ready = `aboutServer{version}` answers with those credentials. A fresh server downloads JCEF (~250 MB) on first start into its root dir; that is normal.
 
 The sync helper builds once per checkout: `(cd sync && ./gradlew installDist)` → `sync/build/install/miharchy-sync/bin/miharchy-sync`. Run it against the scratch server with `JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json`.
 

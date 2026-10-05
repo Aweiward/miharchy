@@ -15,11 +15,13 @@ start)
     echo "$RUN already has a running server (pid $(cat "$RUN/server.pid")); set your own MIHARCHY_VERIFY_DIR" >&2; exit 1
   fi
   ss -ltn | grep -q ":$PORT " && { echo "port $PORT is taken; pick another MIHARCHY_VERIFY_PORT" >&2; exit 1; }
-  install -d -m 700 "$RUN" "$SERVER_DIR" "$EVIDENCE"
+  install -d -m 700 "$RUN" "$SERVER_DIR" "$SERVER_DIR/tmp" "$EVIDENCE"
   pw=$(openssl rand -hex 16)
   printf 'server.ip = "127.0.0.1"\nserver.port = %s\nserver.webUIEnabled = false\nserver.systemTrayEnabled = false\nserver.authMode = "basic_auth"\nserver.authUsername = "verify"\nserver.authPassword = "%s"\n' "$PORT" "$pw" > "$SERVER_DIR/server.conf"
   (umask 077; printf '{"url":"http://127.0.0.1:%s","username":"verify","password":"%s"}\n' "$PORT" "$pw" > "$SERVER_JSON")
-  ( cd /tmp && setsid /usr/bin/suwayomi-server -Dsuwayomi.tachidesk.config.server.rootDir="$SERVER_DIR" > "$RUN/server.log" 2>&1 < /dev/null & )
+  # Suwayomi caches pages and covers in <java.io.tmpdir>/Tachidesk; the default
+  # /tmp is shared with the user's server, so a cache clear here would empty it.
+  ( cd /tmp && setsid /usr/bin/suwayomi-server -Dsuwayomi.tachidesk.config.server.rootDir="$SERVER_DIR" -Djava.io.tmpdir="$SERVER_DIR/tmp" > "$RUN/server.log" 2>&1 < /dev/null & )
   for _ in $(seq 120); do
     v=$(gql '{"query":"{aboutServer{version}}"}' 2>/dev/null | jq -r '.data.aboutServer.version // empty' 2>/dev/null || true)
     if [ -n "$v" ]; then

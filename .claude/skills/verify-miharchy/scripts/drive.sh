@@ -30,7 +30,7 @@ i = s.rindex("}"); open(shell, "w").write(s[:i] + d + s[i:])
 PY
 cd "$RUN"
 set +e
-MIHARCHY_SERVER_JSON=$SERVER_JSON QT_QPA_PLATFORM=offscreen timeout "$secs" quickshell -p "$copy/window" > "$RUN/window.log" 2>&1
+MIHARCHY_SERVER_JSON=$SERVER_JSON MIHARCHY_SERVER_ROOT=$SERVER_DIR MIHARCHY_SERVER_TMPDIR=$SERVER_DIR/tmp QT_QPA_PLATFORM=offscreen timeout "$secs" quickshell -p "$copy/window" > "$RUN/window.log" 2>&1
 code=$?
 set -e
 grep -o 'DRIVER .*' "$RUN/window.log" | cut -c8- | tee "$EVIDENCE/drive.log"
