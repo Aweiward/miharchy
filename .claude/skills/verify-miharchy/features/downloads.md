@@ -14,6 +14,12 @@
 
 - "Save downloads as CBZ" is the server setting `downloadAsCbz` (Mihon's "Save as CBZ archive"). It applies to new downloads: the chapter lands as `<scanlator>_<name>.cbz` in the manga's folder under `$RUN/server/downloads/mangas/<source>/`, and `fetchChapterPages` still serves its pages. Proof: Enter on the row, `settings { downloadAsCbz }` reads `true`, download a chapter, `find` the `.cbz`.
 
+## Auto-download
+
+Mihon's "Auto-download" group, all Suwayomi server settings: "Auto-download new chapters" (`autoDownloadNewChapters`), "only for manga with no unread chapters" (`excludeEntryWithUnreadChapters`, the server's default is on), "skips re-uploaded chapters" (`autoDownloadIgnoreReUploads`: a new chapter numbered below the latest one). The server queues the new chapters a chapter fetch finds (a library update or `fetchChapters`), never on a manga's first fetch. `d` on Categories cycles a category's `includeInDownload` through unset, included and excluded (Mihon's include and exclude lists): once one is included, only manga in an included category download, and an excluded one always stays out. Neither `d` nor deleting a category touches the server setting any more. Not offered: `autoDownloadNewChaptersLimit`.
+
+Proof with a real new chapter: a local-source manga (`$RUN/server/local/<title>/<chapter>/001.png`, source `"0"`) in the library and in an included category; `fetchChapters` once, add a chapter folder, `fetchChapters` again, and `isDownloaded` turns true for the new chapter only. With the category excluded, the next new chapter stays off disk.
+
 ## Delete after reading
 
 Mihon's "Delete chapters" group. Suwayomi has none of it, so the window deletes, and `Downloads.autoDeletePayload` holds the rules both paths share (Mihon's `DownloadManager.getChaptersToDelete`): a chapter goes only when it is on disk and read, not bookmarked unless "Delete bookmarked chapters" is on, and its manga is in no category flagged with `p` in Categories (category meta `miharchy.keepDownloads` = `"true"`, Mihon's excluded categories). The rules read the server at delete time (`autoDeleteQuery`).

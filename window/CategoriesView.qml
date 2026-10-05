@@ -107,17 +107,17 @@ Item {
         break
       case "categories.remove":
         if (!row) break
-        if (wasArmed === row.id) mutate(Categories.deletePayload(categories, row.id))
+        if (wasArmed === row.id) mutate(Categories.deletePayload(row.id))
         else armed = row.id
         break
       case "categories.autoDownload":
-        if (row) mutate(Categories.autoDownloadPayload(categories, row.id))
+        if (row) mutate(Categories.includePayload(categories, row.id, "download"))
         break
       case "categories.keepDownloads":
         if (row) mutate(Categories.keepPayload(categories, row.id))
         break
       case "categories.update":
-        if (row) mutate(Categories.updatePayload(categories, row.id))
+        if (row) mutate(Categories.includePayload(categories, row.id, "update"))
         break
       case "categories.commit":
         var checked = Categories.checkName(field.text, categories, editing === "rename" && row ? row.id : undefined)
@@ -240,7 +240,7 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.75
         anchors.verticalCenter: parent.verticalCenter
-        text: view.armed === entry.modelData.id ? "x again to delete" : ({ INCLUDE: "in updates   ", EXCLUDE: "excluded from updates   " }[entry.modelData.update] || "") + (entry.modelData.download ? "auto-download   " : "") + (entry.modelData.keep ? "keeps downloads   " : "") + entry.modelData.count + " manga"
+        text: view.armed === entry.modelData.id ? "x again to delete" : ({ INCLUDE: "in updates   ", EXCLUDE: "excluded from updates   " }[entry.modelData.update] || "") + ({ INCLUDE: "auto-download   ", EXCLUDE: "no auto-download   " }[entry.modelData.download] || "") + (entry.modelData.keep ? "keeps downloads   " : "") + entry.modelData.count + " manga"
         color: view.armed === entry.modelData.id ? view.theme.urgent : view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall

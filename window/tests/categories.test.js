@@ -26,8 +26,8 @@ test("create, rename and delete send the category mutations", () => {
   assert.match(K.createPayload("Drama").query, /createCategory/);
   assert.deepEqual(K.renamePayload(4, "Fights").variables, { id: 4, name: "Fights" });
   assert.match(K.renamePayload(4, "Fights").query, /updateCategory\(/);
-  assert.equal(K.deletePayload(cats, 2).variables.id, 2);
-  assert.match(K.deletePayload(cats, 2).query, /deleteCategory/);
+  assert.equal(K.deletePayload(2).variables.id, 2);
+  assert.match(K.deletePayload(2).query, /deleteCategory/);
 });
 
 test("a move goes one place up or down, as a 1-based position after Default; none past either end", () => {
@@ -42,9 +42,9 @@ test("a move goes one place up or down, as a 1-based position after Default; non
 test("rows count the library manga in each category", () => {
   const manga = [{ id: 1, categories: [4, 2] }, { id: 3, categories: [4] }, { id: 5, categories: [] }];
   assert.deepEqual(K.rows(cats, manga), [
-    { id: 4, name: "Action", download: false, update: "UNSET", keep: false, count: 2 },
-    { id: 2, name: "Romance", download: false, update: "UNSET", keep: false, count: 1 },
-    { id: 7, name: "Later", download: false, update: "UNSET", keep: false, count: 0 }
+    { id: 4, name: "Action", download: "UNSET", update: "UNSET", keep: false, count: 2 },
+    { id: 2, name: "Romance", download: "UNSET", update: "UNSET", keep: false, count: 1 },
+    { id: 7, name: "Later", download: "UNSET", update: "UNSET", keep: false, count: 0 }
   ]);
 });
 
@@ -55,37 +55,32 @@ test("p flags a category to keep its read downloads in its meta, and again lets 
   assert.equal(K.keepPayload([{ id: 4, keep: true }], 4).variables.meta.value, "false");
 });
 
-const flagged = [{ id: 4, name: "Action", download: true }, { id: 2, name: "Romance", download: false }];
+for (const [key, kind, field] of [["u", "update", "includeInUpdate"], ["d", "download", "includeInDownload"]]) {
+  test(key + " cycles a category through unset, included in and excluded from " + kind + "s", () => {
+    const states = ["UNSET", "INCLUDE", "EXCLUDE"].map((state) => [{ id: 4, name: "Action", [kind]: state }]);
+    assert.deepEqual(states.map((c) => K.includePayload(c, 4, kind).variables), [
+      { id: 4, include: "INCLUDE" },
+      { id: 4, include: "EXCLUDE" },
+      { id: 4, include: "UNSET" }
+    ]);
+    assert.ok(K.includePayload(states[0], 4, kind).query.includes("updateCategory(input: { id: $id, patch: { " + field + ": $include } })"));
+  });
+}
 
-test("d flags a category for auto-download and turns the server's auto-download on with it", () => {
-  const p = K.autoDownloadPayload(flagged, 2);
-  assert.match(p.query, /updateCategory\(input: \{ id: \$id, patch: \{ includeInDownload: \$include \} \}\)/);
-  assert.match(p.query, /setSettings/);
-  assert.deepEqual(p.variables, { id: 2, include: "INCLUDE", on: true });
+test("a category flag or delete leaves the server's auto-download setting to its Settings row", () => {
+  const cats = [{ id: 4, download: "INCLUDE", update: "UNSET" }];
+  for (const p of [K.includePayload(cats, 4, "download"), K.includePayload(cats, 4, "update"), K.deletePayload(4)]) assert.doesNotMatch(p.query, /setSettings/);
+  assert.deepEqual(K.deletePayload(4).variables, { id: 4 });
 });
 
-test("the server downloads every unflagged category once none is flagged, so the last flag off turns auto-download off", () => {
-  assert.deepEqual(K.autoDownloadPayload(flagged, 4).variables, { id: 4, include: "UNSET", on: false });
-  const both = flagged.map((c) => Object.assign({}, c, { download: true }));
-  assert.deepEqual(K.autoDownloadPayload(both, 4).variables, { id: 4, include: "UNSET", on: true });
-});
-
-test("deleting the last flagged category turns auto-download off too", () => {
-  assert.deepEqual(K.deletePayload(flagged, 4).variables, { id: 4, on: false });
-  assert.deepEqual(K.deletePayload(flagged, 2).variables, { id: 2, on: true });
-  assert.match(K.deletePayload(flagged, 4).query, /setSettings/);
-});
-
-test("u cycles a category through unset, included in updates and excluded from them", () => {
-  const states = ["UNSET", "INCLUDE", "EXCLUDE"].map((update) => [{ id: 4, name: "Action", update }]);
-  assert.deepEqual(states.map((c) => K.updatePayload(c, 4).variables), [
-    { id: 4, include: "INCLUDE" },
-    { id: 4, include: "EXCLUDE" },
-    { id: 4, include: "UNSET" }
-  ]);
-  assert.match(K.updatePayload(states[0], 4).query, /updateCategory\(input: \{ id: \$id, patch: \{ includeInUpdate: \$include \} \}\)/);
-});
-
-test("auto-download skips no manga for its unread chapters: the flag means every new chapter", () => {
-  assert.match(K.autoDownloadPayload(flagged, 2).query, /excludeEntryWithUnreadChapters: false/);
+test("u and d cycle a category through unset, included and excluded, for updates and for auto-download", () => {
+  for (const [kind, field] of [["update", "includeInUpdate"], ["download", "includeInDownload"]]) {
+    const states = ["UNSET", "INCLUDE", "EXCLUDE"].map((s) => [{ id: 4, name: "Action", [kind]: s }]);
+    assert.deepEqual(states.map((c) => K.includePayload(c, 4, kind).variables), [
+      { id: 4, include: "INCLUDE" },
+      { id: 4, include: "EXCLUDE" },
+      { id: 4, include: "UNSET" }
+    ]);
+    assert.match(K.includePayload(states[0], 4, kind).query, new RegExp("patch: \\{ " + field + ": \\$include \\}"));
+  }
 });

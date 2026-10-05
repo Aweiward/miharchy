@@ -97,6 +97,14 @@ var ROWS = [
   { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
   // New downloads only; the server reads chapters on disk in either form.
   { key: "downloadAsCbz", label: "Save downloads as CBZ", type: "bool", default: false, store: "server" },
+  // Mihon's auto-download group, all server settings: the library update
+  // queues the new chapters. d in Categories includes or excludes a
+  // category. Skipping manga with unread chapters is Suwayomi's own; Mihon's
+  // "Skip downloading duplicate read chapters" is closest to skipping
+  // re-uploads.
+  { key: "autoDownloadNewChapters", label: "Auto-download new chapters", type: "bool", default: false, store: "server" },
+  { key: "excludeEntryWithUnreadChapters", label: "Auto-download only for manga with no unread chapters", type: "bool", default: true, store: "server" },
+  { key: "autoDownloadIgnoreReUploads", label: "Auto-download skips re-uploaded chapters", type: "bool", default: false, store: "server" },
   // Mihon's delete group. Suwayomi has none, so the window deletes:
   // Downloads.autoDeletePayload holds the rules, and a category keeps its
   // downloads with p in Categories (Mihon's excluded categories).
