@@ -331,23 +331,35 @@ function activate(row, value, categories) {
 function commitFolder(text, home) {
   var t = String(text).trim().replace(/^~(?=\/|$)/, home)
   if (t.charAt(0) !== "/") return { error: "Enter an absolute path, such as ~/Sync/Mihon." }
-  return { folder: t.length > 1 ? t.replace(/\/+$/, "") : t }
+  return { folder: normalizePath(t) }
+}
+
+// An absolute path as Java's Path.normalize() gives it, the form the sync
+// helper compares: no ".", "..", doubled or trailing slashes.
+function normalizePath(path) {
+  var parts = []
+  String(path).split("/").forEach(function(s) {
+    if (s === "..") parts.pop()
+    else if (s && s !== ".") parts.push(s)
+  })
+  return "/" + parts.join("/")
 }
 
 // An edited text -> { save: value } or { error: message }. A folder row
 // gives { folder } instead: the caller checks that it exists, then saves.
-// values: the rows' current values, for notSameAs.
+// values: the rows' current values, for notSameAs. A text row with
+// notSameAs is a path: when not blank it is a { folder } too, normalized.
 function commit(row, text, home, values) {
-  var done = row.type === "folder" ? commitFolder(text, home) : row.pattern && !row.pattern.test(String(text).trim()) ? { error: row.hint } : { save: String(text).trim() }
+  var t = String(text).trim()
+  var done = row.type === "folder" ? commitFolder(text, home) : row.pattern && !row.pattern.test(t) ? { error: row.hint } : row.notSameAs && t ? { folder: normalizePath(t) } : { save: t }
   var path = "folder" in done ? done.folder : done.save
   var other = row.notSameAs && values ? values[row.notSameAs] : ""
-  if (path && other && samePath(path, other)) return { error: "The sync folder and the backup folder must differ: the sync would read the server's backups as phone backups." }
+  if (path && other && path === normalizePath(other)) {
+    // The helper's own refusal, word for word (backupRefusal in sync/).
+    if (row.key === "backupPath") return { error: t + " is the sync folder. Choose another backup folder in Settings." }
+    return { error: "The sync folder and the backup folder must differ: the sync would read the server's backups as phone backups." }
+  }
   return done
-}
-
-function samePath(a, b) {
-  var trim = function(p) { return String(p).replace(/(.)\/+$/, "$1") }
-  return trim(a) === trim(b)
 }
 
 // The modes on, as the status bar names them beside the connection.

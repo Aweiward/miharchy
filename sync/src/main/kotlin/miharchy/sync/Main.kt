@@ -151,15 +151,18 @@ private fun backup(folder: String) {
     lockState() ?: fail("A sync is already running.")
     val file = try {
         val desktop = Desktop(ServerConfig.load())
-        val sync = desktop.syncFolder()?.let { Path.of(it) }
-        if (sync != null && sync.toAbsolutePath().normalize() == dir.toAbsolutePath().normalize()) {
-            fail("$folder is the sync folder. Choose another backup folder in Settings.")
-        }
+        backupRefusal(folder, desktop.syncFolder())?.let { fail(it) }
         writeBackup(dir, backupName(Instant.now()), forMihon(desktop.export(desktop.backupFlags()), desktop.notes()))
     } catch (e: Exception) {
         fail(e.message ?: e.toString())
     }
     println(Json.encodeToString(BackupResult(file.toString())))
+}
+
+/** Why [folder] cannot hold a backup, or null. Settings refuses the same paths with the same words (`window/Settings.js`). */
+fun backupRefusal(folder: String, syncFolder: String?): String? {
+    val same = syncFolder != null && Path.of(syncFolder).toAbsolutePath().normalize() == Path.of(folder).toAbsolutePath().normalize()
+    return if (same) "$folder is the sync folder. Choose another backup folder in Settings." else null
 }
 
 // Reachable for the whole run: a collected channel closes its file, which drops the lock.

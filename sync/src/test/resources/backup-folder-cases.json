@@ -1,0 +1,13 @@
+[
+  { "backup": "/a/./b", "sync": "/a/b", "refused": true },
+  { "backup": "/a/b/../b", "sync": "/a/b", "refused": true },
+  { "backup": "/a/b/", "sync": "/a/b", "refused": true },
+  { "backup": "/a//b", "sync": "/a/b", "refused": true },
+  { "backup": "/a/b", "sync": "/a/c/../b/", "refused": true },
+  { "backup": "/a/b/..", "sync": "/a", "refused": true },
+  { "backup": "/..", "sync": "/", "refused": true },
+  { "backup": "/a/b/c", "sync": "/a/b", "refused": false },
+  { "backup": "/a", "sync": "/a/b", "refused": false },
+  { "backup": "/a/c", "sync": "/a/b", "refused": false },
+  { "backup": "/a/b", "sync": null, "refused": false }
+]

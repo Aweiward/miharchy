@@ -188,10 +188,22 @@ test("the backup folder never is the sync folder, and the sync folder never the 
   const sync = row("syncFolder");
   assert.ok(S.commit(backup, "/home/u/Sync/", "/home/u", { syncFolder: "/home/u/Sync" }).error);
   assert.ok(S.commit(sync, "~/Backups", "/home/u", { backupPath: "/home/u/Backups/" }).error);
-  assert.deepEqual(S.commit(backup, "/home/u/Backups", "/home/u", { syncFolder: "/home/u/Sync" }), { save: "/home/u/Backups" });
+  assert.deepEqual(S.commit(backup, "/home/u/Backups", "/home/u", { syncFolder: "/home/u/Sync" }), { folder: "/home/u/Backups" }, "saved once the folder exists, as the helper needs");
   assert.deepEqual(S.commit(backup, "", "/home/u", { syncFolder: "/home/u/Sync" }), { save: "" }, "blank is the server's own folder");
   assert.deepEqual(S.commit(sync, "~/Sync", "/home/u", { backupPath: "" }), { folder: "/home/u/Sync" });
   assert.ok(S.commit(backup, "Backups", "/home/u", {}).error, "a relative path");
+});
+
+test("the backup folder is refused and saved as the sync helper normalizes it", () => {
+  const backup = row("backupPath");
+  const cases = require("../../sync/src/test/resources/backup-folder-cases.json");
+  for (const c of cases) {
+    const done = S.commit(backup, c.backup, "/home/u", { syncFolder: c.sync || "" });
+    if (c.refused) assert.deepEqual(done, { error: c.backup + " is the sync folder. Choose another backup folder in Settings." }, c.backup);
+    else assert.ok("folder" in done, c.backup);
+  }
+  assert.deepEqual(S.commit(backup, "/a/./b//c/../d/", "/home/u", {}), { folder: "/a/b/d" });
+  assert.deepEqual(S.commitFolder("~/x/../Sync/./", "/home/u"), { folder: "/home/u/Sync" });
 });
 
 test("saving the backup folder keeps the server password out of automatic backups", () => {
