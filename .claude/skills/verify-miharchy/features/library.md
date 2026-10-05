@@ -44,7 +44,7 @@ Open the window; it starts on Library. Or press `1`.
   [3000, function() { log("after-remove", root.connection.manga.length); grab("library-removed"); root.run("window.quit") }]
 ]
 ```
-Read back: `$S/gql.sh '{ metas(filter:{key:{startsWith:"miharchy.library"}}) { nodes { key value } } mangas(condition:{inLibrary:true}){ totalCount nodes { title } } }'` shows the saved choices and one fewer manga; its chapters' `isRead` unchanged. Then a second `drive.sh` run that only logs `root.libraryPrefs` and grabs proves a restart keeps them.
+Read back: `.claude/skills/verify-miharchy/scripts/gql.sh '{ metas(filter:{key:{startsWith:"miharchy.library"}}) { nodes { key value } } mangas(condition:{inLibrary:true}){ totalCount nodes { title } } }'` shows the saved choices and one fewer manga; its chapters' `isRead` unchanged. Then a second `drive.sh` run that only logs `root.libraryPrefs` and grabs proves a restart keeps them.
 
 Category updates: give manga 1, 2, 3 categories A, B and none (`createCategory`, `updateMangaCategories`) and set the three `exclude*` settings false. Then `key("Tab"); key("Tab"); key("u")` checks A only, and `key("c"); key("u"); key("u")` makes A EXCLUDE. A later `u` on Updates runs 2 jobs. Read back `{ categories { nodes { id includeInUpdate } } libraryUpdateStatus { jobsInfo { totalJobs } mangaUpdates { manga { id } } } }`: A is EXCLUDE, and the last run holds manga 2 and 3 only.
 

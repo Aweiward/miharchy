@@ -8,37 +8,38 @@ description: Drive Miharchy's real window (Quickshell/QML) offscreen against a t
 Miharchy's user surface is the window (`window/`, Quickshell QML), backed by Suwayomi-Server over GraphQL, plus the sync helper CLI (`sync/`) and a bar plugin (`plugin/`). Proof means: drive the **real** window code through the same command path keys use (`root.handleKey`, command ids), then confirm the **server state** changed (GraphQL read-back), with captures of what the window showed.
 
 Hard rules, from incidents on this project:
-- Never use the user's server: port 4590, `~/.config/miharchy/server.json`, `~/.local/share/miharchy`. Every run gets its own server on its own port (`MIHARCHY_VERIFY_PORT`, default 4591) and its own run dir.
+- Never use the user's server: port 4590, `~/.config/miharchy/server.json`, `~/.local/share/miharchy`. Every run gets its own server on its own port and its own run dir.
 - Never open windows on the desktop or send keystrokes to it (a safety check blocks it; the user is working). Everything runs with `QT_QPA_PLATFORM=offscreen`.
 - Never kill by process name. `pkill -f <pattern>` matches its own command line and has killed the shell running it here. `server.sh stop` kills by PID file and by this run's server dir only.
 - Never edit `~/.config/omarchy/` or restart the live shell.
 
-All scripts live in `scripts/` and read `scripts/env.sh`: `MIHARCHY_VERIFY_DIR` (run dir, default `${TMPDIR:-/tmp}/miharchy-verify/run`) and `MIHARCHY_VERIFY_PORT`. Use a fresh run dir **and port** per task, e.g. `export MIHARCHY_VERIFY_DIR=$TMPDIR/miharchy-verify/<task>-$(date +%s) MIHARCHY_VERIFY_PORT=46xx` (inside Claude Code, prefer the session scratchpad over /tmp). Agents running in parallel must never share a run dir: `stop` kills whatever server that dir recorded, and the window copy in `$RUN/app` would be overwritten. `start` refuses a dir whose recorded server is still running.
+Run each script as one plain command from the worktree root, e.g. `.claude/skills/verify-miharchy/scripts/server.sh start`: no `export`, no `cd`, no `VAR=...;` prefix. Shell state does not persist between Bash calls, and the scripts need none. Each script reads `scripts/env.sh`, which sets the run dir to `${TMPDIR:-/tmp}/miharchy-verify/<worktree folder name>`, so every worktree gets its own run. `start` picks a free port (never 4590) and keeps it in `$RUN/port`; every later script of that run reads it. `start` and `doctor` print the run dir: use that literal path wherever this skill says `$RUN`.
+
+Runs must never share a run dir: `stop` kills whatever server that dir recorded, and the window copy in `$RUN/app` would be overwritten. Parallel agents in separate worktrees get separate dirs on their own. Two runs in the **same** worktree need `MIHARCHY_VERIFY_DIR=<another dir>` on every command of the second run. `MIHARCHY_VERIFY_PORT` still forces a port. `start` refuses a dir whose recorded server is still running.
 
 ## Launch
 
 ```sh
-S=.claude/skills/verify-miharchy/scripts
-$S/server.sh start                      # ~30–60 s; prints "ready: Suwayomi v… on 127.0.0.1:4591"
-$S/seed.sh --library 2                  # Keiyoushi repo + MangaDex, 2 popular manga in the library
-$S/seed.sh eu.kanade.tachiyomi.extension.en.weebcentral   # more extensions by pkgName
+.claude/skills/verify-miharchy/scripts/server.sh start     # ~30–60 s; prints "ready: Suwayomi v… on 127.0.0.1:<port> (pid N), run dir <RUN>"
+.claude/skills/verify-miharchy/scripts/seed.sh --library 2 # Keiyoushi repo + MangaDex, 2 popular manga in the library
+.claude/skills/verify-miharchy/scripts/seed.sh eu.kanade.tachiyomi.extension.en.weebcentral   # more extensions by pkgName
 ```
 
 The server is `/usr/bin/suwayomi-server` (AUR `suwayomi-server-bin`) with `-Dsuwayomi.tachidesk.config.server.rootDir=$RUN/server` and `-Djava.io.tmpdir=$RUN/server/tmp` (its page and cover cache; the default `/tmp/Tachidesk` is the user's server's too), `basic_auth` with random credentials written to `$RUN/server.json`. Ready = `aboutServer{version}` answers with those credentials. `start` returns then: the server runs detached (`setsid -f`, its own session, output in `$RUN/server.log`), so `server.sh start | tee` and a backgrounded `start` both end. A fresh server downloads JCEF (~250 MB) on first start into its root dir; that is normal.
 
-The sync helper builds once per checkout: `(cd sync && ./gradlew installDist)` → `sync/build/install/miharchy-sync/bin/miharchy-sync`. Run it against the scratch server with `JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json`. For the window's sync, backup and restore, copy the build into `$RUN/home/.local/share/miharchy/helper/` (`cp -r sync/build/install/miharchy-sync/. $RUN/home/.local/share/miharchy/helper/`).
+The sync helper builds once per checkout: `sync/gradlew -p sync installDist` → `sync/build/install/miharchy-sync/bin/miharchy-sync`. Run it against the scratch server with `JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json`. For the window's sync, backup and restore, copy the build into `$RUN/home/.local/share/miharchy/helper/` (`cp -r sync/build/install/miharchy-sync/. $RUN/home/.local/share/miharchy/helper/`).
 
 ## Doctor
 
 ```sh
-$S/server.sh doctor    # "ok: pid N owns 4591, Suwayomi v…, unauthenticated request -> 401"
+.claude/skills/verify-miharchy/scripts/server.sh doctor    # "ok: pid N owns <port>, Suwayomi v…, unauthenticated request -> 401, run dir <RUN>"
 ```
 Run it first whenever anything looks off. It fails if the PID file is missing, the process is dead, another process owns the port, or auth is not enforced.
 
 ## Drive
 
 ```sh
-$S/drive.sh steps.js 90     # copies window/ into $RUN/app, appends the driver, runs it offscreen for ≤ 90 s
+.claude/skills/verify-miharchy/scripts/drive.sh steps.js 90     # copies window/ into $RUN/app, appends the driver, runs it offscreen for ≤ 90 s
 ```
 `drive.sh` runs the window with `HOME=$RUN/home` and `JAVA_OPTS=-Duser.home=$RUN/home`. The window runs the sync helper from `$HOME/.local/share/miharchy/helper`, and this machine has a real one at `~/.local/share/miharchy/helper` whose baselines live in the real home; the run home keeps a drive that syncs, backs up or restores away from both. The run home has no Omarchy theme, so the window draws its default palette; for themed captures copy a theme in first (`site/tools/README.md`, step 1). `PATH` passes through: put logging stubs for `xdg-open`, `wl-copy` and `notify-send` first on it before any drive that opens a link, copies or notifies. Text reaches `wl-copy` as arguments (`wl-copy -- <text>`), and the reader's `Y` sends the page as `wl-copy --type <mime>` with the image on stdin; a `wl-copy` stub reads stdin only on that `--type` call, so a text call never waits on an open stdin. The offscreen window is 1280×800 and does not resize.
 
@@ -55,11 +56,11 @@ Handles (ids in `window/shell.qml`): `root` (view, connection, settingsState), `
 
 Text fields: the driver cannot type. Set the field's text, then send `key("Enter")` (e.g. the source search field is `browseView` → `SourceGrid.searchField`).
 
-Read-backs: `$S/gql.sh '<query>' ['{"var":1}']` against the scratch server, after the window exits.
+Read-backs: `.claude/skills/verify-miharchy/scripts/gql.sh '<query>' ['{"var":1}']` against the scratch server, after the window exits.
 
 ## Evidence
 
-Everything a proof needs lands in `$RUN/evidence/` and survives cleanup: `*.png` captures, `drive.log` (DRIVER lines). Also keep the GraphQL read-back output you rely on (`$S/gql.sh … | tee $RUN/evidence/readback.json`). Read the captures (the Read tool shows images) before claiming anything about the UI.
+Everything a proof needs lands in `$RUN/evidence/` and survives cleanup: `*.png` captures, `drive.log` (DRIVER lines). Also keep the GraphQL read-back output you rely on (`.claude/skills/verify-miharchy/scripts/gql.sh … | tee $RUN/evidence/readback.json`). Read the captures (the Read tool shows images) before claiming anything about the UI.
 
 Proof standard:
 - Drive the real path (keys, mouse events or command ids), not internal setters, except to fill a text field.
@@ -72,8 +73,8 @@ Proof standard:
 ## Cleanup
 
 ```sh
-$S/server.sh stop      # stops java + JCEF helpers of this run, closes the port, deletes $RUN/server and server.json
-rm -rf "$MIHARCHY_VERIFY_DIR/app" "$MIHARCHY_VERIFY_DIR/home"   # the window copy and helper home, when done
+.claude/skills/verify-miharchy/scripts/server.sh stop      # stops java + JCEF helpers of this run, closes the port, deletes $RUN/server, server.json and port
+.claude/skills/verify-miharchy/scripts/server.sh clean     # removes the window copy and helper home, when done
 ```
 Evidence in `$RUN/evidence/` stays. Run `stop` after every failed attempt too, so ports and processes don't pile up. A SIGSTOPped server (hang tests) needs `kill -CONT` before `stop`.
 

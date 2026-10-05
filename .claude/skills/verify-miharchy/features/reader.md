@@ -35,7 +35,7 @@ Library → `Enter` on a manga → `Enter` on a chapter.
 ]
 ```
 Read back after exit (the quit at 0.8 s happens before the 1 s debounce, so this also proves save-on-quit):
-`$S/gql.sh 'query($id:Int!){ chapter(id:$id){ lastPageRead isRead lastReadAt } }' '{"id":<chapter id>}'` → `lastPageRead` equals the logged page, `lastReadAt` set.
+`.claude/skills/verify-miharchy/scripts/gql.sh 'query($id:Int!){ chapter(id:$id){ lastPageRead isRead lastReadAt } }' '{"id":<chapter id>}'` → `lastPageRead` equals the logged page, `lastReadAt` set.
 
 Jumps (Home/End are key codes, so call `root.handleKey`; the go-to field is `reader.pageField`, set its text then send Enter):
 ```js

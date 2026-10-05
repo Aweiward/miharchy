@@ -1,6 +1,6 @@
 # Miharchy feature map
 
-One file per user-facing feature: how a user reaches it, how to drive it with `scripts/drive.sh`, and what end state proves it. Keep this map honest as features change (`/maintain-verification-skill`).
+One file per user-facing feature: how a user reaches it, how to drive it with `.claude/skills/verify-miharchy/scripts/drive.sh`, and what end state proves it. Keep this map honest as features change (`/maintain-verification-skill`).
 
 | Feature | File | Proof is |
 |---|---|---|

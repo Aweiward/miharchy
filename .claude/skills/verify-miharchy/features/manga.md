@@ -27,8 +27,8 @@ Library → `Enter` on a manga.
 ## Driving it with drive.sh
 Give one chapter a page read first, so `u` has a reset to do (the page count exists only after the pages are fetched):
 ```sh
-$S/gql.sh 'mutation($id:Int!){ fetchChapterPages(input:{chapterId:$id}){ pages } }' '{"id":<2nd chapter id>}' >/dev/null
-$S/gql.sh 'mutation($id:Int!){ updateChapter(input:{id:$id, patch:{lastPageRead:3}}){ chapter{ lastPageRead } } }' '{"id":<2nd chapter id>}'
+.claude/skills/verify-miharchy/scripts/gql.sh 'mutation($id:Int!){ fetchChapterPages(input:{chapterId:$id}){ pages } }' '{"id":<2nd chapter id>}' >/dev/null
+.claude/skills/verify-miharchy/scripts/gql.sh 'mutation($id:Int!){ updateChapter(input:{id:$id, patch:{lastPageRead:3}}){ chapter{ lastPageRead } } }' '{"id":<2nd chapter id>}'
 ```
 ```js
 [
@@ -40,7 +40,7 @@ $S/gql.sh 'mutation($id:Int!){ updateChapter(input:{id:$id, patch:{lastPageRead:
   [500,  function() { done() }]
 ]
 ```
-Read back: `$S/gql.sh 'query($id:Int!){ manga(id:$id){ unreadCount chapters{ nodes{ id isRead lastPageRead lastReadAt sourceOrder } } } }' '{"id":<manga id>}'`.
+Read back: `.claude/skills/verify-miharchy/scripts/gql.sh 'query($id:Int!){ manga(id:$id){ unreadCount chapters{ nodes{ id isRead lastPageRead lastReadAt sourceOrder } } } }' '{"id":<manga id>}'`.
 
 Bookmark, filter, sort and resume. The panel rows run unread, downloaded, bookmarked, by source, by number, by upload date, save as default, save as default for every manga. Indexes of `mangaDetail.shown` are what the cursor sees; `mangaDetail.optionRows` shows the choices:
 ```js
@@ -55,7 +55,7 @@ Bookmark, filter, sort and resume. The panel rows run unread, downloaded, bookma
   [1500, function() { done() }]
 ]
 ```
-Read back: `$S/gql.sh '{ manga(id:<id>){ meta { key value } chapters { nodes { id isBookmarked isRead } } } metas(filter:{key:{startsWith:"miharchy.chapter"}}){ nodes { key value } } }'`. Run the window a second time to see the choices come back from meta.
+Read back: `.claude/skills/verify-miharchy/scripts/gql.sh '{ manga(id:<id>){ meta { key value } chapters { nodes { id isBookmarked isRead } } } metas(filter:{key:{startsWith:"miharchy.chapter"}}){ nodes { key value } } }'`. Run the window a second time to see the choices come back from meta.
 
 ## Gotchas
 - `grab()` saves asynchronously; a `done()` in the same step quits before the file is written.
