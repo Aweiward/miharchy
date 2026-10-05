@@ -411,6 +411,13 @@ ShellRoot {
       settingsView.run(id)
       return
     }
+    if (id === "manga.searchTitle") {
+      var title = mangaDetail.manga ? mangaDetail.manga.title : ""
+      if (!title) return
+      run("view.browse")
+      browseView.searchEverywhere(title)
+      return
+    }
     if (id === "manga.migrate") {
       migrateView.startSingle(mangaDetail.manga)
       return

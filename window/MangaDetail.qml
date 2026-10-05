@@ -63,7 +63,7 @@ Rectangle {
     : optionsOpen ? "j k move   enter change   esc close   "
     : downloadsOpen ? "j k move   enter download   esc close   "
     : selecting ? "j k extend   R read   u unread   b bookmark   d download   x delete download   esc end   "
-    : (note ? note + "   " : "") + "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   o browser   y copy link   r refresh   esc back   "
+    : (note ? note + "   " : "") + "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   o browser   y copy link   Y copy title   / search title   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
@@ -256,6 +256,11 @@ Rectangle {
           Quickshell.execDetached(["wl-copy", "--", manga.url])
           note = "Link copied"
         }
+        break
+      case "manga.copyTitle":
+        if (!manga) break
+        Quickshell.execDetached(["wl-copy", "--", manga.title])
+        note = "Title copied"
         break
       case "manga.categories":
         picking = true
