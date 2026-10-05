@@ -677,6 +677,7 @@ ShellRoot {
         onClosed: function(chapterId) {
           mangaDetail.reread(chapterId)
           updatesView.load()
+          if (root.config) root.fetchLibrary()
         }
         onDeleted: mangaDetail.reload()
       }
