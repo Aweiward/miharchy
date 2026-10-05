@@ -95,6 +95,8 @@ var ROWS = [
   { key: "defaultCategory", label: "Default category", type: "category", default: "ask", store: "meta" },
   // The server refuses a folder that does not exist; empty means its own.
   { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
+  // New downloads only; the server reads chapters on disk in either form.
+  { key: "downloadAsCbz", label: "Save downloads as CBZ", type: "bool", default: false, store: "server" },
   // Suwayomi has no such setting, so the reader deletes a chapter it
   // finished as it leaves it.
   { key: "deleteAfterRead", label: "Delete after read", type: "bool", default: false, store: "meta" },
