@@ -231,12 +231,12 @@ ShellRoot {
     var editing = settingsEditing ? "settings" : libraryView.editing ? "library" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
     // An open sync result, download queue, reader, migration or manga
     // detail decides which keys apply, in that order; on Browse, the screen
-    // does.
+    // or the panel over it does.
     var scope = syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? "reader"
       : migrateView.open ? "migrate-" + migrateView.step
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.selecting ? "manga-select" : "manga")
-      : view === "browse" ? browseView.screen : view === "library" && libraryScreen === "categories" ? "categories"
+      : view === "browse" ? browseView.scope : view === "library" && libraryScreen === "categories" ? "categories"
       : view === "library" && libraryOptions ? "library-options" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
     // Any other key disarms a remove, even one no command takes.
@@ -267,7 +267,7 @@ ShellRoot {
       extensionsView.run(id)
       return
     }
-    if (/^(browse|sources|source|global)\./.test(id)) {
+    if (/^(browse|sources|source|global|panel)\./.test(id)) {
       browseView.run(id)
       return
     }

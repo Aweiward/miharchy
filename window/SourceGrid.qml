@@ -52,14 +52,16 @@ Item {
         model: [
           { mode: "popular", label: "p popular" },
           { mode: "latest", label: "n latest" },
-          { mode: "search", label: view.listing && view.listing.mode === "search" ? "/ " + view.listing.query : "/ search" }
+          { mode: "search", label: view.listing && view.listing.mode === "search" ? "/ " + (view.listing.query || "search") : "/ search" },
+          { mode: "filters", label: view.listing && view.listing.filters.length ? "F " + view.listing.filters.length + " filters" : "F filter" }
         ]
 
         Text {
           required property var modelData
+          readonly property bool on: view.listing !== null && (modelData.mode === "filters" ? view.listing.filters.length > 0 : view.listing.mode === modelData.mode)
           visible: modelData.mode !== "latest" || (view.listing && view.listing.source.supportsLatest)
           text: modelData.label
-          color: view.listing && view.listing.mode === modelData.mode ? view.theme.accent : view.theme.muted
+          color: on ? view.theme.accent : view.theme.muted
           font.family: view.theme.fontFamily
           font.pixelSize: view.theme.fontSmall
         }

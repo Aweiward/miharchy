@@ -5,11 +5,13 @@ import "Commands.js" as Commands
 import "Model.js" as Model
 import "Browse.js" as Browse
 import "GlobalSearch.js" as GlobalSearch
+import "Widgets.js" as Widgets
 
 // The Browse view past its extensions: the source list, a source's manga
-// and a search across every source. It talks to the server itself;
-// Browse.js and GlobalSearch.js decide. shell.qml forwards every
-// "browse.", "sources.", "source." and "global." command to run(),
+// and a search across every source, and a source's filters or settings
+// over them. It talks to the server itself; Browse.js, GlobalSearch.js and
+// Widgets.js decide. shell.qml forwards every "browse.", "sources.",
+// "source.", "global." and "panel." command to run(), reads scope,
 // shows ExtensionsView while screen is "extensions", and opens a manga's
 // detail on openManga.
 Item {
@@ -30,21 +32,38 @@ Item {
   property int gridCursor: 0
   property var global: null
   property var globalCursor: ({ row: 0, col: 0 })
-  // "" | "source" | "global": the search field is open.
+  // A source's filters or settings (Widgets.panel) over the screen, or null.
+  property var panel: null
+  // Each source's filter panel by source id, kept for the window's life
+  // as Mihon keeps them for its browse screen; never stored.
+  property var filterPanels: ({})
+  // The path of the text row the panel field types.
+  property var panelEditPath: null
+  readonly property var panelRows: panel ? Widgets.rows(panel.widgets, panel.open) : []
+  // The command scope: the open panel, else the screen.
+  readonly property string scope: panel ? (panel.kind === "filters" ? "source-filters" : "source-settings") : screen
+  // "" | "source" | "global" | "panel": a text field is open.
   property string editing: ""
   // Only the latest request of each kind may update its state.
   property int sourcesSeq: 0
   property int listingSeq: 0
   property int globalSeq: 0
+  property int panelSeq: 0
   // The global search's requests by group index, to abort.
   property var globalXhrs: []
 
+  readonly property string settingsHint: {
+    var s = screen === "source" && listing ? listing.source : src.sources[sourceCursor]
+    return s && s.configurable ? "S settings   " : ""
+  }
   readonly property var hint: ({
-    sources: "j k move   enter open   / search all   l languages   r refresh   tab extensions   ",
+    sources: "j k move   enter open   / search all   l languages   " + settingsHint + "r refresh   tab extensions   ",
     extensions: "r refresh   tab sources   ",
-    source: "hjkl move   enter open   p popular   n latest   / search   r retry   esc back   ",
-    global: "hjkl move   enter open   / search   r retry   esc back   "
-  })[screen]
+    source: "hjkl move   enter open   p popular   n latest   / search   F filter   " + settingsHint + "r retry   esc back   ",
+    global: "hjkl move   enter open   / search   r retry   esc back   ",
+    "source-filters": "j k move   enter change   a apply   x reset   esc close   ",
+    "source-settings": "j k move   enter change   esc close   "
+  })[scope]
 
   signal key(var event)
   signal editEnded()
@@ -56,9 +75,12 @@ Item {
     sourcesSeq++
     listingSeq++
     globalSeq++
+    panelSeq++
     screen = "sources"
     listing = null
     global = null
+    panel = null
+    filterPanels = {}
     src = config ? { state: "idle", message: "", sources: [] } : { state: "no-config", message: "", sources: [] }
     if (active && config) loadSources()
   }
@@ -94,11 +116,11 @@ Item {
     })
   }
 
-  function openListing(mode, query) {
+  function openListing(mode, query, filters) {
     // Before the new listing lands: the emptied grid reports its end at
     // once, and the page that starts must carry the new number.
     listingSeq++
-    listing = Browse.listing(listing.source, mode, query)
+    listing = Browse.listing(listing.source, mode, query, filters)
     gridCursor = 0
     moreManga()
   }
@@ -157,6 +179,45 @@ Item {
   function closeSearch() {
     editing = ""
     editEnded()
+  }
+
+  // A filter panel reopens as it was left; settings always load fresh.
+  function openPanel(kind, source) {
+    panelSeq++
+    var kept = kind === "filters" ? filterPanels[source.id] : null
+    panel = kept || Widgets.panel(kind, source)
+    if (kept) return
+    var seq = panelSeq
+    send(Widgets.loadPayload(panel), function(reply) {
+      if (seq !== view.panelSeq) return
+      view.panel = Widgets.reducePanel(view.panel, { type: "reply", reply: reply })
+      if (view.panel.kind === "filters" && view.panel.state === "ok") view.filterPanels[source.id] = view.panel
+    })
+  }
+
+  // Settings save at once; filters wait for apply.
+  function editPanel(widgets, path) {
+    var before = panel.widgets
+    panel = Widgets.reducePanel(panel, { type: "edit", widgets: widgets })
+    if (panel.kind === "filters") {
+      filterPanels[panel.source.id] = panel
+      return
+    }
+    var seq = panelSeq
+    send(Widgets.savePayload(panel, path), function(reply) {
+      if (seq !== view.panelSeq) return
+      view.panel = Widgets.reducePanel(view.panel, { type: "reply", reply: reply, before: before })
+    })
+  }
+
+  // Closing settings over a source loads it again, so the listing shows
+  // what the new values give.
+  function closePanel() {
+    if (editing === "panel") closeSearch()
+    var stale = panel.kind === "preferences" && panel.saved && screen === "source"
+    panelSeq++
+    panel = null
+    if (stale) openListing(listing.mode, listing.query, listing.filters)
   }
 
   function run(id) {
@@ -220,7 +281,59 @@ Item {
       case "source.commit":
         var q = grid.searchField.text.trim()
         closeSearch()
-        if (q) openListing("search", q)
+        // As Mihon: a search from a search keeps its filters; from
+        // popular or latest it starts without them.
+        if (q) openListing("search", q, listing.mode === "search" ? listing.filters : [])
+        break
+      case "source.filters":
+        openPanel("filters", listing.source)
+        break
+      case "source.settings":
+        var ss = screen === "source" ? listing.source : src.sources[sourceCursor]
+        if (ss && ss.configurable) openPanel("preferences", ss)
+        break
+      case "panel.up":
+      case "panel.down":
+        panel = Widgets.reducePanel(panel, { type: "move", delta: id === "panel.up" ? -1 : 1 })
+        break
+      case "panel.choose":
+        if (panel.state !== "ok") break
+        var row = panelRows[panel.cursor]
+        var act = Widgets.activate(panel.widgets, row)
+        if (act.toggle) {
+          panel = Widgets.reducePanel(panel, { type: "toggle", key: act.toggle })
+        } else if (act.widgets) {
+          editPanel(act.widgets, row.path)
+        } else if (act.edit !== undefined) {
+          panelEditPath = row.path
+          editing = "panel"
+          panelView.field.text = act.edit
+          panelView.field.selectAll()
+          panelView.field.forceActiveFocus()
+        }
+        break
+      case "panel.commit":
+        var typed = panelView.field.text
+        closeSearch()
+        editPanel(Widgets.setText(panel.widgets, panelEditPath, typed), panelEditPath)
+        break
+      case "panel.cancel":
+        closeSearch()
+        break
+      case "panel.reset":
+        if (panel.state === "ok") editPanel(Widgets.reset(panel.widgets), null)
+        break
+      case "panel.apply":
+        if (panel.state !== "ok") break
+        // Filters reach a source only in a search, so applying searches,
+        // with the query of a search already showing.
+        var applied = Widgets.filterChanges(panel.widgets)
+        closePanel()
+        openListing("search", listing.mode === "search" ? listing.query : "", applied)
+        break
+      case "panel.closeFilters":
+      case "panel.closeSettings":
+        closePanel()
         break
       case "source.cancel":
         closeSearch()
@@ -390,6 +503,31 @@ Item {
     cursor: view.globalCursor
     editing: view.editing === "global"
     configPath: view.configPath
+    onKey: function(event) { view.key(event) }
+  }
+
+  WidgetPanel {
+    id: panelView
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: Math.min(parent.width - view.theme.fontSize * 4, view.theme.fontSize * 34)
+    visible: view.panel !== null
+    theme: view.theme
+    title: !view.panel ? "" : view.panel.kind === "filters" ? "Filter " + view.panel.source.name : view.panel.source.name + " settings"
+    rows: view.panelRows
+    cursor: view.panel ? view.panel.cursor : 0
+    editing: view.editing === "panel"
+    editLabel: view.editing === "panel" && view.panelEditPath ? (view.panelRows.filter(function(r) { return r.option === -1 && r.path.join("/") === view.panelEditPath.join("/") }).map(function(r) { return r.label })[0] || "") : ""
+    problem: {
+      if (!view.panel) return ""
+      if (view.panel.state === "loading") return "Loading"
+      var p = Model.problem(view.panel, view.configPath)
+      if (p) return p.title + ". " + p.detail
+      if (view.panel.error) return "Not saved: " + view.panel.error
+      return view.panel.state === "ok" && view.panelRows.length === 0 ? (view.panel.kind === "filters" ? "This source has no filters." : "This source has no settings.") : ""
+    }
     onKey: function(event) { view.key(event) }
   }
 }

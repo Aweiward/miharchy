@@ -123,8 +123,8 @@ test("a batch searches the target source once per manga, one at a time like Miho
   const target = { id: "8", name: "MangaPill (EN)", supportsLatest: true };
   let b = Mi.batch(target, [{ id: 1, title: "Chainsaw Man" }, { id: 2, title: "Berserk" }]);
   assert.deepEqual(b.search.groups.map((g) => G.payload(g).variables), [
-    { source: "8", type: "SEARCH", page: 1, query: "Chainsaw Man" },
-    { source: "8", type: "SEARCH", page: 1, query: "Berserk" }
+    { source: "8", type: "SEARCH", page: 1, query: "Chainsaw Man", filters: [] },
+    { source: "8", type: "SEARCH", page: 1, query: "Berserk", filters: [] }
   ]);
   assert.deepEqual(Mi.due(b), [0]);
   b = Mi.reduceBatch(b, 0, { type: "request", now: 0 });

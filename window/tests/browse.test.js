@@ -32,7 +32,7 @@ const page = (ids, hasNextPage) => ok({ fetchSourceManga: { hasNextPage, mangas:
 test("a listing asks for page 1, then the next page, and appends without duplicates", () => {
   let l = B.listing({ id: "99", name: "S", supportsLatest: true }, "popular", "");
   const p1 = B.listingPayload(l);
-  assert.deepEqual(p1.variables, { source: "99", type: "POPULAR", page: 1, query: null });
+  assert.deepEqual(p1.variables, { source: "99", type: "POPULAR", page: 1, query: null, filters: null });
   l = B.reduceListing(l, { type: "request" });
   assert.equal(B.listingPayload(l), null, "no second request while one is in flight");
   l = B.reduceListing(l, { type: "reply", reply: page([1, 2], true), config });
@@ -48,7 +48,25 @@ test("a listing asks for page 1, then the next page, and appends without duplica
 test("latest and search map to their fetch types; search sends the query", () => {
   const s = { id: "9", name: "S", supportsLatest: true };
   assert.equal(B.listingPayload(B.listing(s, "latest", "")).variables.type, "LATEST");
-  assert.deepEqual(B.listingPayload(B.listing(s, "search", "one piece")).variables, { source: "9", type: "SEARCH", page: 1, query: "one piece" });
+  assert.deepEqual(B.listingPayload(B.listing(s, "search", "one piece")).variables, { source: "9", type: "SEARCH", page: 1, query: "one piece", filters: [] });
+});
+
+test("filters reach the source only in a search, as Suwayomi applies them only there", () => {
+  const s = { id: "9", name: "S", supportsLatest: true };
+  const filters = [{ position: 0, selectState: 3 }];
+  assert.deepEqual(B.listingPayload(B.listing(s, "search", "", filters)).variables, { source: "9", type: "SEARCH", page: 1, query: "", filters });
+  assert.equal(B.listingPayload(B.listing(s, "popular", "", filters)).variables.filters, null);
+  assert.equal(B.listing(s, "popular", "", filters).filters.length, 0, "popular and latest drop them");
+});
+
+test("an empty filtered search points at the filters", () => {
+  const l = B.reduceListing(B.reduceListing(B.listing({ id: "9", name: "S" }, "search", "", [{ position: 0, checkBoxState: true }]), { type: "request" }), { type: "reply", reply: page([], false), config });
+  assert.deepEqual(B.notice(l, "/c"), { title: "No manga found", detail: "Try other filters: F." });
+});
+
+test("a source says whether it has settings", () => {
+  const s = B.sources(ok({ sources: { nodes: [src({ id: "2", isConfigurable: true }), src({ id: "3", displayName: "T" })] } }), config, false).sources;
+  assert.deepEqual(s.map((x) => x.configurable), [true, false]);
 });
 
 test("a source without latest falls back to popular", () => {
