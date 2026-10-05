@@ -3,6 +3,7 @@
 The Library view (key `1`): a cover grid of the server's library manga with unread badges, a category switcher, search, sort and filters, and removal.
 
 ## Sub-features
+- Downloaded only (palette "Downloaded only on or off", `root.run("mode.downloadedOnly")`, meta `miharchy.downloadedOnly`): the Library shows only manga with downloads (`root.shown.manga`), a manga's chapter list only downloaded chapters (`mangaDetail.shown`), the reader's list only those plus the one opened (`reader.reader.chapters`), Updates only downloaded rows; the status bar says "downloaded only". Seed a download with `enqueueChapterDownloads` + `startDownloader` and wait for `isDownloaded`. The stored filters stay as they were (read back `metas`).
 - Cover grid with unread-chapter badges (`unreadCount`), placeholder tiles for missing covers.
 - `L` switches between the cover grid and a list (cover, title, source, unread count), as do the panel's Display rows; global meta `miharchy.libraryDisplay` keeps it. In the list, `j`/`k` move one row. A source that is not installed shows its name from meta `miharchy.sourceNames` with "(not installed)".
 - The panel's Badges rows turn on a downloaded-chapters badge (top-left, before the unread count) and the source's language (top-right); its Tabs row shows each category's manga count, which a search also shows, as in Mihon. The list shows the same as text. Meta `miharchy.libraryBadgeDownloads`, `miharchy.libraryBadgeLanguage`, `miharchy.libraryTabCounts` (`on`/`off`, off by default).

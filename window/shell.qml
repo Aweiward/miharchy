@@ -36,7 +36,9 @@ ShellRoot {
   property string libraryScreen: "grid"
   property string libraryQuery: ""
   // The Library's sort and filters, as server meta holds them.
-  readonly property var libraryPrefs: libraryStore.values
+  // Downloaded only forces the Downloaded filter on, as in Mihon.
+  readonly property bool downloadedOnly: settingsState.values.downloadedOnly === true
+  readonly property var libraryPrefs: Prefs.force(libraryStore.values, "libraryFilterDownloaded", "include", downloadedOnly)
   property bool libraryOptions: false
   property int libraryOptionsCursor: 0
   readonly property var switcher: Model.switcher({ manga: Library.apply(connection.manga, libraryPrefs, libraryQuery), categories: connection.categories })
@@ -506,6 +508,7 @@ ShellRoot {
         settingsView.createBackup()
         break
       case "mode.incognito":
+      case "mode.downloadedOnly":
         var mode = Settings.toggle(id.slice(5), settingsState.values)
         saveSetting(mode.row, mode.value)
         break
@@ -884,6 +887,7 @@ ShellRoot {
           id: updatesView
           anchors.fill: parent
           visible: root.view === "updates"
+          downloadedOnly: root.downloadedOnly
           theme: theme
           config: root.config
           configPath: root.configPath
@@ -923,6 +927,7 @@ ShellRoot {
           anchors.fill: parent
           theme: theme
           config: root.config
+          downloadedOnly: root.downloadedOnly
           configPath: root.configPath
           categories: root.connection.categories
           onCategorized: if (root.config) root.fetchLibrary()

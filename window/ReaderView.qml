@@ -27,8 +27,8 @@ Rectangle {
   readonly property string webtoonWidth: values.webtoonWidth
   // The skips, as Chapters.readingOrder() takes them. A change lists the
   // chapters again at once.
-  readonly property var skip: ({ read: values.skipRead, filtered: values.skipFiltered, dupe: values.skipDupe })
-  readonly property string skipKey: [skip.read, skip.filtered, skip.dupe].join()
+  readonly property var skip: ({ read: values.skipRead, filtered: values.skipFiltered, dupe: values.skipDupe, downloaded: values.downloadedOnly === true })
+  readonly property string skipKey: [skip.read, skip.filtered, skip.dupe, skip.downloaded].join()
   readonly property bool deleteBookmarked: values.deleteBookmarked === true
   // What the chapter list comes from: { chapters, prefs }, the manga's
   // chapters newest first and its chapter choices.

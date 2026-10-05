@@ -68,6 +68,16 @@ function read(table, data, values) {
   return next
 }
 
+// values with key shown as value while on, whatever is stored: how a mode
+// such as Downloaded only forces a filter without saving over the choice.
+function force(values, key, value, on) {
+  if (!on) return values
+  var next = {}
+  for (var k in values) next[k] = values[k]
+  next[key] = value
+  return next
+}
+
 // Where a save lands: "global", or one manga's meta.
 function scope(mangaId) {
   return mangaId === undefined ? "global" : "manga:" + mangaId
@@ -90,6 +100,7 @@ if (typeof module !== "undefined") {
   module.exports = {
     PREFIX: PREFIX,
     TRI_STATE: TRI_STATE,
+    force: force,
     defaults: defaults,
     loadPayload: loadPayload,
     savePayload: savePayload,
