@@ -159,6 +159,47 @@ function continueChapter(chapters, chapterPrefs) {
   return Chapters.nextUnread(Chapters.apply(chapters, chapterPrefs), chapterPrefs)
 }
 
+// The actions on selected manga (Mihon's library selection) take their
+// chapters from one query; Browse.toChapters() gives them the shape the
+// chapter actions read.
+var CHAPTERS_QUERY = "query($ids: [Int!]) { chapters(filter: { mangaId: { in: $ids } }) {"
+  + " nodes { id name chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder } } }"
+var REMOVE_MUTATION = "mutation($ids: [Int!]!) { updateMangas(input: { ids: $ids, patch: { inLibrary: false } }) { mangas { id inLibrary } } }"
+var CATEGORIES_MUTATION = "mutation($ids: [Int!]!, $add: [Int!]!, $remove: [Int!]!) {"
+  + " updateMangasCategories(input: { ids: $ids, patch: { addToCategories: $add, removeFromCategories: $remove } }) { mangas { id } } }"
+
+function chaptersPayload(mangaIds) {
+  return { query: CHAPTERS_QUERY, variables: { ids: mangaIds } }
+}
+
+// Takes the manga out of the library. Their chapters, read state and
+// downloads stay, as in Mihon.
+function removePayload(mangaIds) {
+  return { query: REMOVE_MUTATION, variables: { ids: mangaIds } }
+}
+
+// Mihon's change category dialog for many manga: each user category is
+// "all" when every manga is in it, "some" when a few are, else "none".
+// manga: the chosen manga, as Model.fromResponse() builds them.
+function categoryRows(categories, manga) {
+  return categories.map(function(c) {
+    var n = manga.filter(function(m) { return m.categories.indexOf(c.id) !== -1 }).length
+    return { id: c.id, name: c.name, state: n === 0 ? "none" : n === manga.length ? "all" : "some" }
+  })
+}
+
+// Choosing a row puts every manga in that category, or takes every manga
+// out once all are in it.
+function categoryPayload(row, mangaIds) {
+  var out = row.state === "all"
+  return { query: CATEGORIES_MUTATION, variables: { ids: mangaIds, add: out ? [] : [row.id], remove: out ? [row.id] : [] } }
+}
+
+// "the manga" for one, "3 manga" for more: what an armed x or X acts on.
+function count(n) {
+  return n === 1 ? "the manga" : n + " manga"
+}
+
 // Whether the search or a filter may hide manga.
 function narrowed(prefs, query) {
   return words(query).length > 0 || FILTERS.some(function(f) { return prefs[filterKey(f)] !== "off" })
@@ -187,6 +228,11 @@ if (typeof module !== "undefined") {
     toggleDisplay: toggleDisplay,
     badges: badges,
     continueChapter: continueChapter,
+    chaptersPayload: chaptersPayload,
+    removePayload: removePayload,
+    categoryRows: categoryRows,
+    categoryPayload: categoryPayload,
+    count: count,
     tabLabel: tabLabel,
     choose: choose,
     narrowed: narrowed,

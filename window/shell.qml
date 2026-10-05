@@ -11,6 +11,8 @@ import "Chapters.js" as Chapters
 import "Library.js" as Library
 import "Browse.js" as Browse
 import "Prefs.js" as Prefs
+import "Updates.js" as Updates
+import "Downloads.js" as Downloads
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -46,15 +48,37 @@ ShellRoot {
   // { mangaId, chapterId } to read once the config loads, or null.
   property var pendingChapter: Model.chapterTarget(Quickshell.env("MIHARCHY_OPEN_CHAPTER"))
 
-  // The id of the manga a second x removes from the library, or -1.
-  property int libraryArmed: -1
+  // Manga ids picked with v. The actions take these, or the cursor's
+  // manga with none, as on Updates.
+  property var librarySelected: []
+  readonly property var libraryTargets: Updates.chosen(shown.manga, librarySelected, libraryCursor)
+  // What a second x ("remove") or X ("delete" the downloads) does to the
+  // targets, or "".
+  property string libraryArmed: ""
+  // The manga the change categories panel changes; [] while it is closed.
+  property var libraryPickIds: []
+  property int libraryPickCursor: 0
+  readonly property var libraryPickRows: Library.categoryRows(connection.categories, connection.manga.filter(function(m) { return root.libraryPickIds.indexOf(m.id) !== -1 }))
   property string libraryError: ""
   // What u on the Library started; in place of the hint until the next key.
   property string libraryNote: ""
 
+  readonly property string libraryHint: libraryScreen === "categories" ? categoriesView.hint
+    : libraryPickIds.length ? "j k move   enter in or out   esc close   "
+    : libraryOptions ? "j k move   enter change   esc close   "
+    : libraryNote ? libraryNote + "   "
+    : libraryArmed === "remove" ? "x again to remove " + Library.count(libraryTargets.length) + " from the library, any other key keeps it   "
+    : libraryArmed === "delete" ? "X again to delete the downloads of " + Library.count(libraryTargets.length) + ", any other key keeps them   "
+    : (libraryError ? libraryError + "   " : "") + (librarySelected.length
+      ? librarySelected.length + " selected   v select   A all   I invert   R read   U unread   d download   X delete downloads   C categories   x remove   esc clear   "
+      : "enter open   space read   v select   x remove   " + (libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (libraryPrefs.libraryDisplay === "list" ? "L grid   " : "L list   ") + (switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D queue   s sync   ")
+
   onSwitcherIndexChanged: libraryCursor = 0
   // A removed manga leaves the grid, so the cursor may point past its end.
-  onShownChanged: libraryCursor = Math.max(0, Math.min(shown.manga.length - 1, libraryCursor))
+  onShownChanged: {
+    libraryCursor = Math.max(0, Math.min(shown.manga.length - 1, libraryCursor))
+    librarySelected = Updates.keep(librarySelected, shown.manga)
+  }
 
   Theme { id: theme }
 
@@ -170,22 +194,6 @@ ShellRoot {
     keyRoot.forceActiveFocus()
   }
 
-  function removeFromLibrary(mangaId) {
-    var req = Model.request(config, Model.inLibraryPayload(mangaId, false))
-    libraryError = ""
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState !== XMLHttpRequest.DONE) return
-      var reply = Model.reply(xhr.status, xhr.responseText)
-      if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
-      root.fetchLibrary()
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
-  }
-
   function send(payload, done) {
     var req = Model.request(config, payload)
     var xhr = new XMLHttpRequest()
@@ -239,6 +247,51 @@ ShellRoot {
     })
   }
 
+  // Mihon's library selection actions, on the targets: "read" and "unread"
+  // mark every chapter, "download" queues the unread ones, "delete" takes
+  // the downloads off the disk, "remove" takes the manga out of the
+  // library. The selection ends, as in Mihon.
+  function actOnLibrary(action) {
+    var ids = libraryTargets.map(function(m) { return m.id })
+    librarySelected = []
+    if (!ids.length || !config) return
+    var failed = function(reply) {
+      if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
+    }
+    if (action === "remove") {
+      send(Library.removePayload(ids), function(reply) {
+        failed(reply)
+        root.fetchLibrary()
+      })
+      return
+    }
+    send(Library.chaptersPayload(ids), function(reply) {
+      if (reply.state !== "ok") return failed(reply)
+      var chapters = Browse.toChapters(reply.data.chapters.nodes)
+      if (action === "read" || action === "unread") return root.markChapters(chapters, action, ids)
+      var payload = action === "download" ? Downloads.enqueuePayload(Downloads.unread(chapters)) : Downloads.removePayload(chapters, downloadsView.queue.items)
+      if (!payload) {
+        root.libraryNote = action === "download" ? "Every unread chapter is downloaded already." : "No chapter is downloaded."
+        return
+      }
+      root.send(payload, function(done) {
+        failed(done)
+        downloadsView.apply(done)
+        root.fetchLibrary()
+      })
+    })
+  }
+
+  // x and X ask once; the same key again acts.
+  function armLibrary(kind, action) {
+    if (libraryArmed === kind) {
+      libraryArmed = ""
+      actOnLibrary(action)
+    } else if (libraryTargets.length && config) {
+      libraryArmed = kind
+    }
+  }
+
   function fetchLibrary() {
     var cfg = config
     var req = Model.libraryRequest(cfg)
@@ -267,11 +320,12 @@ ShellRoot {
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.selecting ? "manga-select" : "manga")
       : view === "browse" ? browseView.scope : view === "library" && libraryScreen === "categories" ? "categories"
+      : view === "library" && libraryPickIds.length ? "library-categories"
       : view === "library" && libraryOptions ? "library-options" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
-    // Any other key disarms a remove, even one no command takes.
-    if (id !== "library.remove") {
-      libraryArmed = -1
+    // Any other key disarms a remove or a delete, even one no command takes.
+    if (id !== "library.remove" && id !== "library.deleteDownloads") {
+      libraryArmed = ""
       libraryError = ""
     }
     libraryNote = ""
@@ -466,7 +520,8 @@ ShellRoot {
         libraryView.closeSearch()
         break
       case "library.clearSearch":
-        if (libraryQuery) libraryQuery = ""
+        if (librarySelected.length) librarySelected = []
+        else if (libraryQuery) libraryQuery = ""
         else run("window.quit")
         break
       case "library.options":
@@ -489,14 +544,48 @@ ShellRoot {
         libraryStore.set([Library.choose(libraryPrefs, Library.rows(libraryPrefs)[libraryOptionsCursor])])
         break
       case "library.remove":
-        var r = shown.manga[libraryCursor]
-        if (!r || !config) break
-        if (libraryArmed === r.id) {
-          libraryArmed = -1
-          removeFromLibrary(r.id)
-        } else {
-          libraryArmed = r.id
+        armLibrary("remove", "remove")
+        break
+      case "library.deleteDownloads":
+        armLibrary("delete", "delete")
+        break
+      case "library.select":
+        if (shown.manga[libraryCursor]) librarySelected = Updates.toggle(librarySelected, shown.manga[libraryCursor].id)
+        break
+      case "library.selectAll":
+        librarySelected = shown.manga.map(function(m) { return m.id })
+        break
+      case "library.invert":
+        librarySelected = Updates.invert(librarySelected, shown.manga)
+        break
+      case "library.markRead":
+      case "library.markUnread":
+        actOnLibrary(id === "library.markRead" ? "read" : "unread")
+        break
+      case "library.download":
+        actOnLibrary("download")
+        break
+      case "library.setCategories":
+        if (!connection.categories.length) libraryNote = "No categories yet. Press c to make one."
+        else if (libraryTargets.length) {
+          libraryPickIds = libraryTargets.map(function(m) { return m.id })
+          libraryPickCursor = 0
         }
+        break
+      case "library.pickUp":
+      case "library.pickDown":
+        libraryPickCursor = Math.max(0, Math.min(libraryPickRows.length - 1, libraryPickCursor + (id === "library.pickUp" ? -1 : 1)))
+        break
+      case "library.pickToggle":
+        var pick = libraryPickRows[libraryPickCursor]
+        if (pick) send(Library.categoryPayload(pick, libraryPickIds), function(reply) {
+          if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
+          root.fetchLibrary()
+        })
+        break
+      case "library.pickClose":
+        libraryPickIds = []
+        librarySelected = []
         break
       case "library.open":
         var m = shown.manga[libraryCursor]
@@ -603,6 +692,11 @@ ShellRoot {
           switcherIndex: root.switcherIndex
           cursor: root.libraryCursor
           armed: root.libraryArmed
+          selected: root.librarySelected
+          targets: root.libraryTargets.map(function(m) { return m.id })
+          picking: root.libraryPickIds.length > 0
+          pickRows: root.libraryPickRows
+          pickCursor: root.libraryPickCursor
           notice: Model.notice(root.connection, root.configPath, root.shown, Library.narrowed(root.libraryPrefs, root.libraryQuery))
           prefs: root.libraryPrefs
           query: root.libraryQuery
@@ -611,9 +705,17 @@ ShellRoot {
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           onSearched: function(text) { root.libraryQuery = text }
-          onPicked: function(index) { root.libraryCursor = index }
-          onCategoryPicked: function(index) { root.libraryCategory = root.switcher[index].id }
+          // A click moves the targets, so it disarms x and X as a key does.
+          onPicked: function(index) {
+            root.libraryArmed = ""
+            root.libraryCursor = index
+          }
+          onCategoryPicked: function(index) {
+            root.libraryArmed = ""
+            root.libraryCategory = root.switcher[index].id
+          }
           onOptionPicked: function(index) { root.libraryOptionsCursor = index }
+          onPickPicked: function(index) { root.libraryPickCursor = index }
         }
 
         CategoriesView {
@@ -800,7 +902,7 @@ ShellRoot {
         HintBar {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "enter open   space read   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.libraryPrefs.libraryDisplay === "list" ? "L grid   " : "L list   ") + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryHint, updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           theme: theme
           onKey: function(event) { root.handleKey(event) }
         }

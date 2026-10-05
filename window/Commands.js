@@ -30,7 +30,7 @@ var KEY = {
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, source, global, or its panel: source-filters,
 // source-settings; Library screen: categories; or
-// overlay: library-options, manga, manga-categories, manga-options,
+// overlay: library-options, library-categories, manga, manga-categories, manga-options,
 // manga-select, manga-track,
 // manga-track-pick, downloads, reader, sync,
 // or a restore step: restore-confirm, -checking, -running, -done, -failed,
@@ -69,9 +69,10 @@ var commands = [
   { id: "track.back", title: "Back", keys: ["Esc", "Backspace"], view: "manga-track-pick", hidden: true },
   { id: "categories.back", title: "Back", keys: ["Esc", "Backspace"], view: "categories", hidden: true },
   // Clears a search the field kept; with none, it quits like Esc elsewhere.
-  { id: "library.clearSearch", title: "Clear the search", keys: ["Esc"], view: "library", hidden: true },
+  { id: "library.clearSearch", title: "Clear the selection or the search", keys: ["Esc"], view: "library", hidden: true },
   // Ends a selection; with none, it quits like Esc elsewhere.
   { id: "updates.clearSelection", title: "Clear the selection", keys: ["Esc"], view: "updates", hidden: true },
+  { id: "library.pickClose", title: "Close categories", keys: ["Esc", "Backspace", "C"], view: "library-categories", hidden: true },
   { id: "library.optionsClose", title: "Close sort and filter", keys: ["Esc", "Backspace", "F"], view: "library-options", hidden: true },
   { id: "manga.selectEnd", title: "End the selection", keys: ["Esc", "v"], view: "manga-select", hidden: true },
   { id: "manga.optionsClose", title: "Close chapter filter and sort", keys: ["Esc", "Backspace", "F"], view: "manga-options", hidden: true },
@@ -190,7 +191,21 @@ var commands = [
   { id: "library.categories", title: "Categories", keys: ["c"], view: "library", hidden: true },
   // u, as Check for new chapters on Updates: Mihon's Update category.
   { id: "library.update", title: "Check this category for new chapters", keys: ["u"], view: "library", hidden: true },
+  // Act on the selection, or on the manga under the cursor, as on Updates:
+  // v as on a manga's chapters, since Space reads on; U, not u, which
+  // checks for new chapters.
   { id: "library.remove", title: "Remove from library", keys: ["x"], view: "library", hidden: true },
+  { id: "library.select", title: "Select or deselect the manga", keys: ["v"], view: "library", hidden: true },
+  { id: "library.selectAll", title: "Select every manga in the category", keys: ["A"], view: "library", hidden: true },
+  { id: "library.invert", title: "Invert the selection", keys: ["I"], view: "library", hidden: true },
+  { id: "library.markRead", title: "Mark every chapter read", keys: ["R"], view: "library", hidden: true },
+  { id: "library.markUnread", title: "Mark every chapter unread", keys: ["U"], view: "library", hidden: true },
+  { id: "library.download", title: "Download unread chapters", keys: ["d"], view: "library", hidden: true },
+  { id: "library.deleteDownloads", title: "Delete downloads", keys: ["X"], view: "library", hidden: true },
+  { id: "library.setCategories", title: "Change categories", keys: ["C"], view: "library", hidden: true },
+  { id: "library.pickUp", title: "Previous category", keys: ["k", "Up"], view: "library-categories", hidden: true },
+  { id: "library.pickDown", title: "Next category", keys: ["j", "Down"], view: "library-categories", hidden: true },
+  { id: "library.pickToggle", title: "In or out of category", keys: ["Space", "Enter"], view: "library-categories", hidden: true },
   { id: "library.search", title: "Search the library", keys: ["/"], view: "library", hidden: true },
   // F, not f: f is fullscreen everywhere.
   { id: "library.options", title: "Sort and filter", keys: ["F"], view: "library", hidden: true },

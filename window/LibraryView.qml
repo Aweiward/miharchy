@@ -7,7 +7,8 @@ import "Library.js" as Library
 // The Library view: the category switcher with the search field and a note
 // of the search, filters and sort in use, then the shown category as a cover
 // grid or a list (Library.PREFS libraryDisplay) with its cursor, or a notice
-// in its place, and the sort, filter and display panel over it. shell.qml owns the cursor, the shown category, the search
+// in its place, and the sort, filter and display panel or the change
+// categories panel over it. shell.qml owns the cursor, the shown category, the search
 // and the choices.
 Item {
   id: view
@@ -20,8 +21,17 @@ Item {
   // switcher and switcherIndex update one after the other.
   readonly property var manga: switcher[switcherIndex] ? switcher[switcherIndex].manga : []
   property int cursor: 0
-  // The id of the manga a second x removes, or -1.
-  property int armed: -1
+  // Manga ids picked with v; the actions take these, or the cursor's manga.
+  property var selected: []
+  // What a second x or X does to the targets: "remove", "delete" or "".
+  property string armed: ""
+  property var targets: []
+  readonly property string armedText: armed === "remove" ? "x again to remove from library" : "X again to delete downloads"
+  // The change categories panel's rows (Library.categoryRows), shown while
+  // picking.
+  property bool picking: false
+  property var pickRows: []
+  property int pickCursor: 0
   // Model.notice(): null for the grid, otherwise { title, detail }.
   property var notice: null
   // Prefs values for Library.PREFS, and the search text.
@@ -46,6 +56,7 @@ Item {
   signal picked(int index)
   signal categoryPicked(int index)
   signal optionPicked(int index)
+  signal pickPicked(int index)
 
   onCursorChanged: show()
   onListedChanged: show()
@@ -153,8 +164,16 @@ Item {
       required property var modelData
       required property int index
       readonly property bool current: index === view.cursor
+      readonly property bool chosen: view.selected.indexOf(modelData.id) !== -1
+      readonly property bool armed: view.armed !== "" && view.targets.indexOf(modelData.id) !== -1
       width: grid.cellWidth
       height: grid.cellHeight
+
+      Rectangle {
+        anchors.fill: parent
+        visible: cell.chosen
+        color: view.theme.selected
+      }
 
       MouseArea {
         anchors.fill: parent
@@ -179,13 +198,12 @@ Item {
       }
 
       Text {
-        readonly property bool armed: view.armed === cell.modelData.id
         anchors.top: coverBox.bottom
         anchors.topMargin: view.theme.fontSize / 2
         anchors.left: coverBox.left
         anchors.right: coverBox.right
-        text: armed ? "x again to remove from library" : cell.modelData.title
-        color: armed ? view.theme.urgent : cell.current ? view.theme.accent : view.theme.foreground
+        text: cell.armed ? view.armedText : cell.modelData.title
+        color: cell.armed ? view.theme.urgent : cell.current || cell.chosen ? view.theme.accent : view.theme.foreground
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
         elide: Text.ElideRight
@@ -209,15 +227,23 @@ Item {
       required property var modelData
       required property int index
       readonly property bool current: index === view.cursor
-      readonly property bool armed: view.armed === modelData.id
+      readonly property bool chosen: view.selected.indexOf(modelData.id) !== -1
+      readonly property bool armed: view.armed !== "" && view.targets.indexOf(modelData.id) !== -1
       width: list.width
       height: view.theme.fontSize * 4
-      color: current ? view.theme.selected : "transparent"
+      color: current || chosen ? view.theme.selected : "transparent"
 
       MouseArea {
         anchors.fill: parent
         onClicked: view.point(row.index, false)
         onDoubleClicked: view.point(row.index, true)
+      }
+
+      Rectangle {
+        visible: row.chosen
+        width: view.theme.fontSize * 0.25
+        height: parent.height
+        color: view.theme.accent
       }
 
       Cover {
@@ -251,7 +277,7 @@ Item {
         Text {
           width: parent.width
           elide: Text.ElideRight
-          text: row.armed ? "x again to remove from library" : row.modelData.source
+          text: row.armed ? view.armedText : row.modelData.source
           color: row.armed ? view.theme.urgent : row.current ? view.theme.selectedText : view.theme.muted
           font.family: view.theme.fontFamily
           font.pixelSize: view.theme.fontSmall
@@ -302,7 +328,60 @@ Item {
   // double click's Enter would change the option under the panel's cursor.
   MouseArea {
     anchors.fill: parent
-    visible: view.optionsOpen
+    visible: view.optionsOpen || view.picking
+  }
+
+  // Mihon's change category dialog: [x] every chosen manga is in the
+  // category, [-] some are, [ ] none is.
+  Rectangle {
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: view.theme.fontSize * 22
+    height: picks.implicitHeight + view.theme.fontSize * 2
+    visible: view.picking
+    color: view.theme.background
+    border.width: 1
+    border.color: view.theme.muted
+
+    Column {
+      id: picks
+      x: view.theme.fontSize
+      y: view.theme.fontSize
+      width: parent.width - view.theme.fontSize * 2
+
+      Text {
+        text: "Categories"
+        color: view.theme.muted
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      Repeater {
+        model: view.pickRows
+
+        Text {
+          id: pick
+          required property var modelData
+          required property int index
+          width: picks.width
+          elide: Text.ElideRight
+          text: ({ all: "[x] ", some: "[-] ", none: "[ ] " })[modelData.state] + modelData.name
+          color: index === view.pickCursor ? view.theme.accent : modelData.state === "none" ? view.theme.muted : view.theme.foreground
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: view.pickPicked(pick.index)
+            onDoubleClicked: {
+              view.pickPicked(pick.index)
+              view.key(Commands.enter())
+            }
+          }
+        }
+      }
+    }
   }
 
   Rectangle {
