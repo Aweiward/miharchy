@@ -24,5 +24,6 @@ Press `2`.
 Read back: compare the row count with `node -e` over `window/Updates.js` `updates(data, Date.now())` applied to `UPDATES_QUERY`'s reply.
 
 ## Gotchas
-- Chapters fetched when a manga joins the library are backlog, not updates; to create updates, add a manga to the library before fetching its chapters, or remove chapter rows (see past PRs).
+- Chapters fetched when a manga joins the library are backlog, not updates; to create updates, add a manga to the library before fetching its chapters, or remove chapter rows (see past PRs). Recipe: take MangaDex `fetchSourceManga(type: LATEST)` (recent uploads pass the 3-month rule), `updateManga(patch: {inLibrary: true})` each, wait 2 s, then `fetchMangaAndChapters` each. Three manga gave 29 updates.
+- To prove the mark's count after an action, run `UPDATES_QUERY` through `gql.sh` and pass the reply to `Updates.count` in node (`window/tests/load.js` loads it); it must equal `updatesView.rows.length` in the drive log.
 - Server filters (`excludeUnreadChapters`, `excludeNotStarted`, `excludeCompleted`) default on and skip most manga on a fresh server.
