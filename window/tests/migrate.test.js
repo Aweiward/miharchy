@@ -60,6 +60,22 @@ test("the target write puts it in the library, replaces its categories with the 
   assert.doesNotMatch(plain.query, /setMangaMeta/);
 });
 
+test("the old manga's tracks go to the target in the same write, unless left out", () => {
+  const old = { id: 7, categories: { nodes: [] }, meta: [], trackRecords: { nodes: [{ id: 11, trackerId: 2, tracker: { name: "AniList" } }, { id: 12, trackerId: 1, tracker: { name: "MyAnimeList" } }] } };
+  assert.deepEqual(Mi.trackRecords(old), [{ id: 11, tracker: "AniList" }, { id: 12, tracker: "MyAnimeList" }]);
+  const p = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true);
+  assert.equal(p.variables.track0, 11);
+  assert.equal(p.variables.track1, 12);
+  assert.match(p.query, /track0: bindTrackRecord\(input: \{ mangaId: \$target, trackRecordId: \$track0 \}\)/);
+  assert.match(p.query, /\$track1: Int!/);
+  assert.ok(p.query.indexOf("inLibrary: true") < p.query.indexOf("bindTrackRecord"), "one write: the old manga leaves only after it all succeeds");
+  assert.doesNotMatch(p.query, /bindTrack\(/, "never bindTrack, which calls the tracker");
+  const without = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, false);
+  assert.doesNotMatch(without.query, /bindTrackRecord/);
+  assert.equal(without.variables.track0, undefined);
+  assert.deepEqual(Mi.trackRecords({ id: 7 }), [], "a manga read before tracks were asked for has none");
+});
+
 test("Migrate takes the old manga out of the library, Copy keeps it; deleting downloads names the downloaded chapters", () => {
   const old = { id: 7, chapters: { nodes: [ch(1, { isDownloaded: true }), ch(2), ch(3, { isDownloaded: true })] } };
   const both = Mi.oldPayload(old, true, true);
