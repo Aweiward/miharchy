@@ -15,7 +15,7 @@ private val N = MangaKey(SOURCE, "/manga/n")
 private fun chapter(url: String, read: Boolean = false, page: Long = 0, bookmark: Boolean = false) =
     BackupChapter(url = url, name = url, read = read, lastPageRead = page, bookmark = bookmark)
 
-private class TestManga(val chapters: List<BackupChapter>, val favorite: Boolean, val categories: List<String>, val tracks: List<BackupTracking>)
+private class TestManga(val chapters: List<BackupChapter>, val favorite: Boolean, val categories: List<String>, val tracks: List<BackupTracking>, val notes: String)
 
 private fun manga(
     key: MangaKey,
@@ -23,7 +23,8 @@ private fun manga(
     favorite: Boolean = true,
     categories: List<String> = emptyList(),
     tracks: List<BackupTracking> = emptyList(),
-) = key to TestManga(chapters.toList(), favorite, categories, tracks)
+    notes: String = "",
+) = key to TestManga(chapters.toList(), favorite, categories, tracks, notes)
 
 private const val MAL = 1
 private const val ANILIST = 2
@@ -43,7 +44,7 @@ private fun library(vararg manga: Pair<MangaKey, TestManga>, categories: List<St
                 source = key.source, url = key.url, title = key.url,
                 chapters = m.chapters, favorite = m.favorite,
                 categories = m.categories.map { names.indexOf(it).toLong() * 10 },
-                tracking = m.tracks,
+                tracking = m.tracks, notes = m.notes,
             )
         },
         backupCategories = names.mapIndexed { i, name -> BackupCategory(name, order = i.toLong() * 10) },
@@ -285,6 +286,24 @@ class MergeTest {
         val phone = library(manga(M, favorite = false, tracks = listOf(track(read = 4F))))
         val desktop = library(manga(M, tracks = listOf(track(read = 5F))))
         assertEquals(emptyList(), merge(base, phone, desktop, base))
+    }
+
+    @Test fun `a manga new to the desktop brings its notes`() {
+        val phone = library(manga(M, notes = "Dropped"))
+        assertEquals(listOf(ImportManga(M, "/manga/m"), SetNotes(M, "Dropped")), merge(null, phone, Library.EMPTY, null))
+    }
+
+    @Test fun `notes changed on the phone only come in, changed on the desktop only stay`() {
+        val base = library(manga(M, notes = "a"))
+        assertEquals(listOf(SetNotes(M, "b")), merge(base, library(manga(M, notes = "b")), base, base))
+        assertEquals(listOf(SetNotes(M, "")), merge(base, library(manga(M)), base, base), "a note the phone cleared clears")
+        assertEquals(emptyList(), merge(base, base, library(manga(M, notes = "c")), base))
+    }
+
+    @Test fun `notes both sides changed keep both texts, the desktop's first`() {
+        val base = library(manga(M, notes = "a"))
+        assertEquals(listOf(SetNotes(M, "desk\n\nphone")), merge(base, library(manga(M, notes = "phone")), library(manga(M, notes = "desk")), base))
+        assertEquals(emptyList(), merge(base, library(manga(M, notes = "same")), library(manga(M, notes = "same")), base))
     }
 
     @Test fun `track merging is idempotent once applied`() {

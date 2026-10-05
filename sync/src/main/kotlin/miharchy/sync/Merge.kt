@@ -29,6 +29,10 @@ data class RemoveFromLibrary(val manga: MangaKey, val title: String) : Change
 @Serializable @SerialName("setCategories")
 data class SetCategories(val manga: MangaKey, val categories: Set<String>) : Change
 
+/** The desktop's notes on this manga become [notes]. */
+@Serializable @SerialName("setNotes")
+data class SetNotes(val manga: MangaKey, val notes: String) : Change
+
 @Serializable @SerialName("markRead")
 data class MarkRead(override val manga: MangaKey, override val chapterUrl: String) : ChapterChange
 
@@ -89,9 +93,11 @@ fun merge(phoneBaseline: Library?, phoneNow: Library, desktopNow: Library, deskt
                 changes += ImportManga(key, pN.title)
                 if (merged.categories.isNotEmpty()) changes += SetCategories(key, merged.categories)
                 changes += merged.tracks.map { (id, t) -> BindTrack(key, id, t) }
+                if (merged.notes.isNotEmpty()) changes += SetNotes(key, merged.notes)
             }
             continue
         }
+        if (merged.notes != dN.notes) changes += SetNotes(key, merged.notes)
         if (merged.inLibrary != dN.inLibrary) {
             changes += if (merged.inLibrary) AddToLibrary(key, pN.title) else RemoveFromLibrary(key, dN.title)
         }
@@ -147,7 +153,9 @@ private fun mergeManga(pB: MangaState, pN: MangaState, dB: MangaState, dN: Manga
         // Chapters read on a desktop track never go down, as Suwayomi's restore and Mihon's both keep the higher value.
         id to if (tdN != null && tdN.lastChapterRead > t.lastChapterRead) t.copy(lastChapterRead = tdN.lastChapterRead) else t
     }.toMap()
-    return MangaState(pN.title, inLibrary, categories, chapters, tracks)
+    // Both sides edited the notes: neither text is lost, the desktop's first.
+    val notes = pick(pB.notes, pN.notes, dB.notes, dN.notes) { p, d -> listOf(d, p).filter { it.isNotBlank() }.distinct().joinToString("\n\n") }
+    return MangaState(pN.title, inLibrary, categories, chapters, tracks, notes)
 }
 
 /**
@@ -178,4 +186,5 @@ private fun MangaState.changedFrom(base: MangaState) =
     inLibrary != base.inLibrary ||
         categories != base.categories ||
         tracks != base.tracks ||
+        notes != base.notes ||
         (chapters.keys + base.chapters.keys).any { chapter(it) != base.chapter(it) }

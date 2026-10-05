@@ -62,6 +62,16 @@ test("a sync reports what came from the phone, the file for Mihon and what Mihon
   assert.equal(S.oneLine(s), "Synced. Restore the newest miharchy backup in Mihon. 3 changes to repeat on the phone; s in the window lists them.");
 });
 
+test("notes from the phone count, and notes a Mihon restore keeps are listed", () => {
+  const s = finish(JSON.stringify({
+    ...summary,
+    changes: [{ type: "setNotes", manga: { source: "1", url: "/m" }, notes: "Dropped" }],
+    unreachable: [{ change: "notesChanged", manga: "Kept" }]
+  }), 0);
+  assert.deepEqual(s.changes, ["set notes on 1 manga"]);
+  assert.deepEqual(s.unreachable, [{ manga: "Kept", chapter: "", change: "notes changed" }]);
+});
+
 test("with no phone backup yet the sync still writes one for Mihon", () => {
   const s = finish(JSON.stringify({ ...summary, backup: null, changes: [], unreachable: [] }), 0);
   assert.deepEqual(S.report(s), ["No phone backup in the sync folder yet.", "Wrote miharchy-2026-10-04_07-06-05.tachibk. Restore it in Mihon to bring the desktop's changes to the phone."]);

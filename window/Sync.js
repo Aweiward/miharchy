@@ -37,7 +37,8 @@ var COUNTS = [
   ["setLastPage", "set the last page read on %d chapters"],
   ["bindTrack", "bound %d tracks"],
   ["updateTrack", "updated %d tracks"],
-  ["unbindTrack", "unbound %d tracks"]
+  ["unbindTrack", "unbound %d tracks"],
+  ["setNotes", "set notes on %d manga"]
 ]
 
 var CHANGE_TEXT = {
@@ -48,7 +49,8 @@ var CHANGE_TEXT = {
   pageLowered: "last page read lowered",
   trackRemoved: "track removed",
   trackLowered: "chapters read lowered",
-  trackChanged: "status, score, dates or entry changed"
+  trackChanged: "status, score, dates or entry changed",
+  notesChanged: "notes changed"
 }
 
 function basename(path) {

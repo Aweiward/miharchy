@@ -14,6 +14,7 @@ var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaTy
 
 var MANGA_FIELDS = "id title realUrl author artist description genre status thumbnailUrl inLibrary initialized sourceId source { displayName } categories { nodes { id } } meta { key value }"
 var CHAPTER_FIELDS = "id name realUrl chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder"
+var NOTES_META = "miharchy.notes"
 var DETAIL_QUERY = "query($id: Int!) { manga(id: $id) { " + MANGA_FIELDS + " chapters { nodes { " + CHAPTER_FIELDS + " } } }"
   + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
 var EXTENSION_QUERY = "query($name: String!) { extensions(filter: { name: { equalTo: $name } }) { nodes { name isInstalled } } }"
@@ -176,7 +177,9 @@ function sourceHelp(manga, extension) {
 
 function toManga(config, n, names) {
   var source = Model.sourceLabel(n, names)
-  var own = (n.meta || []).filter(function(m) { return m.key === "miharchy.readingMode" })[0]
+  var meta = {}
+  var nodes = n.meta || []
+  nodes.forEach(function(m) { meta[m.key] = String(m.value) })
   return {
     id: n.id,
     title: String(n.title || ""),
@@ -198,7 +201,9 @@ function toManga(config, n, names) {
     categories: ((n.categories && n.categories.nodes) || []).map(function(c) { return c.id }),
     longStrip: longStrip(n.genre || [], source),
     // "" until m picks one in the reader.
-    readingMode: own ? String(own.value) : ""
+    readingMode: meta["miharchy.readingMode"] || "",
+    // Mihon's notes, Markdown; the sync helper carries them to and from backups.
+    notes: meta[NOTES_META] || ""
   }
 }
 

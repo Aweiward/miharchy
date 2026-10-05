@@ -490,6 +490,14 @@ test("on a manga, Y copies the title and / searches every source for it", () => 
   assert.equal(C.dispatch(screen("sources"), text("/")), "global.search", "/ on Browse still opens the search field");
 });
 
+test("on a manga, n opens the notes; while they are written, Enter saves and Esc drops the edit", () => {
+  assert.equal(C.dispatch(screen("manga"), text("n")), "manga.notes");
+  const field = { palette: false, view: "manga", editing: "manga" };
+  assert.equal(C.dispatch(field, key(C.KEY.Return)), "manga.commit");
+  assert.equal(C.dispatch(field, key(C.KEY.Escape)), "manga.cancel");
+  assert.equal(C.dispatch(field, text("q")), null, "letters type into the notes");
+});
+
 test("on a manga, R marks read, u marks unread and P marks every chapter below the cursor read; R and u act on a selection too", () => {
   const m = screen("manga");
   assert.equal(C.dispatch(m, text("R")), "manga.markRead");

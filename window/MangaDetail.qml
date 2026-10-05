@@ -7,6 +7,7 @@ import "Browse.js" as Browse
 import "Downloads.js" as Downloads
 import "Chapters.js" as Chapters
 import "Commands.js" as Commands
+import "Prefs.js" as Prefs
 
 // A manga's detail over the view that opened it, Library or Browse: cover
 // and metadata beside the chapter list, filtered and sorted as the manga's
@@ -43,8 +44,11 @@ Rectangle {
   property string downloadsNote: ""
   // The skipFiltered reader setting, which the download menu follows as Mihon's does.
   property bool skipFiltered: true
-  readonly property bool editing: counting
-  // What the last o or y did, until the next manga command.
+  // writing: the notes editor is open; notesNote says how its save went.
+  property bool writing: false
+  property string notesNote: ""
+  readonly property bool editing: counting || writing
+  // What the last o, y or Y did, until the next manga command.
   property string note: ""
 
   readonly property bool open: detail !== null
@@ -63,7 +67,7 @@ Rectangle {
     : optionsOpen ? "j k move   enter change   esc close   "
     : downloadsOpen ? "j k move   enter download   esc close   "
     : selecting ? "j k extend   R read   u unread   b bookmark   d download   x delete download   esc end   "
-    : (note ? note + "   " : "") + "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   o browser   y copy link   Y copy title   / search title   r refresh   esc back   "
+    : (note ? note + "   " : "") + "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   n notes   o browser   y copy link   Y copy title   / search title   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
@@ -75,7 +79,7 @@ Rectangle {
   signal downloads(var reply)
   // A double click sends Enter, a click on a key label its key, as typed.
   signal key(var event)
-  // The number field closed; the window takes the keys back.
+  // A text field closed; the window takes the keys back.
   signal editEnded()
 
   visible: open
@@ -126,7 +130,7 @@ Rectangle {
     picking = false
     optionsOpen = false
     downloadsOpen = false
-    endCount()
+    endEdit()
     anchor = -1
     detailSeq++
     detail = null
@@ -202,10 +206,27 @@ Rectangle {
     optionsNote = row.id === "defaultAll" ? "Saved as the default for every manga" : "Saved as the default"
   }
 
-  function endCount() {
-    if (!counting) return
+  function endEdit() {
+    if (!editing) return
     counting = false
+    writing = false
     editEnded()
+  }
+
+  // Saved as manga meta, which the sync helper maps to Mihon's notes.
+  function saveNotes() {
+    var mangaId = detail.mangaId
+    var text = notesField.text
+    notesNote = "Saving"
+    send(Prefs.savePayload("notes", text, mangaId), function(reply) {
+      if (!view.detail || view.detail.mangaId !== mangaId) return
+      if (reply.state !== "ok") {
+        view.notesNote = reply.message || reply.state
+        return
+      }
+      view.endEdit()
+      view.reload()
+    })
   }
 
   // Queues what the menu row picks, and closes the menu, as Mihon's does.
@@ -225,6 +246,14 @@ Rectangle {
     if (!counting) return
     countField.text = ""
     countField.forceActiveFocus()
+  }
+
+  onWritingChanged: {
+    if (!writing) return
+    notesNote = ""
+    notesField.text = manga.notes
+    notesField.cursorPosition = notesField.length
+    notesField.forceActiveFocus()
   }
 
   function markReply(reply) {
@@ -335,17 +364,24 @@ Rectangle {
         if (row.id === "next" && !row.count) counting = true
         else downloadRow(row, row.count)
         break
+      case "manga.notes":
+        if (manga) writing = true
+        break
       case "manga.commit":
+        if (writing) {
+          saveNotes()
+          break
+        }
         var n = Chapters.count(countField.text)
         if (!n) {
           downloadsNote = "Type a whole number above 0"
           break
         }
-        endCount()
+        endEdit()
         downloadRow(Chapters.DOWNLOADS[downloadsCursor], n)
         break
       case "manga.cancel":
-        endCount()
+        endEdit()
         break
       case "manga.deleteDownload":
         sendDownloads(Downloads.removePayload(Downloads.marked(shown, cursor, anchor), queue))
@@ -484,6 +520,22 @@ Rectangle {
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSmall
     }
+
+    // Mihon's notes section, Markdown. maximumLineCount does not cap
+    // Markdown, so the height does: long notes must leave the chapters room.
+    Text {
+      width: parent.width
+      height: Math.min(implicitHeight, view.theme.fontSize * 9)
+      clip: true
+      visible: text !== ""
+      wrapMode: Text.Wrap
+      textFormat: Text.MarkdownText
+      text: view.manga ? view.manga.notes : ""
+      color: view.theme.accent
+      linkColor: view.theme.accent
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
+    }
   }
 
   ListView {
@@ -570,7 +622,62 @@ Rectangle {
   // Under an open panel: a click outside it never reaches a chapter.
   MouseArea {
     anchors.fill: parent
-    visible: view.optionsOpen || view.picking || view.downloadsOpen
+    visible: view.optionsOpen || view.picking || view.downloadsOpen || view.writing
+  }
+
+  // The notes editor: Markdown as typed, shown rendered on the manga.
+  Rectangle {
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: Math.min(parent.width - view.theme.fontSize * 4, view.theme.fontSize * 44)
+    height: Math.min(parent.height - view.theme.fontSize * 4, view.theme.fontSize * 20)
+    visible: view.writing
+    color: Qt.alpha(view.theme.panel, 1)
+    border.width: 1
+    border.color: view.theme.panelBorder
+
+    Text {
+      id: notesTitle
+      x: view.theme.fontSize
+      y: view.theme.fontSize
+      width: parent.width - view.theme.fontSize * 2
+      elide: Text.ElideRight
+      text: "Notes" + (view.notesNote ? "   " + view.notesNote : "")
+      color: view.theme.muted
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
+    }
+
+    Flickable {
+      id: notesScroll
+      anchors.top: notesTitle.bottom
+      anchors.bottom: parent.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.margins: view.theme.fontSize
+      clip: true
+      contentHeight: notesField.contentHeight
+
+      TextEdit {
+        id: notesField
+        width: notesScroll.width
+        wrapMode: TextEdit.Wrap
+        color: view.theme.foreground
+        selectionColor: view.theme.selected
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSize
+        onCursorRectangleChanged: {
+          if (cursorRectangle.y < notesScroll.contentY) notesScroll.contentY = cursorRectangle.y
+          else if (cursorRectangle.y + cursorRectangle.height > notesScroll.contentY + notesScroll.height) notesScroll.contentY = cursorRectangle.y + cursorRectangle.height - notesScroll.height
+        }
+        // Shift+Enter is a new line; the window takes Enter (save) and Esc.
+        Keys.onPressed: function(event) {
+          if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ShiftModifier)) event.accepted = false
+          else view.key(event)
+        }
+      }
+    }
   }
 
   // Mihon's download menu.

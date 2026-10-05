@@ -6,6 +6,7 @@ The sync helper (`sync/`, Kotlin CLI) merges the newest phone backup in the sync
 - `miharchy-sync sync [--folder DIR] [--dry-run] [--json]`; without `--folder` it reads meta `miharchy.syncFolder`.
 - Per-side baselines in `<home>/.local/share/miharchy/sync/`; a lock file stops concurrent syncs.
 - The "cannot reach the phone" list (removals, unread marks, track changes stock Mihon cannot apply).
+- Notes: Mihon's `BackupManga.notes` (110) and manga meta `miharchy.notes` go both ways. A phone change comes in as `setNotes`; when both sides changed, both texts stay, the desktop's first. Suwayomi's backup has no notes, so `forMihon` writes them into the export from meta. Mihon's restore keeps the notes of a manga the phone already has, so a desktop edit shows in the list as "notes changed" until a phone backup carries it. To make a phone backup with notes, read an export with `LibraryKt.decodeBackup` in `jshell --class-path <helper lib jars>`, call `setNotes` on a manga, and write it back with `encodeBackup`.
 
 ## How to get to it (user POV)
 Library or Updates → `s`, or the palette's "Sync now"; or `s` in the bar popup.

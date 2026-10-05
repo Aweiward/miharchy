@@ -88,7 +88,7 @@ private fun sync(folderArg: String?, dryRun: Boolean): Summary {
     val names = mergeSourceNames(storedNames, listOfNotNull(phoneBaseline, phoneNow).flatMap { it.backupSources })
     if (names != storedNames) desktop.setSourceNames(names)
 
-    val exported = forMihon(desktop.export())
+    val exported = forMihon(desktop.export(), desktop.notes())
     val exportFile = writeExport(folder, exportName(Instant.now()), exported)
     writePrivately(stateDir.resolve("desktop-baseline.tachibk"), exported)
     phoneBytes?.let { writePrivately(stateDir.resolve("phone-baseline.tachibk"), it) }
@@ -180,6 +180,7 @@ fun describe(summary: Summary): String {
         c.count { it is BindTrack } to "bound %d tracks",
         c.count { it is UpdateTrack } to "updated %d tracks",
         c.count { it is UnbindTrack } to "unbound %d tracks",
+        c.count { it is SetNotes } to "set notes on %d manga",
     ).filter { it.first > 0 }.map { (n, text) -> text.format(n) }
     val lines = mutableListOf("Sync folder ${summary.folder}, server ${summary.server}")
     if (summary.backup == null) {

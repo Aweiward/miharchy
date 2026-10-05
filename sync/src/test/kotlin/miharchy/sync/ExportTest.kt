@@ -105,6 +105,18 @@ class ExportTest {
         )
     }
 
+    @Test fun `the backup for Mihon carries the desktop's notes, which Suwayomi's backup lacks`() {
+        val suwayomi = encodeBackup(backup(manga("/m"), manga("/n")))
+        val mihon = decodeBackup(forMihon(suwayomi, mapOf(MangaKey(SOURCE, "/m") to "Dropped")))
+        assertEquals(listOf("Dropped", ""), mihon.backupManga.map { it.notes })
+    }
+
+    @Test fun `notes the phone already has are listed, since a Mihon restore keeps them`() {
+        val phone = backup(manga("/m").apply { notes = "old" }, manga("/same").apply { notes = "x" })
+        val export = backup(manga("/m").apply { notes = "new" }, manga("/same").apply { notes = "x" })
+        assertEquals(listOf(Unreachable(Unreachable.Kind.NOTES_CHANGED, "Title /m")), unreachable(phone, export))
+    }
+
     @Test fun `pruning keeps the newest exports and never touches phone backups`() {
         val names = listOf(
             "miharchy-2026-10-01_00-00-00.tachibk", "miharchy-2026-10-03_00-00-00.tachibk",

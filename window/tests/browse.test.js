@@ -123,6 +123,15 @@ test("a detail reads the cached manga and shows chapters newest first", () => {
   assert.equal(B.detailPayload(d), null, "an initialized manga with chapters needs no source fetch");
 });
 
+test("a manga's meta gives its reading mode and its notes; without them both are empty", () => {
+  const meta = [{ key: "miharchy.readingMode", value: "webtoon" }, { key: "miharchy.notes", value: "**Dropped** at ch. 40" }];
+  const d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode({ meta }) }), config });
+  assert.equal(d.manga.readingMode, "webtoon");
+  assert.equal(d.manga.notes, "**Dropped** at ch. 40");
+  const bare = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode() }), config });
+  assert.deepEqual([bare.manga.readingMode, bare.manga.notes], ["", ""]);
+});
+
 test("an uninitialized manga or one without chapters is fetched from the source once", () => {
   for (const node of [mangaNode({ initialized: false }), mangaNode({ chapters: { nodes: [] } })]) {
     let d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: node }), config });

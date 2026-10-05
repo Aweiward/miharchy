@@ -49,6 +49,8 @@ data class MangaState(
     val chapters: Map<String, ChapterState>,
     /** By tracker id. */
     val tracks: Map<Int, TrackState> = emptyMap(),
+    /** Mihon's notes; the desktop keeps them in manga meta [NOTES_KEY]. */
+    val notes: String = "",
 ) {
     fun chapter(url: String) = chapters[url] ?: ChapterState()
 }
@@ -80,6 +82,7 @@ fun Backup.toLibrary(): Library {
                 categories = m.categories.mapNotNull { nameByOrder[it] }.toSet(),
                 chapters = m.chapters.associate { it.url to ChapterState(it.read, it.bookmark, it.lastPageRead) },
                 tracks = m.tracking.filter { it.syncId in TRACKER_NAMES }.associate { it.syncId to it.toTrackState() },
+                notes = m.notes,
             )
         },
         categories = backupCategories.sortedBy { it.order }.map { it.name },

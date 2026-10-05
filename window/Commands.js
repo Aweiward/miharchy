@@ -170,6 +170,7 @@ var commands = [
   // y yanks, as in vim. In the reader they act on the chapter.
   { id: "manga.openWeb", title: "Open the manga in the browser", keys: ["o"], view: "manga", hidden: true },
   { id: "manga.copyLink", title: "Copy the manga's link", keys: ["y"], view: "manga", hidden: true },
+  { id: "manga.notes", title: "Write notes on the manga", keys: ["n"], view: "manga", hidden: true },
   // Mihon's title: a long press copies it, a tap searches it everywhere.
   { id: "manga.copyTitle", title: "Copy the manga's title", keys: ["Y"], view: "manga", hidden: true },
   { id: "manga.searchTitle", title: "Search every source for the title", keys: ["/"], view: "manga", hidden: true },

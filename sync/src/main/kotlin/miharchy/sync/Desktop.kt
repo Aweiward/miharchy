@@ -42,6 +42,9 @@ data class ServerConfig(val url: String, val username: String, val password: Str
 
 const val SOURCE_NAMES_KEY = "miharchy.sourceNames"
 
+/** Manga meta holding Mihon's notes; Suwayomi's backups have no notes field. */
+const val NOTES_KEY = "miharchy.notes"
+
 /** The desktop library plus the Suwayomi ids needed to change it. */
 class Snapshot(
     val library: Library,
@@ -106,6 +109,12 @@ class Desktop(private val config: ServerConfig) {
         return response.body()
     }
 
+    /** Each library manga's notes, which [export] cannot carry: Suwayomi's backup has no notes field. */
+    fun notes(): Map<MangaKey, String> = query(
+        "{ mangas(filter: { inLibrary: { equalTo: true } }) { nodes { sourceId url meta { key value } } } }",
+        buildJsonObject {},
+    ).nodes("mangas").associate { MangaKey(it.str("sourceId").toLong(), it.str("url")) to it.notes() }.filterValues { it.isNotEmpty() }
+
     /** Library manga plus any manga the phone backup names, so phone changes find their desktop rows. */
     fun snapshot(phoneUrls: Collection<String>): Snapshot {
         val data = query(
@@ -115,6 +124,7 @@ class Desktop(private val config: ServerConfig) {
               mangas(filter: { or: [{ inLibrary: { equalTo: true } }, { url: { in: ${'$'}urls } }] }) {
                 nodes {
                   id sourceId url title inLibrary
+                  meta { key value }
                   categories { nodes { name } }
                   chapters { nodes { id url isRead isBookmarked lastPageRead } }
                   trackRecords {
@@ -160,6 +170,7 @@ class Desktop(private val config: ServerConfig) {
                 categories = m.nodes("categories").map { it.str("name") }.toSet(),
                 chapters = chapters,
                 tracks = tracks,
+                notes = m.notes(),
             )
         }
         return Snapshot(Library(manga, categoryIds.keys.toList()), mangaIds, chapterIds, categoryIds, trackRecordIds)
@@ -229,6 +240,13 @@ class Desktop(private val config: ServerConfig) {
             query(
                 "mutation(\$id: Int!, \$add: [Int!]!) { updateMangaCategories(input: { id: \$id, patch: { clearCategories: true, addToCategories: \$add } }) { clientMutationId } }",
                 buildJsonObject { put("id", snap.mangaId(c.manga)); putJsonArray("add") { c.categories.forEach { add(categoryIds.getValue(it)) } } },
+            )
+        }
+
+        for (c in changes.filterIsInstance<SetNotes>()) {
+            query(
+                "mutation(\$id: Int!, \$key: String!, \$value: String!) { setMangaMeta(input: { meta: { mangaId: \$id, key: \$key, value: \$value } }) { clientMutationId } }",
+                buildJsonObject { put("id", snap.mangaId(c.manga)); put("key", NOTES_KEY); put("value", c.notes) },
             )
         }
 
@@ -392,10 +410,13 @@ fun Change.isAppliedTo(library: Library): Boolean {
         is BindTrack -> library.manga[manga]?.tracks?.get(tracker) == track
         is UpdateTrack -> library.manga[manga]?.tracks?.get(tracker) == track
         is UnbindTrack -> library.manga[manga]?.tracks?.containsKey(tracker) != true
+        is SetNotes -> library.manga[manga]?.notes == notes
     }
 }
 
 private fun Snapshot.mangaId(key: MangaKey) = mangaIds[key] ?: error("Suwayomi has no manga $key")
+
+private fun JsonElement.notes() = jsonObject.getValue("meta").jsonArray.firstOrNull { it.str("key") == NOTES_KEY }?.str("value").orEmpty()
 
 private fun JsonElement.obj(name: String) = jsonObject.getValue(name).jsonObject
 private fun JsonElement.str(name: String) = jsonObject.getValue(name).jsonPrimitive.content
