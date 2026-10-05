@@ -391,10 +391,23 @@ test("on Updates, j/k move, Enter reads the chapter, u checks for updates and r 
   assert.equal(C.dispatch(updates, key(C.KEY.Return)), "updates.open");
   assert.equal(C.dispatch(updates, text("u")), "updates.check");
   assert.equal(C.dispatch(updates, text("r")), "library.reload");
-  assert.equal(C.dispatch(updates, key(C.KEY.Escape)), "window.quit");
+  assert.equal(C.dispatch(updates, key(C.KEY.Escape)), "updates.clearSelection", "Esc ends a selection, else quits");
   assert.equal(C.dispatch(screen("reader"), text("u")), "reader.halfUp", "u still goes half a view up in the reader");
   assert.equal(C.dispatch(screen("library"), text("u")), "library.update", "u on the Library checks the shown category");
   assert.equal(C.dispatch(screen("categories"), text("u")), "categories.update");
+});
+
+test("on Updates, Space selects, A selects all, I inverts, and R U b d x act on the selection", () => {
+  const updates = screen("updates");
+  assert.equal(C.dispatch(updates, key(C.KEY.Space)), "updates.select");
+  assert.equal(C.dispatch(updates, text("A")), "updates.selectAll");
+  assert.equal(C.dispatch(updates, text("I")), "updates.invert");
+  assert.equal(C.dispatch(updates, text("R")), "updates.markRead");
+  assert.equal(C.dispatch(updates, text("U")), "updates.markUnread");
+  assert.equal(C.dispatch(updates, text("b")), "updates.bookmark");
+  assert.equal(C.dispatch(updates, text("d")), "updates.download");
+  assert.equal(C.dispatch(updates, text("x")), "updates.deleteDownload");
+  assert.equal(C.dispatch(screen("library"), text("R")), null);
 });
 
 test("on a manga, d downloads, U downloads every unread chapter, x deletes downloads and v starts a selection", () => {

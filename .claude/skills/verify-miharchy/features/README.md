@@ -8,7 +8,7 @@ One file per user-facing feature: how a user reaches it, how to drive it with `s
 | Browse and add | `browse.md` | a source lists manga, the detail opens, `a` toggles `inLibrary` |
 | Manga chapter actions | `manga.md` | `R`/`u`/`P` change `isRead`/`lastPageRead`, the Library badge follows; `b` sets `isBookmarked`; `F` filter and sort land in manga meta `miharchy.chapter*`; Space resumes |
 | Reader | `reader.md` | pages render, `lastPageRead`/`isRead` saved, quit flushes the save |
-| Updates | `updates.md` | the list matches the 3-month update rule, `u` runs a library update |
+| Updates | `updates.md` | the list matches the 3-month update rule, `u` runs a library update, the selection actions change the server and the mark's count |
 | Settings storage | `settings.md` | downloads and cache sizes match `du` on the scratch server, Enter on "Clear the cache" empties its cache and reports the bytes freed, downloads keep their size |
 | Sync | `sync.md` | the helper merges a phone backup and writes `miharchy-*.tachibk` |
 | Restore a backup | `restore.md` | the window lists the missing sources and trackers, restores the file, and the next sync keeps what it restored |

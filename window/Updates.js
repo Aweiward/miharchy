@@ -19,7 +19,7 @@ var STATUS_FIELDS = "libraryUpdateStatus { jobsInfo { isRunning finishedJobs tot
 // ponytail: no page limit; the client-side fetchedAt cut must see every
 // unread chapter, so a limit waits for a library big enough to need one.
 var UPDATES_QUERY = "{ chapters(filter: { inLibrary: { equalTo: true }, isRead: { equalTo: false } }) {"
-  + " nodes { id name uploadDate fetchedAt sourceOrder isRead manga { id title thumbnailUrl inLibraryAt } } } " + STATUS_FIELDS + " }"
+  + " nodes { id name uploadDate fetchedAt sourceOrder isRead lastPageRead isBookmarked isDownloaded manga { id title thumbnailUrl inLibraryAt } } } " + STATUS_FIELDS + " }"
 var STATUS_QUERY = "{ " + STATUS_FIELDS + " }"
 // Its own reply holds the status from before the run, so the view polls.
 // With no categories the server skips the excluded ones (Categories.js);
@@ -56,8 +56,10 @@ function count(data, now) {
 }
 
 // updates.state: "loading" | "ok" | a failed connection state.
-// rows: { id, mangaId, title, cover, chapter, date, header }, header the
-// fetch day on the first row of each day, else "".
+// rows: { id, mangaId, title, cover, chapter, date, header, read, lastPage,
+// bookmarked, downloaded }, header the fetch day on the first row of each
+// day, else "". The last four are the chapter fields Chapters.js and
+// Downloads.js build their payloads from.
 // running: the server runs a library update; checking: u asked for one and
 // no poll has answered yet. checkedAt: when the last run started, in ms.
 function initial() {
@@ -100,7 +102,11 @@ function rows(data, config, now) {
       cover: Model.coverUrl(config, c.manga.thumbnailUrl),
       chapter: String(c.name || ""),
       date: Browse.day(c.uploadDate),
-      header: day === last ? "" : day
+      header: day === last ? "" : day,
+      read: false,
+      lastPage: c.lastPageRead || 0,
+      bookmarked: c.isBookmarked === true,
+      downloaded: c.isDownloaded === true
     }
     last = day
     return row
@@ -163,6 +169,32 @@ function progress(u, now) {
     + skippedText(u)
 }
 
+// The selection is a list of chapter ids, not a range as on a manga:
+// Mihon inverts it, and the inverse of a range is not one.
+function toggle(selected, id) {
+  return selected.indexOf(id) === -1 ? selected.concat([id]) : selected.filter(function(s) { return s !== id })
+}
+
+function invert(selected, rows) {
+  return rows.filter(function(r) { return selected.indexOf(r.id) === -1 }).map(function(r) { return r.id })
+}
+
+// What stays selected after a reload: an update that left the list goes.
+function keep(selected, rows) {
+  return selected.filter(function(id) { return rows.some(function(r) { return r.id === id }) })
+}
+
+// The rows an action applies to: the selection, or the row under the
+// cursor when nothing is selected.
+function chosen(rows, selected, cursor) {
+  if (!selected.length) return rows[cursor] ? [rows[cursor]] : []
+  return rows.filter(function(r) { return selected.indexOf(r.id) !== -1 })
+}
+
+function mangaIds(rows) {
+  return rows.map(function(r) { return r.mangaId }).filter(function(id, i, all) { return all.indexOf(id) === i })
+}
+
 // { title, detail } in place of the list, or null.
 function notice(u, configPath) {
   if (u.state === "loading") return u.rows.length ? null : { title: "Loading updates", detail: "" }
@@ -185,6 +217,11 @@ if (typeof module !== "undefined") {
     reduce: reduce,
     finished: finished,
     progress: progress,
-    notice: notice
+    notice: notice,
+    toggle: toggle,
+    invert: invert,
+    keep: keep,
+    chosen: chosen,
+    mangaIds: mangaIds
   }
 }

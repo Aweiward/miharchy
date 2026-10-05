@@ -34,6 +34,7 @@ test("the tracker push asks for each manga's progress once", () => {
   const two = Ch.trackPayload([5, 9, 5]);
   assert.equal(two.query.match(/trackProgress/g).length, 2);
   assert.match(two.query, /m9: trackProgress\(input: \{ mangaId: 9 \}\)/);
+  assert.equal(Ch.trackPayload([]), null, "no manga, no empty mutation");
 });
 
 const P = require("./load")("Prefs.js");

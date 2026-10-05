@@ -204,8 +204,10 @@ ShellRoot {
     if (!payload || !config) return
     send(payload, function(reply) {
       // The push waits for the mark: the server reads the chapters it marked.
-      if (reply.state === "ok" && action === "read") root.send(Chapters.trackPayload(mangaIds), function() {})
-      mangaDetail.markReply(reply)
+      var track = reply.state === "ok" && action === "read" ? Chapters.trackPayload(mangaIds) : null
+      if (track) root.send(track, function() {})
+      // Updates marks chapters of many manga; the detail hears only of its own.
+      if (mangaDetail.open && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
       updatesView.load()
       root.fetchLibrary()
     })
@@ -247,6 +249,7 @@ ShellRoot {
       libraryError = ""
     }
     libraryNote = ""
+    if (id !== "updates.deleteDownload") updatesView.armed = false
     if (id !== null) run(id)
     return id !== null
   }
@@ -333,6 +336,10 @@ ShellRoot {
     }
     if (id.indexOf("setup.") === 0) {
       setupView.run(id)
+      return
+    }
+    if (id === "updates.clearSelection" && !updatesView.selected.length) {
+      run("window.quit")
       return
     }
     if (id.indexOf("updates.") === 0) {
@@ -644,7 +651,10 @@ ShellRoot {
           config: root.config
           configPath: root.configPath
           active: visible
+          queue: downloadsView.queue.items
           onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+          onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
+          onDownloads: function(reply) { downloadsView.apply(reply) }
         }
 
         SetupView {
@@ -739,7 +749,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
@@ -773,7 +783,10 @@ ShellRoot {
         theme: theme
         config: root.config
         configPath: root.configPath
-        onLeftQueue: function(items) { mangaDetail.downloadsLeft(items) }
+        onLeftQueue: function(items) {
+          mangaDetail.downloadsLeft(items)
+          updatesView.load()
+        }
       }
 
       SyncView {

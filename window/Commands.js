@@ -70,6 +70,8 @@ var commands = [
   { id: "categories.back", title: "Back", keys: ["Esc", "Backspace"], view: "categories", hidden: true },
   // Clears a search the field kept; with none, it quits like Esc elsewhere.
   { id: "library.clearSearch", title: "Clear the search", keys: ["Esc"], view: "library", hidden: true },
+  // Ends a selection; with none, it quits like Esc elsewhere.
+  { id: "updates.clearSelection", title: "Clear the selection", keys: ["Esc"], view: "updates", hidden: true },
   { id: "library.optionsClose", title: "Close sort and filter", keys: ["Esc", "Backspace", "F"], view: "library-options", hidden: true },
   { id: "manga.selectEnd", title: "End the selection", keys: ["Esc", "v"], view: "manga-select", hidden: true },
   { id: "manga.optionsClose", title: "Close chapter filter and sort", keys: ["Esc", "Backspace", "F"], view: "manga-options", hidden: true },
@@ -131,8 +133,7 @@ var commands = [
   { id: "manga.deleteDownload", title: "Delete downloads", keys: ["x"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.select", title: "Select chapters", keys: ["v"], view: "manga", hidden: true },
   { id: "manga.downloadUnread", title: "Download unread chapters", keys: ["U"], view: "manga", hidden: true },
-  // Shift, as r refreshes: R and P write read state. u is free wherever a
-  // chapter can be unmarked; Updates lists only unread chapters.
+  // Shift, as r refreshes: R and P write read state.
   { id: "manga.markRead", title: "Mark read", keys: ["R"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.markUnread", title: "Mark unread", keys: ["u"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.markPrevious", title: "Mark every chapter before read", keys: ["P"], view: "manga", hidden: true },
@@ -214,6 +215,16 @@ var commands = [
   // Not r: r reloads what a view shows, and a library update asks every
   // source.
   { id: "updates.check", title: "Check for new chapters", keys: ["u"], view: "updates", hidden: true },
+  // Act on the selection, or on the update under the cursor. U, not u as on
+  // a manga: u checks here.
+  { id: "updates.select", title: "Select or deselect the update", keys: ["Space"], view: "updates", hidden: true },
+  { id: "updates.selectAll", title: "Select all updates", keys: ["A"], view: "updates", hidden: true },
+  { id: "updates.invert", title: "Invert the selection", keys: ["I"], view: "updates", hidden: true },
+  { id: "updates.markRead", title: "Mark read", keys: ["R"], view: "updates", hidden: true },
+  { id: "updates.markUnread", title: "Mark unread", keys: ["U"], view: "updates", hidden: true },
+  { id: "updates.bookmark", title: "Bookmark or unbookmark", keys: ["b"], view: "updates", hidden: true },
+  { id: "updates.download", title: "Download chapters", keys: ["d"], view: "updates", hidden: true },
+  { id: "updates.deleteDownload", title: "Delete downloads", keys: ["x"], view: "updates", hidden: true },
   { id: "categories.autoDownload", title: "Auto-download new chapters", keys: ["d"], view: "categories", hidden: true },
   { id: "categories.update", title: "Include in or exclude from updates", keys: ["u"], view: "categories", hidden: true },
   { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
