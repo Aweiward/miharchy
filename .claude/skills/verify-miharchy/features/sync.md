@@ -15,8 +15,9 @@ Library or Updates → `s`, or the palette's "Sync now"; or `s` in the bar popup
 ## Driving it with drive.sh
 The helper is the real path; drive it directly:
 ```sh
-(cd sync && ./gradlew installDist)
-mkdir -p $RUN/folder $RUN/home && cp <phone-backup>.tachibk $RUN/folder/
+sync/gradlew -p sync installDist
+mkdir -p $RUN/folder $RUN/home
+cp <phone-backup>.tachibk $RUN/folder/
 JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json \
   sync/build/install/miharchy-sync/bin/miharchy-sync sync --folder $RUN/folder --json | tee $RUN/evidence/sync.json
 ```

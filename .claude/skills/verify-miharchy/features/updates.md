@@ -49,7 +49,7 @@ The actions, after the seed recipe in Gotchas. Give the 20th row's chapter a pag
   ]
 })()
 ```
-Read back: `$S/gql.sh '{ chapters(filter:{id:{in:[...]}}){ nodes{ id isRead isBookmarked isDownloaded lastPageRead } } }'`, and the mark's count as in Gotchas.
+Read back: `.claude/skills/verify-miharchy/scripts/gql.sh '{ chapters(filter:{id:{in:[...]}}){ nodes{ id isRead isBookmarked isDownloaded lastPageRead } } }'`, and the mark's count as in Gotchas.
 
 ## Gotchas
 - Chapters fetched when a manga joins the library are backlog, not updates; to create updates, add a manga to the library before fetching its chapters, or remove chapter rows (see past PRs). Recipe: take MangaDex `fetchSourceManga(type: LATEST)` (recent uploads pass the 3-month rule), `updateManga(patch: {inLibrary: true})` each, wait 2 s, then `fetchMangaAndChapters` each. Three manga gave 29 updates.

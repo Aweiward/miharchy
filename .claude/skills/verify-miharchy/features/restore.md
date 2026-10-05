@@ -17,7 +17,7 @@ The window runs the helper Setup installs under `$HOME`; `drive.sh` sets `HOME=$
 mkdir -p $RUN/home/.local/share/miharchy/helper
 cp -r sync/build/install/miharchy-sync/. $RUN/home/.local/share/miharchy/helper/
 cp <fixture>.tachibk $RUN/home/r.tachibk
-$S/drive.sh steps.js 60
+.claude/skills/verify-miharchy/scripts/drive.sh steps.js 60
 ```
 Steps: `root.run("restore.open")`, set `restoreView.pathField.text = "~/r.tachibk"`, `key("Enter")`, wait for `restoreView.restore.step === "confirm"`, `key("Enter")`, wait for `"done"`. Log `restoreView.restore`.
 

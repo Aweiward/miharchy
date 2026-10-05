@@ -35,11 +35,10 @@ Proof. Set up with `gql.sh`: every chapter of both seeded manga downloaded (enqu
 Enqueuing starts the downloader a moment later, and MangaDex finishes a chapter in seconds, so a queue to drive must be stopped after the enqueue:
 
 ```sh
-Q=$S/gql.sh
-$Q 'mutation { deleteDownloadedChapters(input:{ids:[4,5,6]}) { chapters { id } } }'
-$Q 'mutation { enqueueChapterDownloads(input:{ids:[4,5,6]}) { downloadStatus { state } } }'
-$Q 'mutation { stopDownloader(input:{}) { downloadStatus { state } } }'; sleep 1
-$Q 'mutation { stopDownloader(input:{}) { downloadStatus { state } } }'
+.claude/skills/verify-miharchy/scripts/gql.sh 'mutation { deleteDownloadedChapters(input:{ids:[4,5,6]}) { chapters { id } } }'
+.claude/skills/verify-miharchy/scripts/gql.sh 'mutation { enqueueChapterDownloads(input:{ids:[4,5,6]}) { downloadStatus { state } } }'
+.claude/skills/verify-miharchy/scripts/gql.sh 'mutation { stopDownloader(input:{}) { downloadStatus { state } } }'
+.claude/skills/verify-miharchy/scripts/gql.sh 'mutation { stopDownloader(input:{}) { downloadStatus { state } } }'
 ```
 
 ## Drive
@@ -62,4 +61,4 @@ $Q 'mutation { stopDownloader(input:{}) { downloadStatus { state } } }'
 ]
 ```
 
-Read back: `$S/gql.sh '{ downloadStatus { state queue { chapter { id } } } }'` holds the last order, and `state` stays `STOPPED`: a reorder does not start the downloader.
+Read back: `.claude/skills/verify-miharchy/scripts/gql.sh '{ downloadStatus { state queue { chapter { id } } } }'` holds the last order, and `state` stays `STOPPED`: a reorder does not start the downloader.
