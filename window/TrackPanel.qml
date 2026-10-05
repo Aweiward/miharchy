@@ -31,7 +31,7 @@ Rectangle {
   signal editEnded()
 
   visible: open
-  color: theme.panel
+  color: Qt.alpha(theme.panel, 1)
   border.width: 1
   border.color: theme.panelBorder
   height: Math.min(parent.height - theme.fontSize * 4, body.implicitHeight + theme.fontSize * 2)

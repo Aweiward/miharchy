@@ -380,7 +380,7 @@ Rectangle {
     width: view.theme.fontSize * 28
     height: Math.min(parent.height - view.theme.fontSize * 4, pickList.contentHeight + view.theme.fontSize * 2)
     visible: view.picking
-    color: view.theme.panel
+    color: Qt.alpha(view.theme.panel, 1)
     border.width: 1
     border.color: view.theme.panelBorder
 
