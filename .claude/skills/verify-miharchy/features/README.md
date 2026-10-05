@@ -20,3 +20,5 @@ One file per user-facing feature: how a user reaches it, how to drive it with `s
 | Trackers | `trackers.md` | the panel lists the manga's tracks; `o`/`y` hand the track's link to `xdg-open`/`wl-copy` (stubbed); date and private writes send `updateTrack` inputs the server accepts; a mark read pushes `trackProgress` (a `trackChapter` line in the server log) under always and not under never |
 
 Not yet mapped: the rest of Settings, Setup, Global search, tracker logins, History, the bar plugin (`plugin/Mark.qml`, rendered offscreen with the shell's `Commons`/`Ui` copied into a scratch Quickshell config).
+
+The mark's new-chapter notification is proven without the shell: `plugin/tests/mark.test.js` pins the decision and runs the real notify script with a stub `notify-send` on `PATH`; feed `Mark.js` the scratch server's answer to `Mark.listPayload()` from node to check the query. For the click, start a drive with `MIHARCHY_OPEN_VIEW=updates` (the window opens on Updates), and while it runs send `quickshell ipc -p $RUN/app/window call miharchy openUpdates` to that offscreen copy. Never run the real `notify-send`.

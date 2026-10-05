@@ -20,6 +20,7 @@ Panel {
   property var config: null
   property var mark: Mark.initial()
   readonly property string devHelper: decodeURIComponent(Qt.resolvedUrl(Sync.DEV_HELPER).toString().replace(/^file:\/\//, ""))
+  readonly property string notifyIcon: decodeURIComponent(Qt.resolvedUrl("../icons/miharchy.svg").toString().replace(/^file:\/\//, ""))
   property var sync: Sync.initial()
   property int cursor: 0
   // Only the latest poll may land.
@@ -70,6 +71,8 @@ Panel {
     xhr.onreadystatechange = function() {
       if (xhr.readyState !== XMLHttpRequest.DONE || seq !== root.pollSeq) return
       root.mark = Mark.reduce(root.mark, { type: "reply", reply: Model.reply(xhr.status, xhr.responseText), config: cfg, now: Date.now() })
+      var n = Mark.notification(root.mark)
+      if (n) Quickshell.execDetached(Mark.notifyCommand(n, root.launcher, root.notifyIcon))
     }
     xhr.open("POST", req.url)
     xhr.setRequestHeader("Content-Type", "application/json")

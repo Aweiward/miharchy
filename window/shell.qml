@@ -23,7 +23,8 @@ ShellRoot {
 
   readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
 
-  property string view: "library"
+  // The launcher's open-updates starts a window on Updates.
+  property string view: Quickshell.env("MIHARCHY_OPEN_VIEW") === "updates" ? "updates" : "library"
   property var config: null
   property var connection: Model.initial()
   property bool paletteOpen: false
@@ -133,11 +134,24 @@ ShellRoot {
     updatesView.openChapter(target.mangaId, target.chapterId)
   }
 
+  // The mark's new-chapter notification lands here, through the
+  // launcher's open-updates.
+  function openUpdates() {
+    if (reader.open) reader.close()
+    mangaDetail.close()
+    downloadsView.open = false
+    view = "updates"
+  }
+
   IpcHandler {
     target: "miharchy"
 
     function openChapter(mangaId: int, chapterId: int): void {
       root.openChapter({ mangaId: mangaId, chapterId: chapterId })
+    }
+
+    function openUpdates(): void {
+      root.openUpdates()
     }
   }
 
