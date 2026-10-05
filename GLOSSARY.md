@@ -116,6 +116,10 @@ _Avoid_: viewer
 How the reader lays out pages: paged left-to-right, paged right-to-left, or webtoon (one vertical strip).
 _Avoid_: layout, direction
 
+**Reader settings panel**:
+The panel `s` opens over the reader: the manga's reading mode, then the reader's settings. It shows the same settings as the Settings view.
+_Avoid_: reader menu, reader options
+
 ## Relationships
 
 - An **extension** provides one or more **sources**. A **source** serves many **manga**.

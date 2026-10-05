@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "Chapters.js" as Chapters
+import "Commands.js" as Commands
 import "Model.js" as Model
 import "Prefs.js" as Prefs
 import "Reader.js" as Reader
@@ -17,14 +18,23 @@ Rectangle {
   property var config: null
   property string configPath: ""
   property var reader: null
-  property bool deleteAfterRead: false
-  // The pageFit and webtoonWidth settings.
-  property string pageFit: "screen"
-  property string webtoonWidth: "60"
-  // The skipRead, skipFiltered and skipDupe settings, as Chapters.readingOrder() takes them.
-  property var skip: ({ read: false, filtered: true, dupe: false })
+  // The Settings values: page fit, webtoon width, skips, delete after read.
+  property var values: Settings.initial().values
+  readonly property string pageFit: values.pageFit
+  readonly property string webtoonWidth: values.webtoonWidth
+  // The skips, as Chapters.readingOrder() takes them. A change lists the
+  // chapters again at once.
+  readonly property var skip: ({ read: values.skipRead, filtered: values.skipFiltered, dupe: values.skipDupe })
+  readonly property string skipKey: [skip.read, skip.filtered, skip.dupe].join()
+  // What the chapter list comes from: { chapters, prefs }, the manga's
+  // chapters newest first and its chapter choices.
+  property var source: null
   // Only the latest start may set the chapter list.
   property int startSeq: 0
+  // The settings panel (s) and its cursor.
+  property bool panelOpen: false
+  property int panelCursor: 0
+  readonly property var panelRows: reader ? Reader.panelRows(reader, values) : []
   // Whether the go-to-page field is open.
   property bool editing: false
   readonly property alias pageField: field
@@ -51,6 +61,7 @@ Rectangle {
   // The chapter ids belong to the old server, so nothing saves.
   onConfigChanged: {
     endEdit()
+    panelOpen = false
     saveTimer.stop()
     pagesSeq++
     reader = null
@@ -73,21 +84,28 @@ Rectangle {
   // setting: miharchy.defaultReadingMode. The pages load at once with the
   // default chapter choices; the manga's own sort and filters follow.
   function start(manga, chapters, chapterId, setting) {
-    var skip = view.skip
     var defaults = Prefs.defaults(Chapters.PREFS)
+    source = { chapters: chapters, prefs: defaults }
     reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting))
     loadPages()
     var seq = ++startSeq
     send(Prefs.loadPayload(Chapters.PREFS, manga.id), function(reply) {
       if (seq !== view.startSeq || !view.reader || reply.state !== "ok") return
-      var prefs = Prefs.read(Chapters.PREFS, reply.data, defaults)
-      // The chapter open now, which a quick ] may have moved, is the one kept.
-      view.reader = Reader.reduce(view.reader, { type: "chapters", chapters: Chapters.readingOrder(chapters, prefs, Reader.chapterId(view.reader), skip) })
+      view.source = { chapters: chapters, prefs: Prefs.read(Chapters.PREFS, reply.data, defaults) }
+      view.relist()
     })
   }
 
+  // The chapter open now, which a quick ] may have moved, is the one kept.
+  function relist() {
+    if (reader) reader = Reader.reduce(reader, { type: "chapters", chapters: Chapters.readingOrder(source.chapters, source.prefs, Reader.chapterId(reader), skip) })
+  }
+
+  onSkipKeyChanged: relist()
+
   function close() {
     endEdit()
+    panelOpen = false
     save()
     leave()
     pagesSeq++
@@ -132,7 +150,7 @@ Rectangle {
   }
 
   function leave() {
-    var payload = Reader.deletePayload(reader, deleteAfterRead)
+    var payload = Reader.deletePayload(reader, values.deleteAfterRead)
     if (!payload) return
     exitStep("write")
     send(payload, function() {
@@ -242,11 +260,32 @@ Rectangle {
   }
 
   function row(key) {
-    return Settings.ROWS.filter(function(r) { return r.key === key })[0]
+    return Reader.settingRow(key)
+  }
+
+  // The manga's reading mode saves to its meta; every other row is a
+  // Settings row, which shell.qml saves.
+  function choose() {
+    var p = panelRows[panelCursor]
+    if (p.manga) run("reader.mode")
+    else setting(row(p.key), Settings.activate(row(p.key), values[p.key]).save)
   }
 
   function run(id) {
     switch (id) {
+      case "reader.settings":
+        panelOpen = true
+        return
+      case "reader.settingsClose":
+        panelOpen = false
+        return
+      case "reader.settingsUp":
+      case "reader.settingsDown":
+        panelCursor = Math.max(0, Math.min(panelRows.length - 1, panelCursor + (id === "reader.settingsUp" ? -1 : 1)))
+        return
+      case "reader.settingsChoose":
+        choose()
+        return
       case "reader.retry":
         reader = Reader.reduce(reader, { type: "retry" })
         loadPages()
@@ -437,6 +476,93 @@ Rectangle {
     property: "contentY"
     duration: 120
     easing.type: Easing.OutQuad
+  }
+
+  // Under the open panel: a click outside it never turns a page.
+  MouseArea {
+    anchors.fill: parent
+    visible: view.panelOpen
+  }
+
+  // The settings panel, drawn as a manga's chapter filter and sort.
+  Rectangle {
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: view.theme.fontSize * 32
+    height: panel.implicitHeight + view.theme.fontSize * 2
+    visible: view.panelOpen
+    color: Qt.alpha(view.theme.panel, 1)
+    border.width: 1
+    border.color: view.theme.panelBorder
+
+    Column {
+      id: panel
+      x: view.theme.fontSize
+      y: view.theme.fontSize
+      width: parent.width - view.theme.fontSize * 2
+
+      Repeater {
+        model: view.panelRows
+
+        Column {
+          id: panelRow
+          required property var modelData
+          required property int index
+          readonly property bool current: index === view.panelCursor
+          width: panel.width
+
+          Text {
+            visible: panelRow.index < 2
+            topPadding: panelRow.index === 0 ? 0 : view.theme.fontSize * 0.8
+            text: panelRow.modelData.manga ? "This manga" : "Every manga"
+            color: view.theme.muted
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSmall
+          }
+
+          Item {
+            width: parent.width
+            height: rowLabel.implicitHeight
+
+            Text {
+              id: rowLabel
+              width: parent.width - rowValue.implicitWidth - view.theme.fontSize
+              elide: Text.ElideRight
+              text: panelRow.modelData.label
+              color: panelRow.current ? view.theme.accent : view.theme.foreground
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSize
+            }
+
+            Text {
+              id: rowValue
+              anchors.right: parent.right
+              text: panelRow.modelData.text
+              color: panelRow.current ? view.theme.accent : view.theme.muted
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSize
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              onClicked: view.panelCursor = panelRow.index
+              onDoubleClicked: {
+                view.panelCursor = panelRow.index
+                view.key(Commands.enter())
+              }
+            }
+          }
+        }
+      }
+
+      HintBar {
+        topPadding: view.theme.fontSize * 0.8
+        theme: view.theme
+        text: "j k move   enter change   esc close"
+        onKey: function(event) { view.key(event) }
+      }
+    }
   }
 
   Text {
