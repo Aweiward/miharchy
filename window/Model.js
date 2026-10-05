@@ -235,7 +235,7 @@ function fromResponse(status, body, config) {
     }),
     categories: ((r.data.categories && r.data.categories.nodes) || [])
       .filter(function(c) { return c.id !== DEFAULT_CATEGORY })
-      .map(function(c) { return { id: c.id, name: String(c.name), download: c.includeInDownload === "INCLUDE", update: c.includeInUpdate || "UNSET", keep: Downloads.keepsDownloads(c.meta || []) } })
+      .map(function(c) { return { id: c.id, name: String(c.name), download: c.includeInDownload || "UNSET", update: c.includeInUpdate || "UNSET", keep: Downloads.keepsDownloads(c.meta || []) } })
   })
 }
 
