@@ -10,6 +10,10 @@
 - `X` asks first and the second `X` cancels every download (Mihon's cancel all): `clearDownloader`, which also stops the downloader. Any other key keeps the queue (`shell.qml` disarms on every other key, as for Updates' `x`). With the queue empty, `X` does nothing.
 - Every reorder is one request: one `reorderChapterDownload(chapterId, to)` per download out of place, run in order; only the last answers with the status. `to` counts from 0, and a `to` past the end fails the request, so `Downloads.moved` clamps.
 
+## Settings
+
+- "Save downloads as CBZ" is the server setting `downloadAsCbz` (Mihon's "Save as CBZ archive"). It applies to new downloads: the chapter lands as `<scanlator>_<name>.cbz` in the manga's folder under `$RUN/server/downloads/mangas/<source>/`, and `fetchChapterPages` still serves its pages. Proof: Enter on the row, `settings { downloadAsCbz }` reads `true`, download a chapter, `find` the `.cbz`.
+
 ## Setup
 
 Enqueuing starts the downloader a moment later, and MangaDex finishes a chapter in seconds, so a queue to drive must be stopped after the enqueue:
