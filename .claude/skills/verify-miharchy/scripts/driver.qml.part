@@ -31,8 +31,14 @@
     }
     return null
   }
-  // dy in angleDelta units: -120 is one notch down.
-  function wheel(item, dy, x, y) { var p = vAt(item, x, y); vMouse.mouseWheel(item, p[0], p[1], Qt.NoButton, Qt.NoModifier, 0, dy, -1) }
+  // dy in angleDelta units: -120 is one notch down. mods: e.g. Qt.ControlModifier.
+  function wheel(item, dy, x, y, mods) { var p = vAt(item, x, y); vMouse.mouseWheel(item, p[0], p[1], Qt.NoButton, mods || Qt.NoModifier, 0, dy, -1) }
+  // A press at x1, y1, ten moves to x2, y2 and a release there: a left-button drag.
+  function drag(item, x1, y1, x2, y2) {
+    vMouse.mousePress(item, x1, y1, Qt.LeftButton, Qt.NoModifier, -1)
+    for (var i = 1; i <= 10; i++) vMouse.mouseMove(item, x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10, -1, Qt.LeftButton, Qt.NoModifier)
+    vMouse.mouseRelease(item, x2, y2, Qt.LeftButton, Qt.NoModifier, -1)
+  }
   function grab(name) { keyRoot.grabToImage(function(r) { r.saveToFile("@EVIDENCE@/" + name + ".png") }) }
   function log(label, value) { console.log("DRIVER " + label + " " + JSON.stringify(value)) }
   function done() { Qt.quit() }
