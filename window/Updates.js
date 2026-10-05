@@ -177,8 +177,10 @@ function choose(prefs, row) {
 // found: its updates before the filters.
 // running: the server runs a library update; checking: u asked for one and
 // no poll has answered yet. checkedAt: when the last run started, in ms.
+// stopped: null, or the user stopped the last run, at "finished / total"
+// ("" before the first poll).
 function initial() {
-  return { state: "loading", message: "", rows: [], data: null, found: 0, running: false, checking: false, finished: 0, total: 0, skipped: 0, skipReasons: [], checkedAt: 0 }
+  return { state: "loading", message: "", rows: [], data: null, found: 0, running: false, checking: false, finished: 0, total: 0, skipped: 0, skipReasons: [], checkedAt: 0, stopped: null }
 }
 
 // The bar mark's list: unread updates only.
@@ -197,6 +199,11 @@ function statusPayload() {
 // categories: ids to update, or none for the whole library.
 function checkPayload(categories) {
   return { query: CHECK_MUTATION, variables: { categories: categories || null } }
+}
+
+// Mihon's cancel on the update notification.
+function stopPayload() {
+  return { query: "mutation { updateStop(input: {}) { clientMutationId } }" }
 }
 
 function pad(n) {
@@ -254,7 +261,8 @@ function status(data) {
 //   "list"      { reply, config, now, prefs } for viewPayload()
 //   "filter"    { config, now, prefs }: the filters changed
 //   "checking"  checkPayload() went out
-//   "status"    { reply } for statusPayload()
+//   "stopped"   stopPayload() succeeded
+//   "status"   { reply } for statusPayload()
 function reduce(u, event) {
   switch (event.type) {
     case "request":
@@ -262,17 +270,27 @@ function reduce(u, event) {
     case "list":
       var r = event.reply
       if (r.state !== "ok") return copy(u, { state: r.state, message: r.message })
-      return reduce(copy(copy(u, status(r.data)), { state: "ok", message: "", data: r.data }), { type: "filter", config: event.config, now: event.now, prefs: event.prefs })
+      return reduce(copy(withStatus(u, r.data), { state: "ok", message: "", data: r.data }), { type: "filter", config: event.config, now: event.now, prefs: event.prefs })
     case "filter":
       if (!u.data) return u
       return copy(u, { rows: rows(u.data, event.config, event.now, event.prefs), found: recent(u.data, event.now).length })
     case "checking":
-      return copy(u, { checking: true })
+      return copy(u, { checking: true, stopped: null })
+    case "stopped":
+      if (!u.running && !u.checking) return u
+      return copy(u, { running: false, checking: false, stopped: u.total ? u.finished + " / " + u.total : "" })
     case "status":
       if (event.reply.state !== "ok") return copy(u, { running: false, checking: false })
-      return copy(copy(u, status(event.reply.data)), { checking: false })
+      return copy(withStatus(u, event.reply.data), { checking: false })
   }
   return u
+}
+
+// The server forgets a stopped run's counts, so the stop stays in u until
+// a run starts.
+function withStatus(u, data) {
+  var s = status(data)
+  return copy(copy(u, s), { stopped: s.running ? null : u.stopped })
 }
 
 // Whether a run ended between two states, so the list is due a reload.
@@ -291,6 +309,7 @@ function skippedText(u) {
 function progress(u, now) {
   if (u.running) return "Checking for new chapters " + u.finished + " / " + u.total
   if (u.checking) return "Checking for new chapters"
+  if (u.stopped !== null) return "Stopped checking for new chapters" + (u.stopped ? " at " + u.stopped : "")
   if (!u.checkedAt) return "Never checked"
   var d = new Date(u.checkedAt)
   return "Last checked " + dayLabel(u.checkedAt, now) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes())
@@ -348,6 +367,7 @@ if (typeof module !== "undefined") {
     listPayload: listPayload,
     statusPayload: statusPayload,
     checkPayload: checkPayload,
+    stopPayload: stopPayload,
     reduce: reduce,
     finished: finished,
     progress: progress,

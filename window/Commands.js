@@ -301,6 +301,7 @@ var commands = [
   { id: "updates.download", title: "Download chapters", keys: ["d"], view: "updates", hidden: true },
   { id: "updates.deleteDownload", title: "Delete downloads", keys: ["x"], view: "updates", hidden: true },
   { id: "updates.filter", title: "Filter updates", keys: ["F"], view: "updates", hidden: true },
+  { id: "updates.stop", title: "Stop the library update", keys: ["C"], view: "updates", hidden: true },
   { id: "categories.autoDownload", title: "Include in or exclude from auto-download", keys: ["d"], view: "categories", hidden: true },
   { id: "categories.update", title: "Include in or exclude from updates", keys: ["u"], view: "categories", hidden: true },
   { id: "categories.keepDownloads", title: "Keep or delete read downloads", keys: ["p"], view: "categories", hidden: true },
