@@ -170,7 +170,7 @@ function pageResult(output, done, failed) {
 }
 
 function relist(chapters, chapterId) {
-  var list = chapters.slice().reverse().map(function(c) { return { id: c.id, name: c.name, url: c.url, number: c.number, downloaded: c.downloaded === true, bookmarked: c.bookmarked === true, scanlator: c.scanlator || "" } })
+  var list = chapters.slice().reverse().map(function(c) { return { id: c.id, name: c.name, url: c.url, number: c.number, downloaded: c.downloaded === true, bookmarked: c.bookmarked === true, read: c.read === true, scanlator: c.scanlator || "" } })
   var index = 0
   for (var i = 0; i < list.length; i++) if (list[i].id === chapterId) index = i
   return { chapters: list, index: index }
@@ -368,6 +368,16 @@ function trackPayload(r) {
 // rules of Downloads.autoDeletePayload permitting. Asked as the reader
 // leaves the chapter, so its pages stay on disk while it shows. -> a
 // chapter id, or null.
+// Mihon's download ahead while reading: the next count unread chapters
+// after the one open, in reading order, as Mihon's getNextChapters takes
+// them; the caller queues those not on disk (Downloads.enqueuePayload).
+// count: the downloadAhead setting, "0" for off.
+// Mihon also waits until the chapter open and the next are downloaded and
+// a quarter of the pages are read; this queues as the chapter opens.
+function ahead(r, count) {
+  return r.chapters.slice(r.index + 1).filter(function(c) { return !c.read }).slice(0, Number(count) || 0)
+}
+
 function deleteTarget(r, slots) {
   if (slots < 0 || r.state !== "ok" || r.incognito || !r.read || r.wasRead) return null
   var c = r.chapters[r.index - slots]
@@ -577,6 +587,7 @@ if (typeof module !== "undefined") {
     reduce: reduce,
     savePayload: savePayload,
     trackPayload: trackPayload,
+    ahead: ahead,
     deleteTarget: deleteTarget,
     modePayload: modePayload,
     bookmarkPayload: bookmarkPayload,

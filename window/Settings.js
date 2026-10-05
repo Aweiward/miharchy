@@ -132,6 +132,18 @@ var ROWS = [
   { key: "autoDownloadNewChapters", label: "Auto-download new chapters", type: "bool", default: false, store: "server" },
   { key: "excludeEntryWithUnreadChapters", label: "Auto-download only for manga with no unread chapters", type: "bool", default: true, store: "server" },
   { key: "autoDownloadIgnoreReUploads", label: "Auto-download skips re-uploaded chapters", type: "bool", default: false, store: "server" },
+  // Mihon's download ahead while reading: opening a chapter queues the
+  // next this many unread chapters (Reader.ahead).
+  {
+    key: "downloadAhead", label: "Download ahead while reading", type: "choice", default: "0", store: "meta",
+    options: [
+      { value: "0", label: "Off" },
+      { value: "2", label: "Next 2 unread chapters" },
+      { value: "3", label: "Next 3 unread chapters" },
+      { value: "5", label: "Next 5 unread chapters" },
+      { value: "10", label: "Next 10 unread chapters" }
+    ]
+  },
   // Mihon's delete group. Suwayomi has none, so the window deletes:
   // Downloads.autoDeletePayload holds the rules, and a category keeps its
   // downloads with p in Categories (Mihon's excluded categories).

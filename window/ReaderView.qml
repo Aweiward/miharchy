@@ -125,6 +125,7 @@ Rectangle {
     zoom = 1
     reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title)
     pageSizes = {}
+    aheadFor = -1
     loadPages()
     var seq = ++startSeq
     send(Prefs.loadPayload(table, manga.id), function(reply) {
@@ -166,7 +167,18 @@ Rectangle {
       view.reader = Reader.reduce(view.reader, { type: "pages", reply: reply, config: cfg })
       view.layoutStrip()
       view.save()
+      view.downloadAhead()
     })
+  }
+
+  // Once per chapter opened: a retry or a page fetch again queues nothing
+  // new. The queue shows any failure; the reader says nothing.
+  property int aheadFor: -1
+  function downloadAhead() {
+    if (reader.state !== "ok" || Reader.chapterId(reader) === aheadFor) return
+    aheadFor = Reader.chapterId(reader)
+    var payload = Downloads.enqueuePayload(Reader.ahead(reader, values.downloadAhead))
+    if (payload) send(payload, function() {})
   }
 
   function save() {
