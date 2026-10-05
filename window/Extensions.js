@@ -106,6 +106,20 @@ function actionPayload(pkgName, action) {
   }
 }
 
+// Mihon's Update all: every installed extension with an update and no
+// action in flight. -> { pkgNames, payload }, or null when none is due.
+function updateAll(ext) {
+  var pkgNames = ext.extensions.filter(function(e) { return e.installed && e.hasUpdate && !ext.busy[e.pkgName] }).map(function(e) { return e.pkgName })
+  if (!pkgNames.length) return null
+  return {
+    pkgNames: pkgNames,
+    payload: {
+      query: "mutation($ids: [String!]!) { updateExtensions(input: { ids: $ids, patch: { update: true } }) { extensions { " + FIELDS + " } } }",
+      variables: { ids: pkgNames }
+    }
+  }
+}
+
 // A repo URL as typed -> { url } or { error }.
 function parseRepoUrl(text) {
   var t = String(text).trim()
@@ -119,6 +133,8 @@ function parseRepoUrl(text) {
 //   "reply"           { reply, config } for the load step in flight
 //   "action"          { pkgName, action } went out
 //   "action-reply"    { pkgName, reply, config }
+//   "update-all"      { pkgNames } went out, updateAll()'s
+//   "update-all-reply" { pkgNames, reply, config }
 //   "repo-reply"      { reply, removed? } for an add, or a removal of removed
 // reply is Model.reply()'s. A failure keeps what is shown.
 function reduce(ext, event) {
@@ -140,6 +156,17 @@ function reduce(ext, event) {
       var list = ext.extensions.filter(function(e) { return e.pkgName !== event.pkgName || node })
       list = list.map(function(e) { return e.pkgName === event.pkgName ? toExtension(event.config, node) : e })
       return copy(ext, { busy: busy, extensions: list })
+    case "update-all":
+      return event.pkgNames.reduce(function(e, p) { return reduce(e, { type: "action", pkgName: p, action: "update" }) }, ext)
+    case "update-all-reply":
+      var done = copy(ext, { busy: event.pkgNames.reduce(without, ext.busy) })
+      if (r.state !== "ok") {
+        var why = r.message || Model.problem(r, "").title
+        return copy(done, { errors: event.pkgNames.reduce(function(m, p) { return withKey(m, p, why) }, ext.errors) })
+      }
+      var nodes = {}
+      r.data.updateExtensions.extensions.forEach(function(n) { nodes[n.pkgName] = n })
+      return copy(done, { extensions: ext.extensions.map(function(e) { return nodes[e.pkgName] ? toExtension(event.config, nodes[e.pkgName]) : e }) })
     case "repo-reply":
       if (r.state !== "ok") return copy(ext, { repoError: r.message || Model.problem(r, "").title })
       if (event.removed) {
@@ -324,6 +351,7 @@ if (typeof module !== "undefined") {
     addRepoPayload: addRepoPayload,
     removeRepoPayload: removeRepoPayload,
     actionPayload: actionPayload,
+    updateAll: updateAll,
     parseRepoUrl: parseRepoUrl,
     reduce: reduce,
     rows: rows,

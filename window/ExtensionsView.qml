@@ -38,7 +38,8 @@ Item {
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.key === view.cursorKey }))
   readonly property var problem: Model.problem(ext, configPath)
   readonly property var detailsExtension: details ? Extensions.find(ext, details.pkgName) : null
-  readonly property string hint: !details ? "j k move   enter install/details   u update   x remove   a add repo   / filter   l languages   "
+  readonly property bool updatable: ext.extensions.some(function(e) { return e.installed && e.hasUpdate })
+  readonly property string hint: !details ? "j k move   enter install/details   u update   " + (updatable ? "U update all   " : "") + "x remove   a add repo   / filter   l languages   "
     : "j k move   enter settings   " + (detailsExtension && detailsExtension.hasUpdate ? "u update   " : "") + "x uninstall   esc back   "
 
   signal key(var event)
@@ -157,6 +158,15 @@ Item {
         if (!a || !config) break
         if (a.details) showDetails(a.details)
         else act(a)
+        break
+      case "extensions.updateAll":
+        var all = Extensions.updateAll(ext)
+        if (!all || !config) break
+        var cfg = config
+        ext = Extensions.reduce(ext, { type: "update-all", pkgNames: all.pkgNames })
+        send(all.payload, function(reply) {
+          view.ext = Extensions.reduce(view.ext, { type: "update-all-reply", pkgNames: all.pkgNames, reply: reply, config: cfg })
+        })
         break
       case "extension.up":
       case "extension.down":
