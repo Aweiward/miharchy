@@ -239,19 +239,56 @@ class Desktop(private val config: ServerConfig) {
     }
 
     /** Categories stay out: Suwayomi's restore would replace them. Tracks restore into its database only, never to the tracker. */
-    private fun restore(backup: Backup) {
+    private fun restore(backup: Backup) = restoreFile(encodeBackup(backup), includeCategories = false) {}
+
+    /** The sources and trackers [backup] needs that the server lacks, from Suwayomi's `validateBackup`. */
+    fun validate(backup: ByteArray): Check {
+        val result = upload(
+            "query(\$backup: Upload!) { validateBackup(input: { backup: \$backup }) { missingSources { id name } missingTrackers { name } } }",
+            backup,
+        ).obj("validateBackup")
+        return Check(
+            missingSources = result.getValue("missingSources").jsonArray.map { s -> s.str("name").ifBlank { s.str("id") } },
+            missingTrackers = result.getValue("missingTrackers").jsonArray.map { it.str("name") },
+        )
+    }
+
+    /**
+     * Restores [backup] and reports each new progress step until it ends. Client data and server settings stay out,
+     * as in [export]: a Suwayomi backup's server settings hold its server password.
+     */
+    fun restoreFile(backup: ByteArray, includeCategories: Boolean = true, onProgress: (RestoreProgress) -> Unit) {
+        val id = upload(
+            """
+            mutation(${'$'}backup: Upload!) {
+              restoreBackup(input: { backup: ${'$'}backup, flags: {
+                includeManga: true, includeChapters: true, includeHistory: true, includeCategories: $includeCategories,
+                includeTracking: true, includeClientData: false, includeServerSettings: false
+              } }) { id }
+            }
+            """,
+            backup,
+        ).obj("restoreBackup").str("id")
+
+        var last: RestoreProgress? = null
+        while (true) {
+            val s = query("query(\$id: String!) { restoreStatus(id: \$id) { state mangaProgress totalManga } }", buildJsonObject { put("id", id) })
+                .obj("restoreStatus")
+            val status = RestoreProgress(s.str("state"), s.int("mangaProgress"), s.int("totalManga"))
+            if (status != last) onProgress(status)
+            last = status
+            when (status.state) {
+                "SUCCESS" -> return
+                "FAILURE" -> error("Suwayomi could not restore the backup.")
+            }
+            Thread.sleep(250)
+        }
+    }
+
+    /** A GraphQL request whose variable `backup` is the file, sent as the GraphQL multipart request spec says. */
+    private fun upload(query: String, backup: ByteArray): JsonObject {
         val operations = buildJsonObject {
-            put(
-                "query",
-                """
-                mutation(${'$'}backup: Upload!) {
-                  restoreBackup(input: { backup: ${'$'}backup, flags: {
-                    includeManga: true, includeChapters: true, includeHistory: true, includeCategories: false,
-                    includeTracking: true, includeClientData: false, includeServerSettings: false
-                  } }) { id }
-                }
-                """,
-            )
+            put("query", query)
             putJsonObject("variables") { put("backup", JsonNull) }
         }
         val boundary = "miharchy-" + System.nanoTime()
@@ -263,23 +300,14 @@ class Desktop(private val config: ServerConfig) {
             }
             part("operations", "", operations.toString().toByteArray())
             part("map", "", """{"0":["variables.backup"]}""".toByteArray())
-            part("0", "; filename=\"miharchy-import.tachibk\"\r\nContent-Type: application/octet-stream", encodeBackup(backup))
+            part("0", "; filename=\"miharchy-import.tachibk\"\r\nContent-Type: application/octet-stream", backup)
             write("--$boundary--\r\n".toByteArray())
         }.toByteArray()
-        val id = send(
+        return send(
             HttpRequest.newBuilder(endpoint)
                 .header("Content-Type", "multipart/form-data; boundary=$boundary")
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body)),
-        ).obj("restoreBackup").str("id")
-
-        while (true) {
-            val status = query("query(\$id: String!) { restoreStatus(id: \$id) { state } }", buildJsonObject { put("id", id) })
-            when (status.obj("restoreStatus").str("state")) {
-                "SUCCESS" -> return
-                "FAILURE" -> error("Suwayomi failed to restore the phone backup")
-            }
-            Thread.sleep(250)
-        }
+        )
     }
 
     private fun query(query: String, variables: JsonObject): JsonObject = send(

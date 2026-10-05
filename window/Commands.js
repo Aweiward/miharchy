@@ -33,6 +33,7 @@ var KEY = {
 // overlay: library-options, manga, manga-categories, manga-options,
 // manga-select, manga-track,
 // manga-track-pick, downloads, reader, sync,
+// or a restore step: restore-confirm, -checking, -running, -done, -failed,
 // or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
 // -done) shows;
 // an array allows several.
@@ -45,6 +46,7 @@ var commands = [
   { id: "view.setup", title: "Setup", keys: [] },
   { id: "downloads.open", title: "Download queue", keys: [] },
   { id: "sync.now", title: "Sync now", keys: [] },
+  { id: "restore.open", title: "Restore a backup", keys: [] },
   { id: "migrate.batch", title: "Migrate a source", keys: [] },
   // Before library.reload and window.quit: on these screens r and Esc mean
   // something else.
@@ -74,6 +76,8 @@ var commands = [
   { id: "downloads.close", title: "Close the download queue", keys: ["Esc", "D"], view: "downloads", hidden: true },
   { id: "reader.close", title: "Close the reader", keys: ["Esc", "q"], view: "reader", hidden: true },
   { id: "sync.close", title: "Close the sync result", keys: ["Esc", "q", "Enter"], view: "sync", hidden: true },
+  { id: "restore.confirm", title: "Restore", keys: ["Enter"], view: "restore-confirm", hidden: true },
+  { id: "restore.close", title: "Close", keys: ["Esc", "q"], view: ["restore-confirm", "restore-checking", "restore-running", "restore-done", "restore-failed"], hidden: true },
   { id: "reader.retry", title: "Load again", keys: ["r"], view: "reader", hidden: true },
   { id: "history.reload", title: "Reload history", keys: ["r"], view: "history", hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },

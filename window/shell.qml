@@ -230,11 +230,11 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var editing = reader.editing ? "reader" : settingsEditing ? "settings" : libraryView.editing ? "library" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
-    // An open sync result, download queue, reader, migration or manga
+    var editing = restoreView.editing ? "restore" : reader.editing ? "reader" : settingsEditing ? "settings" : libraryView.editing ? "library" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
+    // An open restore, sync result, download queue, reader, migration or manga
     // detail decides which keys apply, in that order; on Browse, the screen
     // or the panel over it does.
-    var scope = syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? "reader"
+    var scope = restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? "reader"
       : migrateView.open ? "migrate-" + migrateView.step
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.selecting ? "manga-select" : "manga")
@@ -251,6 +251,14 @@ ShellRoot {
     return id !== null
   }
 
+  // A sync or a restore changed the library, and the source names in meta.
+  function reloadAfterImport() {
+    if (!config) return
+    fetchLibrary()
+    sendSettings(Settings.loadPayload())
+    updatesView.load()
+  }
+
   function closePalette() {
     paletteOpen = false
     keyRoot.forceActiveFocus()
@@ -259,6 +267,7 @@ ShellRoot {
   function run(id) {
     if (id.indexOf("view.") === 0) {
       syncView.open = false
+      restoreView.close()
       if (reader.open) reader.close()
       migrateView.close()
       mangaDetail.close()
@@ -332,6 +341,10 @@ ShellRoot {
     }
     if (id.indexOf("sync.") === 0) {
       syncView.run(id)
+      return
+    }
+    if (id.indexOf("restore.") === 0) {
+      restoreView.run(id)
       return
     }
     switch (id) {
@@ -726,7 +739,7 @@ ShellRoot {
         Text {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: syncView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: "j k move   enter read   u check   s sync   ", history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           color: theme.muted
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
@@ -767,11 +780,17 @@ ShellRoot {
         id: syncView
         anchors.fill: parent
         theme: theme
-        onSynced: if (root.config) {
-          root.fetchLibrary()
-          root.sendSettings(Settings.loadPayload())
-          updatesView.load()
-        }
+        onSynced: root.reloadAfterImport()
+      }
+
+      RestoreView {
+        id: restoreView
+        anchors.fill: parent
+        theme: theme
+        folder: root.settingsState.values.syncFolder
+        onKey: function(event) { event.accepted = root.handleKey(event) }
+        onEditEnded: keyRoot.forceActiveFocus()
+        onRestored: root.reloadAfterImport()
       }
 
       CommandPalette {
