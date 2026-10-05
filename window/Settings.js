@@ -116,6 +116,9 @@ var ROWS = [
   { key: "excludeUnreadChapters", label: "Skip manga with unread chapters", type: "bool", default: true, store: "server" },
   { key: "excludeNotStarted", label: "Skip manga not started", type: "bool", default: true, store: "server" },
   { key: "excludeCompleted", label: "Skip completed manga", type: "bool", default: true, store: "server" },
+  // Mihon's "Automatically refresh metadata": the library update also
+  // fetches each manga's title, cover and description.
+  { key: "updateMangas", label: "Refresh metadata during library updates", type: "bool", default: false, store: "server" },
   // Mihon's default category for manga added to the library: "ask", "0"
   // (Default: no category) or a category id. The server's own default flag
   // applies only to its REST add, so the window applies this one.
