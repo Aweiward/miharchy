@@ -402,6 +402,17 @@ function libraryPayload(d) {
   return Model.inLibraryPayload(d.mangaId, !d.manga.inLibrary)
 }
 
+// Mihon's GetDuplicateLibraryManga: the library manga, other than this
+// one, whose title contains its title, ignoring case. Mihon also matches
+// a shared track, which a manga not yet in the library never has. A blank
+// title would match every manga, so it matches none.
+// library: Model's library entries; manga: the detail's manga.
+function duplicates(library, manga) {
+  var title = manga.title.trim().toLowerCase()
+  if (!title) return []
+  return library.filter(function(m) { return m.id !== manga.id && m.title.toLowerCase().indexOf(title) !== -1 })
+}
+
 function markInLibrary(l, mangaId, inLibrary) {
   return copy(l, { items: l.items.map(function(m) { return m.id === mangaId ? copy(m, { inLibrary: inLibrary }) : m }) })
 }
@@ -446,6 +457,7 @@ if (typeof module !== "undefined") {
     reduceDetail: reduceDetail,
     sourceHelp: sourceHelp,
     libraryPayload: libraryPayload,
+    duplicates: duplicates,
     categoryPayload: categoryPayload,
     markInLibrary: markInLibrary,
     notice: notice

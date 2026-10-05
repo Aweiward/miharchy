@@ -384,7 +384,7 @@ ShellRoot {
     var scope = trackAsk ? "track-ask" : restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? (reader.panelOpen ? "reader-settings" : "reader")
       : migrateView.open ? "migrate-" + migrateView.step
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
-      : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.downloadsOpen ? "manga-download" : mangaDetail.selecting ? "manga-select" : "manga")
+      : mangaDetail.open ? (mangaDetail.dupesOpen ? "manga-duplicates" : mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.downloadsOpen ? "manga-download" : mangaDetail.selecting ? "manga-select" : "manga")
       : view === "browse" ? (browseView.scope === "extensions" && extensionsView.details ? "extension" : browseView.scope) : view === "library" && libraryScreen === "categories" ? "categories"
       : view === "library" && libraryArmed === "remove" ? "library-remove"
       : view === "library" && libraryPickIds.length ? "library-categories"
@@ -469,6 +469,12 @@ ShellRoot {
     }
     if (id === "manga.migrate") {
       migrateView.startSingle(mangaDetail.manga)
+      return
+    }
+    if (id === "manga.duplicateMigrate") {
+      var dupe = mangaDetail.dupes[mangaDetail.dupesCursor]
+      mangaDetail.dupes = []
+      migrateView.startWith(dupe, mangaDetail.manga)
       return
     }
     if (id === "migrate.batch") {
@@ -959,7 +965,7 @@ ShellRoot {
           }
           queue: downloadsView.queue.items
           onDownloads: function(reply) { downloadsView.apply(reply) }
-          libraryIds: root.connection.manga.map(function(m) { return m.id })
+          libraryManga: root.connection.manga
           onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
           onMark: function(chapters, action, mangaId) { root.markChapters(chapters, action, [mangaId]) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
