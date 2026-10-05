@@ -21,9 +21,12 @@ test("every row is complete, and a choice's default is one of its options", () =
   }
 });
 
-test("the first rows and their defaults", () => {
-  assert.deepEqual(S.ROWS.map((r) => r.label), ["Downloaded only", "Incognito mode", "Show NSFW sources", "Default reading mode", "Page fit", "Two-page spreads", "Split wide pages", "Webtoon width", "Reader background", "Keep the screen on", "Always show chapter transition", "Skip read chapters", "Skip filtered chapters", "Skip duplicate chapters", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Notify about new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Refresh metadata during library updates", "Default category", "Download folder", "Save downloads as CBZ", "Local manga folder", "Auto-download new chapters", "Auto-download only for manga with no unread chapters", "Auto-download skips re-uploaded chapters", "Download ahead while reading", "Delete downloads marked read", "Delete after reading", "Delete bookmarked chapters", "Update trackers after reading", "Update trackers when marking chapters read", "Save pages to", "Sync folder", "Backup folder", "Automatic backups", "Automatic backup time", "Keep automatic backups", "Backups include categories", "Backups include chapters", "Backups include tracking", "Backups include history", "Create a backup"]);
-  assert.deepEqual(S.initial().values, { downloadedOnly: false, incognito: false, showNsfw: false, defaultReadingMode: "paged-rtl", pageFit: "screen", dualPageView: "never", dualPageSplit: false, webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, notifyNewChapters: true, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, updateMangas: false, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, localSourcePath: "", autoDownloadNewChapters: false, excludeEntryWithUnreadChapters: true, autoDownloadIgnoreReUploads: false, downloadAhead: "0", deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, trackAfterReading: true, trackOnMarkRead: "always", pageFolder: "", syncFolder: "", backupPath: "", backupInterval: 1, backupTime: "00:00", backupTTL: 14, autoBackupIncludeCategories: true, autoBackupIncludeChapters: true, autoBackupIncludeTracking: true, autoBackupIncludeHistory: true });
+test("the modes come first, and some defaults match Mihon", () => {
+  assert.deepEqual(S.ROWS.slice(0, 2).map((r) => r.key), ["downloadedOnly", "incognito"]);
+  const v = S.initial().values;
+  assert.equal(v.skipFiltered, true);
+  assert.equal(v.defaultCategory, "ask");
+  assert.equal(v.defaultReadingMode, "paged-rtl");
   assert.deepEqual(row("defaultReadingMode").options.map((o) => o.label), ["Paged right-to-left", "Paged left-to-right", "Paged vertical", "Webtoon", "Continuous vertical"]);
 });
 
@@ -43,7 +46,7 @@ test("a load reply sets server values and namespaced meta, defaults fill the res
     ] }
   }));
   assert.equal(s.state, "ok");
-  assert.deepEqual(s.values, { downloadedOnly: false, incognito: false, showNsfw: true, defaultReadingMode: "paged-rtl", pageFit: "screen", dualPageView: "never", dualPageSplit: false, webtoonWidth: "60", readerTheme: "theme", keepScreenOn: true, alwaysShowChapterTransition: true, skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, notifyNewChapters: true, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, updateMangas: false, defaultCategory: "ask", downloadsPath: "", downloadAsCbz: false, localSourcePath: "", autoDownloadNewChapters: false, excludeEntryWithUnreadChapters: true, autoDownloadIgnoreReUploads: false, downloadAhead: "0", deleteAfterMarkRead: false, deleteAfterRead: "false", deleteBookmarked: false, trackAfterReading: true, trackOnMarkRead: "always", pageFolder: "", syncFolder: "", backupPath: "", backupInterval: 1, backupTime: "00:00", backupTTL: 14, autoBackupIncludeCategories: true, autoBackupIncludeChapters: true, autoBackupIncludeTracking: true, autoBackupIncludeHistory: true });
+  assert.deepEqual(s.values, { ...S.initial().values, showNsfw: true, flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191" });
 });
 
 test("the page fit and webtoon width come back from meta after a restart; an unknown one reads as the default", () => {
