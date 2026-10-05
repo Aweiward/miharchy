@@ -51,6 +51,39 @@ test("the Sources list puts the last used source, then the pinned ones, then eac
   assert.deepEqual(B.pinned({ pinnedSources: "{bad" }), [], "a broken value pins nothing");
 });
 
+test("languages and hidden sources narrow Sources and global search, as Mihon's GetEnabledSources", () => {
+  const P = require("./load")("Prefs.js");
+  const list = B.sources(ok({ sources: { nodes: [
+    src({ id: "1", displayName: "MangaDex", lang: "all" }),
+    src({ id: "2", displayName: "Weeb Central" }),
+    src({ id: "3", displayName: "Asura Scans" }),
+    src({ id: "4", displayName: "Rawkuma", lang: "ja" })
+  ] } }), config, false, true).sources;
+  let prefs = P.defaults(B.PREFS);
+  const apply = (c) => { prefs = { ...prefs, [c.key]: c.value }; };
+  assert.deepEqual(B.enabled(list, prefs).map((s) => s.id), ["3", "1", "2"], "English and Multi until the user picks, as before");
+  const rows = () => B.languageRows(list, prefs).map((r) => [r.kind, r.label, r.mark, r.depth]);
+  assert.deepEqual(rows(), [
+    ["language", "Multi", "[x]", 0], ["source", "MangaDex", "[x]", 1],
+    ["language", "en", "[x]", 0], ["source", "Asura Scans", "[x]", 1], ["source", "Weeb Central", "[x]", 1],
+    ["language", "ja", "[ ]", 0]
+  ], "a language lists its sources only while enabled");
+  apply(B.chooseLanguage(prefs, B.languageRows(list, prefs)[5]));
+  assert.deepEqual(B.enabled(list, prefs).map((s) => s.id), ["3", "1", "4", "2"]);
+  apply(B.chooseLanguage(prefs, B.languageRows(list, prefs)[4]));
+  assert.equal(prefs.disabledSources, "[\"2\"]");
+  assert.deepEqual(B.enabled(list, prefs).map((s) => s.id), ["3", "1", "4"], "a hidden source leaves Sources and global search");
+  assert.equal(rows()[4][2], "[ ]", "the panel still lists it, unticked");
+  apply(B.chooseLanguage(prefs, B.languageRows(list, prefs)[2]));
+  assert.deepEqual(B.enabled(list, prefs).map((s) => s.id), ["1", "4"], "turning English off hides its sources");
+  assert.deepEqual(rows().map((r) => r[1]), ["Multi", "MangaDex", "ja", "Rawkuma", "en"], "enabled languages first, as Mihon sorts them");
+  apply(B.chooseLanguage(prefs, B.languageRows(list, prefs)[4]));
+  apply(B.chooseLanguage(prefs, B.languageRows(list, prefs)[1]));
+  assert.deepEqual(B.languageRows(list, prefs).filter((r) => r.kind === "source").map((r) => r.label), ["MangaDex", "Asura Scans", "Weeb Central", "Rawkuma"], "hidden sources last in their language");
+  assert.equal(B.languageRows(list, prefs)[1].mark, "[ ]");
+  assert.deepEqual(B.sourceRows(B.enabled(list, prefs), prefs).map((r) => r.header), ["en", "ja"], "Multi's one source is hidden");
+});
+
 test("a failed sources reply keeps the connection state for Model.problem", () => {
   assert.equal(B.sources(M.reply(0, ""), config, false).state, "down");
 });
