@@ -28,6 +28,8 @@ ShellRoot {
   property var connection: Model.initial()
   property bool paletteOpen: false
   property int libraryCursor: 0
+  // A mark read's question to the trackers (Chapters.trackAsk), or null.
+  property var trackAsk: null
   // The shown category's id in Model.switcher(); a deleted one falls back to All.
   property int libraryCategory: -1
   // "grid" | "categories"
@@ -218,8 +220,10 @@ ShellRoot {
     send(payload, function(reply) {
       // The push waits for the mark: the server reads the chapters it marked.
       var read = reply.state === "ok" && action === "read"
-      var track = read ? Chapters.trackPayload(mangaIds) : null
-      if (track) root.send(track, function() {})
+      var after = read ? Chapters.afterMarkRead(root.settingsState.values.trackOnMarkRead) : null
+      var check = after === "check" ? Chapters.trackCheckPayload(mangaIds) : null
+      if (after === "push") root.pushTrackers(mangaIds)
+      if (check) root.send(check, function(r) { root.trackAsk = r.state === "ok" ? Chapters.trackAsk(r.data) : null })
       if (read && root.settingsState.values.deleteAfterMarkRead) root.deleteRead(marked, refresh)
       else refresh()
       function refresh() {
@@ -229,6 +233,11 @@ ShellRoot {
         root.fetchLibrary()
       }
     })
+  }
+
+  function pushTrackers(mangaIds) {
+    var track = Chapters.trackPayload(mangaIds)
+    if (track) send(track, function() {})
   }
 
   // Deletes the downloads of the read chapters that Downloads.autoDeletePayload
@@ -356,7 +365,7 @@ ShellRoot {
     // An open restore, sync result, download queue, reader, migration or manga
     // detail decides which keys apply, in that order; on Browse, the screen
     // or the panel over it does.
-    var scope = restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? (reader.panelOpen ? "reader-settings" : "reader")
+    var scope = trackAsk ? "track-ask" : restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? (reader.panelOpen ? "reader-settings" : "reader")
       : migrateView.open ? "migrate-" + migrateView.step
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.downloadsOpen ? "manga-download" : mangaDetail.selecting ? "manga-select" : "manga")
@@ -415,6 +424,11 @@ ShellRoot {
     }
     if (id.indexOf("categories.") === 0) {
       categoriesView.run(id)
+      return
+    }
+    if (id === "trackAsk.yes" || id === "trackAsk.no") {
+      if (id === "trackAsk.yes") pushTrackers(trackAsk.mangaIds)
+      trackAsk = null
       return
     }
     if (id === "manga.track") {
@@ -975,7 +989,7 @@ ShellRoot {
           id: hintBar
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : mangaDetail.writing ? "enter save   shift+enter new line   esc cancel" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || mangaDetail.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryHint, updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: browseView.panel || browseView.screen !== "extensions" ? browseView.hint : extensionsView.hint + (extensionsView.details ? "" : browseView.hint), setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: root.trackAsk ? "y update   n keep" : syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : mangaDetail.writing ? "enter save   shift+enter new line   esc cancel" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || mangaDetail.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryHint, updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: browseView.panel || browseView.screen !== "extensions" ? browseView.hint : extensionsView.hint + (extensionsView.details ? "" : browseView.hint), setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           maxWidth: parent.width - connectionText.width - theme.fontSize * 2
           theme: theme
           onKey: function(event) { root.handleKey(event) }
@@ -1029,6 +1043,27 @@ ShellRoot {
         onKey: function(event) { event.accepted = root.handleKey(event) }
         onEditEnded: keyRoot.forceActiveFocus()
         onRestored: root.reloadAfterImport()
+      }
+
+      // Mihon's snackbar after a mark read, kept until answered.
+      Rectangle {
+        anchors.bottom: status.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: askText.implicitWidth + theme.fontSize * 3
+        height: askText.implicitHeight + theme.fontSize * 1.5
+        visible: root.trackAsk !== null
+        color: theme.panel
+        border.width: 1
+        border.color: theme.panelBorder
+
+        Text {
+          id: askText
+          anchors.centerIn: parent
+          text: root.trackAsk ? Chapters.trackAskText(root.trackAsk) : ""
+          color: theme.foreground
+          font.family: theme.fontFamily
+          font.pixelSize: theme.fontSize
+        }
       }
 
       CommandPalette {

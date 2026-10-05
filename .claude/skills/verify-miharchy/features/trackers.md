@@ -6,6 +6,7 @@ The tracking panel (`t` on a manga's detail, scopes `manga-track` and `manga-tra
 - Enter finds the manga on the tracker (search, then pick); `s` status, `c` chapters read, `S` score; `x` stops tracking (Miharchy's record only).
 - `d` / `D`: the start and finish dates, typed as `YYYY-MM-DD`, empty clears; only on a tracker with `supportsReadingDates`. `p`: private on or off, only with `supportsPrivateTracking`. Each is an `updateTrack`.
 - `o` opens the track's `remoteUrl` with `xdg-open`, `y` copies it with `wl-copy`; both work on a logged-out tracker's track too.
+- After a mark read (`R`, `P`, Updates, Library), Settings' "Update trackers when marking chapters read" (meta `miharchy.trackOnMarkRead`): always sends `trackProgress`, never sends nothing, ask reads each manga's tracks and highest read chapter and, when a logged-in tracker is behind, shows "Update trackers to chapter N?" over the status bar (scope `track-ask`: `y` pushes, `n`/Esc keeps). "Update trackers after reading" (`miharchy.trackAfterReading`) gates the reader's push.
 
 ## How to get to it (user POV)
 Library, Enter on a manga, `t`.
@@ -23,6 +24,8 @@ Never let `o` or `y` reach the desktop: put stub `xdg-open` and `wl-copy` that l
   [500, function() { log("note", trackPanel.note); done() }]
 ]
 ```
+
+The push itself: on a logged-out tracker `trackProgress` changes no record, but the server logs each one: `grep "trackChapter(mangaId" $RUN/server/logs/application.log` gains a line per push (none under never). The ask prompt needs a logged-in tracker to come up by itself; set `root.trackAsk = { mangaIds: [id], chapter: n }` to show it, then click the `y update` hint part (`hintBar.children`).
 
 ## Gotchas
 - Never log in to a real tracker account from a verify run.

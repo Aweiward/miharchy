@@ -44,10 +44,54 @@ function bookmarkPayload(chapters) {
 // null for no manga: an empty mutation is a GraphQL error.
 function trackPayload(mangaIds) {
   if (!mangaIds.length) return null
-  var fields = mangaIds.filter(function(id, i) { return mangaIds.indexOf(id) === i }).map(function(id) {
+  var fields = unique(mangaIds).map(function(id) {
     return "m" + id + ": trackProgress(input: { mangaId: " + Number(id) + " }) { trackRecords { id lastChapterRead } }"
   })
   return { query: "mutation { " + fields.join(" ") + " }" }
+}
+
+function unique(ids) {
+  return ids.filter(function(id, i) { return ids.indexOf(id) === i })
+}
+
+// What a manual mark read does to the trackers, by the setting
+// trackOnMarkRead (Mihon's autoUpdateTrackOnMarkRead): "push" at once,
+// "check" whether to ask first, or null.
+function afterMarkRead(setting) {
+  return { always: "push", ask: "check" }[setting] || null
+}
+
+// For "check": each marked manga's tracks and its highest read chapter, read
+// after the mark, which is the number trackProgress would send.
+function trackCheckPayload(mangaIds) {
+  if (!mangaIds.length) return null
+  var fields = unique(mangaIds).map(function(id) {
+    var n = Number(id)
+    return "m" + n + ": manga(id: " + n + ") { id trackRecords { nodes { lastChapterRead tracker { isLoggedIn } } } }"
+      + " r" + n + ": chapters(condition: { mangaId: " + n + ", isRead: true }, order: [{ by: CHAPTER_NUMBER, byType: DESC }], first: 1) { nodes { chapterNumber } }"
+  })
+  return { query: "query { " + fields.join(" ") + " }" }
+}
+
+// trackCheckPayload's data -> { mangaIds, chapter } to ask about, or null.
+// As Mihon: ask only when a logged-in tracker sits below the chapter the
+// push would send. chapter: that number when one manga is asked about.
+function trackAsk(data) {
+  var due = []
+  Object.keys(data).filter(function(k) { return k.charAt(0) === "m" && data[k] }).forEach(function(k) {
+    var id = data[k].id
+    var top = (data["r" + id] && data["r" + id].nodes[0]) || null
+    if (!top) return
+    var behind = data[k].trackRecords.nodes.some(function(t) { return t.tracker.isLoggedIn && t.lastChapterRead < top.chapterNumber })
+    if (behind) due.push({ id: id, chapter: top.chapterNumber })
+  })
+  if (!due.length) return null
+  return { mangaIds: due.map(function(d) { return d.id }), chapter: due.length === 1 ? due[0].chapter : null }
+}
+
+// The question, as Mihon's snackbar words it.
+function trackAskText(ask) {
+  return ask.chapter !== null ? "Update trackers to chapter " + (Math.round(ask.chapter * 100) / 100) + "?" : "Update trackers for " + ask.mangaIds.length + " manga?"
 }
 
 // Chapters here are the shape Browse.toChapters() builds.
@@ -249,6 +293,10 @@ if (typeof module !== "undefined") {
     markPayload: markPayload,
     bookmarkPayload: bookmarkPayload,
     trackPayload: trackPayload,
+    afterMarkRead: afterMarkRead,
+    trackCheckPayload: trackCheckPayload,
+    trackAsk: trackAsk,
+    trackAskText: trackAskText,
     apply: apply,
     readingOrder: readingOrder,
     rows: rows,

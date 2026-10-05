@@ -33,7 +33,7 @@ var KEY = {
 // source-settings; Library screen: categories; or
 // overlay: library-options, library-categories, library-remove, manga, manga-categories, manga-options,
 // manga-download, manga-select, manga-track,
-// manga-track-pick, downloads, reader, reader-settings, sync,
+// manga-track-pick, track-ask, downloads, reader, reader-settings, sync,
 // or a restore step: restore-confirm, -checking, -running, -done, -failed,
 // or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
 // -done) shows;
@@ -60,6 +60,9 @@ var commands = [
   // Every step answers Esc, so it never falls through to quit, even while
   // a migration runs.
   { id: "migrate.back", title: "Back", keys: ["Esc", "Backspace"], view: ["migrate-search", "migrate-from", "migrate-to", "migrate-match", "migrate-confirm", "migrate-busy", "migrate-done"], hidden: true },
+  // Asked after a mark read, as Mihon's snackbar; only y, n and Esc answer.
+  { id: "trackAsk.yes", title: "Update the trackers", keys: ["y"], view: "track-ask", hidden: true },
+  { id: "trackAsk.no", title: "Keep the trackers as they are", keys: ["n", "Esc"], view: "track-ask", hidden: true },
   { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: ["source", "global"], hidden: true },
   { id: "extension.back", title: "Back", keys: ["Esc", "Backspace"], view: "extension", hidden: true },
   // F and S close the panel they open, as F does on the Library.
