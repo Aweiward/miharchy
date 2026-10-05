@@ -134,8 +134,8 @@ test("with always show on, turning past the last page shows the finished and the
   assert.equal(t.index, r.index, "still in the chapter");
   assert.equal(t.page, 1);
   assert.deepEqual(R.transitionLines(t.transition), [
-    { label: "Finished", chapter: { id: 21, name: "Ch. 1", url: "u1", number: 1, downloaded: false, bookmarked: false, scanlator: "" } },
-    { label: "Next", chapter: { id: 22, name: "Ch. 2", url: "u2", number: 2, downloaded: true, bookmarked: false, scanlator: "Kumo" } }
+    { label: "Finished", chapter: { id: 21, name: "Ch. 1", url: "u1", number: 1, downloaded: false, bookmarked: false, read: false, scanlator: "" } },
+    { label: "Next", chapter: { id: 22, name: "Ch. 2", url: "u2", number: 2, downloaded: true, bookmarked: false, read: false, scanlator: "Kumo" } }
   ]);
   const back = R.reduce(t, { type: "turn", delta: -1 });
   assert.equal(back.transition, null);
@@ -534,6 +534,20 @@ test("save and copy pass the paths as arguments, never inside the script", () =>
   assert.equal(R.pageResult("cp: No space left\n", "Saved", "Saving failed"), "Saving failed: cp: No space left");
   assert.equal(R.pageResult("", "Saved", "Saving failed"), "Saving failed: no output");
   assert.equal(R.copyCommand("/run/img", "text/html")[4], "image/jpeg", "a type that is no image reads as JPEG");
+});
+
+test("download ahead takes the next unread chapters after the one open, in reading order", () => {
+  const list = [
+    { id: 16, name: "Ch. 6" }, { id: 15, name: "Ch. 5", downloaded: true }, { id: 14, name: "Ch. 4", read: true },
+    { id: 13, name: "Ch. 3" }, { id: 12, name: "Ch. 2" }, { id: 11, name: "Ch. 1" }
+  ];
+  const r = R.open(5, list, 12, "paged-rtl");
+  assert.deepEqual(R.ahead(r, "2").map((c) => c.id), [13, 15], "a read chapter does not count");
+  assert.deepEqual(R.ahead(r, "10").map((c) => c.id), [13, 15, 16], "no more than there are");
+  assert.deepEqual(R.ahead(r, "0"), [], "off");
+  const D = require("./load")("Downloads.js");
+  assert.deepEqual(D.enqueuePayload(R.ahead(r, "3")).variables.ids, [13, 16], "the one on disk is not queued again");
+  assert.equal(D.enqueuePayload(R.ahead(R.open(5, list, 16, "paged-rtl"), "5")), null, "the last chapter queues nothing");
 });
 
 // Page sizes by URL, as ReaderView collects them; the pages at wideAt are
