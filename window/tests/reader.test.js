@@ -222,9 +222,39 @@ test("m cycles the reading mode and saves it for the manga, keeping the page", (
   assert.equal(r.page, 4);
   assert.deepEqual(R.modePayload(r).variables, { meta: { mangaId: 5, key: "miharchy.readingMode", value: "paged-ltr" } });
   r = R.reduce(r, { type: "mode" });
+  assert.equal(r.mode, "paged-vertical");
+  assert.equal(R.indicator(r, "screen", "60"), "5 / 10   vertical   fit screen");
+  r = R.reduce(r, { type: "mode" });
   assert.equal(r.mode, "webtoon");
   assert.equal(R.indicator(r, "screen", "60"), "5 / 10   webtoon   60%");
+  r = R.reduce(r, { type: "mode" });
+  assert.equal(r.mode, "continuous-vertical");
+  assert.equal(R.indicator(r, "screen", "60"), "5 / 10   continuous vertical   60%");
   assert.equal(R.reduce(r, { type: "mode" }).mode, "paged-rtl");
+});
+
+test("vertical pages: j and k turn a page that fits, h back and l on, clicks in Mihon's L layout", () => {
+  const v = loaded(12, 5, {}, "paged-vertical");
+  assert.equal(R.strip("paged-vertical"), false);
+  assert.deepEqual(R.action(v, "reader.down", true, true), { turn: 1 });
+  assert.deepEqual(R.action(v, "reader.up", true, true), { turn: -1 });
+  assert.deepEqual(R.action(v, "reader.down", false, true), { scroll: 0.25 }, "a page taller than the view scrolls first");
+  assert.deepEqual(R.action(v, "reader.left"), { turn: -1 });
+  assert.deepEqual(R.action(v, "reader.right"), { turn: 1 });
+  assert.equal(R.tapZone("paged-vertical", 500, 900, 1000, 1000), "reader.halfDown");
+  assert.equal(R.tapZone("paged-vertical", 500, 100, 1000, 1000), "reader.halfUp");
+  assert.equal(R.stripGap("paged-vertical"), 0);
+});
+
+test("continuous vertical is the strip with a gap under each page; webtoon has none", () => {
+  const c = loaded(12, 4, {}, "continuous-vertical");
+  assert.equal(R.strip("continuous-vertical"), true);
+  assert.ok(R.stripGap("continuous-vertical") > 0);
+  assert.equal(R.stripGap("webtoon"), 0);
+  assert.deepEqual(R.action(c, "reader.down"), { scroll: 0.25 });
+  assert.equal(R.action(c, "reader.left"), null, "a strip has no sides");
+  assert.deepEqual(R.action(c, "reader.down", true, false), { turn: 1, chapter: true }, "the strip's end leaves the chapter");
+  assert.equal(R.mode({ readingMode: "continuous-vertical" }, "paged-rtl"), "continuous-vertical", "the manga's choice holds");
 });
 
 test("in webtoon the page is the one at the middle of the view, the last at the end of the strip", () => {

@@ -52,7 +52,8 @@ Rectangle {
   property string note: ""
 
   readonly property bool open: reader !== null
-  readonly property bool webtoon: open && reader.mode === "webtoon"
+  // Webtoon or continuous vertical: the strip shows, not the pager.
+  readonly property bool inStrip: open && Reader.strip(reader.mode)
   readonly property var problem: reader ? Model.problem(reader, configPath) : null
 
   // The chapter the reader showed last, when it closed.
@@ -208,13 +209,13 @@ Rectangle {
     loadPages()
   }
 
-  // The strip holds the chapter's pages only while webtoon shows them. Set
+  // The strip holds the chapter's pages only while it shows. Set
   // here, not bound: rebinding the model on every read state change would
   // rebuild the strip and lose the scroll position.
   function layoutStrip() {
     scrollAnimation.stop()
     strip.positioned = false
-    strip.model = webtoon && reader.state === "ok" ? reader.pages : []
+    strip.model = inStrip && reader.state === "ok" ? reader.pages : []
     strip.pinToEnd = strip.count > 0 && reader.toEnd
     if (!strip.count) return
     if (reader.toEnd) strip.positionViewAtEnd()
@@ -225,7 +226,7 @@ Rectangle {
   // Positioning moves the strip before it settles; those moves are not
   // reading.
   function track() {
-    if (!strip.positioned || !webtoon || reader.state !== "ok") return
+    if (!strip.positioned || !inStrip || reader.state !== "ok") return
     var page = strip.indexAt(strip.width / 2, strip.contentY + strip.height / 2)
     if (page === -1 && !strip.atYBeginning && !strip.atYEnd) return
     var next = Reader.reduce(reader, { type: "scroll", page: page, start: strip.atYBeginning, end: strip.atYEnd })
@@ -234,12 +235,12 @@ Rectangle {
     saveTimer.restart()
   }
 
-  // In webtoon the strip moves there and track() then takes the page at
+  // In the strip it moves there and track() then takes the page at
   // the middle of the view, as for any scroll.
   function jump(page) {
     var before = reader
     go({ type: "goto", page: page })
-    if (!webtoon || reader === before) return
+    if (!inStrip || reader === before) return
     scrollAnimation.stop()
     strip.pinToEnd = reader.page === reader.pages.length - 1
     if (strip.pinToEnd) strip.positionViewAtEnd()
@@ -248,7 +249,7 @@ Rectangle {
 
   // The page or the strip, whichever shows.
   function flick() {
-    return webtoon ? strip : pager
+    return inStrip ? strip : pager
   }
 
   function scroll(part) {
@@ -348,14 +349,14 @@ Rectangle {
         endEdit()
         return
       case "reader.fit":
-        if (!webtoon) setting(row("pageFit"), Settings.activate(row("pageFit"), pageFit).save)
+        if (!inStrip) setting(row("pageFit"), Settings.activate(row("pageFit"), pageFit).save)
         return
       case "reader.wider":
       case "reader.narrower":
-        if (webtoon) setting(row("webtoonWidth"), Reader.step(row("webtoonWidth").options, webtoonWidth, id === "reader.wider" ? 1 : -1))
+        if (inStrip) setting(row("webtoonWidth"), Reader.step(row("webtoonWidth").options, webtoonWidth, id === "reader.wider" ? 1 : -1))
         return
     }
-    if (webtoon) track()
+    if (inStrip) track()
     var f = flick()
     var act = Reader.action(reader, id, f.atYEnd, f.atYBeginning)
     if (!act) return
@@ -399,7 +400,7 @@ Rectangle {
     id: pager
     property Item page: null
     anchors.fill: parent
-    visible: view.open && !view.webtoon
+    visible: view.open && !view.inStrip
     contentWidth: page ? Math.max(width, page.width) : width
     contentHeight: page ? Math.max(height, page.height) : height
     boundsBehavior: Flickable.StopAtBounds
@@ -419,7 +420,7 @@ Rectangle {
       ServerImage {
         id: slot
         required property int index
-        readonly property var held: view.reader && view.reader.state === "ok" && !view.webtoon ? Reader.slots(view.reader)[index] : null
+        readonly property var held: view.reader && view.reader.state === "ok" && !view.inStrip ? Reader.slots(view.reader)[index] : null
         readonly property bool current: held !== null && held.page === view.reader.page
         readonly property var size: Reader.fit(view.pageFit, { width: implicitWidth, height: implicitHeight }, { width: pager.width, height: pager.height })
         x: Math.max(0, (pager.width - width) / 2)
@@ -461,7 +462,8 @@ Rectangle {
     anchors.bottom: parent.bottom
     anchors.horizontalCenter: parent.horizontalCenter
     width: Reader.stripWidth(view.webtoonWidth, parent.width)
-    visible: view.webtoon
+    visible: view.inStrip
+    spacing: view.reader ? Reader.stripGap(view.reader.mode) : 0
     cacheBuffer: height
     boundsBehavior: Flickable.StopAtBounds
     onContentYChanged: view.track()
@@ -552,7 +554,7 @@ Rectangle {
 
   // The mouse runs the reader's own commands: a click the one its zone
   // stands for (Reader.tapZone), as h, l, d or u would; in paged mode the
-  // wheel j and k, so a tall page scrolls before it turns. In webtoon the
+  // wheel j and k, so a tall page scrolls before it turns. In the strip the
   // wheel falls through to the strip, which scrolls. While the go-to field
   // types, as for keys, neither acts. It also keeps clicks off the views
   // below the reader.
@@ -565,7 +567,7 @@ Rectangle {
     onDoubleClicked: function(mouse) { view.tap(mouse.x, mouse.y) }
     onWheel: function(wheel) {
       if (view.editing) return
-      if (view.webtoon) {
+      if (view.inStrip) {
         wheel.accepted = false
         return
       }
