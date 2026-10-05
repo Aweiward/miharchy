@@ -391,3 +391,16 @@ test("a failed mark read shows its error, and the next one clears it", () => {
   assert.equal(failed.libraryError, "Timed out");
   assert.equal(B.reduceDetail(failed, { type: "mark-reply", reply: ok({ marked: { chapters: [] }, reset: { chapters: [] } }) }).libraryError, "");
 });
+
+test("a manga whose title is inside a library manga's title, ignoring case, is a possible duplicate, as Mihon's", () => {
+  const library = [
+    { id: 1, title: "Solo Leveling" },
+    { id: 2, title: "Solo Leveling: Ragnarok" },
+    { id: 3, title: "One Piece" },
+    { id: 4, title: "solo leveling" }
+  ];
+  assert.deepEqual(B.duplicates(library, { id: 9, title: "SOLO LEVELING" }).map((m) => m.id), [1, 2, 4]);
+  assert.deepEqual(B.duplicates(library, { id: 1, title: "Solo Leveling" }).map((m) => m.id), [2, 4], "never the manga itself");
+  assert.deepEqual(B.duplicates(library, { id: 9, title: "Leveling Solo" }), []);
+  assert.deepEqual(B.duplicates(library, { id: 9, title: "  " }), [], "a blank title matches nothing");
+});

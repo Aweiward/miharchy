@@ -32,8 +32,15 @@ Rectangle {
   property var queue: []
   // Only the latest detail request may update it.
   property int detailSeq: 0
-  // The library's manga, which "save as default for every manga" resets.
-  property var libraryIds: []
+  // The library's manga (Model's entries): "save as default for every
+  // manga" resets them, and adding checks them for duplicates.
+  property var libraryManga: []
+  readonly property var libraryIds: libraryManga.map(function(m) { return m.id })
+  // The library manga a, adding, found with a similar title (Mihon's
+  // possible duplicates); the panel shows while there is one.
+  property var dupes: []
+  property int dupesCursor: 0
+  readonly property bool dupesOpen: dupes.length > 0
   property bool optionsOpen: false
   property int optionsCursor: 0
   property string optionsNote: ""
@@ -66,7 +73,8 @@ Rectangle {
   readonly property string resume: detail ? Chapters.resumeLabel(detail.chapters, next) : ""
   readonly property var optionRows: Chapters.rows(prefs, detail ? Chapters.scanlators(detail.chapters) : [])
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
-  readonly property string hint: picking ? "j k move   space in or out   esc close   "
+  readonly property string hint: dupesOpen ? "j k move   enter open   M migrate to this   a add anyway   esc cancel   "
+    : picking ? "j k move   space in or out   esc close   "
     : optionsOpen ? "j k move   enter change   esc close   "
     : downloadsOpen ? "j k move   enter download   esc close   "
     : selecting ? "j k extend   R read   u unread   b bookmark   d download   x delete download   esc end   "
@@ -121,6 +129,7 @@ Rectangle {
 
   // fromSource: opened while browsing a source, so it refreshes once.
   function openManga(mangaId, fromSource) {
+    dupes = []
     detail = Browse.detail(mangaId, fromSource)
     chapterPrefs.open(mangaId)
     scanlatorPrefs.open(mangaId)
@@ -130,6 +139,7 @@ Rectangle {
   }
 
   function close() {
+    dupes = []
     picking = false
     optionsOpen = false
     downloadsOpen = false
@@ -168,9 +178,15 @@ Rectangle {
 
   // Matched by manga, not by request number: a refresh or Back while the
   // toggle is in flight must not strand it, since the server applies it.
-  function toggleLibrary() {
+  // force: add even with possible duplicates in the library.
+  function toggleLibrary(force) {
     var payload = Browse.libraryPayload(detail)
     if (!payload) return
+    if (!force && !manga.inLibrary) {
+      dupes = Browse.duplicates(libraryManga, manga)
+      dupesCursor = 0
+      if (dupes.length) return
+    }
     var mangaId = detail.mangaId
     detail = Browse.reduceDetail(detail, { type: "library-request" })
     send(payload, function(reply) {
@@ -337,7 +353,21 @@ Rectangle {
         chooseOption()
         break
       case "manga.library":
-        toggleLibrary()
+        toggleLibrary(false)
+        break
+      case "manga.addAnyway":
+        dupes = []
+        toggleLibrary(true)
+        break
+      case "manga.duplicatesClose":
+        dupes = []
+        break
+      case "manga.duplicatesUp":
+      case "manga.duplicatesDown":
+        dupesCursor = Math.max(0, Math.min(dupes.length - 1, dupesCursor + (id === "manga.duplicatesUp" ? -1 : 1)))
+        break
+      case "manga.duplicateOpen":
+        openManga(dupes[dupesCursor].id, false)
         break
       case "manga.select":
         anchor = cursor
@@ -625,7 +655,7 @@ Rectangle {
   // Under an open panel: a click outside it never reaches a chapter.
   MouseArea {
     anchors.fill: parent
-    visible: view.optionsOpen || view.picking || view.downloadsOpen || view.writing
+    visible: view.optionsOpen || view.picking || view.downloadsOpen || view.writing || view.dupesOpen
   }
 
   // The notes editor: Markdown as typed, shown rendered on the manga.
@@ -909,6 +939,103 @@ Rectangle {
           font.pixelSize: view.theme.fontSize
         }
       }
+    }
+  }
+
+  // Mihon's DuplicateMangaDialog: Enter opens the library manga, M
+  // migrates it to this one, a adds this one anyway.
+  Rectangle {
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: view.theme.fontSize * 40
+    height: Math.min(parent.height - view.theme.fontSize * 4, dupesHead.height + dupeList.contentHeight + dupesHint.height + view.theme.fontSize * 3)
+    visible: view.dupesOpen
+    color: Qt.alpha(view.theme.panel, 1)
+    border.width: 1
+    border.color: view.theme.panelBorder
+
+    Text {
+      id: dupesHead
+      x: view.theme.fontSize
+      y: view.theme.fontSize
+      width: parent.width - view.theme.fontSize * 2
+      bottomPadding: view.theme.fontSize * 0.5
+      wrapMode: Text.Wrap
+      text: "Possible duplicates. You have manga in your library with a similar name."
+      color: view.theme.accent
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSmall
+    }
+
+    ListView {
+      id: dupeList
+      anchors.top: dupesHead.bottom
+      x: dupesHead.x
+      width: dupesHead.width
+      height: parent.height - dupesHead.height - dupesHint.height - view.theme.fontSize * 3
+      clip: true
+      model: view.dupes
+      currentIndex: view.dupesCursor
+      onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+
+      delegate: Rectangle {
+        id: dupe
+        required property var modelData
+        required property int index
+        readonly property bool current: index === view.dupesCursor
+        width: dupeList.width
+        height: dupeText.implicitHeight + view.theme.fontSize * 0.6
+        color: current ? view.theme.selected : "transparent"
+
+        MouseArea {
+          anchors.fill: parent
+          onClicked: view.dupesCursor = dupe.index
+          onDoubleClicked: {
+            view.dupesCursor = dupe.index
+            view.key(Commands.enter())
+          }
+        }
+
+        Column {
+          id: dupeText
+          anchors.left: parent.left
+          anchors.leftMargin: view.theme.fontSize * 0.5
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+
+          Text {
+            width: parent.width
+            elide: Text.ElideRight
+            text: dupe.modelData.title
+            color: dupe.current ? view.theme.selectedText : view.theme.foreground
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSize
+          }
+
+          Text {
+            width: parent.width
+            elide: Text.ElideRight
+            text: [dupe.modelData.source, dupe.modelData.author, dupe.modelData.total + (dupe.modelData.total === 1 ? " chapter" : " chapters")].filter(function(t) { return t !== "" }).join("   ")
+            color: dupe.current ? view.theme.selectedText : view.theme.muted
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSmall
+          }
+        }
+      }
+    }
+
+    HintBar {
+      id: dupesHint
+      anchors.top: dupeList.bottom
+      anchors.topMargin: view.theme.fontSize
+      x: dupesHead.x
+      maxWidth: dupesHead.width
+      theme: view.theme
+      text: "enter open   M migrate to this   a add anyway   esc cancel"
+      color: view.theme.foreground
+      pixelSize: view.theme.fontSmall
+      onKey: function(event) { view.key(event) }
     }
   }
 }

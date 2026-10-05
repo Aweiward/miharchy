@@ -157,6 +157,29 @@ Rectangle {
     })
   }
 
+  // A migration whose target is already chosen: old, a library manga, to
+  // manga, the open detail's (Mihon's migrate from the duplicate dialog).
+  function startWith(old, manga) {
+    if (!config || !old || !manga || running) return
+    seq++
+    batchMode = false
+    search = null
+    view.old = old
+    pick({ id: manga.id, title: manga.title, source: manga.sourceName })
+  }
+
+  // target: { id, title, source } for the single migration of old.
+  function pick(target) {
+    jobs = [{ old: { id: old.id, title: old.title }, target: target, result: "" }]
+    busyText = "Reading " + target.title
+    step = "busy"
+    prepare(0, function(failed) {
+      if (view.step !== "busy") return
+      if (failed) view.fail(failed)
+      else view.step = "confirm"
+    })
+  }
+
   function startBatch() {
     if (!config || running) return
     seq++
@@ -322,7 +345,7 @@ Rectangle {
         }
         // The searches keep running under the confirm, so going back to
         // them drops nothing.
-        if (step === "confirm") {
+        if (step === "confirm" && (batchMode || search)) {
           step = batchMode ? "match" : "search"
           break
         }
@@ -377,15 +400,7 @@ Rectangle {
       case "migrate.open":
         if (step === "search") {
           var t = GlobalSearch.current(search, searchCursor)
-          if (!t) break
-          jobs = [{ old: { id: old.id, title: old.title }, target: { id: t.id, title: t.title, source: search.groups[searchCursor.row].source.name }, result: "" }]
-          busyText = "Reading " + t.title
-          step = "busy"
-          prepare(0, function(failed) {
-            if (view.step !== "busy") return
-            if (failed) view.fail(failed)
-            else view.step = "confirm"
-          })
+          if (t) pick({ id: t.id, title: t.title, source: search.groups[searchCursor.row].source.name })
         } else if (step === "from") {
           from = froms[cursor] || null
           if (!from) break
