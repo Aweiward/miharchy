@@ -15,6 +15,10 @@ Rectangle {
   property bool current: false
   // Unread chapters, shown top-left like Mihon; 0 shows nothing.
   property int badge: 0
+  // Downloaded chapters, before the unread count, and the source's
+  // language, top-right, as Mihon's badges; 0 and "" show nothing.
+  property int downloads: 0
+  property string lang: ""
 
   color: Qt.alpha(theme.foreground, 0.06)
   border.width: current ? 2 : 0
@@ -48,22 +52,50 @@ Rectangle {
     elide: Text.ElideRight
   }
 
-  Rectangle {
+  Row {
     x: cover.border.width + cover.theme.fontSize * 0.3
+    spacing: cover.theme.fontSize * 0.2
     y: cover.border.width + cover.theme.fontSize * 0.3
-    visible: cover.badge > 0
-    width: Math.max(height, count.implicitWidth + cover.theme.fontSize * 0.6)
-    height: count.implicitHeight + cover.theme.fontSize * 0.2
+
+    Repeater {
+      model: [
+        { text: cover.downloads > 0 ? String(cover.downloads) : "", color: cover.theme.foreground },
+        { text: cover.badge > 0 ? String(cover.badge) : "", color: cover.theme.accent }
+      ]
+
+      Badge {
+        required property var modelData
+        theme: cover.theme
+        text: modelData.text
+        color: modelData.color
+      }
+    }
+  }
+
+  Badge {
+    anchors.right: parent.right
+    anchors.rightMargin: cover.border.width + cover.theme.fontSize * 0.3
+    y: cover.border.width + cover.theme.fontSize * 0.3
+    theme: cover.theme
+    text: cover.lang
+    color: cover.theme.foreground
+  }
+
+  component Badge: Rectangle {
+    id: badgeBox
+    required property Theme theme
+    property alias text: label.text
+    visible: text !== ""
+    width: visible ? Math.max(height, label.implicitWidth + theme.fontSize * 0.6) : 0
+    height: label.implicitHeight + theme.fontSize * 0.2
     radius: height / 4
-    color: cover.theme.accent
 
     Text {
-      id: count
+      id: label
       anchors.centerIn: parent
-      text: cover.badge
-      color: cover.theme.background
-      font.family: cover.theme.fontFamily
-      font.pixelSize: cover.theme.fontSmall
+      color: badgeBox.theme.background
+      font.family: badgeBox.theme.fontFamily
+      font.pixelSize: badgeBox.theme.fontSmall
       font.bold: true
     }
   }

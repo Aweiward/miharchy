@@ -21,7 +21,8 @@ test("the defaults sort by title ascending with every filter off", () => {
   assert.deepEqual(P.defaults(L.PREFS), {
     librarySort: "title", librarySortDirection: "asc", libraryDisplay: "grid",
     libraryFilterDownloaded: "off", libraryFilterUnread: "off", libraryFilterStarted: "off",
-    libraryFilterBookmarked: "off", libraryFilterCompleted: "off", libraryFilterTracked: "off"
+    libraryFilterBookmarked: "off", libraryFilterCompleted: "off", libraryFilterTracked: "off",
+    libraryBadgeDownloads: "off", libraryBadgeLanguage: "off", libraryTabCounts: "off"
   });
   assert.deepEqual(ids(L.apply(shelf, prefs(), "")), [2, 1, 3, 4], "title ignores case");
 });
@@ -79,7 +80,8 @@ test("ties fall back to title ascending, even when the sort is descending, then 
 test("the panel lists the filters, then the sorts, then the display modes, with their states", () => {
   const rows = L.rows(prefs({ libraryFilterUnread: "exclude", librarySort: "added", librarySortDirection: "desc" }));
   assert.deepEqual(rows.map((r) => r.label), ["Downloaded", "Unread", "Started", "Bookmarked", "Completed", "Tracked",
-    "Title", "Total chapters", "Last read", "Last update", "Unread count", "Latest chapter", "Date added", "Cover grid", "List"]);
+    "Title", "Total chapters", "Last read", "Last update", "Unread count", "Latest chapter", "Date added", "Cover grid", "List",
+    "Downloaded chapters", "Language", "Number of items"]);
   assert.deepEqual(rows.filter((r) => r.kind === "display").map((r) => r.state), ["picked", "unpicked"]);
   assert.deepEqual(rows.filter((r) => r.kind === "filter").map((r) => r.state), ["off", "exclude", "off", "off", "off", "off"]);
   assert.deepEqual(rows.filter((r) => r.kind === "sort").map((r) => r.state), ["", "", "", "", "", "", "desc"]);
@@ -113,6 +115,28 @@ test("a display row picks its mode, and the toggle key switches between grid and
   assert.deepEqual(L.toggleDisplay(prefs()), { key: "libraryDisplay", value: "list" });
   assert.deepEqual(L.toggleDisplay(prefs({ libraryDisplay: "list" })), { key: "libraryDisplay", value: "grid" });
   assert.deepEqual(L.apply(shelf, prefs({ libraryDisplay: "list" }), ""), L.apply(shelf, prefs(), ""), "the display mode hides nothing");
+});
+
+test("a badge or the tab count row turns it on and off", () => {
+  const row = (p, id) => L.rows(p).find((r) => r.id === id);
+  assert.deepEqual(L.choose(prefs(), row(prefs(), "libraryBadgeDownloads")), { key: "libraryBadgeDownloads", value: "on" });
+  const on = prefs({ libraryTabCounts: "on" });
+  assert.equal(row(on, "libraryTabCounts").state, "on");
+  assert.deepEqual(L.choose(on, row(on, "libraryTabCounts")), { key: "libraryTabCounts", value: "off" });
+});
+
+test("the cover shows unread always, downloads and the language only with their badge on", () => {
+  const m = manga(1, "x", { unread: 4, downloads: 2, lang: "en" });
+  assert.deepEqual(L.badges(m, prefs()), { unread: 4, downloads: 0, lang: "" });
+  assert.deepEqual(L.badges(m, prefs({ libraryBadgeDownloads: "on", libraryBadgeLanguage: "on" })), { unread: 4, downloads: 2, lang: "EN" });
+  assert.deepEqual(L.badges(manga(2, "y", { lang: "" }), prefs({ libraryBadgeLanguage: "on" })).lang, "", "a missing source has no language");
+});
+
+test("a tab shows its manga count when the count is on or a search runs, as Mihon", () => {
+  const entry = { name: "Action", manga: [shelf[0], shelf[2]] };
+  assert.equal(L.tabLabel(entry, prefs(), ""), "Action");
+  assert.equal(L.tabLabel(entry, prefs({ libraryTabCounts: "on" }), ""), "Action (2)");
+  assert.equal(L.tabLabel(entry, prefs(), " ber "), "Action (2)");
 });
 
 test("the header names the search, the active filters and a sort other than the default", () => {

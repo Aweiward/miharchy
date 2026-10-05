@@ -42,6 +42,14 @@ var DISPLAYS = [
   { id: "list", label: "List" }
 ]
 
+// Mihon's overlay badges and tab item count, each on or off; all start
+// off, as in Mihon. The unread badge always shows.
+var TOGGLES = [
+  { kind: "badge", key: "libraryBadgeDownloads", label: "Downloaded chapters" },
+  { kind: "badge", key: "libraryBadgeLanguage", label: "Language" },
+  { kind: "tabs", key: "libraryTabCounts", label: "Number of items" }
+]
+
 // One sort for the whole library, as Mihon keeps it unless its per-category
 // display setting is on.
 var PREFS = [
@@ -49,6 +57,7 @@ var PREFS = [
   { key: "librarySortDirection", default: "asc", options: ["asc", "desc"] },
   { key: "libraryDisplay", default: "grid", options: DISPLAYS.map(function(d) { return d.id }) }
 ].concat(FILTERS.map(function(f) { return { key: filterKey(f), default: "off", options: STATES } }))
+  .concat(TOGGLES.map(function(t) { return { key: t.key, default: "off", options: ["off", "on"] } }))
 
 function sortOf(prefs) {
   return SORTS.filter(function(s) { return s.id === prefs.librarySort })[0] || SORTS[0]
@@ -96,7 +105,8 @@ function apply(manga, prefs, query) {
 
 // The panel: each filter with its state, then each sort with "asc" or
 // "desc" on the chosen one and "" on the rest, then each display mode with
-// "picked" on the chosen one and "unpicked" on the rest.
+// "picked" on the chosen one and "unpicked" on the rest, then the badges
+// and the tab count, "on" or "off".
 function rows(prefs) {
   return FILTERS.map(function(f) {
     return { kind: "filter", id: f.id, label: f.label, state: prefs[filterKey(f)] }
@@ -104,6 +114,8 @@ function rows(prefs) {
     return { kind: "sort", id: s.id, label: s.label, state: s === sortOf(prefs) ? prefs.librarySortDirection : "" }
   })).concat(DISPLAYS.map(function(d) {
     return { kind: "display", id: d.id, label: d.label, state: d.id === prefs.libraryDisplay ? "picked" : "unpicked" }
+  })).concat(TOGGLES.map(function(t) {
+    return { kind: t.kind, id: t.key, label: t.label, state: prefs[t.key] }
   }))
 }
 
@@ -117,8 +129,26 @@ function toggleDisplay(prefs) {
 function choose(prefs, row) {
   if (row.kind === "filter") return { key: filterKey(row), value: STATES[(STATES.indexOf(row.state) + 1) % STATES.length] }
   if (row.kind === "display") return { key: "libraryDisplay", value: row.id }
+  if (row.kind === "badge" || row.kind === "tabs") return { key: row.id, value: row.state === "on" ? "off" : "on" }
   if (row.state) return { key: "librarySortDirection", value: row.state === "asc" ? "desc" : "asc" }
   return { key: "librarySort", value: row.id }
+}
+
+// What a manga's cover shows: unread always, downloads and the source's
+// language when their badge is on; 0 and "" show nothing.
+function badges(m, prefs) {
+  return {
+    unread: m.unread,
+    downloads: prefs.libraryBadgeDownloads === "on" ? m.downloads : 0,
+    lang: prefs.libraryBadgeLanguage === "on" ? m.lang.toUpperCase() : ""
+  }
+}
+
+// A category tab's name, with its manga count when the tab count is on or
+// a search runs, as Mihon. entry: a Model.switcher() entry, already
+// searched and filtered.
+function tabLabel(entry, prefs, query) {
+  return entry.name + (prefs.libraryTabCounts === "on" || words(query).length ? " (" + entry.manga.length + ")" : "")
 }
 
 // Whether the search or a filter may hide manga.
@@ -147,6 +177,8 @@ if (typeof module !== "undefined") {
     apply: apply,
     rows: rows,
     toggleDisplay: toggleDisplay,
+    badges: badges,
+    tabLabel: tabLabel,
     choose: choose,
     narrowed: narrowed,
     summary: summary

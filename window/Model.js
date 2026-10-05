@@ -17,7 +17,7 @@ var SOURCE_NAMES_META = "miharchy.sourceNames"
 
 var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDownload includeInUpdate } }"
   + " metas(condition: { key: \"" + SOURCE_NAMES_META + "\" }) { nodes { value } }"
-  + " mangas(condition: {inLibrary: true}) { nodes { id title author artist genre status thumbnailUrl sourceId source { id displayName } unreadCount downloadCount bookmarkCount inLibraryAt"
+  + " mangas(condition: {inLibrary: true}) { nodes { id title author artist genre status thumbnailUrl sourceId source { id displayName lang } unreadCount downloadCount bookmarkCount inLibraryAt"
   + " chapters { totalCount } lastReadChapter { lastReadAt } latestUploadedChapter { uploadDate } latestFetchedChapter { fetchedAt }"
   + " trackRecords { totalCount } categories { nodes { id } } } } }"
 
@@ -213,6 +213,7 @@ function fromResponse(status, body, config) {
         cover: n.source ? coverUrl(config, n.thumbnailUrl) : "",
         categories: ids(n.categories),
         source: sourceLabel(n, names),
+        lang: n.source ? String(n.source.lang || "") : "",
         unread: unread,
         author: String(n.author || ""),
         artist: String(n.artist || ""),
