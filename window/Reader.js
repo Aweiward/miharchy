@@ -123,7 +123,7 @@ function open(mangaId, chapters, chapterId, readingMode, incognito) {
 }
 
 function relist(chapters, chapterId) {
-  var list = chapters.slice().reverse().map(function(c) { return { id: c.id, name: c.name, url: c.url, number: c.number, downloaded: c.downloaded === true, scanlator: c.scanlator || "" } })
+  var list = chapters.slice().reverse().map(function(c) { return { id: c.id, name: c.name, url: c.url, number: c.number, downloaded: c.downloaded === true, bookmarked: c.bookmarked === true, scanlator: c.scanlator || "" } })
   var index = 0
   for (var i = 0; i < list.length; i++) if (list[i].id === chapterId) index = i
   return { chapters: list, index: index }
@@ -239,6 +239,7 @@ function spread(r, layout, fitMode, view, zoom) {
 //   "mode"         the next reading mode
 //   "saving"       savePayload() went out
 //   "save-failed"  { chapterId }
+//   "bookmarked"   { chapterId, bookmarked } the server stored it
 //   "retry"        fetch the pages again after a failure
 //   "chapters"     { chapters } newest first: the list again, once the
 //                  manga's chapter choices load; the chapter open stays
@@ -289,6 +290,8 @@ function reduce(r, event) {
     case "chapters":
       var l = relist(event.chapters, chapterId(r))
       return copy(r, { chapters: l.chapters, index: l.index, transition: null })
+    case "bookmarked":
+      return copy(r, { chapters: r.chapters.map(function(c) { return c.id === event.chapterId ? copy(c, { bookmarked: event.bookmarked }) : c }) })
     case "retry":
       return r.state === "loading" || r.state === "ok" ? r : copy(r, { state: "loading", message: "" })
   }
@@ -322,6 +325,11 @@ function deleteTarget(r, slots) {
   if (slots < 0 || r.state !== "ok" || r.incognito || !r.read || r.wasRead) return null
   var c = r.chapters[r.index - slots]
   return c ? c.id : null
+}
+
+// Mihon's top bar bookmark: b turns the chapter open's bookmark on or off.
+function bookmarkPayload(r) {
+  return Chapters.bookmarkPayload([r.chapters[r.index]])
 }
 
 function modePayload(r) {
@@ -518,6 +526,7 @@ if (typeof module !== "undefined") {
     trackPayload: trackPayload,
     deleteTarget: deleteTarget,
     modePayload: modePayload,
+    bookmarkPayload: bookmarkPayload,
     action: action,
     tapZone: tapZone,
     wheel: wheel,

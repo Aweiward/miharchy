@@ -344,6 +344,18 @@ Rectangle {
       case "reader.settingsChoose":
         choose()
         return
+      case "reader.bookmark":
+        var chapter = reader.chapters[reader.index]
+        var payload = Reader.bookmarkPayload(reader)
+        send(payload, function(reply) {
+          if (reply.state !== "ok") {
+            view.note = "Bookmark failed: " + (reply.message || reply.state)
+            return
+          }
+          // The chapter line then says "bookmarked" while it is.
+          if (view.reader) view.reader = Reader.reduce(view.reader, { type: "bookmarked", chapterId: chapter.id, bookmarked: payload.variables.bookmarked })
+        })
+        return
       case "reader.openWeb":
       case "reader.copyLink":
         var url = reader.chapters[reader.index].url
@@ -788,7 +800,7 @@ Rectangle {
     anchors.left: incognitoMark.visible ? incognitoMark.right : parent.left
     anchors.bottom: parent.bottom
     anchors.margins: view.theme.fontSize
-    text: view.reader ? Reader.chapterName(view.reader) + ({ first: "   no previous chapter", last: "   no next chapter" }[view.reader.edge] || "") + (view.note ? "   " + view.note : "") : ""
+    text: view.reader ? Reader.chapterName(view.reader) + (view.reader.chapters[view.reader.index].bookmarked ? "   bookmarked" : "") + ({ first: "   no previous chapter", last: "   no next chapter" }[view.reader.edge] || "") + (view.note ? "   " + view.note : "") : ""
     color: view.theme.muted
     font.family: view.theme.fontFamily
     font.pixelSize: view.theme.fontSmall
