@@ -288,6 +288,7 @@ if (typeof module !== "undefined") {
     PREFS: PREFS,
     SCANLATOR_PREFS: SCANLATOR_PREFS,
     scanlators: scanlators,
+    excluded: excluded,
     DOWNLOADS: DOWNLOADS,
     toDownload: toDownload,
     count: count,

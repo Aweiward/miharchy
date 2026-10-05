@@ -6,9 +6,10 @@ import "Model.js" as Model
 import "Browse.js" as Browse
 import "Updates.js" as Updates
 import "Downloads.js" as Downloads
+import "Prefs.js" as Prefs
 
-// The Updates view: unread updates grouped by fetch day, and the library
-// update run. It talks to the server itself; Updates.js decides. shell.qml
+// The Updates view: updates through the user's filters, grouped by fetch
+// day, and the library update run. It talks to the server itself; Updates.js decides. shell.qml
 // forwards every "updates." command to run() and starts the reader on read.
 // Read state goes through shell.qml's markChapters() (mark), downloads
 // through the queue (downloads), as on a manga.
@@ -35,15 +36,23 @@ Item {
   property bool armed: false
   // The download queue's items, for each update's marker.
   property var queue: []
-
+  // The user's categories (Model's), for the category filters.
+  property var categories: []
+  property bool filterOpen: false
+  property int filterCursor: 0
+  // Downloaded only forces the Downloaded filter, as in Mihon, without
+  // saving over the user's choice.
   property bool downloadedOnly: false
+  readonly property var prefs: Prefs.force(store.values, "updatesFilterDownloaded", "include", downloadedOnly)
+  readonly property var filterRows: Updates.filterRows(prefs, categories)
+
   readonly property var rows: updates.rows
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.id === view.cursorId }))
   readonly property var notice: Updates.notice(updates, configPath)
   readonly property var targets: Updates.chosen(rows, selected, cursor)
   readonly property string hint: armed ? "x again to delete the downloads, any other key keeps them   "
     : (selected.length ? selected.length + " selected   space select   A all   I invert   " : "j k move   enter read   space select   A all   ")
-      + "R read   U unread   b bookmark   d download   x delete download   " + (selected.length ? "esc clear   " : "u check   s sync   ")
+      + "R read   U unread   b bookmark   d download   x delete download   " + (selected.length ? "esc clear   " : "F filter   u check   s sync   ")
 
   signal read(var manga, var chapters, int chapterId)
   // action: "read", "unread" or "bookmark".
@@ -55,8 +64,8 @@ Item {
 
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
   onActiveChanged: load()
-  onDownloadedOnlyChanged: load()
   onRowsChanged: selected = Updates.keep(selected, rows)
+  onPrefsChanged: updates = Updates.reduce(updates, { type: "filter", config: config, now: Date.now(), prefs: prefs })
   onConfigChanged: {
     listSeq++
     openSeq++
@@ -82,9 +91,9 @@ Item {
     var seq = ++listSeq
     var cfg = config
     updates = Updates.reduce(updates, { type: "request" })
-    send(Updates.listPayload(), function(reply) {
+    send(Updates.viewPayload(Date.now()), function(reply) {
       if (seq !== view.listSeq) return
-      view.updates = Updates.reduce(view.updates, { type: "list", reply: reply, config: cfg, now: Date.now(), downloadedOnly: view.downloadedOnly })
+      view.updates = Updates.reduce(view.updates, { type: "list", reply: reply, config: cfg, now: Date.now(), prefs: view.prefs })
     })
   }
 
@@ -205,7 +214,28 @@ Item {
       case "updates.deleteDownload":
         deleteDownloads()
         break
+      case "updates.filter":
+        filterOpen = true
+        break
+      case "updates.filterClose":
+        filterOpen = false
+        break
+      case "updates.filterUp":
+      case "updates.filterDown":
+        filterCursor = Commands.moveCursor(filterCursor, id === "updates.filterUp" ? -1 : 1, filterRows.length)
+        break
+      case "updates.filterChoose":
+        store.set(Updates.choose(prefs, filterRows[filterCursor]))
+        break
     }
+  }
+
+  PrefStore {
+    id: store
+    config: view.config
+    table: Updates.PREFS
+    onConfigChanged: load()
+    onFailed: function(reply) { view.error = reply.message || Model.problem(reply, view.configPath).title }
   }
 
   // A scheduled run can start any time, so an idle view still looks now
@@ -303,7 +333,8 @@ Item {
             width: parent.width
             elide: Text.ElideRight
             text: entry.modelData.title
-            color: entry.current ? view.theme.selectedText : view.theme.foreground
+            // Mihon dims a read update.
+            color: entry.current ? view.theme.selectedText : entry.modelData.read ? view.theme.muted : view.theme.foreground
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
           }
@@ -367,6 +398,31 @@ Item {
       color: view.theme.muted
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSize
+    }
+  }
+
+  // Under the filter panel: a click outside it never reaches an update,
+  // where a double click's Enter would change the filter under the cursor.
+  MouseArea {
+    anchors.fill: parent
+    visible: view.filterOpen
+  }
+
+  WidgetPanel {
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: view.theme.fontSize * 24
+    height: Math.min(parent.height - view.theme.fontSize * 4, view.theme.fontSize * (4 + view.filterRows.length * 2))
+    visible: view.filterOpen
+    theme: view.theme
+    title: "Filter updates"
+    rows: view.filterRows
+    cursor: view.filterCursor
+    onKey: function(event) { view.key(event) }
+    onPicked: function(index, twice) {
+      view.filterCursor = index
+      if (twice) view.key(Commands.enter())
     }
   }
 }
