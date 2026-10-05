@@ -120,6 +120,10 @@ _Avoid_: layout, direction
 The panel `s` opens over the reader: the manga's reading mode, then the reader's settings. It shows the same settings as the Settings view.
 _Avoid_: reader menu, reader options
 
+**Transition page**:
+The page the reader shows between two chapters: the finished chapter and the next one, with a warning when chapters are missing or cannot load.
+_Avoid_: interstitial, chapter break
+
 ## Relationships
 
 - An **extension** provides one or more **sources**. A **source** serves many **manga**.
