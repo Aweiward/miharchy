@@ -29,7 +29,10 @@ var COUNTS = [
   ["markUnread", "marked %d chapters unread"],
   ["addBookmark", "bookmarked %d chapters"],
   ["removeBookmark", "removed %d bookmarks"],
-  ["setLastPage", "set the last page read on %d chapters"]
+  ["setLastPage", "set the last page read on %d chapters"],
+  ["bindTrack", "bound %d tracks"],
+  ["updateTrack", "updated %d tracks"],
+  ["unbindTrack", "unbound %d tracks"]
 ]
 
 var CHANGE_TEXT = {
@@ -37,7 +40,10 @@ var CHANGE_TEXT = {
   categoriesCleared: "taken out of every category",
   markedUnread: "marked unread",
   bookmarkRemoved: "bookmark removed",
-  pageLowered: "last page read lowered"
+  pageLowered: "last page read lowered",
+  trackRemoved: "track removed",
+  trackLowered: "chapters read lowered",
+  trackChanged: "status, score, dates or entry changed"
 }
 
 function basename(path) {
@@ -47,7 +53,8 @@ function basename(path) {
 // sync.state: "idle" | "running" | "done" | "failed"
 // done: changes (count lines), backup (the phone backup's file name, or ""),
 // export (the file name written for the phone) and unreachable (rows of
-// { manga, chapter, change } the user repeats in Mihon).
+// { manga, chapter, change } the user repeats in Mihon; chapter holds the
+// tracker's name for a track).
 // failed: message.
 function initial() {
   return { state: "idle" }
@@ -83,7 +90,7 @@ function result(job) {
     changes: changes,
     export: basename(summary.export),
     unreachable: summary.unreachable.map(function(u) {
-      return { manga: u.manga, chapter: u.chapter || "", change: CHANGE_TEXT[u.change] || u.change }
+      return { manga: u.manga, chapter: u.chapter || u.tracker || "", change: CHANGE_TEXT[u.change] || u.change }
     })
   }
 }

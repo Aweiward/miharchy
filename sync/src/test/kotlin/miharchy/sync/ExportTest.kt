@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupTracking
 import java.nio.file.Files
 import java.time.Instant
 import kotlin.io.path.listDirectoryEntries
@@ -77,6 +78,23 @@ class ExportTest {
         val phone = backup(manga("/m", chapter("/c", read = true, page = 20)))
         val export = backup(manga("/m", chapter("/c", read = true, page = 2)))
         assertEquals(emptyList(), unreachable(phone, export))
+    }
+
+    @Test fun `a track Mihon's restore cannot reach is listed, a new or raised one is not`() {
+        fun track(tracker: Int, read: Float, status: Int = 1, title: String = "") =
+            BackupTracking(syncId = tracker, libraryId = 0, mediaId = 7, lastChapterRead = read, status = status, title = title)
+        val phone = backup(manga("/m").apply { tracking = listOf(track(1, 5F), track(2, 5F), track(3, 5F), track(4, 5F), track(7, 5F, title = "Mihon's"), track(6, 5F)) })
+        val export = backup(
+            manga("/m").apply { tracking = listOf(track(2, 3F), track(3, 5F, status = 2), track(4, 8F), track(5, 1F), track(7, 5F, title = "Suwayomi's")) },
+        )
+        assertEquals(
+            listOf(
+                Unreachable(Unreachable.Kind.TRACK_REMOVED, "Title /m", tracker = "MyAnimeList"),
+                Unreachable(Unreachable.Kind.TRACK_LOWERED, "Title /m", tracker = "AniList"),
+                Unreachable(Unreachable.Kind.TRACK_CHANGED, "Title /m", tracker = "Kitsu"),
+            ),
+            unreachable(phone, export),
+        )
     }
 
     @Test fun `export names sort by time, to the second`() {

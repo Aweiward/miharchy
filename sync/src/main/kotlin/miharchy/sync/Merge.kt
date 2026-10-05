@@ -44,6 +44,24 @@ data class RemoveBookmark(override val manga: MangaKey, override val chapterUrl:
 @Serializable @SerialName("setLastPage")
 data class SetLastPage(override val manga: MangaKey, override val chapterUrl: String, val page: Long) : ChapterChange
 
+@Serializable
+sealed interface TrackChange : Change {
+    val manga: MangaKey
+    val tracker: Int
+}
+
+/** The desktop has no track on this tracker yet; the restore inserts this one. */
+@Serializable @SerialName("bindTrack")
+data class BindTrack(override val manga: MangaKey, override val tracker: Int, val track: TrackState) : TrackChange
+
+/** The desktop's track on this tracker becomes this one, with chapters read never lower than it was. */
+@Serializable @SerialName("updateTrack")
+data class UpdateTrack(override val manga: MangaKey, override val tracker: Int, val track: TrackState) : TrackChange
+
+/** Removes the desktop's track only; the entry on the tracker stays. */
+@Serializable @SerialName("unbindTrack")
+data class UnbindTrack(override val manga: MangaKey, override val tracker: Int) : TrackChange
+
 private val ABSENT = MangaState(title = "", inLibrary = false, categories = emptySet(), chapters = emptyMap())
 
 /**
@@ -70,6 +88,7 @@ fun merge(phoneBaseline: Library?, phoneNow: Library, desktopNow: Library, deskt
             if (merged.inLibrary) {
                 changes += ImportManga(key, pN.title)
                 if (merged.categories.isNotEmpty()) changes += SetCategories(key, merged.categories)
+                changes += merged.tracks.map { (id, t) -> BindTrack(key, id, t) }
             }
             continue
         }
@@ -82,6 +101,11 @@ fun merge(phoneBaseline: Library?, phoneNow: Library, desktopNow: Library, deskt
             if (c.read != d.read) changes += if (c.read) MarkRead(key, url) else MarkUnread(key, url)
             if (c.bookmark != d.bookmark) changes += if (c.bookmark) AddBookmark(key, url) else RemoveBookmark(key, url)
             if (c.lastPageRead != d.lastPageRead) changes += SetLastPage(key, url, c.lastPageRead)
+        }
+        for (id in (merged.tracks.keys + dN.tracks.keys).sorted()) {
+            val t = merged.tracks[id]
+            val d = dN.tracks[id]
+            if (t != d) changes += if (t == null) UnbindTrack(key, id) else if (d == null) BindTrack(key, id, t) else UpdateTrack(key, id, t)
         }
     }
 
@@ -117,10 +141,41 @@ private fun mergeManga(pB: MangaState, pN: MangaState, dB: MangaState, dN: Manga
             lastPageRead = pick(cpB.lastPageRead, cpN.lastPageRead, cdB.lastPageRead, cdN.lastPageRead, ::maxOf),
         )
     }
-    return MangaState(pN.title, inLibrary, categories, chapters)
+    val tracks = (pB.tracks.keys + pN.tracks.keys + dB.tracks.keys + dN.tracks.keys).mapNotNull { id ->
+        val tdN = dN.tracks[id]
+        val t = mergeTrack(pB.tracks[id], pN.tracks[id], dB.tracks[id], tdN) ?: return@mapNotNull null
+        // Chapters read on a desktop track never go down, as Suwayomi's restore and Mihon's both keep the higher value.
+        id to if (tdN != null && tdN.lastChapterRead > t.lastChapterRead) t.copy(lastChapterRead = tdN.lastChapterRead) else t
+    }.toMap()
+    return MangaState(pN.title, inLibrary, categories, chapters, tracks)
+}
+
+/**
+ * Null is no track. An unbind on one side loses to a change on the other, as a library removal does. Both changed:
+ * the higher chapters read, the earliest start, the latest finish, and every other field from the side that read
+ * further (the phone on a tie). The tracker entry's own fields move together, so one side's id never gets the
+ * other's url.
+ */
+private fun mergeTrack(pB: TrackState?, pN: TrackState?, dB: TrackState?, dN: TrackState?): TrackState? {
+    if (pN == pB) return dN
+    if (dN == dB) return pN
+    if (pN == null || dN == null) return pN ?: dN
+    val lead = if (dN.lastChapterRead > pN.lastChapterRead) dN else pN
+    fun <T> field(get: (TrackState) -> T, resolve: (T, T) -> T = { _, _ -> get(lead) }): T =
+        pick(pB?.let(get), get(pN), dB?.let(get), get(dN)) { p, d -> resolve(p!!, d!!) }!!
+    fun TrackState.entry() = TrackState(remoteId, libraryId, title, remoteUrl, totalChapters)
+    return field({ it.entry() }).copy(
+        lastChapterRead = field({ it.lastChapterRead }, ::maxOf),
+        status = field({ it.status }),
+        score = field({ it.score }),
+        startDate = field({ it.startDate }) { p, d -> listOf(p, d).filter { it > 0 }.minOrNull() ?: 0 },
+        finishDate = field({ it.finishDate }, ::maxOf),
+        private = field({ it.private }),
+    )
 }
 
 private fun MangaState.changedFrom(base: MangaState) =
     inLibrary != base.inLibrary ||
         categories != base.categories ||
+        tracks != base.tracks ||
         (chapters.keys + base.chapters.keys).any { chapter(it) != base.chapter(it) }

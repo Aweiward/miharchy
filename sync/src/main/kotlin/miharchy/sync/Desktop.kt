@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -47,6 +48,7 @@ class Snapshot(
     val mangaIds: Map<MangaKey, Int>,
     val chapterIds: Map<Pair<MangaKey, String>, Int>,
     val categoryIds: Map<String, Int>,
+    val trackRecordIds: Map<Pair<MangaKey, Int>, Int>,
 )
 
 class Desktop(private val config: ServerConfig) {
@@ -115,6 +117,9 @@ class Desktop(private val config: ServerConfig) {
                   id sourceId url title inLibrary
                   categories { nodes { name } }
                   chapters { nodes { id url isRead isBookmarked lastPageRead } }
+                  trackRecords {
+                    nodes { id trackerId remoteId libraryId title remoteUrl totalChapters lastChapterRead status score startDate finishDate private }
+                  }
                 }
               }
             }
@@ -125,6 +130,7 @@ class Desktop(private val config: ServerConfig) {
         val categoryIds = data.nodes("categories").map { it.str("name") to it.int("id") }.filter { it.second != 0 }.toMap()
         val mangaIds = mutableMapOf<MangaKey, Int>()
         val chapterIds = mutableMapOf<Pair<MangaKey, String>, Int>()
+        val trackRecordIds = mutableMapOf<Pair<MangaKey, Int>, Int>()
         val manga = data.nodes("mangas").associate { m ->
             val key = MangaKey(m.str("sourceId").toLong(), m.str("url"))
             mangaIds[key] = m.int("id")
@@ -132,14 +138,31 @@ class Desktop(private val config: ServerConfig) {
                 chapterIds[key to c.str("url")] = c.int("id")
                 c.str("url") to ChapterState(c.bool("isRead"), c.bool("isBookmarked"), c.int("lastPageRead").toLong())
             }
+            val tracks = m.nodes("trackRecords").filter { it.int("trackerId") in TRACKER_NAMES }.associate { t ->
+                trackRecordIds[key to t.int("trackerId")] = t.int("id")
+                t.int("trackerId") to TrackState(
+                    remoteId = t.str("remoteId").toLong(),
+                    libraryId = t.jsonObject.getValue("libraryId").jsonPrimitive.contentOrNull?.toLong() ?: 0,
+                    title = t.str("title"),
+                    remoteUrl = t.str("remoteUrl"),
+                    totalChapters = t.int("totalChapters"),
+                    lastChapterRead = t.str("lastChapterRead").toFloat(),
+                    status = t.int("status"),
+                    score = t.str("score").toFloat(),
+                    startDate = t.str("startDate").toLong(),
+                    finishDate = t.str("finishDate").toLong(),
+                    private = t.bool("private"),
+                )
+            }
             key to MangaState(
                 title = m.str("title"),
                 inLibrary = m.bool("inLibrary"),
                 categories = m.nodes("categories").map { it.str("name") }.toSet(),
                 chapters = chapters,
+                tracks = tracks,
             )
         }
-        return Snapshot(Library(manga, categoryIds.keys.toList()), mangaIds, chapterIds, categoryIds)
+        return Snapshot(Library(manga, categoryIds.keys.toList()), mangaIds, chapterIds, categoryIds, trackRecordIds)
     }
 
     /**
@@ -175,6 +198,19 @@ class Desktop(private val config: ServerConfig) {
             )
         }
 
+        // Restore never deletes a track, and on one the desktop has it only sets the tracker entry's ids and raises
+        // chapters read. A track it cannot reach is unbound first, locally only, so the restore inserts it whole.
+        val unbinds = changes.filterIsInstance<TrackChange>().filter { c ->
+            c is UnbindTrack || (c is UpdateTrack && snap.library.manga[c.manga]?.tracks?.get(c.tracker)?.restoredWith(c.track) != c.track)
+        }
+        for (c in unbinds) {
+            val id = snap.trackRecordIds[c.manga to c.tracker] ?: continue
+            query(
+                "mutation(\$id: Int!) { unbindTrack(input: { recordId: \$id, deleteRemoteTrack: false }) { clientMutationId } }",
+                buildJsonObject { put("id", id) },
+            )
+        }
+
         val backup = restoreBackup(phoneBackup, changes, snap.library)
         if (backup.backupManga.isNotEmpty()) restore(backup)
 
@@ -202,7 +238,7 @@ class Desktop(private val config: ServerConfig) {
         check(missed.isEmpty()) { "Suwayomi did not apply: $missed" }
     }
 
-    /** Categories stay out: Suwayomi's restore would replace them. */
+    /** Categories stay out: Suwayomi's restore would replace them. Tracks restore into its database only, never to the tracker. */
     private fun restore(backup: Backup) {
         val operations = buildJsonObject {
             put(
@@ -211,7 +247,7 @@ class Desktop(private val config: ServerConfig) {
                 mutation(${'$'}backup: Upload!) {
                   restoreBackup(input: { backup: ${'$'}backup, flags: {
                     includeManga: true, includeChapters: true, includeHistory: true, includeCategories: false,
-                    includeTracking: false, includeClientData: false, includeServerSettings: false
+                    includeTracking: true, includeClientData: false, includeServerSettings: false
                   } }) { id }
                 }
                 """,
@@ -261,20 +297,33 @@ class Desktop(private val config: ServerConfig) {
     }
 }
 
+/** What Suwayomi's restore makes of this desktop track given [track] (BackupMangaHandler.restoreMangaTrackerData). */
+fun TrackState.restoredWith(track: TrackState) =
+    copy(remoteId = track.remoteId, libraryId = track.libraryId, lastChapterRead = maxOf(lastChapterRead, track.lastChapterRead))
+
 /**
  * What Suwayomi's restore merges in: a never-seen manga whole, in the library; any other manga with only its
- * changed chapters, outside the library so the restore leaves that flag alone. Restore inserts missing chapters
- * and keeps `read || db`, `bookmark || db` and `max(lastPageRead, db)`, so each chapter carries its raised values
- * and false or 0 (no change) elsewhere. Lowered values were reset before the restore.
+ * changed chapters and tracks, outside the library so the restore leaves that flag alone. Restore inserts missing
+ * chapters and keeps `read || db`, `bookmark || db` and `max(lastPageRead, db)`, so each chapter carries its raised
+ * values and false or 0 (no change) elsewhere. Lowered values were reset before the restore. Each manga carries
+ * only its merged tracks to bind or update.
  */
 fun restoreBackup(phone: ByteArray, changes: List<Change>, desktop: Library): Backup {
     val imports = changes.filterIsInstance<ImportManga>().map { it.manga }.toSet()
     val chapterChanges = changes.filterIsInstance<ChapterChange>().groupBy { it.manga }
+    val tracks = changes.mapNotNull { c ->
+        when (c) {
+            is BindTrack -> c.manga to c.track.toBackup(c.tracker)
+            is UpdateTrack -> c.manga to c.track.toBackup(c.tracker)
+            else -> null
+        }
+    }.groupBy({ it.first }, { it.second })
     return Backup(
         backupManga = decodeBackup(phone).backupManga.mapNotNull { m ->
             val key = MangaKey(m.source, m.url)
             if (key !in imports) {
-                val byUrl = chapterChanges[key]?.groupBy { it.chapterUrl } ?: return@mapNotNull null
+                if (key !in chapterChanges && key !in tracks) return@mapNotNull null
+                val byUrl = chapterChanges[key].orEmpty().groupBy { it.chapterUrl }
                 val known = desktop.manga[key]?.chapters.orEmpty()
                 val chapters = m.chapters.filter { it.url in byUrl }
                 val inserted = chapters.count { it.url !in known }
@@ -292,7 +341,7 @@ fun restoreBackup(phone: ByteArray, changes: List<Change>, desktop: Library): Ba
             m.apply {
                 favorite = key in imports
                 categories = emptyList()
-                tracking = emptyList()
+                tracking = tracks[key].orEmpty()
             }
         },
     )
@@ -312,6 +361,9 @@ fun Change.isAppliedTo(library: Library): Boolean {
         is AddBookmark -> chapter(this)?.bookmark == true
         is RemoveBookmark -> chapter(this)?.bookmark == false
         is SetLastPage -> chapter(this)?.lastPageRead == page
+        is BindTrack -> library.manga[manga]?.tracks?.get(tracker) == track
+        is UpdateTrack -> library.manga[manga]?.tracks?.get(tracker) == track
+        is UnbindTrack -> library.manga[manga]?.tracks?.containsKey(tracker) != true
     }
 }
 
