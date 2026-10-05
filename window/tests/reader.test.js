@@ -362,6 +362,42 @@ test("the indicator names the fit in paged and the width in webtoon", () => {
   const r = loaded(12, 3);
   assert.equal(R.indicator(r, "width", "60"), "1 / 3   right to left   fit width");
   assert.equal(R.indicator(Object.assign({}, r, { mode: "webtoon" }), "width", "60"), "1 / 3   webtoon   60%");
+  assert.equal(R.indicator(r, "width", "60", 2), "1 / 3   right to left   fit width   zoom 200%");
+  assert.equal(R.indicator(r, "width", "60", 1), "1 / 3   right to left   fit width", "no zoom, no word");
+});
+
+test("zoom scales the fitted page and decodes it at that size; + and - step, stopping at either end", () => {
+  const view = { width: 1600, height: 1000 };
+  const tall = { width: 800, height: 1200 };
+  const one = R.fit("screen", tall, view);
+  const two = R.fit("screen", tall, view, 2);
+  assert.deepEqual([two.width, two.height, two.sourceHeight], [one.width * 2, one.height * 2, one.sourceHeight * 2]);
+  assert.deepEqual(R.fit("original", tall, view, 1.5), { width: 1200, height: 1800, sourceWidth: 0, sourceHeight: 0 });
+  assert.equal(R.zoomStep(1, 1), 1.25);
+  assert.equal(R.zoomStep(1, -1), 1, "no zoom out past the fit");
+  assert.equal(R.zoomStep(4, 1), 4);
+  assert.equal(R.zoomStep(2, -1), 1.5);
+});
+
+test("a zoom keeps the middle of the view on the same spot, inside the content", () => {
+  assert.equal(R.zoomedAt(0, 1000, 1000, 2000), 500, "a page as wide as the view: its middle stays the middle");
+  assert.equal(R.zoomedAt(0, 1000, 600, 1800), 400, "a centred page smaller than the view: its middle stays the middle");
+  assert.equal(R.zoomedAt(1500, 1000, 4000, 2000), 500, "zoomed out, the spot at 2000 moves to 1000");
+  assert.equal(R.zoomedAt(0, 1000, 2000, 600), -150, "a page that shrinks below the view sits in its middle again; within() takes it to 0");
+  assert.equal(R.within(-20, 0, 2000, 1000), 0);
+  assert.equal(R.within(1500, 0, 2000, 1000), 1000);
+  assert.equal(R.within(300, 0, 800, 1000), 0, "content smaller than the view stays put");
+  assert.equal(R.within(-50, -100, 2000, 1000), -50, "a ListView's origin counts");
+});
+
+test("h and l pan a page wider than the view before they turn, as Mihon's navigate to pan", () => {
+  const r = loaded(12, 5, {}, "paged-rtl");
+  assert.deepEqual(R.action(r, "reader.left", true, true, { left: true, right: false }), { pan: -0.5 });
+  assert.deepEqual(R.action(r, "reader.left", true, true, { left: false, right: true }), { turn: 1 }, "at the left edge, left turns on");
+  assert.deepEqual(R.action(r, "reader.right", true, true, { left: false, right: true }), { pan: 0.5 });
+  assert.deepEqual(R.action(r, "reader.right", true, true, { left: false, right: false }), { turn: -1 });
+  const w = loaded(12, 5, {}, "webtoon");
+  assert.equal(R.action(w, "reader.left", true, true, { left: true, right: true }), null, "the strip never pans with h and l");
 });
 
 test("] and [ open the next and previous chapter where each was left", () => {

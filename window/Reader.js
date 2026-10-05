@@ -251,13 +251,17 @@ function modePayload(r) {
 // at its bottom or top. A scroll key scrolls until that edge, then turns:
 // a page taller than the view reads down first. In webtoon the turn leaves
 // the chapter, since the page at either end is the first or the last.
-function action(r, id, atEnd, atStart) {
+// room: { left, right }, whether a page wider than the view can still
+// scroll that way. Then h and l pan half a view first, as Mihon's
+// navigate to pan does: -> { pan: part of the view width }.
+function action(r, id, atEnd, atStart, room) {
   var side = { "reader.left": "left", "reader.right": "right" }[id]
   // On the transition page every key that reads on or back turns at once.
   if (r.transition) {
     var d = side ? (strip(r.mode) ? 0 : delta(r.mode, side)) : SCROLL[id] ? (SCROLL[id] > 0 ? 1 : -1) : 0
     return d ? { turn: d } : null
   }
+  if (side && room && room[side] && !strip(r.mode)) return { pan: side === "left" ? -0.5 : 0.5 }
   if (side) return strip(r.mode) ? null : { turn: delta(r.mode, side) }
   if (!SCROLL[id]) return null
   var forward = SCROLL[id] > 0
@@ -303,19 +307,45 @@ var FIT_LABELS = { screen: "fit screen", width: "fit width", height: "fit height
 
 // fit: a pageFit value; page: the image's size so far (0 while it loads),
 // read for its aspect, and for its size in original; view: the reader's.
+// zoom: the zoom on top of the fit (ZOOMS), 1 when left out.
 // -> the size shown, and the decode size: one side only, 0 for free, so
 // the image keeps its own aspect and a guess made while it loads never
-// sticks.
-function fit(mode, page, view) {
+// sticks. A zoomed page decodes at its zoomed size, so it stays sharp.
+function fit(mode, page, view, zoom) {
+  var z = zoom || 1
   var known = page.width > 0 && page.height > 0
   var w = known ? page.width : 1
   var h = known ? page.height : 1.4
   var byWidth = view.width / w
   var byHeight = view.height / h
-  if (mode === "original") return known ? { width: w, height: h, sourceWidth: 0, sourceHeight: 0 } : { width: view.width, height: view.width * h, sourceWidth: 0, sourceHeight: 0 }
+  if (mode === "original") return known ? { width: w * z, height: h * z, sourceWidth: 0, sourceHeight: 0 } : { width: view.width * z, height: view.width * h * z, sourceWidth: 0, sourceHeight: 0 }
   var side = mode === "width" || (mode !== "height" && byWidth <= byHeight) ? "width" : "height"
-  var scale = side === "width" ? byWidth : byHeight
-  return { width: w * scale, height: h * scale, sourceWidth: side === "width" ? view.width : 0, sourceHeight: side === "height" ? view.height : 0 }
+  var scale = (side === "width" ? byWidth : byHeight) * z
+  return { width: w * scale, height: h * scale, sourceWidth: side === "width" ? view.width * z : 0, sourceHeight: side === "height" ? view.height * z : 0 }
+}
+
+// The zoom levels + and - step through in the paged modes, on top of the
+// page fit; 0 goes back to 1. Mihon zooms with a pinch or a double tap.
+var ZOOMS = [1, 1.25, 1.5, 2, 3, 4]
+
+function zoomStep(zoom, dir) {
+  var i = Math.max(0, ZOOMS.indexOf(zoom))
+  return ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i + dir))]
+}
+
+// A scroll position along one axis kept inside the content: origin, the
+// content's start; content and view, their sizes.
+function within(pos, origin, content, view) {
+  return Math.max(origin, Math.min(origin + Math.max(0, content - view), pos))
+}
+
+// Where a zoom moves the scroll position along one axis, so the spot of
+// the page at the middle of the view stays there. before, after: the
+// page's size; a page smaller than the view sits in its middle. The
+// caller keeps the result within().
+function zoomedAt(pos, view, before, after) {
+  var spot = (pos + view / 2 - Math.max(0, (view - before) / 2)) / before
+  return spot * after + Math.max(0, (view - after) / 2) - view / 2
 }
 
 // The webtoonWidth setting: a percent of the window's width (Mihon's side
@@ -381,10 +411,11 @@ function canQuit(s) {
   return s.quitting && s.writes === 0
 }
 
-// fit, width: the pageFit and webtoonWidth settings.
-function indicator(r, fit, width) {
+// fit, width: the pageFit and webtoonWidth settings; zoom: the page's,
+// named only when it is on.
+function indicator(r, fit, width, zoom) {
   if (r.state !== "ok") return ""
-  var shape = strip(r.mode) ? width + "%" : FIT_LABELS[fit]
+  var shape = strip(r.mode) ? width + "%" : FIT_LABELS[fit] + (zoom > 1 ? "   zoom " + Math.round(zoom * 100) + "%" : "")
   return (r.page + 1) + " / " + r.pages.length + "   " + MODE_LABELS[r.mode] + (shape ? "   " + shape : "")
 }
 
@@ -410,6 +441,10 @@ if (typeof module !== "undefined") {
     wheel: wheel,
     pageNumber: pageNumber,
     fit: fit,
+    ZOOMS: ZOOMS,
+    zoomStep: zoomStep,
+    within: within,
+    zoomedAt: zoomedAt,
     stripWidth: stripWidth,
     step: step,
     gap: gap,

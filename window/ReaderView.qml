@@ -54,6 +54,9 @@ Rectangle {
   readonly property bool open: reader !== null
   // Webtoon or continuous vertical: the strip shows, not the pager.
   readonly property bool inStrip: open && Reader.strip(reader.mode)
+  // The paged zoom on top of the page fit (Reader.ZOOMS). It holds across
+  // pages and chapters, and starts at 1 as the reader opens.
+  property real zoom: 1
   readonly property var problem: reader ? Model.problem(reader, configPath) : null
 
   // The chapter the reader showed last, when it closed.
@@ -97,6 +100,7 @@ Rectangle {
     var table = Chapters.PREFS.concat(Chapters.SCANLATOR_PREFS)
     var defaults = Prefs.defaults(table)
     source = { chapters: chapters, prefs: defaults }
+    zoom = 1
     reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito)
     loadPages()
     var seq = ++startSeq
@@ -252,16 +256,29 @@ Rectangle {
     return inStrip ? strip : pager
   }
 
-  function scroll(part) {
+  // By part of the view: down, or across for a pan.
+  function scroll(part, across) {
     var f = flick()
-    var from = scrollAnimation.running && scrollAnimation.target === f ? scrollAnimation.to : f.contentY
-    var top = f.originY
-    var bottom = f.originY + f.contentHeight - f.height
-    scrollAnimation.stop()
+    var anim = across ? panAnimation : scrollAnimation
+    var from = anim.running && anim.target === f ? anim.to : across ? f.contentX : f.contentY
+    anim.stop()
     strip.pinToEnd = false
-    scrollAnimation.target = f
-    scrollAnimation.to = Math.max(top, Math.min(bottom, from + part * f.height))
-    scrollAnimation.start()
+    anim.target = f
+    anim.to = across ? Reader.within(from + part * f.width, f.originX, f.contentWidth, f.width) : Reader.within(from + part * f.height, f.originY, f.contentHeight, f.height)
+    anim.start()
+  }
+
+  // The spot at the middle of the view stays there.
+  function zoomTo(z) {
+    if (z === zoom) return
+    panAnimation.stop()
+    scrollAnimation.stop()
+    var p = pager.page
+    var before = p ? { width: p.width, height: p.height } : null
+    zoom = z
+    if (!before) return
+    pager.contentX = Reader.within(Reader.zoomedAt(pager.contentX, pager.width, before.width, p.width), 0, pager.contentWidth, pager.width)
+    pager.contentY = Reader.within(Reader.zoomedAt(pager.contentY, pager.height, before.height, p.height), 0, pager.contentHeight, pager.height)
   }
 
   function openEdit() {
@@ -351,16 +368,23 @@ Rectangle {
       case "reader.fit":
         if (!inStrip) setting(row("pageFit"), Settings.activate(row("pageFit"), pageFit).save)
         return
-      case "reader.wider":
-      case "reader.narrower":
-        if (inStrip) setting(row("webtoonWidth"), Reader.step(row("webtoonWidth").options, webtoonWidth, id === "reader.wider" ? 1 : -1))
+      case "reader.zoomIn":
+      case "reader.zoomOut":
+        var dir = id === "reader.zoomIn" ? 1 : -1
+        if (inStrip) setting(row("webtoonWidth"), Reader.step(row("webtoonWidth").options, webtoonWidth, dir))
+        else zoomTo(Reader.zoomStep(zoom, dir))
+        return
+      case "reader.zoomReset":
+        if (inStrip) setting(row("webtoonWidth"), row("webtoonWidth").default)
+        else zoomTo(1)
         return
     }
     if (inStrip) track()
     var f = flick()
-    var act = Reader.action(reader, id, f.atYEnd, f.atYBeginning)
+    var act = Reader.action(reader, id, f.atYEnd, f.atYBeginning, { left: !f.atXBeginning, right: !f.atXEnd })
     if (!act) return
     if ("scroll" in act) scroll(act.scroll)
+    else if ("pan" in act) scroll(act.pan, true)
     else go({ type: "turn", delta: act.turn, chapter: act.chapter === true, always: values.alwaysShowChapterTransition, offline: offline })
   }
 
@@ -422,7 +446,10 @@ Rectangle {
         required property int index
         readonly property var held: view.reader && view.reader.state === "ok" && !view.inStrip ? Reader.slots(view.reader)[index] : null
         readonly property bool current: held !== null && held.page === view.reader.page
-        readonly property var size: Reader.fit(view.pageFit, { width: implicitWidth, height: implicitHeight }, { width: pager.width, height: pager.height })
+        readonly property var size: Reader.fit(view.pageFit, { width: implicitWidth, height: implicitHeight }, { width: pager.width, height: pager.height }, view.zoom)
+        // The page loading, a fit or a window size starts the page over at
+        // its start; a zoom keeps the spot (zoomTo).
+        readonly property string placing: [implicitHeight > 0, view.pageFit, pager.width, pager.height].join()
         x: Math.max(0, (pager.width - width) / 2)
         y: Math.max(0, (pager.height - height) / 2)
         width: size.width
@@ -432,7 +459,7 @@ Rectangle {
           pager.page = slot
           Qt.callLater(pager.place)
         }
-        onSizeChanged: if (current) Qt.callLater(pager.place)
+        onPlacingChanged: if (current) Qt.callLater(pager.place)
         config: view.config
         url: held ? held.url : ""
         // Decoded at the size shown, not the scan's: six full-size scans
@@ -555,18 +582,48 @@ Rectangle {
   // The mouse runs the reader's own commands: a click the one its zone
   // stands for (Reader.tapZone), as h, l, d or u would; in paged mode the
   // wheel j and k, so a tall page scrolls before it turns. In the strip the
-  // wheel falls through to the strip, which scrolls. While the go-to field
-  // types, as for keys, neither acts. It also keeps clicks off the views
-  // below the reader.
+  // wheel falls through to the strip, which scrolls. Ctrl+wheel zooms, as
+  // + and -. A drag moves the page or the strip, and its release is no
+  // click. While the go-to field types, as for keys, none acts. It also
+  // keeps clicks off the views below the reader.
   MouseArea {
     property real wheelRest: 0
+    property point pressedAt
+    property point startAt
+    property bool dragged: false
+    // Qt's default start drag distance.
+    readonly property real dragDistance: 10
     anchors.fill: parent
     enabled: view.open
-    onClicked: function(mouse) { view.tap(mouse.x, mouse.y) }
+    onPressed: function(mouse) {
+      var f = view.flick()
+      scrollAnimation.stop()
+      panAnimation.stop()
+      pressedAt = Qt.point(mouse.x, mouse.y)
+      startAt = Qt.point(f.contentX, f.contentY)
+      dragged = false
+    }
+    onPositionChanged: function(mouse) {
+      var dx = mouse.x - pressedAt.x
+      var dy = mouse.y - pressedAt.y
+      if (view.editing || (!dragged && Math.abs(dx) < dragDistance && Math.abs(dy) < dragDistance)) return
+      dragged = true
+      strip.pinToEnd = false
+      var f = view.flick()
+      f.contentX = Reader.within(startAt.x - dx, f.originX, f.contentWidth, f.width)
+      f.contentY = Reader.within(startAt.y - dy, f.originY, f.contentHeight, f.height)
+    }
+    onClicked: function(mouse) { if (!dragged) view.tap(mouse.x, mouse.y) }
     // Each click of a quick pair turns, as each tap does in Mihon.
-    onDoubleClicked: function(mouse) { view.tap(mouse.x, mouse.y) }
+    onDoubleClicked: function(mouse) { if (!dragged) view.tap(mouse.x, mouse.y) }
     onWheel: function(wheel) {
       if (view.editing) return
+      if (wheel.modifiers & Qt.ControlModifier) {
+        var z = Reader.wheel(wheelRest, wheel.angleDelta.y)
+        wheelRest = z.acc
+        for (var n = 0; n < Math.abs(z.steps); n++) view.run(z.steps > 0 ? "reader.zoomOut" : "reader.zoomIn")
+        return
+      }
       if (view.inStrip) {
         wheel.accepted = false
         return
@@ -580,6 +637,13 @@ Rectangle {
   NumberAnimation {
     id: scrollAnimation
     property: "contentY"
+    duration: 120
+    easing.type: Easing.OutQuad
+  }
+
+  NumberAnimation {
+    id: panAnimation
+    property: "contentX"
     duration: 120
     easing.type: Easing.OutQuad
   }
@@ -709,7 +773,7 @@ Rectangle {
     anchors.right: parent.right
     anchors.bottom: parent.bottom
     anchors.margins: view.theme.fontSize
-    text: view.reader ? Reader.indicator(view.reader, view.pageFit, view.webtoonWidth) : ""
+    text: view.reader ? Reader.indicator(view.reader, view.pageFit, view.webtoonWidth, view.zoom) : ""
     color: view.theme.muted
     font.family: view.theme.fontFamily
     font.pixelSize: view.theme.fontSmall
