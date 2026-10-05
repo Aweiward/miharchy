@@ -28,7 +28,8 @@ var KEY = {
 // match the key code.
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
-// sources, extensions, source, global, or its panel: source-filters,
+// sources, extensions, extension (an extension's details), source,
+// global, or its panel: source-filters,
 // source-settings; Library screen: categories; or
 // overlay: library-options, library-categories, library-remove, manga, manga-categories, manga-options,
 // manga-download, manga-select, manga-track,
@@ -60,6 +61,7 @@ var commands = [
   // a migration runs.
   { id: "migrate.back", title: "Back", keys: ["Esc", "Backspace"], view: ["migrate-search", "migrate-from", "migrate-to", "migrate-match", "migrate-confirm", "migrate-busy", "migrate-done"], hidden: true },
   { id: "browse.back", title: "Back", keys: ["Esc", "Backspace"], view: ["source", "global"], hidden: true },
+  { id: "extension.back", title: "Back", keys: ["Esc", "Backspace"], view: "extension", hidden: true },
   // F and S close the panel they open, as F does on the Library.
   { id: "panel.closeFilters", title: "Close filters", keys: ["Esc", "Backspace", "F"], view: "source-filters", hidden: true },
   { id: "panel.closeSettings", title: "Close source settings", keys: ["Esc", "Backspace", "S"], view: "source-settings", hidden: true },
@@ -98,8 +100,14 @@ var commands = [
   { id: "settings.activate", title: "Change setting", keys: ["Enter", "Space"], view: "settings", hidden: true },
   { id: "extensions.up", title: "Previous row", keys: ["k", "Up"], view: "extensions", hidden: true },
   { id: "extensions.down", title: "Next row", keys: ["j", "Down"], view: "extensions", hidden: true },
-  { id: "extensions.activate", title: "Install or update extension", keys: ["Enter"], view: "extensions", hidden: true },
+  { id: "extensions.activate", title: "Install extension or show its details", keys: ["Enter"], view: "extensions", hidden: true },
+  { id: "extensions.update", title: "Update extension", keys: ["u"], view: "extensions", hidden: true },
   { id: "extensions.remove", title: "Uninstall extension or remove repo", keys: ["x"], view: "extensions", hidden: true },
+  { id: "extension.up", title: "Previous source", keys: ["k", "Up"], view: "extension", hidden: true },
+  { id: "extension.down", title: "Next source", keys: ["j", "Down"], view: "extension", hidden: true },
+  { id: "extension.settings", title: "Source settings", keys: ["Enter", "S"], view: "extension", hidden: true },
+  { id: "extension.update", title: "Update extension", keys: ["u"], view: "extension", hidden: true },
+  { id: "extension.uninstall", title: "Uninstall extension", keys: ["x"], view: "extension", hidden: true },
   { id: "extensions.addRepo", title: "Add extension repo", keys: ["a"], view: "extensions", hidden: true },
   { id: "extensions.filter", title: "Filter extensions", keys: ["/"], view: "extensions", hidden: true },
   { id: "extensions.languages", title: "English or every language", keys: ["l"], view: "extensions", hidden: true },

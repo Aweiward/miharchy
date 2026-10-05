@@ -111,16 +111,45 @@ test("the filter matches names and repos, ignoring case", () => {
   assert.deepEqual(titles(s, { query: "KEI" }), ["Keiyoushi"]);
 });
 
-test("Enter installs or updates, x uninstalls or removes a repo", () => {
+test("Enter installs or opens the details, u updates, x uninstalls or removes a repo", () => {
   const s = loadedState();
   const row = (t) => E.rows(s, { showNsfw: true }).find((r) => r.title === t);
   assert.deepEqual(E.actionFor(s, row("Weeb Central"), "extensions.activate"), { action: "install", pkgName: "pkg.Weeb Central" });
-  assert.deepEqual(E.actionFor(s, row("MangaDex"), "extensions.activate"), { action: "update", pkgName: "pkg.MangaDex" });
-  assert.equal(E.actionFor(s, row("Asura Scans"), "extensions.activate"), null);
+  assert.deepEqual(E.actionFor(s, row("MangaDex"), "extensions.update"), { action: "update", pkgName: "pkg.MangaDex" });
+  assert.deepEqual(E.actionFor(s, row("MangaDex"), "extensions.activate"), { details: "pkg.MangaDex" }, "an updatable extension opens its details too");
+  assert.deepEqual(E.actionFor(s, row("Asura Scans"), "extensions.activate"), { details: "pkg.Asura Scans" });
+  assert.equal(E.actionFor(s, row("Asura Scans"), "extensions.update"), null, "nothing to update");
+  assert.equal(E.actionFor(s, row("Weeb Central"), "extensions.update"), null, "not installed");
   assert.deepEqual(E.actionFor(s, row("Asura Scans"), "extensions.remove"), { action: "uninstall", pkgName: "pkg.Asura Scans" });
   assert.equal(E.actionFor(s, row("Weeb Central"), "extensions.remove"), null);
   assert.equal(E.actionFor(s, row("Keiyoushi"), "extensions.activate"), null);
   assert.equal(E.actionFor(s, null, "extensions.activate"), null);
+});
+
+test("details list the extension's sources by name and open settings only where there are some", () => {
+  const s = loadedState();
+  let d = E.details("pkg.MangaDex");
+  assert.deepEqual(E.detailsPayload(d).variables, { pkg: "pkg.MangaDex" });
+  assert.match(E.detailsPayload(d).query, /extension\(pkgName: \$pkg\)/);
+  d = E.reduceDetails(d, { type: "reply", reply: ok({ extension: { source: { nodes: [
+    { id: "22", displayName: "MangaDex (JA)", lang: "ja", isConfigurable: false },
+    { id: "11", displayName: "MangaDex (EN)", lang: "en", isConfigurable: true }
+  ] } } }) });
+  assert.equal(d.state, "ok");
+  assert.deepEqual(d.sources.map((x) => x.name), ["MangaDex (EN)", "MangaDex (JA)"]);
+  assert.deepEqual(E.detailsAction(s, d, "extension.settings"), { settings: { id: "11", name: "MangaDex (EN)", lang: "en", configurable: true } });
+  d = E.reduceDetails(d, { type: "move", delta: 5 });
+  assert.equal(d.cursor, 1, "the cursor stops at the last source");
+  assert.equal(E.detailsAction(s, d, "extension.settings"), null, "a source without settings");
+
+  assert.deepEqual(E.detailsHeader(s, d), ["Version 1.6.1, an update is available", "Language multiple", "pkg.MangaDex"]);
+  assert.deepEqual(E.detailsAction(s, d, "extension.update"), { action: "update", pkgName: "pkg.MangaDex" });
+  assert.deepEqual(E.detailsAction(s, d, "extension.uninstall"), { action: "uninstall", pkgName: "pkg.MangaDex" });
+  const busy = E.reduce(s, { type: "action", pkgName: "pkg.MangaDex", action: "update" });
+  assert.equal(E.detailsAction(busy, d, "extension.uninstall"), null, "no uninstall while an update runs");
+
+  const failed = E.reduceDetails(E.details("pkg.MangaDex"), { type: "reply", reply: M.reply(401, "") });
+  assert.equal(failed.state, "unauthorized");
 });
 
 test("a repo is removed by the URL the server stores, never the one typed", () => {
