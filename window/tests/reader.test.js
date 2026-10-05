@@ -322,3 +322,15 @@ test("the wheel moves one step per notch and adds up touchpad deltas", () => {
   assert.equal(s.acc, -80);
   assert.deepEqual(R.wheel(-80, 100), { steps: 0, acc: 20 }, "a turn back cancels a partial notch");
 });
+
+test("the settings panel shows the manga's reading mode first, then the reader's Settings rows with their values", () => {
+  const S = require("./load")("Settings.js");
+  const values = Object.assign({}, S.initial().values, { pageFit: "width", skipRead: true });
+  const rows = R.panelRows(loaded(12, 4, {}, "paged-ltr"), values);
+  assert.deepEqual(rows[0], { key: "readingMode", label: "Reading mode", text: "left to right", manga: true });
+  assert.deepEqual(rows.slice(1).map((r) => r.key), R.PANEL_KEYS);
+  assert.ok(rows.slice(1).every((r) => !r.manga), "every other row applies to every manga");
+  assert.equal(rows.find((r) => r.key === "pageFit").text, "Fit width");
+  assert.equal(rows.find((r) => r.key === "skipRead").text, "on");
+  assert.ok(R.PANEL_KEYS.every((k) => S.ROWS.some((r) => r.key === k)), "each key is a Settings row");
+});

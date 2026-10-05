@@ -338,7 +338,7 @@ ShellRoot {
     // An open restore, sync result, download queue, reader, migration or manga
     // detail decides which keys apply, in that order; on Browse, the screen
     // or the panel over it does.
-    var scope = restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? "reader"
+    var scope = restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? (reader.panelOpen ? "reader-settings" : "reader")
       : migrateView.open ? "migrate-" + migrateView.step
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.selecting ? "manga-select" : "manga")
@@ -945,10 +945,7 @@ ShellRoot {
         theme: theme
         config: root.config
         configPath: root.configPath
-        deleteAfterRead: root.settingsState.values.deleteAfterRead
-        pageFit: root.settingsState.values.pageFit
-        webtoonWidth: root.settingsState.values.webtoonWidth
-        skip: ({ read: root.settingsState.values.skipRead, filtered: root.settingsState.values.skipFiltered, dupe: root.settingsState.values.skipDupe })
+        values: root.settingsState.values
         onKey: function(event) { event.accepted = root.handleKey(event) }
         onEditEnded: keyRoot.forceActiveFocus()
         onSetting: function(row, value) { root.saveSetting(row, value) }

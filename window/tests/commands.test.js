@@ -342,6 +342,19 @@ test("in the reader, ] and [ change chapter, Home and End go to the first and la
   assert.equal(C.dispatch(field, text("7")), null, "digits type into the go-to field");
 });
 
+test("in the reader, s opens its settings panel; there j/k move, Enter or Space change a row, and Esc, s or q close it", () => {
+  assert.equal(C.dispatch(screen("reader"), text("s")), "reader.settings");
+  const p = screen("reader-settings");
+  assert.equal(C.dispatch(p, text("j")), "reader.settingsDown");
+  assert.equal(C.dispatch(p, key(C.KEY.Down)), "reader.settingsDown");
+  assert.equal(C.dispatch(p, text("k")), "reader.settingsUp");
+  assert.equal(C.dispatch(p, key(C.KEY.Return)), "reader.settingsChoose");
+  assert.equal(C.dispatch(p, C.keyEvent(C.KEY.Space, " ", 0)), "reader.settingsChoose");
+  for (const t of ["s", "q"]) assert.equal(C.dispatch(p, text(t)), "reader.settingsClose", t);
+  assert.equal(C.dispatch(p, key(C.KEY.Escape)), "reader.settingsClose", "Esc closes the panel, not the window");
+  assert.equal(C.dispatch(p, text("l")), null, "the panel holds the page still");
+});
+
 test("f toggles fullscreen everywhere, but types in an edit field or the palette", () => {
   for (const v of ["library", "settings", "sources", "source", "global", "manga", "reader"]) assert.equal(C.dispatch(screen(v), text("f")), "window.fullscreen", v);
   assert.equal(C.dispatch(palette, text("f")), null);
@@ -513,7 +526,7 @@ test("Sync now runs from the palette or s on the Library and Updates; its result
   assert.ok(C.paletteRows("sync").some((c) => c.id === "sync.now"));
   assert.equal(C.dispatch(screen("library"), text("s")), "sync.now");
   assert.equal(C.dispatch(screen("updates"), text("s")), "sync.now");
-  assert.equal(C.dispatch(screen("reader"), text("s")), null);
+  assert.equal(C.dispatch(screen("reader"), text("s")), "reader.settings", "s in the reader opens its settings, not a sync");
   const result = screen("sync");
   for (const k of [key(C.KEY.Escape), text("q"), key(C.KEY.Return)]) assert.equal(C.dispatch(result, k), "sync.close");
   assert.equal(C.dispatch(result, text("s")), null, "a second s does not start another sync over the result");

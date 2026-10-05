@@ -32,7 +32,7 @@ var KEY = {
 // source-settings; Library screen: categories; or
 // overlay: library-options, library-categories, library-remove, manga, manga-categories, manga-options,
 // manga-select, manga-track,
-// manga-track-pick, downloads, reader, sync,
+// manga-track-pick, downloads, reader, reader-settings, sync,
 // or a restore step: restore-confirm, -checking, -running, -done, -failed,
 // or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
 // -done) shows;
@@ -86,6 +86,8 @@ var commands = [
   { id: "restore.confirm", title: "Restore", keys: ["Enter"], view: "restore-confirm", hidden: true },
   { id: "restore.close", title: "Close", keys: ["Esc", "q"], view: ["restore-confirm", "restore-checking", "restore-running", "restore-done", "restore-failed"], hidden: true },
   { id: "reader.retry", title: "Load again", keys: ["r"], view: "reader", hidden: true },
+  // q too: in the reader, q never quits the window.
+  { id: "reader.settingsClose", title: "Close reader settings", keys: ["Esc", "Backspace", "s", "q"], view: "reader-settings", hidden: true },
   { id: "history.reload", title: "Reload history", keys: ["r"], view: "history", hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },
   { id: "window.quit", title: "Quit", keys: ["q", "Esc"] },
@@ -185,6 +187,10 @@ var commands = [
   { id: "reader.fit", title: "Next page fit", keys: ["z"], view: "reader", hidden: true },
   { id: "reader.wider", title: "Wider webtoon strip", keys: ["+", "="], view: "reader", hidden: true },
   { id: "reader.narrower", title: "Narrower webtoon strip", keys: ["-"], view: "reader", hidden: true },
+  { id: "reader.settings", title: "Reader settings", keys: ["s"], view: "reader", hidden: true },
+  { id: "reader.settingsUp", title: "Previous setting", keys: ["k", "Up"], view: "reader-settings", hidden: true },
+  { id: "reader.settingsDown", title: "Next setting", keys: ["j", "Down"], view: "reader-settings", hidden: true },
+  { id: "reader.settingsChoose", title: "Change setting", keys: ["Enter", "Space"], view: "reader-settings", hidden: true },
   { id: "library.left", title: "Previous manga", keys: ["h", "Left"], view: "library", hidden: true },
   { id: "library.right", title: "Next manga", keys: ["l", "Right"], view: "library", hidden: true },
   { id: "library.up", title: "Row up", keys: ["k", "Up"], view: "library", hidden: true },

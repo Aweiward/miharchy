@@ -2,6 +2,7 @@
 .import "Model.js" as Model
 .import "Downloads.js" as Downloads
 .import "Chapters.js" as Chapters
+.import "Settings.js" as Settings
 
 // The reader: one chapter's pages, the page shown, and the read state to
 // save. Pure, so tests/reader.test.js pins it; ReaderView.qml fetches pages,
@@ -252,6 +253,24 @@ function step(options, value, dir) {
   return values[Math.max(0, Math.min(values.length - 1, values.indexOf(value) + dir))]
 }
 
+// The settings panel (s), Mihon's reader settings sheet: the manga's own
+// reading mode, then the Settings rows the reader reads, which apply to
+// every manga. A later reader setting is one more key here.
+var PANEL_KEYS = ["pageFit", "webtoonWidth", "skipRead", "skipFiltered", "skipDupe"]
+
+function settingRow(key) {
+  return Settings.ROWS.filter(function(row) { return row.key === key })[0]
+}
+
+// values: the Settings values. -> [{ key, label, text, manga }], manga true
+// for the row stored in the manga's meta.
+function panelRows(r, values) {
+  return [{ key: "readingMode", label: "Reading mode", text: MODE_LABELS[r.mode], manga: true }].concat(PANEL_KEYS.map(function(key) {
+    var row = settingRow(key)
+    return { key: key, label: row.label, text: Settings.display(row, values[key]), manga: false }
+  }))
+}
+
 function slotOf(page) {
   return (page % SLOTS + SLOTS) % SLOTS
 }
@@ -306,6 +325,9 @@ if (typeof module !== "undefined") {
     fit: fit,
     stripWidth: stripWidth,
     step: step,
+    PANEL_KEYS: PANEL_KEYS,
+    settingRow: settingRow,
+    panelRows: panelRows,
     slotOf: slotOf,
     slots: slots,
     EXIT: EXIT,
