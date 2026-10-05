@@ -29,6 +29,14 @@ test("a status reply lists the queue in order with each chapter's progress", () 
   assert.equal(q.items[0].chapter, "Ch. 13");
 });
 
+test("X cancels every download with one clearDownloader, whose reply empties the queue", () => {
+  assert.match(D.CLEAR_PAYLOAD.query, /clearDownloader\(input: \{\}\) \{ downloadStatus/);
+  const q = polled(D.initial(), { downloadStatus: status("STARTED", [item(13, "DOWNLOADING", 0.4)]) });
+  const cleared = polled(q, { clearDownloader: { downloadStatus: status("STOPPED", []) } });
+  assert.deepEqual(cleared.items, []);
+  assert.deepEqual(D.left(q.items, cleared.items).map((i) => i.chapterId), [13]);
+});
+
 test("enqueue, dequeue, start and stop replies all carry the status the queue reads", () => {
   for (const field of ["enqueueChapterDownloads", "dequeueChapterDownloads", "startDownloader", "stopDownloader"]) {
     const data = {};

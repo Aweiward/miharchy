@@ -170,6 +170,7 @@ var commands = [
   { id: "downloads.sortNumber", title: "Sort the queue by chapter number", keys: ["n"], view: "downloads", hidden: true },
   { id: "downloads.sortDate", title: "Sort the queue by upload date", keys: ["u"], view: "downloads", hidden: true },
   { id: "downloads.dequeue", title: "Take out of the queue", keys: ["x"], view: "downloads", hidden: true },
+  { id: "downloads.clear", title: "Cancel all downloads", keys: ["X"], view: "downloads", hidden: true },
   { id: "downloads.toggle", title: "Start or stop downloading", keys: ["Space"], view: "downloads", hidden: true },
   { id: "manga.track", title: "Tracking", keys: ["t"], view: "manga", hidden: true },
   // Mihon's WebView and Share, on a desktop: the browser and the clipboard.

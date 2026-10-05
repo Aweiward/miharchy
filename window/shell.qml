@@ -355,6 +355,7 @@ ShellRoot {
     }
     libraryNote = ""
     if (id !== "updates.deleteDownload") updatesView.armed = false
+    if (id !== "downloads.clear") downloadsView.armed = false
     if (id !== null) run(id)
     return id !== null
   }

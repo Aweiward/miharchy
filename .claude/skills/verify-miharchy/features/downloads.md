@@ -7,6 +7,7 @@
 - `j`/`k` move the cursor. `x` takes the download out of the queue. `Space` starts or pauses the downloader. `Esc`/`D` close.
 - `K`/`J` move the download up or down, `t` to the top, `b` to the bottom (Mihon's move actions). The cursor follows the download.
 - `n` sorts by chapter number, `u` by upload date: ascending, or descending when the queue already runs ascending (Mihon's sort menu offers both directions). The whole queue sorts; Mihon sorts within each source group.
+- `X` asks first and the second `X` cancels every download (Mihon's cancel all): `clearDownloader`, which also stops the downloader. Any other key keeps the queue (`shell.qml` disarms on every other key, as for Updates' `x`). With the queue empty, `X` does nothing.
 - Every reorder is one request: one `reorderChapterDownload(chapterId, to)` per download out of place, run in order; only the last answers with the status. `to` counts from 0, and a `to` past the end fails the request, so `Downloads.moved` clamps.
 
 ## Setup
