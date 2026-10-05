@@ -23,6 +23,8 @@ Item {
   readonly property bool loginEditing: Trackers.editing(trackers)
   readonly property string loginStep: loginEditing ? trackers.login.step : ""
   property var values: ({})
+  // The user's categories, for the default category row.
+  property var categories: []
   property int cursor: 0
   property bool editing: false
   // Model.problem() of the settings state, or null.
@@ -219,7 +221,7 @@ Item {
             horizontalAlignment: Text.AlignRight
             elide: Text.ElideLeft
             visible: !row.editingThis
-            text: Settings.display(row.modelData, view.values[row.modelData.key])
+            text: Settings.display(row.modelData, view.values[row.modelData.key], view.categories)
             color: row.current ? view.theme.selectedText : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize

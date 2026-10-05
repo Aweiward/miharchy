@@ -15,6 +15,7 @@ The Library view (key `1`): a cover grid of the server's library manga with unre
 - `u` checks the shown category for new chapters (`updateLibrary(categories: [id])`, Default is 0; All sends none and skips excluded categories). The footer says so until the next key; the Updates view shows the run.
 - `c` opens Categories: `u` there cycles a category's `includeInUpdate` UNSET, INCLUDE ("in updates"), EXCLUDE ("excluded from updates").
 - `Enter` opens the manga detail (cache only).
+- Settings' "Default category" row cycles Always ask, Default, then each category (meta `miharchy.defaultCategory`: `ask`, `0`, an id). `a` on a manga detail that adds the manga then moves it to exactly that category, to none for Default, or opens the detail's categories picker for Always ask (also for a deleted category; with no categories nothing asks). Drive: `key("5")`, put `root.settingsCursor` on the row, `key("Enter")` per step (wait for the save between presses: activate reads the saved value); `mangaDetail.openManga(id, false)` on a manga out of the library, `key("a")`, then log `mangaDetail.manga.categories` and `mangaDetail.picking`.
 - `Space` reads the next unread chapter of the manga under the cursor without the detail, as Mihon's continue reading button: the first unread by the manga's own chapter filters and sort (`Library.continueChapter`, the detail's `Space`). A fully read manga says so in the footer; so does one whose filters hide every unread chapter. Read back: the chapter's `lastReadAt` is set.
 
 ## How to get to it (user POV)

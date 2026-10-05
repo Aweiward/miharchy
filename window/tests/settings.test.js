@@ -9,7 +9,7 @@ const ok = (data) => ({ type: "response", reply: M.reply(200, JSON.stringify({ d
 test("every row is complete, and a choice's default is one of its options", () => {
   const keys = new Set();
   for (const r of S.ROWS) {
-    assert.ok(r.key && r.label && ["bool", "choice", "text", "folder"].includes(r.type) && ["server", "meta"].includes(r.store), r.key);
+    assert.ok(r.key && r.label && ["bool", "choice", "text", "folder", "category"].includes(r.type) && ["server", "meta"].includes(r.store), r.key);
     assert.ok("default" in r, r.key);
     assert.ok(!keys.has(r.key), "unique key " + r.key);
     keys.add(r.key);
@@ -18,8 +18,8 @@ test("every row is complete, and a choice's default is one of its options", () =
 });
 
 test("the first rows and their defaults", () => {
-  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "Page fit", "Webtoon width", "Skip read chapters", "Skip filtered chapters", "Skip duplicate chapters", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Download folder", "Delete after read", "Sync folder"]);
-  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, downloadsPath: "", deleteAfterRead: false, syncFolder: "" });
+  assert.deepEqual(S.ROWS.map((r) => r.label), ["Show NSFW sources", "Default reading mode", "Page fit", "Webtoon width", "Skip read chapters", "Skip filtered chapters", "Skip duplicate chapters", "FlareSolverr", "FlareSolverr URL", "Check for new chapters", "Skip manga with unread chapters", "Skip manga not started", "Skip completed manga", "Default category", "Download folder", "Delete after read", "Sync folder"]);
+  assert.deepEqual(S.initial().values, { showNsfw: false, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: false, flareSolverrUrl: "http://127.0.0.1:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", deleteAfterRead: false, syncFolder: "" });
   assert.deepEqual(row("defaultReadingMode").options.map((o) => o.label), ["Paged right-to-left", "Paged left-to-right", "Webtoon"]);
 });
 
@@ -39,7 +39,7 @@ test("a load reply sets server values and namespaced meta, defaults fill the res
     ] }
   }));
   assert.equal(s.state, "ok");
-  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, downloadsPath: "", deleteAfterRead: false, syncFolder: "" });
+  assert.deepEqual(s.values, { showNsfw: true, defaultReadingMode: "paged-rtl", pageFit: "screen", webtoonWidth: "60", skipRead: false, skipFiltered: true, skipDupe: false, flareSolverrEnabled: true, flareSolverrUrl: "http://localhost:8191", globalUpdateInterval: 12, excludeUnreadChapters: true, excludeNotStarted: true, excludeCompleted: true, defaultCategory: "ask", downloadsPath: "", deleteAfterRead: false, syncFolder: "" });
 });
 
 test("the page fit and webtoon width come back from meta after a restart; an unknown one reads as the default", () => {
@@ -87,6 +87,22 @@ test("a failed request keeps the shown values and carries the error state", () =
   assert.equal(gql.message, "nope");
   assert.equal(S.reduce(loaded, { type: "config-missing" }).state, "no-config");
   assert.equal(M.problem(S.initial(), "p"), null, "loading is not a problem");
+});
+
+test("the default category row cycles always ask, Default and each category, and names them", () => {
+  const r = row("defaultCategory");
+  const cats = [{ id: 2, name: "Action" }, { id: 5, name: "Later" }];
+  assert.equal(r.default, "ask");
+  const seen = [];
+  let v = r.default;
+  for (let i = 0; i < 4; i++) {
+    v = S.activate(r, v, cats).save;
+    seen.push(v);
+  }
+  assert.deepEqual(seen, ["0", "2", "5", "ask"]);
+  assert.deepEqual(["ask", "0", "5", "9"].map((x) => S.display(r, x, cats)), ["Always ask", "Default", "Later", "Always ask"]);
+  const loaded = S.reduce(S.initial(), ok({ settings: {}, metas: { nodes: [{ key: "miharchy.defaultCategory", value: "5" }] } }));
+  assert.equal(loaded.values.defaultCategory, "5");
 });
 
 test("activate toggles bools, cycles choices and edits text", () => {

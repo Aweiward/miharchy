@@ -282,6 +282,19 @@ ShellRoot {
     })
   }
 
+  // Mihon's default category: a manga the detail adds goes to the chosen
+  // category, or the detail's categories picker opens to ask.
+  function addedToLibrary(mangaId) {
+    var to = Library.defaultCategory(settingsState.values.defaultCategory, connection.categories)
+    if (to === -1 && mangaDetail.open && mangaDetail.detail.mangaId === mangaId) mangaDetail.run("manga.categories")
+    if (to === -1 || !connection.categories.length) return fetchLibrary()
+    send(Library.moveToPayload(mangaId, to, connection.categories), function(reply) {
+      if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
+      mangaDetail.reload()
+      root.fetchLibrary()
+    })
+  }
+
   // x and X ask once; the same key again acts.
   function armLibrary(kind, action) {
     if (libraryArmed === kind) {
@@ -466,7 +479,7 @@ ShellRoot {
           break
         }
         var srow = Settings.ROWS[settingsCursor]
-        var act = Settings.activate(srow, settingsState.values[srow.key])
+        var act = Settings.activate(srow, settingsState.values[srow.key], connection.categories)
         if ("save" in act) {
           saveSetting(srow, act.save)
         } else {
@@ -739,6 +752,7 @@ ShellRoot {
           theme: theme
           config: root.config
           values: root.settingsState.values
+          categories: root.connection.categories
           cursor: root.settingsCursor
           editing: root.settingsEditing
           problem: Model.problem(root.settingsState, root.configPath)
@@ -836,7 +850,8 @@ ShellRoot {
           onCategorized: if (root.config) root.fetchLibrary()
           onLibraryChanged: function(mangaId, inLibrary) {
             browseView.markInLibrary(mangaId, inLibrary)
-            if (root.config) root.fetchLibrary()
+            if (inLibrary) root.addedToLibrary(mangaId)
+            else if (root.config) root.fetchLibrary()
           }
           queue: downloadsView.queue.items
           onDownloads: function(reply) { downloadsView.apply(reply) }
