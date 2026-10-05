@@ -26,7 +26,8 @@ var KEY = {
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, source, global; Library screen: categories; or
-// overlay: library-options, manga, manga-categories, manga-select, manga-track,
+// overlay: library-options, manga, manga-categories, manga-options,
+// manga-select, manga-track,
 // manga-track-pick, downloads, reader, sync,
 // or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
 // -done) shows;
@@ -62,6 +63,7 @@ var commands = [
   { id: "library.clearSearch", title: "Clear the search", keys: ["Esc"], view: "library", hidden: true },
   { id: "library.optionsClose", title: "Close sort and filter", keys: ["Esc", "Backspace", "F"], view: "library-options", hidden: true },
   { id: "manga.selectEnd", title: "End the selection", keys: ["Esc", "v"], view: "manga-select", hidden: true },
+  { id: "manga.optionsClose", title: "Close chapter filter and sort", keys: ["Esc", "Backspace", "F"], view: "manga-options", hidden: true },
   { id: "downloads.close", title: "Close the download queue", keys: ["Esc", "D"], view: "downloads", hidden: true },
   { id: "reader.close", title: "Close the reader", keys: ["Esc", "q"], view: "reader", hidden: true },
   { id: "sync.close", title: "Close the sync result", keys: ["Esc", "q", "Enter"], view: "sync", hidden: true },
@@ -113,7 +115,15 @@ var commands = [
   // chapter can be unmarked; Updates lists only unread chapters.
   { id: "manga.markRead", title: "Mark read", keys: ["R"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.markUnread", title: "Mark unread", keys: ["u"], view: ["manga", "manga-select"], hidden: true },
-  { id: "manga.markPrevious", title: "Mark every chapter below read", keys: ["P"], view: "manga", hidden: true },
+  { id: "manga.markPrevious", title: "Mark every chapter before read", keys: ["P"], view: "manga", hidden: true },
+  { id: "manga.bookmark", title: "Bookmark or unbookmark", keys: ["b"], view: ["manga", "manga-select"], hidden: true },
+  // Mihon's Start / Resume button; Enter reads the chapter under the cursor.
+  { id: "manga.resume", title: "Read the next unread chapter", keys: ["Space"], view: "manga", hidden: true },
+  // F, as the Library's sort and filter.
+  { id: "manga.options", title: "Filter and sort chapters", keys: ["F"], view: "manga", hidden: true },
+  { id: "manga.optionsUp", title: "Previous row", keys: ["k", "Up"], view: "manga-options", hidden: true },
+  { id: "manga.optionsDown", title: "Next row", keys: ["j", "Down"], view: "manga-options", hidden: true },
+  { id: "manga.optionsChoose", title: "Change filter or sort", keys: ["Enter", "Space"], view: "manga-options", hidden: true },
   { id: "downloads.open", title: "Download queue", keys: ["D"], view: ["library", "manga"], hidden: true },
   // The views a sync changes; the palette runs it from anywhere.
   { id: "sync.now", title: "Sync now", keys: ["s"], view: ["library", "updates"], hidden: true },

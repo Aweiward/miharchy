@@ -13,7 +13,7 @@ var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaTy
   + " hasNextPage mangas { id title thumbnailUrl inLibrary } } }"
 
 var MANGA_FIELDS = "id title author artist description genre status thumbnailUrl inLibrary initialized sourceId source { displayName } categories { nodes { id } } meta { key value }"
-var CHAPTER_FIELDS = "id name chapterNumber uploadDate isRead lastPageRead isDownloaded scanlator sourceOrder"
+var CHAPTER_FIELDS = "id name chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder"
 // The sync helper stores source names from phone backups here, id -> name.
 var SOURCE_NAMES_META = "miharchy.sourceNames"
 var DETAIL_QUERY = "query($id: Int!) { manga(id: $id) { " + MANGA_FIELDS + " chapters { nodes { " + CHAPTER_FIELDS + " } } }"
@@ -217,7 +217,7 @@ function toManga(config, n, names) {
 
 function toChapters(nodes) {
   return (nodes || []).slice().sort(function(a, b) { return b.sourceOrder - a.sourceOrder }).map(function(c) {
-    return { id: c.id, name: String(c.name || ""), number: c.chapterNumber, date: day(c.uploadDate), read: c.isRead === true, lastPage: c.lastPageRead || 0, downloaded: c.isDownloaded === true, scanlator: String(c.scanlator || "") }
+    return { id: c.id, name: String(c.name || ""), number: c.chapterNumber, date: day(c.uploadDate), uploadDate: Number(c.uploadDate) || 0, sourceOrder: c.sourceOrder, read: c.isRead === true, bookmarked: c.isBookmarked === true, lastPage: c.lastPageRead || 0, downloaded: c.isDownloaded === true, scanlator: String(c.scanlator || "") }
   })
 }
 

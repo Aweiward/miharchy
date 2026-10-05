@@ -82,7 +82,7 @@ const mangaNode = (o) => Object.assign({
   source: { displayName: "MangaDex (EN)" },
   chapters: { nodes: [
     { id: 11, name: "Ch. 1", chapterNumber: 1, uploadDate: "1700000000000", isRead: true, isDownloaded: true, scanlator: "G", sourceOrder: 0 },
-    { id: 12, name: "Ch. 2", chapterNumber: 2, uploadDate: "1700049600000", isRead: false, lastPageRead: 4, scanlator: null, sourceOrder: 1 }
+    { id: 12, name: "Ch. 2", chapterNumber: 2, uploadDate: "1700049600000", isRead: false, isBookmarked: true, lastPageRead: 4, scanlator: null, sourceOrder: 1 }
   ] }
 }, o);
 
@@ -99,6 +99,7 @@ test("a detail reads the cached manga and shows chapters newest first", () => {
   assert.equal(d.chapters[1].read, true);
   assert.deepEqual(d.chapters.map((c) => c.lastPage), [4, 0], "the page read, for a mark unread to reset");
   assert.equal(d.chapters[0].date, "2023-11-15");
+  assert.deepEqual(d.chapters.map((c) => [c.bookmarked, c.uploadDate, c.sourceOrder]), [[true, 1700049600000, 1], [false, 1700000000000, 0]], "what the chapter list filters and sorts by");
   assert.equal(B.detailPayload(d), null, "an initialized manga with chapters needs no source fetch");
 });
 

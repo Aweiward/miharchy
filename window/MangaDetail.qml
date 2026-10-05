@@ -7,8 +7,9 @@ import "Downloads.js" as Downloads
 import "Chapters.js" as Chapters
 
 // A manga's detail over the view that opened it, Library or Browse: cover
-// and metadata beside the chapter list, newest first. It talks to the
-// server itself; Browse.js decides. shell.qml forwards every "manga."
+// and metadata beside the chapter list, filtered and sorted as the manga's
+// chapter choices say (Chapters.js). It talks to the server itself;
+// Browse.js decides. shell.qml forwards every "manga."
 // command to run().
 Rectangle {
   id: view
@@ -28,19 +29,32 @@ Rectangle {
   property var queue: []
   // Only the latest detail request may update it.
   property int detailSeq: 0
+  // The library's manga, which "save as default for every manga" resets.
+  property var libraryIds: []
+  property bool optionsOpen: false
+  property int optionsCursor: 0
+  property string optionsNote: ""
 
   readonly property bool open: detail !== null
   readonly property var manga: detail ? detail.manga : null
   readonly property bool selecting: anchor >= 0
+  // The chapters as listed; cursor and anchor index it. detail.chapters
+  // stays in source order, newest first, for the reader.
+  readonly property var shown: detail ? Chapters.apply(detail.chapters, chapterPrefs.values) : []
+  readonly property var next: Chapters.nextUnread(shown, chapterPrefs.values)
+  readonly property string resume: detail ? Chapters.resumeLabel(detail.chapters, next) : ""
+  readonly property var optionRows: Chapters.rows(chapterPrefs.values)
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
   readonly property string hint: picking ? "j k move   space in or out   esc close   "
-    : selecting ? "j k extend   R read   u unread   d download   x delete download   esc end   "
-    : "j k chapters   enter read   R read   u unread   P read below   d download   v select   U download unread   x delete   D queue   " + (manga && manga.inLibrary ? "a remove from library   M migrate" : "a add to library") + "   c categories   t tracking   r refresh   esc back   "
+    : optionsOpen ? "j k move   enter change   esc close   "
+    : selecting ? "j k extend   R read   u unread   b bookmark   d download   x delete download   esc end   "
+    : "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download unread   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
   // shell.qml's markChapters() applies it and answers with markReply().
-  signal mark(var chapters, bool read, int mangaId)
+  // action: "read", "unread" or "bookmark".
+  signal mark(var chapters, string action, int mangaId)
   signal categorized()
   // A download mutation's reply, which carries the queue.
   signal downloads(var reply)
@@ -50,6 +64,15 @@ Rectangle {
 
   onCursorChanged: chapters.positionViewAtIndex(cursor, ListView.Contain)
   onConfigChanged: close()
+  // A mark or a filter change can take rows away under the cursor.
+  onShownChanged: cursor = Math.max(0, Math.min(shown.length - 1, cursor))
+
+  PrefStore {
+    id: chapterPrefs
+    config: view.config
+    table: Chapters.PREFS
+    onFailed: function(reply) { view.optionsNote = reply.message || reply.state }
+  }
 
   function send(payload, done) {
     var req = Model.request(config, payload)
@@ -66,6 +89,7 @@ Rectangle {
   // fromSource: opened while browsing a source, so it refreshes once.
   function openManga(mangaId, fromSource) {
     detail = Browse.detail(mangaId, fromSource)
+    chapterPrefs.open(mangaId)
     cursor = 0
     detailSeq++
     advance()
@@ -73,6 +97,7 @@ Rectangle {
 
   function close() {
     picking = false
+    optionsOpen = false
     anchor = -1
     detailSeq++
     detail = null
@@ -81,7 +106,7 @@ Rectangle {
   // After the reader: show what it marked read, on the chapter it left.
   function reread(chapterId) {
     if (!detail) return
-    for (var i = 0; i < detail.chapters.length; i++) if (detail.chapters[i].id === chapterId) cursor = i
+    for (var i = 0; i < shown.length; i++) if (shown[i].id === chapterId) cursor = i
     reload()
   }
 
@@ -132,9 +157,20 @@ Rectangle {
     })
   }
 
-  function sendMark(list, read) {
+  function sendMark(list, action) {
     anchor = -1
-    mark(list, read, detail.mangaId)
+    mark(list, action, detail.mangaId)
+  }
+
+  function chooseOption() {
+    var row = optionRows[optionsCursor]
+    optionsNote = ""
+    if (row.kind !== "default") {
+      chapterPrefs.set(Chapters.choose(chapterPrefs.values, row))
+      return
+    }
+    chapterPrefs.saveDefault(row.id === "defaultAll" ? libraryIds : [])
+    optionsNote = row.id === "defaultAll" ? "Saved as the default for every manga" : "Saved as the default"
   }
 
   function markReply(reply) {
@@ -176,11 +212,28 @@ Rectangle {
         break
       case "manga.up":
       case "manga.down":
-        if (detail.chapters.length) cursor = Math.max(0, Math.min(detail.chapters.length - 1, cursor + (id === "manga.up" ? -1 : 1)))
+        if (shown.length) cursor = Math.max(0, Math.min(shown.length - 1, cursor + (id === "manga.up" ? -1 : 1)))
         break
       case "manga.read":
-        var c = detail.chapters[cursor]
-        if (c) read(detail.chapters, c.id)
+        var c = shown[cursor]
+        if (c) read(Chapters.readingOrder(detail.chapters, chapterPrefs.values), c.id)
+        break
+      case "manga.resume":
+        if (next) read(Chapters.readingOrder(detail.chapters, chapterPrefs.values), next.id)
+        break
+      case "manga.options":
+        optionsOpen = true
+        optionsNote = ""
+        break
+      case "manga.optionsClose":
+        optionsOpen = false
+        break
+      case "manga.optionsUp":
+      case "manga.optionsDown":
+        optionsCursor = Math.max(0, Math.min(optionRows.length - 1, optionsCursor + (id === "manga.optionsUp" ? -1 : 1)))
+        break
+      case "manga.optionsChoose":
+        chooseOption()
         break
       case "manga.library":
         toggleLibrary()
@@ -192,20 +245,23 @@ Rectangle {
         anchor = -1
         break
       case "manga.download":
-        sendDownloads(Downloads.enqueuePayload(Downloads.marked(detail.chapters, cursor, anchor)))
+        sendDownloads(Downloads.enqueuePayload(Downloads.marked(shown, cursor, anchor)))
         break
       case "manga.downloadUnread":
         sendDownloads(Downloads.enqueuePayload(Downloads.unread(detail.chapters)))
         break
       case "manga.deleteDownload":
-        sendDownloads(Downloads.removePayload(Downloads.marked(detail.chapters, cursor, anchor), queue))
+        sendDownloads(Downloads.removePayload(Downloads.marked(shown, cursor, anchor), queue))
         break
       case "manga.markRead":
       case "manga.markUnread":
-        sendMark(Downloads.marked(detail.chapters, cursor, anchor), id === "manga.markRead")
+        sendMark(Downloads.marked(shown, cursor, anchor), id === "manga.markRead" ? "read" : "unread")
+        break
+      case "manga.bookmark":
+        sendMark(Downloads.marked(shown, cursor, anchor), "bookmark")
         break
       case "manga.markPrevious":
-        sendMark(Chapters.previous(detail.chapters, cursor), true)
+        sendMark(Chapters.previous(shown, cursor, chapterPrefs.values), "read")
         break
       case "manga.refresh":
         detailSeq++
@@ -335,11 +391,16 @@ Rectangle {
     anchors.right: parent.right
     anchors.margins: view.theme.fontSize * 2
     clip: true
-    model: view.detail ? view.detail.chapters : []
+    model: view.shown
 
     header: Text {
       bottomPadding: view.theme.fontSize * 0.5
-      text: view.detail ? (view.detail.state === "loading" ? "Loading chapters" : view.detail.chapters.length + " chapters") : ""
+      text: {
+        if (!view.detail) return ""
+        if (view.detail.state === "loading") return "Loading chapters"
+        var hidden = view.detail.chapters.length - view.shown.length
+        return [view.detail.chapters.length + " chapters", hidden ? hidden + " hidden by the filter" : "", view.resume ? view.resume + ": space" : ""].filter(function(s) { return s }).join("   ")
+      }
       color: view.theme.accent
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSmall
@@ -363,8 +424,9 @@ Rectangle {
         anchors.rightMargin: view.theme.fontSize
         anchors.verticalCenter: parent.verticalCenter
         elide: Text.ElideRight
-        text: row.modelData.name
-        color: row.current ? view.theme.selectedText : row.modelData.read ? view.theme.muted : view.theme.foreground
+        // Mihon marks a bookmark with an icon and the accent color.
+        text: (row.modelData.bookmarked ? "★ " : "") + row.modelData.name
+        color: row.current ? view.theme.selectedText : row.modelData.read ? view.theme.muted : row.modelData.bookmarked ? view.theme.accent : view.theme.foreground
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSize
       }
@@ -387,6 +449,68 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         text: [row.modelData.scanlator, row.modelData.date].filter(function(s) { return s }).join("   ")
         color: view.theme.muted
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+    }
+  }
+
+  // The chapter filter and sort, drawn as the Library's panel.
+  Rectangle {
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: view.theme.fontSize * 2
+    width: view.theme.fontSize * 30
+    height: options.implicitHeight + view.theme.fontSize * 2
+    visible: view.optionsOpen
+    color: Qt.alpha(view.theme.panel, 1)
+    border.width: 1
+    border.color: view.theme.panelBorder
+
+    Column {
+      id: options
+      x: view.theme.fontSize
+      y: view.theme.fontSize
+      width: parent.width - view.theme.fontSize * 2
+
+      Repeater {
+        model: view.optionRows
+
+        Column {
+          id: option
+          required property var modelData
+          required property int index
+          readonly property bool current: index === view.optionsCursor
+          readonly property bool on: modelData.state !== "" && modelData.state !== "off"
+          width: options.width
+
+          Text {
+            visible: option.index === 0 || option.modelData.kind !== view.optionRows[option.index - 1].kind
+            topPadding: option.index === 0 ? 0 : view.theme.fontSize * 0.8
+            text: ({ filter: "Filter", sort: "Sort", "default": "Default" })[option.modelData.kind]
+            color: view.theme.muted
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSmall
+          }
+
+          Text {
+            width: parent.width
+            elide: Text.ElideRight
+            text: ({ off: "[ ] ", include: "[+] ", exclude: "[-] ", "": "    ", asc: " ↑  ", desc: " ↓  " })[option.modelData.state] + option.modelData.label
+            color: option.current ? view.theme.accent : option.on || option.modelData.kind === "default" ? view.theme.foreground : view.theme.muted
+            font.family: view.theme.fontFamily
+            font.pixelSize: view.theme.fontSize
+          }
+        }
+      }
+
+      Text {
+        width: parent.width
+        visible: text !== ""
+        topPadding: view.theme.fontSize * 0.8
+        wrapMode: Text.Wrap
+        text: view.optionsNote
+        color: view.theme.accent
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
       }

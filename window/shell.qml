@@ -9,7 +9,6 @@ import "Settings.js" as Settings
 import "Setup.js" as Setup
 import "Chapters.js" as Chapters
 import "Library.js" as Library
-import "Prefs.js" as Prefs
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -29,13 +28,10 @@ ShellRoot {
   // "grid" | "categories"
   property string libraryScreen: "grid"
   property string libraryQuery: ""
-  // The Library's sort and filters, as server meta holds them (Prefs.js).
-  property var libraryPrefs: Prefs.defaults(Library.PREFS)
+  // The Library's sort and filters, as server meta holds them.
+  readonly property var libraryPrefs: libraryStore.values
   property bool libraryOptions: false
   property int libraryOptionsCursor: 0
-  // Keys of libraryPrefs the server has yet to store, and whether a save is out.
-  property var libraryUnsaved: []
-  property bool librarySaving: false
   readonly property var switcher: Model.switcher({ manga: Library.apply(connection.manga, libraryPrefs, libraryQuery), categories: connection.categories })
   readonly property int switcherIndex: Model.switcherIndex(switcher, libraryCategory)
   readonly property var shown: switcher[switcherIndex]
@@ -88,7 +84,7 @@ ShellRoot {
     }
     fetchLibrary()
     sendSettings(Settings.loadPayload())
-    loadLibraryPrefs()
+    libraryStore.load()
     if (pendingChapter) openChapter(pendingChapter)
   }
 
@@ -127,49 +123,11 @@ ShellRoot {
     xhr.send(req.body)
   }
 
-  function sendLibraryPrefs(payload, done) {
-    var req = Model.request(config, payload)
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState !== XMLHttpRequest.DONE) return
-      var reply = Model.reply(xhr.status, xhr.responseText)
-      if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
-      done(reply)
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
-  }
-
-  // A choice not yet saved wins over what the server holds.
-  function loadLibraryPrefs() {
-    sendLibraryPrefs(Prefs.loadPayload(Library.PREFS), function(reply) {
-      if (reply.state === "ok" && !root.librarySaving && !root.libraryUnsaved.length) root.libraryPrefs = Prefs.read(Library.PREFS, reply.data, root.libraryPrefs)
-    })
-  }
-
-  // One save at a time, each with the key's latest choice: the server
-  // applies saves sent together in any order.
-  function saveLibraryPrefs() {
-    if (librarySaving || !libraryUnsaved.length || !config) return
-    var key = libraryUnsaved[0]
-    libraryUnsaved = libraryUnsaved.slice(1)
-    librarySaving = true
-    sendLibraryPrefs(Prefs.savePayload(key, libraryPrefs[key]), function() {
-      root.librarySaving = false
-      root.saveLibraryPrefs()
-    })
-  }
-
-  // The grid follows at once; the server keeps it for the next start.
-  function setLibraryPref(change) {
-    var next = {}
-    for (var k in libraryPrefs) next[k] = libraryPrefs[k]
-    next[change.key] = change.value
-    libraryPrefs = next
-    if (libraryUnsaved.indexOf(change.key) === -1) libraryUnsaved = libraryUnsaved.concat([change.key])
-    saveLibraryPrefs()
+  PrefStore {
+    id: libraryStore
+    config: root.config
+    table: Library.PREFS
+    onFailed: function(reply) { root.libraryError = reply.message || Model.problem(reply, root.configPath).title }
   }
 
   function saveSetting(row, value) {
@@ -236,14 +194,15 @@ ShellRoot {
     xhr.send(req.body)
   }
 
-  // The one path that marks chapters read or unread, from any view: the
-  // trackers hear of a mark read, and every view showing read state reloads.
-  function markChapters(chapters, read, mangaIds) {
-    var payload = Chapters.markPayload(chapters, read)
+  // The one path that marks chapters, from any view. action: "read",
+  // "unread" or "bookmark" (a toggle). The trackers hear of a mark read, and
+  // every view showing read state or bookmarks reloads.
+  function markChapters(chapters, action, mangaIds) {
+    var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters) : Chapters.markPayload(chapters, action === "read")
     if (!payload || !config) return
     send(payload, function(reply) {
       // The push waits for the mark: the server reads the chapters it marked.
-      if (reply.state === "ok" && read) root.send(Chapters.trackPayload(mangaIds), function() {})
+      if (reply.state === "ok" && action === "read") root.send(Chapters.trackPayload(mangaIds), function() {})
       mangaDetail.markReply(reply)
       updatesView.load()
       root.fetchLibrary()
@@ -276,7 +235,7 @@ ShellRoot {
     var scope = syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? "reader"
       : migrateView.open ? "migrate-" + migrateView.step
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
-      : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.selecting ? "manga-select" : "manga")
+      : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.selecting ? "manga-select" : "manga")
       : view === "browse" ? browseView.screen : view === "library" && libraryScreen === "categories" ? "categories"
       : view === "library" && libraryOptions ? "library-options" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
@@ -461,7 +420,7 @@ ShellRoot {
         libraryOptionsCursor = Commands.moveCursor(libraryOptionsCursor, id === "library.optionsUp" ? -1 : 1, Library.rows(libraryPrefs).length)
         break
       case "library.optionsChoose":
-        setLibraryPref(Library.choose(libraryPrefs, Library.rows(libraryPrefs)[libraryOptionsCursor]))
+        libraryStore.set([Library.choose(libraryPrefs, Library.rows(libraryPrefs)[libraryOptionsCursor])])
         break
       case "library.remove":
         var r = shown.manga[libraryCursor]
@@ -481,7 +440,7 @@ ShellRoot {
         if (config) {
           fetchLibrary()
           sendSettings(Settings.loadPayload())
-          loadLibraryPrefs()
+          libraryStore.load()
           settingsView.loadTrackers()
           updatesView.load()
         }
@@ -698,8 +657,9 @@ ShellRoot {
           }
           queue: downloadsView.queue.items
           onDownloads: function(reply) { downloadsView.apply(reply) }
+          libraryIds: root.connection.manga.map(function(m) { return m.id })
           onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
-          onMark: function(chapters, read, mangaId) { root.markChapters(chapters, read, [mangaId]) }
+          onMark: function(chapters, action, mangaId) { root.markChapters(chapters, action, [mangaId]) }
         }
 
         TrackPanel {

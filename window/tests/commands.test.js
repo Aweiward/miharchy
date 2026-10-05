@@ -401,6 +401,23 @@ test("on a manga, R marks read, u marks unread and P marks every chapter below t
   assert.equal(C.dispatch(screen("reader"), text("u")), "reader.halfUp");
 });
 
+test("on a manga, b bookmarks, Space resumes, F opens the chapter filter and sort; there j/k move, Enter or Space changes, Esc or F closes", () => {
+  const m = screen("manga");
+  assert.equal(C.dispatch(m, text("b")), "manga.bookmark");
+  assert.equal(C.dispatch(screen("manga-select"), text("b")), "manga.bookmark", "b acts on a selection too");
+  assert.equal(C.dispatch(m, C.keyEvent(C.KEY.Space, " ", 0)), "manga.resume");
+  assert.equal(C.dispatch(m, key(C.KEY.Return)), "manga.read", "Enter still reads the chapter under the cursor");
+  assert.equal(C.dispatch(m, text("F")), "manga.options");
+  const o = screen("manga-options");
+  assert.equal(C.dispatch(o, text("j")), "manga.optionsDown");
+  assert.equal(C.dispatch(o, text("k")), "manga.optionsUp");
+  assert.equal(C.dispatch(o, key(C.KEY.Return)), "manga.optionsChoose");
+  assert.equal(C.dispatch(o, C.keyEvent(C.KEY.Space, " ", 0)), "manga.optionsChoose");
+  assert.equal(C.dispatch(o, key(C.KEY.Escape)), "manga.optionsClose");
+  assert.equal(C.dispatch(o, text("F")), "manga.optionsClose");
+  assert.equal(C.dispatch(o, text("R")), null, "the chapter keys wait while the panel shows");
+});
+
 test("in a selection, j/k extend it, d and x act on it, and v or Esc ends it without leaving the manga", () => {
   const s = screen("manga-select");
   assert.equal(C.dispatch(s, text("j")), "manga.down");
