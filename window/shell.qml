@@ -23,6 +23,11 @@ import "Restart.js" as Restart
 ShellRoot {
   id: root
 
+  // Quickshell would reload the window in place when its files change. An
+  // update writes them one at a time, so a reload can catch half of it, and
+  // it drops the reader without the quit path's save. Q restarts instead.
+  settings.watchFiles: false
+
   readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
 
   // The launcher's open-updates starts a window on Updates.
