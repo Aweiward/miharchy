@@ -22,7 +22,10 @@ Rectangle {
   property int seq: 0
 
   readonly property var problem: Model.problem(queue, configPath)
-  readonly property string hint: "j k move   J K reorder   t top   b bottom   n sort by number   u sort by upload date   x take out   space " + (queue.running ? "pause" : "start") + "   esc close"
+  // The first X arms "cancel all"; shell.qml disarms it on any other key.
+  property bool armed: false
+  readonly property string hint: armed ? "X again to cancel every download, any other key keeps them"
+    : "j k move   J K reorder   t top   b bottom   n sort by number   u sort by upload date   x take out   X cancel all   space " + (queue.running ? "pause" : "start") + "   esc close"
 
   // Items gone from the queue since the last reply: finished or taken out.
   signal leftQueue(var items)
@@ -98,6 +101,10 @@ Rectangle {
       case "downloads.sortNumber":
       case "downloads.sortDate":
         reorder(Downloads.sorted(queue, id === "downloads.sortNumber" ? "chapterNumber" : "uploadDate"))
+        break
+      case "downloads.clear":
+        if (armed) send(Downloads.CLEAR_PAYLOAD)
+        armed = !armed && queue.items.length > 0
         break
       case "downloads.dequeue":
         if (item) send(Downloads.dequeuePayload(item.chapterId))

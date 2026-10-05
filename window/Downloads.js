@@ -16,6 +16,8 @@ var REMOVE_MUTATION = "mutation($queued: [Int!]!, $ids: [Int!]!) { dequeueChapte
   + " deleteDownloadedChapters(input: { ids: $ids }) { chapters { id isDownloaded } } }"
 var START_MUTATION = "mutation { startDownloader(input: {}) { " + STATUS + " } }"
 var STOP_MUTATION = "mutation { stopDownloader(input: {}) { " + STATUS + " } }"
+// Mihon's cancel all; the server also stops the downloader.
+var CLEAR_PAYLOAD = { query: "mutation { clearDownloader(input: {}) { " + STATUS + " } }" }
 
 // queue.state: "loading" | "ok" | a failed connection state.
 // running: the downloader is started. items: in queue order, each
@@ -178,6 +180,7 @@ function marker(chapter, items) {
 if (typeof module !== "undefined") {
   module.exports = {
     STATUS_QUERY: STATUS_QUERY,
+    CLEAR_PAYLOAD: CLEAR_PAYLOAD,
     initial: initial,
     reduce: reduce,
     left: left,
