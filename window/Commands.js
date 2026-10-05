@@ -30,7 +30,7 @@ var KEY = {
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, source, global, or its panel: source-filters,
 // source-settings; Library screen: categories; or
-// overlay: library-options, library-categories, manga, manga-categories, manga-options,
+// overlay: library-options, library-categories, library-remove, manga, manga-categories, manga-options,
 // manga-select, manga-track,
 // manga-track-pick, downloads, reader, sync,
 // or a restore step: restore-confirm, -checking, -running, -done, -failed,
@@ -73,6 +73,10 @@ var commands = [
   // Ends a selection; with none, it quits like Esc elsewhere.
   { id: "updates.clearSelection", title: "Clear the selection", keys: ["Esc"], view: "updates", hidden: true },
   { id: "library.pickClose", title: "Close categories", keys: ["Esc", "Backspace", "C"], view: "library-categories", hidden: true },
+  // Mihon's remove dialog asks whether the downloads go too; any other key
+  // keeps the manga.
+  { id: "library.disarm", title: "Keep the manga", keys: ["Esc"], view: "library-remove", hidden: true },
+  { id: "library.removeWithDownloads", title: "Remove from library and delete downloads", keys: ["d"], view: "library-remove", hidden: true },
   { id: "library.optionsClose", title: "Close sort and filter", keys: ["Esc", "Backspace", "F"], view: "library-options", hidden: true },
   { id: "manga.selectEnd", title: "End the selection", keys: ["Esc", "v"], view: "manga-select", hidden: true },
   { id: "manga.optionsClose", title: "Close chapter filter and sort", keys: ["Esc", "Backspace", "F"], view: "manga-options", hidden: true },
@@ -194,7 +198,7 @@ var commands = [
   // Act on the selection, or on the manga under the cursor, as on Updates:
   // v as on a manga's chapters, since Space reads on; U, not u, which
   // checks for new chapters.
-  { id: "library.remove", title: "Remove from library", keys: ["x"], view: "library", hidden: true },
+  { id: "library.remove", title: "Remove from library", keys: ["x"], view: ["library", "library-remove"], hidden: true },
   { id: "library.select", title: "Select or deselect the manga", keys: ["v"], view: "library", hidden: true },
   { id: "library.selectAll", title: "Select every manga in the category", keys: ["A"], view: "library", hidden: true },
   { id: "library.invert", title: "Invert the selection", keys: ["I"], view: "library", hidden: true },

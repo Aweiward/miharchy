@@ -430,6 +430,15 @@ test("on the Library, Space reads on, v selects, and the selection keys act; the
   assert.equal(C.dispatch(pick, text("x")), null, "no library action runs under the panel");
 });
 
+test("an armed remove takes x to keep the downloads and d to delete them; Esc keeps the manga and does not quit", () => {
+  const armed = screen("library-remove");
+  assert.equal(C.dispatch(armed, text("x")), "library.remove");
+  assert.equal(C.dispatch(armed, text("d")), "library.removeWithDownloads");
+  assert.equal(C.dispatch(armed, key(C.KEY.Escape)), "library.disarm");
+  assert.equal(C.dispatch(armed, text("j")), null, "any other key only disarms");
+  assert.equal(C.dispatch(screen("library"), text("d")), "library.download", "unarmed, d downloads");
+});
+
 test("on a manga, d downloads, U downloads every unread chapter, x deletes downloads and v starts a selection", () => {
   const m = screen("manga");
   assert.equal(C.dispatch(m, text("d")), "manga.download");

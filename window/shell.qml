@@ -67,7 +67,7 @@ ShellRoot {
     : libraryPickIds.length ? "j k move   enter in or out   esc close   "
     : libraryOptions ? "j k move   enter change   esc close   "
     : libraryNote ? libraryNote + "   "
-    : libraryArmed === "remove" ? "x again to remove " + Library.count(libraryTargets.length) + " from the library, any other key keeps it   "
+    : libraryArmed === "remove" ? "x again to remove " + Library.count(libraryTargets.length) + " from the library   d also delete the downloads   esc keep   "
     : libraryArmed === "delete" ? "X again to delete the downloads of " + Library.count(libraryTargets.length) + ", any other key keeps them   "
     : (libraryError ? libraryError + "   " : "") + (librarySelected.length
       ? librarySelected.length + " selected   v select   A all   I invert   R read   U unread   d download   X delete downloads   C categories   x remove   esc clear   "
@@ -250,7 +250,8 @@ ShellRoot {
   // Mihon's library selection actions, on the targets: "read" and "unread"
   // mark every chapter, "download" queues the unread ones, "delete" takes
   // the downloads off the disk, "remove" takes the manga out of the
-  // library. The selection ends, as in Mihon.
+  // library, and "removeDeleting" does both, as Mihon's remove dialog with
+  // both boxes ticked. The selection ends, as in Mihon.
   function actOnLibrary(action) {
     var ids = libraryTargets.map(function(m) { return m.id })
     librarySelected = []
@@ -258,18 +259,27 @@ ShellRoot {
     var failed = function(reply) {
       if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
     }
-    if (action === "remove") {
-      send(Library.removePayload(ids), function(reply) {
+    var remove = function() {
+      root.send(Library.removePayload(ids), function(reply) {
         failed(reply)
         root.fetchLibrary()
       })
-      return
     }
+    if (action === "remove") return remove()
     send(Library.chaptersPayload(ids), function(reply) {
       if (reply.state !== "ok") return failed(reply)
       var chapters = Browse.toChapters(reply.data.chapters.nodes)
       if (action === "read" || action === "unread") return root.markChapters(chapters, action, ids)
       var payload = action === "download" ? Downloads.enqueuePayload(Downloads.unread(chapters)) : Downloads.removePayload(chapters, downloadsView.queue.items)
+      if (action === "removeDeleting") {
+        if (!payload) return remove()
+        // The manga leave only once their downloads are gone.
+        return root.send(payload, function(done) {
+          downloadsView.apply(done)
+          if (done.state === "ok") remove()
+          else failed(done)
+        })
+      }
       if (!payload) {
         root.libraryNote = action === "download" ? "Every unread chapter is downloaded already." : "No chapter is downloaded."
         return
@@ -333,6 +343,7 @@ ShellRoot {
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.selecting ? "manga-select" : "manga")
       : view === "browse" ? browseView.scope : view === "library" && libraryScreen === "categories" ? "categories"
+      : view === "library" && libraryArmed === "remove" ? "library-remove"
       : view === "library" && libraryPickIds.length ? "library-categories"
       : view === "library" && libraryOptions ? "library-options" : view
     var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
@@ -558,6 +569,11 @@ ShellRoot {
         break
       case "library.remove":
         armLibrary("remove", "remove")
+        break
+      case "library.removeWithDownloads":
+        actOnLibrary("removeDeleting")
+        break
+      case "library.disarm":
         break
       case "library.deleteDownloads":
         armLibrary("delete", "delete")
