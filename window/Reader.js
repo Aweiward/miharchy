@@ -69,7 +69,7 @@ function delta(readingMode, side) {
 // transition: the transition page shown past either end, or null (see
 // transition()).
 function at(r, index, toEnd) {
-  return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", pages: [], page: 0, read: false, wasRead: false, saved: null, edge: "", transition: null })
+  return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", pages: [], page: 0, half: 0, read: false, wasRead: false, saved: null, edge: "", transition: null })
 }
 
 // Mihon's calculateChapterGap: how many whole chapter numbers lie between
@@ -145,9 +145,88 @@ function last(r) {
   return r.pages.length - 1
 }
 
+// Two-page spreads and split pages. layout: { dual, split, sizes }, as
+// ReaderView builds it: dual, two pages side by side (dual()); split, the
+// dualPageSplit setting; sizes, each page's image size by URL, for the
+// pages loaded so far. Left out, every page shows alone and whole.
+
+// The dualPageView setting -> whether spreads show: only right to left
+// and left to right, as Mihon offers them; "wide" when the view is wider
+// than tall.
+function dual(readingMode, setting, view) {
+  if (readingMode !== "paged-rtl" && readingMode !== "paged-ltr") return false
+  return setting === "always" || (setting === "wide" && view.width > view.height)
+}
+
+function wide(r, page, layout) {
+  var s = layout && layout.sizes && layout.sizes[r.pages[page]]
+  return !!s && s.width > s.height
+}
+
+// How many pages the spread from page holds. The first page, the cover,
+// shows alone, so the pairs after it face as in the book; a wide page (a
+// double page already) shows alone too. A page not loaded yet counts as
+// narrow until it loads.
+// ponytail: a wide page shifts the pairs after it going on, not going
+// back; a chapter read backwards across one may pair differently.
+function spreadAt(r, page, layout) {
+  return layout && layout.dual && page > 0 && page + 1 < r.pages.length && !wide(r, page, layout) && !wide(r, page + 1, layout) ? 2 : 1
+}
+
+// Whether the page shown splits in two halves (Mihon's dualPageSplit): a
+// wide page with the setting on, outside spreads. r.half is the half
+// shown, 0 the one read first.
+function splits(r, layout) {
+  return !!(layout && layout.split && !layout.dual) && wide(r, r.page, layout)
+}
+
+// Where a turn by delta lands inside the chapter: { page, half }, or null
+// past either end. A split page turns half by half; a spread turns by its
+// pages, and back to the spread that ends on the page before.
+function turnTo(r, delta, layout) {
+  if (splits(r, layout) && (delta > 0 ? r.half === 0 : r.half === 1)) return { page: r.page, half: delta > 0 ? 1 : 0 }
+  var p = delta > 0 ? r.page + spreadAt(r, r.page, layout) : r.page - 1
+  if (delta < 0 && p > 1 && spreadAt(r, p - 1, layout) === 2) p--
+  return p >= 0 && p <= last(r) ? { page: p, half: delta > 0 ? 0 : 1 } : null
+}
+
+// What the pager shows and where. sizes as in layout; fitMode, view and
+// zoom as fit() takes them, each page of a spread fitted into half the
+// view. -> { width, height: the content, at least the view; pagesWidth,
+// pagesHeight: the pages' own; items: [{ page, x, y, width, height,
+// imageX, imageWidth, sourceWidth, sourceHeight }] }. An item clips its
+// image: a split page shows one half of an image twice its width. In
+// right to left the first page sits on the right, and the right half
+// reads first, as in Mihon.
+function spread(r, layout, fitMode, view, zoom) {
+  var n = spreadAt(r, r.page, layout)
+  var split = n === 1 && splits(r, layout)
+  var box = n === 2 ? { width: view.width / 2, height: view.height } : view
+  var rtl = r.mode === "paged-rtl"
+  var items = []
+  for (var i = 0; i < n; i++) {
+    var s = (layout && layout.sizes && layout.sizes[r.pages[r.page + i]]) || { width: 0, height: 0 }
+    var f = fit(fitMode, split ? { width: s.width / 2, height: s.height } : s, box, zoom)
+    var rightHalf = split && (r.half === 0) === rtl
+    items.push({ page: r.page + i, width: f.width, height: f.height, imageX: rightHalf ? -f.width : 0, imageWidth: split ? f.width * 2 : f.width, sourceWidth: split ? f.sourceWidth * 2 : f.sourceWidth, sourceHeight: f.sourceHeight })
+  }
+  var pagesWidth = items.reduce(function(sum, it) { return sum + it.width }, 0)
+  var pagesHeight = Math.max.apply(null, items.map(function(it) { return it.height }))
+  var width = Math.max(view.width, pagesWidth)
+  var height = Math.max(view.height, pagesHeight)
+  var x = (width - pagesWidth) / 2
+  ;(rtl ? items.slice().reverse() : items).forEach(function(it) {
+    it.x = x
+    it.y = (height - it.height) / 2
+    x += it.width
+  })
+  return { width: width, height: height, pagesWidth: pagesWidth, pagesHeight: pagesHeight, items: items }
+}
+
 // event.type:
 //   "pages"        { reply, config } for the chapter open
-//   "turn"         { delta, chapter?, always, offline } by one page; past
+//   "turn"         { delta, chapter?, always, offline, layout? } by one
+//                  page, spread or half page (see turnTo); past
 //                  either end, or at once with chapter, to the transition
 //                  page (see showsTransition) or else the next or previous
 //                  chapter. On the transition page a turn its way leaves
@@ -172,13 +251,16 @@ function reduce(r, event) {
       if (!pages.length) return copy(r, { state: "error", message: "This chapter has no pages." })
       var c = f.chapter
       var page = r.toEnd ? pages.length - 1 : c.isRead ? 0 : Math.max(0, Math.min(pages.length - 1, c.lastPageRead || 0))
-      return copy(r, { state: "ok", pages: pages, page: page, read: c.isRead === true || page === pages.length - 1, wasRead: c.isRead === true })
+      return copy(r, { state: "ok", pages: pages, page: page, half: r.toEnd ? 1 : 0, read: c.isRead === true || page === pages.length - 1, wasRead: c.isRead === true })
     case "turn":
       if (r.state === "loading") return r
       var dir = event.delta > 0 ? "next" : "prev"
       if (r.transition) return r.transition.dir === dir ? move(r, event.delta) : copy(r, { transition: null })
-      var p = event.chapter ? -1 : r.page + event.delta
-      if (r.state === "ok" && p >= 0 && p <= last(r)) return copy(r, { page: p, read: r.read || p === last(r), edge: "" })
+      var to = event.chapter || r.state !== "ok" ? null : turnTo(r, event.delta, event.layout)
+      if (to) return copy(r, { page: to.page, half: to.half, read: r.read || to.page + spreadAt(r, to.page, event.layout) - 1 === last(r), edge: "" })
+      // Reading on past the end saw the last page, even one a spread that
+      // opened on the page before showed: the chapter is read.
+      if (r.state === "ok" && event.delta > 0 && !event.chapter) r = copy(r, { read: true })
       var t = transition(r, dir, event.offline)
       if (r.state === "ok" && showsTransition(t, event.always)) return copy(r, { transition: t, edge: "" })
       return move(r, event.delta)
@@ -197,7 +279,7 @@ function reduce(r, event) {
     case "goto":
       if (r.state !== "ok" || isNaN(event.page)) return r
       var g = Math.max(0, Math.min(last(r), event.page))
-      return copy(r, { page: g, read: r.read || g === last(r), edge: "", transition: null })
+      return copy(r, { page: g, half: 0, read: r.read || g === last(r), edge: "", transition: null })
     case "mode":
       return copy(r, { mode: MODES[(MODES.indexOf(r.mode) + 1) % MODES.length] })
     case "saving":
@@ -364,7 +446,7 @@ function step(options, value, dir) {
 // The settings panel (s), Mihon's reader settings sheet: the manga's own
 // reading mode, then the Settings rows the reader reads, which apply to
 // every manga. A later reader setting is one more key here.
-var PANEL_KEYS = ["pageFit", "webtoonWidth", "readerTheme", "keepScreenOn", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
+var PANEL_KEYS = ["pageFit", "dualPageView", "dualPageSplit", "webtoonWidth", "readerTheme", "keepScreenOn", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
 
 // The readerTheme setting -> the reader's background; themeColor for
 // "theme". Gray is Mihon's ReaderGrayBackgroundColor.
@@ -448,6 +530,11 @@ if (typeof module !== "undefined") {
     stripWidth: stripWidth,
     step: step,
     gap: gap,
+    dual: dual,
+    spreadAt: spreadAt,
+    splits: splits,
+    turnTo: turnTo,
+    spread: spread,
     transition: transition,
     showsTransition: showsTransition,
     transitionLines: transitionLines,

@@ -502,3 +502,86 @@ test("in incognito the reader saves no read state, pushes no track and deletes n
   assert.notEqual(R.trackPayload(plain), null);
   assert.equal(R.deleteTarget(plain, 0), 13);
 });
+
+// Page sizes by URL, as ReaderView collects them; the pages at wideAt are
+// double pages.
+const sized = (r, wideAt) => Object.fromEntries(r.pages.map((u, i) => [u, wideAt.includes(i) ? { width: 1600, height: 1200 } : { width: 800, height: 1200 }]));
+const turnIn = (r, delta, layout) => R.reduce(r, { type: "turn", delta, layout });
+
+test("spreads show in right to left and left to right only: always, or while the window is wide", () => {
+  assert.equal(R.dual("paged-rtl", "always", { width: 800, height: 1000 }), true);
+  assert.equal(R.dual("paged-ltr", "wide", { width: 1600, height: 1000 }), true);
+  assert.equal(R.dual("paged-ltr", "wide", { width: 800, height: 1000 }), false);
+  assert.equal(R.dual("paged-rtl", "never", { width: 1600, height: 1000 }), false);
+  assert.equal(R.dual("paged-vertical", "always", { width: 1600, height: 1000 }), false, "Mihon offers spreads for the horizontal pagers only");
+  assert.equal(R.dual("webtoon", "always", { width: 1600, height: 1000 }), false);
+  assert.ok(R.PANEL_KEYS.includes("dualPageView") && R.PANEL_KEYS.includes("dualPageSplit"));
+});
+
+test("spreads turn by their pages: the cover alone, then pairs, a wide page alone; back lands on the spread before", () => {
+  let r = loaded(12, 7);
+  const layout = { dual: true, split: false, sizes: sized(r, [3]) };
+  const seen = [r.page];
+  for (let i = 0; i < 4; i++) { r = turnIn(r, 1, layout); seen.push(r.page); }
+  assert.deepEqual(seen, [0, 1, 3, 4, 6], "0 | 1 2 | 3 (wide) | 4 5 | 6");
+  assert.equal(R.spreadAt(r, 6, layout), 1, "the last page has no partner");
+  assert.equal(r.read, true);
+  const back = [];
+  for (let i = 0; i < 4; i++) { r = turnIn(r, -1, layout); back.push(r.page); }
+  assert.deepEqual(back, [4, 3, 1, 0]);
+  assert.equal(R.turnTo(loaded(12, 7), -1, layout), null, "before the first page is the chapter before");
+  assert.equal(R.spreadAt(loaded(12, 7), 1, { dual: true, sizes: {} }), 2, "a page not loaded yet pairs");
+  assert.deepEqual([turnIn(loaded(12, 7), 1).page, turnIn(turnIn(loaded(12, 7), 1), 1).page], [1, 2], "no layout: one page at a time");
+});
+
+test("the spread that ends on the last page reads the chapter", () => {
+  let r = loaded(12, 5);
+  const layout = { dual: true, split: false, sizes: sized(r, []) };
+  r = turnIn(turnIn(r, 1, layout), 1, layout);
+  assert.deepEqual([r.page, r.read], [3, true], "3 and 4 show: 4 is the last");
+  assert.deepEqual(R.savePayload(r).variables.patch, { lastPageRead: 3, isRead: true });
+  const reopened = loaded(12, 5, { lastPageRead: 3 });
+  assert.equal(reopened.read, false, "opened on the spread before the last page");
+  const past = R.reduce(reopened, { type: "turn", delta: 1, layout, always: true });
+  assert.deepEqual([past.transition && past.transition.dir, past.read], ["next", true], "reading on past it marks the chapter read");
+  assert.equal(R.savePayload(past).variables.patch.isRead, true);
+});
+
+test("a wide page splits in two halves outside spreads, turned half by half", () => {
+  let r = loaded(12, 4, { lastPageRead: 1 });
+  const layout = { dual: false, split: true, sizes: sized(r, [2]) };
+  const seen = [];
+  for (let i = 0; i < 3; i++) { r = turnIn(r, 1, layout); seen.push([r.page, r.half]); }
+  assert.deepEqual(seen, [[2, 0], [2, 1], [3, 0]]);
+  const back = [];
+  for (let i = 0; i < 3; i++) { r = turnIn(r, -1, layout); back.push([r.page, r.half]); }
+  assert.deepEqual(back, [[2, 1], [2, 0], [1, 1]], "back onto a split page shows its second half first");
+  assert.equal(R.splits(Object.assign({}, r, { page: 2 }), Object.assign({}, layout, { dual: true })), false, "a spread shows a wide page whole");
+  assert.equal(R.splits(Object.assign({}, r, { page: 2 }), Object.assign({}, layout, { split: false })), false);
+});
+
+test("a spread sits in the middle, the first page on the right in right to left", () => {
+  const view = { width: 1600, height: 1000 };
+  const at = (mode) => Object.assign(loaded(12, 7, {}, mode), { page: 1 });
+  const rtl = at("paged-rtl");
+  const layout = { dual: true, split: false, sizes: sized(rtl, []) };
+  const s = R.spread(rtl, layout, "screen", view, 1);
+  const w = 800 * (1000 / 1200);
+  assert.deepEqual(s.items.map((i) => [i.page, i.x, i.width, i.height]), [[1, 800, w, 1000], [2, 800 - w, w, 1000]]);
+  assert.deepEqual([s.width, s.height, s.pagesWidth], [1600, 1000, 2 * w]);
+  const ltr = R.spread(at("paged-ltr"), layout, "screen", view, 1);
+  assert.deepEqual(ltr.items.map((i) => [i.page, i.x]), [[1, 800 - w], [2, 800]]);
+  assert.equal(R.spread(rtl, layout, "screen", view, 2).width, 4 * w, "a zoomed spread runs past the view");
+});
+
+test("a split page shows the half read first: the left in left to right, the right in right to left", () => {
+  const view = { width: 1600, height: 1000 };
+  const at = (mode, half) => Object.assign(loaded(12, 4, {}, mode), { page: 2, half });
+  const layout = (r) => ({ dual: false, split: true, sizes: sized(r, [2]) });
+  const half = (mode, h) => { const r = at(mode, h); return R.spread(r, layout(r), "screen", view, 1).items[0]; };
+  const w = 800 * (1000 / 1200);
+  assert.deepEqual([half("paged-ltr", 0).imageX, half("paged-ltr", 0).width, half("paged-ltr", 0).imageWidth], [0, w, 2 * w]);
+  assert.equal(half("paged-ltr", 1).imageX, -w);
+  assert.equal(half("paged-rtl", 0).imageX, -w);
+  assert.equal(half("paged-rtl", 1).imageX, 0);
+});

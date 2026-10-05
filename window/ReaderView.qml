@@ -57,6 +57,28 @@ Rectangle {
   // The paged zoom on top of the page fit (Reader.ZOOMS). It holds across
   // pages and chapters, and starts at 1 as the reader opens.
   property real zoom: 1
+  // Each page's image size by URL, once its slot decodes it: what spreads
+  // and split pages need to know (Reader.spreadAt).
+  property var pageSizes: ({})
+  // Spreads and split pages, as the turn and the pager take them.
+  readonly property var layout: ({ dual: open && Reader.dual(reader.mode, values.dualPageView, { width: width, height: height }), split: values.dualPageSplit === true, sizes: pageSizes })
+  // What the pager shows: Reader.spread(), null in the strip or while the
+  // pages load.
+  readonly property var shown: open && reader.state === "ok" && !inStrip ? Reader.spread(reader, layout, pageFit, { width: width, height: height }, zoom) : null
+  // A new page or half, its size known, a fit, a window size or spreads
+  // turning on start the page over at its start; a zoom keeps the spot
+  // (zoomTo).
+  readonly property string placeKey: shown ? [reader.index, reader.page, reader.half, reader.pages[reader.page] in pageSizes, pageFit, width, height, layout.dual].join() : ""
+  onPlaceKeyChanged: if (shown) Qt.callLater(pager.place)
+
+  function sized(url, w, h) {
+    var s = pageSizes[url]
+    if (!url || w <= 0 || h <= 0 || (s && Math.abs(s.width - w) < 2 && Math.abs(s.height - h) < 2)) return
+    var next = {}
+    for (var k in pageSizes) next[k] = pageSizes[k]
+    next[url] = { width: w, height: h }
+    pageSizes = next
+  }
   readonly property var problem: reader ? Model.problem(reader, configPath) : null
 
   // The chapter the reader showed last, when it closed.
@@ -102,6 +124,7 @@ Rectangle {
     source = { chapters: chapters, prefs: defaults }
     zoom = 1
     reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito)
+    pageSizes = {}
     loadPages()
     var seq = ++startSeq
     send(Prefs.loadPayload(table, manga.id), function(reply) {
@@ -273,12 +296,11 @@ Rectangle {
     if (z === zoom) return
     panAnimation.stop()
     scrollAnimation.stop()
-    var p = pager.page
-    var before = p ? { width: p.width, height: p.height } : null
+    var before = shown
     zoom = z
     if (!before) return
-    pager.contentX = Reader.within(Reader.zoomedAt(pager.contentX, pager.width, before.width, p.width), 0, pager.contentWidth, pager.width)
-    pager.contentY = Reader.within(Reader.zoomedAt(pager.contentY, pager.height, before.height, p.height), 0, pager.contentHeight, pager.height)
+    pager.contentX = Reader.within(Reader.zoomedAt(pager.contentX, pager.width, before.pagesWidth, shown.pagesWidth), 0, pager.contentWidth, pager.width)
+    pager.contentY = Reader.within(Reader.zoomedAt(pager.contentY, pager.height, before.pagesHeight, shown.pagesHeight), 0, pager.contentHeight, pager.height)
   }
 
   function openEdit() {
@@ -385,7 +407,7 @@ Rectangle {
     if (!act) return
     if ("scroll" in act) scroll(act.scroll)
     else if ("pan" in act) scroll(act.pan, true)
-    else go({ type: "turn", delta: act.turn, chapter: act.chapter === true, always: values.alwaysShowChapterTransition, offline: offline })
+    else go({ type: "turn", delta: act.turn, chapter: act.chapter === true, always: values.alwaysShowChapterTransition, offline: offline, layout: layout })
   }
 
   function tap(x, y) {
@@ -422,11 +444,10 @@ Rectangle {
   // starts from (Mihon's automatic zoom start).
   Flickable {
     id: pager
-    property Item page: null
     anchors.fill: parent
     visible: view.open && !view.inStrip
-    contentWidth: page ? Math.max(width, page.width) : width
-    contentHeight: page ? Math.max(height, page.height) : height
+    contentWidth: view.shown ? view.shown.width : width
+    contentHeight: view.shown ? view.shown.height : height
     boundsBehavior: Flickable.StopAtBounds
     clip: true
 
@@ -437,39 +458,43 @@ Rectangle {
 
     // Each slot keeps its page while that page stays within the two before
     // and three after the one shown, so a live Image holds it decoded and a
-    // turn shows it at once.
+    // turn shows it at once. A slot shows its page where view.shown puts
+    // it, and clips it: a split page is one half of its image.
     Repeater {
       model: Reader.SLOTS
 
-      ServerImage {
+      Item {
         id: slot
         required property int index
-        readonly property var held: view.reader && view.reader.state === "ok" && !view.inStrip ? Reader.slots(view.reader)[index] : null
-        readonly property bool current: held !== null && held.page === view.reader.page
-        readonly property var size: Reader.fit(view.pageFit, { width: implicitWidth, height: implicitHeight }, { width: pager.width, height: pager.height }, view.zoom)
-        // The page loading, a fit or a window size starts the page over at
-        // its start; a zoom keeps the spot (zoomTo).
-        readonly property string placing: [implicitHeight > 0, view.pageFit, pager.width, pager.height].join()
-        x: Math.max(0, (pager.width - width) / 2)
-        y: Math.max(0, (pager.height - height) / 2)
+        readonly property var held: view.shown ? Reader.slots(view.reader)[index] : null
+        readonly property var item: held && view.shown ? view.shown.items.filter(function(it) { return it.page === slot.held.page })[0] || null : null
+        // A page out of view decodes at the size it would show alone.
+        readonly property var size: item || Reader.fit(view.pageFit, { width: image.implicitWidth, height: image.implicitHeight }, { width: pager.width, height: pager.height }, view.zoom)
+        x: item ? item.x : 0
+        y: item ? item.y : 0
         width: size.width
         height: size.height
-        visible: current
-        onCurrentChanged: if (current) {
-          pager.page = slot
-          Qt.callLater(pager.place)
+        visible: item !== null
+        clip: true
+
+        ServerImage {
+          id: image
+          x: slot.item ? slot.item.imageX : 0
+          width: slot.item ? slot.item.imageWidth : slot.size.width
+          height: slot.size.height
+          onImplicitWidthChanged: view.sized(url, implicitWidth, implicitHeight)
+          onImplicitHeightChanged: view.sized(url, implicitWidth, implicitHeight)
+          config: view.config
+          url: slot.held ? slot.held.url : ""
+          // Decoded at the size shown, not the scan's: six full-size scans
+          // would hold hundreds of megabytes. Stretch, as the size already
+          // keeps the aspect.
+          sourceSize: Qt.size(slot.size.sourceWidth, slot.size.sourceHeight)
+          asynchronous: true
+          cache: true
+          smooth: true
+          mipmap: true
         }
-        onPlacingChanged: if (current) Qt.callLater(pager.place)
-        config: view.config
-        url: held ? held.url : ""
-        // Decoded at the size shown, not the scan's: six full-size scans
-        // would hold hundreds of megabytes. Stretch, as the size already
-        // keeps the aspect.
-        sourceSize: Qt.size(size.sourceWidth, size.sourceHeight)
-        asynchronous: true
-        cache: true
-        smooth: true
-        mipmap: true
       }
     }
   }
