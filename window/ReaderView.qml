@@ -146,7 +146,7 @@ Rectangle {
     var payload = Reader.savePayload(reader)
     if (!payload) return
     var id = Reader.chapterId(reader)
-    var push = Reader.trackPayload(reader)
+    var push = values.trackAfterReading ? Reader.trackPayload(reader) : null
     reader = Reader.reduce(reader, { type: "saving" })
     exitStep("write")
     send(payload, function(reply) {

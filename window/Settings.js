@@ -122,6 +122,18 @@ var ROWS = [
     ]
   },
   { key: "deleteBookmarked", label: "Delete bookmarked chapters", type: "bool", default: false, store: "meta" },
+  // Mihon's tracking group. The reader pushes after the save that first
+  // marks a chapter read; a mark read from a list (R, P, Updates, Library)
+  // pushes, asks first (only when a logged-in tracker is behind) or not.
+  { key: "trackAfterReading", label: "Update trackers after reading", type: "bool", default: true, store: "meta" },
+  {
+    key: "trackOnMarkRead", label: "Update trackers when marking chapters read", type: "choice", default: "always", store: "meta",
+    options: [
+      { value: "always", label: "Always" },
+      { value: "ask", label: "Ask" },
+      { value: "never", label: "Never" }
+    ]
+  },
   // Setup sets it too; the sync helper reads it from the server.
   { key: "syncFolder", label: "Sync folder", type: "folder", default: "", store: "meta", blank: "not set" }
 ]

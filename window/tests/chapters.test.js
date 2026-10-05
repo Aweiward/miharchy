@@ -37,6 +37,37 @@ test("the tracker push asks for each manga's progress once", () => {
   assert.equal(Ch.trackPayload([]), null, "no manga, no empty mutation");
 });
 
+test("a manual mark read pushes, asks or leaves the trackers, by the setting", () => {
+  assert.equal(Ch.afterMarkRead("always"), "push");
+  assert.equal(Ch.afterMarkRead("ask"), "check");
+  assert.equal(Ch.afterMarkRead("never"), null);
+});
+
+test("ask only when a logged-in tracker is behind the highest read chapter", () => {
+  const p = Ch.trackCheckPayload([5, 9, 5]);
+  assert.equal(p.query.match(/manga\(id: /g).length, 2, "each manga once");
+  assert.match(p.query, /r9: chapters\(condition: \{ mangaId: 9, isRead: true \}, order: \[\{ by: CHAPTER_NUMBER, byType: DESC \}\], first: 1\)/);
+  assert.equal(Ch.trackCheckPayload([]), null);
+
+  const track = (read, on) => ({ lastChapterRead: read, tracker: { isLoggedIn: on } });
+  const manga = (id, tracks) => ({ id, trackRecords: { nodes: tracks } });
+  const top = (n) => ({ nodes: n === null ? [] : [{ chapterNumber: n }] });
+  const data = {
+    m5: manga(5, [track(12, true), track(3, false)]), r5: top(14),
+    m9: manga(9, [track(20, true)]), r9: top(14)
+  };
+  const ask = Ch.trackAsk(data);
+  assert.deepEqual(ask, { mangaIds: [5], chapter: 14 });
+  assert.equal(Ch.trackAskText(ask), "Update trackers to chapter 14?");
+  assert.equal(Ch.trackAsk({ m9: data.m9, r9: data.r9 }), null, "the tracker is already there");
+  assert.equal(Ch.trackAsk({ m5: manga(5, [track(1, false)]), r5: top(14) }), null, "a logged-out tracker is never asked about");
+  assert.equal(Ch.trackAsk({ m5: manga(5, []), r5: top(14) }), null, "no tracks");
+  assert.equal(Ch.trackAsk({ m5: manga(5, [track(0, true)]), r5: top(null) }), null, "nothing read");
+  const many = Ch.trackAsk({ m5: data.m5, r5: data.r5, m7: manga(7, [track(0, true)]), r7: top(2.5) });
+  assert.deepEqual(many, { mangaIds: [5, 7], chapter: null });
+  assert.equal(Ch.trackAskText(many), "Update trackers for 2 manga?");
+});
+
 const P = require("./load")("Prefs.js");
 
 // Newest first by source order; numbers and dates out of step with it, as
