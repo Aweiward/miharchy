@@ -194,6 +194,8 @@ var commands = [
   { id: "library.search", title: "Search the library", keys: ["/"], view: "library", hidden: true },
   // F, not f: f is fullscreen everywhere.
   { id: "library.options", title: "Sort and filter", keys: ["F"], view: "library", hidden: true },
+  // Space, as a manga's Read the next unread chapter.
+  { id: "library.continue", title: "Read the next unread chapter", keys: ["Space"], view: "library", hidden: true },
   { id: "library.display", title: "Switch between the cover grid and the list", keys: ["L"], view: "library", hidden: true },
   { id: "library.optionsUp", title: "Previous row", keys: ["k", "Up"], view: "library-options", hidden: true },
   { id: "library.optionsDown", title: "Next row", keys: ["j", "Down"], view: "library-options", hidden: true },

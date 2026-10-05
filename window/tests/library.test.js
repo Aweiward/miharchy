@@ -2,6 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const L = require("./load")("Library.js");
 const P = require("./load")("Prefs.js");
+const C = require("./load")("Chapters.js");
 
 const manga = (id, title, extra) => ({
   id, title, author: "", artist: "", genre: [], unread: 0, read: 0, total: 0, downloads: 0, bookmarks: 0,
@@ -137,6 +138,17 @@ test("a tab shows its manga count when the count is on or a search runs, as Miho
   assert.equal(L.tabLabel(entry, prefs(), ""), "Action");
   assert.equal(L.tabLabel(entry, prefs({ libraryTabCounts: "on" }), ""), "Action (2)");
   assert.equal(L.tabLabel(entry, prefs(), " ber "), "Action (2)");
+});
+
+test("continue reading takes the next unread chapter by the manga's own chapter filters and sort", () => {
+  const ch = (id, number, read, extra) => ({ id, number, sourceOrder: number, read, downloaded: false, bookmarked: false, uploadDate: 0, ...extra });
+  // Newest first, as Browse.toChapters() holds them.
+  const chapters = [ch(4, 4, false), ch(3, 3, false, { downloaded: true }), ch(2, 2, false), ch(1, 1, true)];
+  const cp = (extra) => ({ ...P.defaults(C.PREFS), ...extra });
+  assert.equal(L.continueChapter(chapters, cp()).id, 2, "the oldest unread in source order");
+  assert.equal(L.continueChapter(chapters, cp({ chapterSortDirection: "asc" })).id, 2, "the direction does not change which is next");
+  assert.equal(L.continueChapter(chapters, cp({ chapterFilterDownloaded: "include" })).id, 3, "a filter skips the chapters it hides");
+  assert.equal(L.continueChapter(chapters.map((c) => ({ ...c, read: true })), cp()), null);
 });
 
 test("the header names the search, the active filters and a sort other than the default", () => {

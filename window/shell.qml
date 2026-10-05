@@ -9,6 +9,8 @@ import "Settings.js" as Settings
 import "Setup.js" as Setup
 import "Chapters.js" as Chapters
 import "Library.js" as Library
+import "Browse.js" as Browse
+import "Prefs.js" as Prefs
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -210,6 +212,30 @@ ShellRoot {
       if (mangaDetail.open && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
       updatesView.load()
       root.fetchLibrary()
+    })
+  }
+
+  // Mihon's continue reading: the reader opens on the manga's next unread
+  // chapter, by its own chapter filters and sort, without the manga detail.
+  function continueReading(m) {
+    if (!m.unread) {
+      libraryNote = "Every chapter of " + m.title + " is read."
+      return
+    }
+    var cfg = config
+    var d = Browse.detail(m.id, false)
+    send(Browse.detailPayload(d), function(reply) {
+      d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
+      if (!d.manga) {
+        root.libraryError = Browse.notice(d, root.configPath).title
+        return
+      }
+      root.send(Prefs.loadPayload(Chapters.PREFS, m.id), function(saved) {
+        var prefs = Prefs.read(Chapters.PREFS, saved.state === "ok" ? saved.data : {}, Prefs.defaults(Chapters.PREFS))
+        var next = Library.continueChapter(d.chapters, prefs)
+        if (next) reader.start(d.manga, d.chapters, next.id, root.settingsState.values.defaultReadingMode)
+        else root.libraryNote = "No next chapter of " + m.title + " passes its chapter filters."
+      })
     })
   }
 
@@ -452,6 +478,9 @@ ShellRoot {
       case "library.optionsUp":
       case "library.optionsDown":
         libraryOptionsCursor = Commands.moveCursor(libraryOptionsCursor, id === "library.optionsUp" ? -1 : 1, Library.rows(libraryPrefs).length)
+        break
+      case "library.continue":
+        if (shown.manga[libraryCursor] && config) continueReading(shown.manga[libraryCursor])
         break
       case "library.display":
         libraryStore.set([Library.toggleDisplay(libraryPrefs)])
@@ -771,7 +800,7 @@ ShellRoot {
         HintBar {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "hjkl move   enter open   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.libraryPrefs.libraryDisplay === "list" ? "L grid   " : "L list   ") + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryScreen === "categories" ? categoriesView.hint : root.libraryOptions ? "j k move   enter change   esc close   " : root.libraryNote ? root.libraryNote + "   " : root.libraryArmed !== -1 ? "x again to remove from library, any other key keeps it   " : (root.libraryError ? root.libraryError + "   " : "") + "enter open   space read   x remove   " + (root.libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (root.libraryPrefs.libraryDisplay === "list" ? "L grid   " : "L list   ") + (root.switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D downloads   s sync   ", updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           theme: theme
           onKey: function(event) { root.handleKey(event) }
         }

@@ -14,6 +14,7 @@ The Library view (key `1`): a cover grid of the server's library manga with unre
 - `u` checks the shown category for new chapters (`updateLibrary(categories: [id])`, Default is 0; All sends none and skips excluded categories). The footer says so until the next key; the Updates view shows the run.
 - `c` opens Categories: `u` there cycles a category's `includeInUpdate` UNSET, INCLUDE ("in updates"), EXCLUDE ("excluded from updates").
 - `Enter` opens the manga detail (cache only).
+- `Space` reads the next unread chapter of the manga under the cursor without the detail, as Mihon's continue reading button: the first unread by the manga's own chapter filters and sort (`Library.continueChapter`, the detail's `Space`). A fully read manga says so in the footer; so does one whose filters hide every unread chapter. Read back: the chapter's `lastReadAt` is set.
 
 ## How to get to it (user POV)
 Open the window; it starts on Library. Or press `1`.
