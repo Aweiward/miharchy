@@ -42,10 +42,17 @@ test("a move goes one place up or down, as a 1-based position after Default; non
 test("rows count the library manga in each category", () => {
   const manga = [{ id: 1, categories: [4, 2] }, { id: 3, categories: [4] }, { id: 5, categories: [] }];
   assert.deepEqual(K.rows(cats, manga), [
-    { id: 4, name: "Action", download: false, update: "UNSET", count: 2 },
-    { id: 2, name: "Romance", download: false, update: "UNSET", count: 1 },
-    { id: 7, name: "Later", download: false, update: "UNSET", count: 0 }
+    { id: 4, name: "Action", download: false, update: "UNSET", keep: false, count: 2 },
+    { id: 2, name: "Romance", download: false, update: "UNSET", keep: false, count: 1 },
+    { id: 7, name: "Later", download: false, update: "UNSET", keep: false, count: 0 }
   ]);
+});
+
+test("p flags a category to keep its read downloads in its meta, and again lets them go", () => {
+  const p = K.keepPayload([{ id: 4, keep: false }], 4);
+  assert.match(p.query, /setCategoryMeta/);
+  assert.deepEqual(p.variables, { meta: { categoryId: 4, key: "miharchy.keepDownloads", value: "true" } });
+  assert.equal(K.keepPayload([{ id: 4, keep: true }], 4).variables.meta.value, "false");
 });
 
 const flagged = [{ id: 4, name: "Action", download: true }, { id: 2, name: "Romance", download: false }];

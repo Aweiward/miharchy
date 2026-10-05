@@ -1,4 +1,5 @@
 .pragma library
+.import "Downloads.js" as Downloads
 
 // The window's state model: which view shows, and where the server
 // connection stands. Pure, so tests/model.test.js pins it; shell.qml owns
@@ -15,7 +16,7 @@ var VIEWS = [
 // The sync helper stores source names from phone backups here, id -> name.
 var SOURCE_NAMES_META = "miharchy.sourceNames"
 
-var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDownload includeInUpdate } }"
+var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDownload includeInUpdate meta { key value } } }"
   + " metas(condition: { key: \"" + SOURCE_NAMES_META + "\" }) { nodes { value } }"
   + " mangas(condition: {inLibrary: true}) { nodes { id title author artist genre status thumbnailUrl sourceId source { id displayName lang } unreadCount downloadCount bookmarkCount inLibraryAt"
   + " chapters { totalCount } lastReadChapter { lastReadAt } latestUploadedChapter { uploadDate } latestFetchedChapter { fetchedAt }"
@@ -234,7 +235,7 @@ function fromResponse(status, body, config) {
     }),
     categories: ((r.data.categories && r.data.categories.nodes) || [])
       .filter(function(c) { return c.id !== DEFAULT_CATEGORY })
-      .map(function(c) { return { id: c.id, name: String(c.name), download: c.includeInDownload === "INCLUDE", update: c.includeInUpdate || "UNSET" } })
+      .map(function(c) { return { id: c.id, name: String(c.name), download: c.includeInDownload === "INCLUDE", update: c.includeInUpdate || "UNSET", keep: Downloads.keepsDownloads(c.meta || []) } })
   })
 }
 

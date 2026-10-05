@@ -278,6 +278,7 @@ var commands = [
   { id: "updates.deleteDownload", title: "Delete downloads", keys: ["x"], view: "updates", hidden: true },
   { id: "categories.autoDownload", title: "Auto-download new chapters", keys: ["d"], view: "categories", hidden: true },
   { id: "categories.update", title: "Include in or exclude from updates", keys: ["u"], view: "categories", hidden: true },
+  { id: "categories.keepDownloads", title: "Keep or delete read downloads", keys: ["p"], view: "categories", hidden: true },
   { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
   { id: "setup.down", title: "Next step", keys: ["j", "Down"], view: "setup", hidden: true },
   // M, not m: m is the reader's reading mode, and a migration is a big step.

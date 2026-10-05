@@ -129,6 +129,40 @@ test("an item's line shows its manga, chapter and state", () => {
   assert.equal(D.progressText(queue[1]), "queued");
 });
 
+test("the delete after reading setting is how many read chapters back the delete goes, -1 for off", () => {
+  assert.deepEqual(["false", "true", "1", "2", "3", "4", "", undefined].map(D.deleteSlots), [-1, 0, 1, 2, 3, 4, -1, -1]);
+});
+
+const node = (id, o) => Object.assign({ id, isRead: true, isBookmarked: false, isDownloaded: true, manga: { categories: { nodes: [] } } }, o);
+const keepCategory = (value) => ({ categories: { nodes: [{ meta: [{ key: "miharchy.other", value: "true" }] }, { meta: [{ key: D.KEEP_KEY, value }] }] } });
+const autoDeleted = (nodes, bookmarked, readIds) => {
+  const p = D.autoDeletePayload({ chapters: { nodes } }, bookmarked, readIds || []);
+  return p ? p.variables.ids : [];
+};
+
+test("an automatic delete takes read chapters on disk only, as Mihon's getChaptersToDelete", () => {
+  assert.deepEqual(autoDeleted([node(1), node(2, { isRead: false }), node(3, { isDownloaded: false })], false), [1]);
+  assert.deepEqual(autoDeleted([node(2, { isRead: false })], false, [2]), [2], "a chapter just read, its save still on the way");
+  assert.equal(D.autoDeletePayload({ chapters: { nodes: [node(3, { isDownloaded: false })] } }, false, []), null);
+  assert.match(D.autoDeletePayload({ chapters: { nodes: [node(1)] } }, false, []).query, /deleteDownloadedChapters/);
+});
+
+test("bookmarked chapters stay unless deleting them is allowed", () => {
+  assert.deepEqual(autoDeleted([node(1, { isBookmarked: true }), node(2)], false), [2]);
+  assert.deepEqual(autoDeleted([node(1, { isBookmarked: true }), node(2)], true), [1, 2]);
+});
+
+test("a manga in a category that keeps downloads keeps them", () => {
+  assert.deepEqual(autoDeleted([node(1, { manga: keepCategory("true") }), node(2)], true), [2]);
+  assert.deepEqual(autoDeleted([node(1, { manga: keepCategory("false") })], true), [1]);
+});
+
+test("the automatic delete query asks for what the rules read", () => {
+  const q = D.autoDeleteQuery([4, 5]);
+  assert.deepEqual(q.variables, { ids: [4, 5] });
+  for (const field of ["isRead", "isBookmarked", "isDownloaded", "meta { key value }"]) assert.ok(q.query.includes(field), field);
+});
+
 const queued = (running, list) => polled(D.initial(), { downloadStatus: status(running ? "STARTED" : "STOPPED", list.map(([id, number, date]) => {
   const i = item(id, "QUEUED", 0);
   i.chapter.chapterNumber = number;

@@ -268,16 +268,17 @@ test("keys: paged turns by page, webtoon scrolls by part of the view", () => {
   assert.equal(R.action(web, "reader.left"), null, "a strip has no sides");
 });
 
-test("with delete after read on, leaving a chapter this reading finished deletes its download", () => {
-  const done = turn(turn(loaded(12, 3), 1), 1);
+test("leaving a chapter this reading finished lets the chapter that many slots back in reading order go", () => {
+  const done = turn(turn(loaded(13, 3), 1), 1);
   assert.equal(done.read, true);
-  const p = R.deletePayload(done, true);
-  assert.match(p.query, /deleteDownloadedChapters/);
-  assert.deepEqual(p.variables, { ids: [12] });
-  assert.equal(R.deletePayload(done, false), null, "off by default");
-  assert.equal(R.deletePayload(turn(loaded(12, 3), 1), true), null, "an unfinished chapter stays");
-  assert.equal(R.deletePayload(loaded(12, 3, { isRead: true }), true), null, "a chapter read before stays when read again");
-  assert.equal(R.deletePayload(R.open(5, chapters, 12, "paged-rtl"), true), null, "nothing before the pages load");
+  assert.equal(R.deleteTarget(done, 0), 13, "the last read chapter: this one");
+  assert.equal(R.deleteTarget(done, 1), 12, "second to last");
+  assert.equal(R.deleteTarget(done, 2), 11);
+  assert.equal(R.deleteTarget(done, 3), null, "no chapter that far back");
+  assert.equal(R.deleteTarget(done, -1), null, "off");
+  assert.equal(R.deleteTarget(turn(loaded(13, 3), 1), 0), null, "an unfinished chapter lets none go");
+  assert.equal(R.deleteTarget(loaded(13, 3, { isRead: true }), 0), null, "a chapter read before lets none go when read again");
+  assert.equal(R.deleteTarget(R.open(5, chapters, 13, "paged-rtl"), 0), null, "nothing before the pages load");
 });
 
 test("quitting waits for the reader's saves and deletes in flight, then quits once", () => {

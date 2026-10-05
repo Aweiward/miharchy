@@ -9,6 +9,7 @@ import "Commands.js" as Commands
 import "Settings.js" as Settings
 import "Setup.js" as Setup
 import "Chapters.js" as Chapters
+import "Downloads.js" as Downloads
 import "Library.js" as Library
 import "Browse.js" as Browse
 import "Prefs.js" as Prefs
@@ -213,14 +214,31 @@ ShellRoot {
   function markChapters(chapters, action, mangaIds) {
     var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters) : Chapters.markPayload(chapters, action === "read")
     if (!payload || !config) return
+    // Mihon's delete after marked read takes the chapters this mark reads.
+    var marked = chapters.filter(function(c) { return !c.read }).map(function(c) { return c.id })
     send(payload, function(reply) {
       // The push waits for the mark: the server reads the chapters it marked.
-      var track = reply.state === "ok" && action === "read" ? Chapters.trackPayload(mangaIds) : null
+      var read = reply.state === "ok" && action === "read"
+      var track = read ? Chapters.trackPayload(mangaIds) : null
       if (track) root.send(track, function() {})
-      // Updates marks chapters of many manga; the detail hears only of its own.
-      if (mangaDetail.open && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
-      updatesView.load()
-      root.fetchLibrary()
+      if (read && root.settingsState.values.deleteAfterMarkRead) root.deleteRead(marked, refresh)
+      else refresh()
+      function refresh() {
+        // Updates marks chapters of many manga; the detail hears only of its own.
+        if (mangaDetail.open && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
+        updatesView.load()
+        root.fetchLibrary()
+      }
+    })
+  }
+
+  // Deletes the downloads of the read chapters that Downloads.autoDeletePayload
+  // lets go, then calls done, whatever happened.
+  function deleteRead(chapterIds, done) {
+    send(Downloads.autoDeleteQuery(chapterIds), function(reply) {
+      var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, root.settingsState.values.deleteBookmarked, []) : null
+      if (payload) root.send(payload, done)
+      else done()
     })
   }
 

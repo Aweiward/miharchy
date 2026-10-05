@@ -189,9 +189,9 @@ const library = (categories, manga) => M.reduce(M.initial(), respond(200, { data
 const ids = (shown) => shown.manga.map((m) => m.id);
 
 test("the library answer carries user categories, without Suwayomi's Default", () => {
-  const c = library([{ id: 4, name: "Action", order: 1, includeInDownload: "INCLUDE", includeInUpdate: "EXCLUDE" }, { id: 2, name: "Romance", order: 2, includeInDownload: "UNSET", includeInUpdate: "UNSET" }], [[7, [4, 2]]]);
-  assert.match(M.LIBRARY_QUERY, /categories\(orderBy: ORDER\) \{ nodes \{ id name includeInDownload includeInUpdate \} \}/);
-  assert.deepEqual(c.categories, [{ id: 4, name: "Action", download: true, update: "EXCLUDE" }, { id: 2, name: "Romance", download: false, update: "UNSET" }]);
+  const c = library([{ id: 4, name: "Action", order: 1, includeInDownload: "INCLUDE", includeInUpdate: "EXCLUDE", meta: [{ key: "miharchy.keepDownloads", value: "true" }] }, { id: 2, name: "Romance", order: 2, includeInDownload: "UNSET", includeInUpdate: "UNSET", meta: [] }], [[7, [4, 2]]]);
+  assert.match(M.LIBRARY_QUERY, /categories\(orderBy: ORDER\) \{ nodes \{ id name includeInDownload includeInUpdate meta \{ key value \} \} \}/);
+  assert.deepEqual(c.categories, [{ id: 4, name: "Action", download: true, update: "EXCLUDE", keep: true }, { id: 2, name: "Romance", download: false, update: "UNSET", keep: false }]);
   assert.deepEqual(c.manga[0].categories, [4, 2]);
 });
 

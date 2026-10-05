@@ -1,4 +1,5 @@
 .pragma library
+.import "Downloads.js" as Downloads
 
 // Managing categories: the names the window accepts and the mutations it
 // sends. Pure, so tests/categories.test.js pins it; CategoriesView.qml
@@ -20,6 +21,9 @@ var UPDATE_MUTATION = "mutation($id: Int!, $include: IncludeOrExclude!) { update
 // a manga that is also in an included one. Suwayomi's updateLibrary
 // applies the same rule.
 var UPDATE_STATES = ["UNSET", "INCLUDE", "EXCLUDE"]
+// Mihon's excluded categories for deleting chapters: a manga in one keeps
+// its read downloads (Downloads.autoDeletePayload).
+var KEEP_MUTATION = "mutation($meta: CategoryMetaTypeInput!) { setCategoryMeta(input: { meta: $meta }) { meta { key value } } }"
 var MOVE_MUTATION = "mutation($id: Int!, $position: Int!) { updateCategoryOrder(input: { id: $id, position: $position }) { categories { id } } }"
 
 // -> { name } or { error }. The sync helper matches categories by name, and
@@ -62,6 +66,11 @@ function updatePayload(categories, id) {
   return { query: UPDATE_MUTATION, variables: { id: id, include: UPDATE_STATES[(UPDATE_STATES.indexOf(state) + 1) % UPDATE_STATES.length] } }
 }
 
+function keepPayload(categories, id) {
+  var keep = !categories.filter(function(c) { return c.id === id })[0].keep
+  return { query: KEEP_MUTATION, variables: { meta: { categoryId: id, key: Downloads.KEEP_KEY, value: String(keep) } } }
+}
+
 // Moves categories[index] by delta (-1 or 1), or null past either end.
 // Positions count from 1, after Default at 0.
 function movePayload(categories, index, delta) {
@@ -70,11 +79,11 @@ function movePayload(categories, index, delta) {
   return { query: MOVE_MUTATION, variables: { id: categories[index].id, position: to + 1 } }
 }
 
-// Each category as { id, name, download, update, count } with its number of
-// library manga.
+// Each category as { id, name, download, update, keep, count } with its
+// number of library manga.
 function rows(categories, manga) {
   return categories.map(function(c) {
-    return { id: c.id, name: c.name, download: c.download === true, update: c.update || "UNSET", count: manga.filter(function(m) { return m.categories.indexOf(c.id) !== -1 }).length }
+    return { id: c.id, name: c.name, download: c.download === true, update: c.update || "UNSET", keep: c.keep === true, count: manga.filter(function(m) { return m.categories.indexOf(c.id) !== -1 }).length }
   })
 }
 
@@ -86,6 +95,7 @@ if (typeof module !== "undefined") {
     deletePayload: deletePayload,
     autoDownloadPayload: autoDownloadPayload,
     updatePayload: updatePayload,
+    keepPayload: keepPayload,
     movePayload: movePayload,
     rows: rows
   }

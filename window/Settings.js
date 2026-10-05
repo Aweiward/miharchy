@@ -97,9 +97,23 @@ var ROWS = [
   { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
   // New downloads only; the server reads chapters on disk in either form.
   { key: "downloadAsCbz", label: "Save downloads as CBZ", type: "bool", default: false, store: "server" },
-  // Suwayomi has no such setting, so the reader deletes a chapter it
-  // finished as it leaves it.
-  { key: "deleteAfterRead", label: "Delete after read", type: "bool", default: false, store: "meta" },
+  // Mihon's delete group. Suwayomi has none, so the window deletes:
+  // Downloads.autoDeletePayload holds the rules, and a category keeps its
+  // downloads with p in Categories (Mihon's excluded categories).
+  { key: "deleteAfterMarkRead", label: "Delete downloads marked read", type: "bool", default: false, store: "meta" },
+  // The values "false" and "true" are those of the on/off row this was.
+  {
+    key: "deleteAfterRead", label: "Delete after reading", type: "choice", default: "false", store: "meta",
+    options: [
+      { value: "false", label: "Off" },
+      { value: "true", label: "Last read chapter" },
+      { value: "1", label: "Second to last read chapter" },
+      { value: "2", label: "Third to last read chapter" },
+      { value: "3", label: "Fourth to last read chapter" },
+      { value: "4", label: "Fifth to last read chapter" }
+    ]
+  },
+  { key: "deleteBookmarked", label: "Delete bookmarked chapters", type: "bool", default: false, store: "meta" },
   // Setup sets it too; the sync helper reads it from the server.
   { key: "syncFolder", label: "Sync folder", type: "folder", default: "", store: "meta", blank: "not set" }
 ]
