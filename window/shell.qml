@@ -928,9 +928,12 @@ ShellRoot {
         anchors.right: parent.right
         anchors.leftMargin: theme.fontSize * 2
         anchors.rightMargin: theme.fontSize * 2
-        height: theme.fontSize * 2.5
+        // A hint wider than the space beside the connection state wraps,
+        // and the bar grows up to hold it.
+        height: Math.max(theme.fontSize * 2.5, hintBar.height + theme.fontSize)
 
         Text {
+          id: connectionText
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
           text: ({ loading: "connecting", ok: "connected", "no-config": "no server config", down: "server down", unauthorized: "unauthorized", error: "server error" })[root.connection.state]
@@ -940,9 +943,11 @@ ShellRoot {
         }
 
         HintBar {
+          id: hintBar
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
           text: syncView.open || restoreView.open ? "" : libraryView.editing ? "enter keep   esc clear" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryHint, updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: (browseView.screen === "extensions" ? extensionsView.hint : "") + browseView.hint, setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          maxWidth: parent.width - connectionText.width - theme.fontSize * 2
           theme: theme
           onKey: function(event) { root.handleKey(event) }
         }
