@@ -158,6 +158,8 @@ var commands = [
   { id: "global.up", title: "Previous source", keys: ["k", "Up"], view: "global", hidden: true },
   { id: "global.down", title: "Next source", keys: ["j", "Down"], view: "global", hidden: true },
   { id: "global.open", title: "Open manga", keys: ["Enter"], view: "global", hidden: true },
+  { id: "global.pinnedOnly", title: "Search pinned sources only, or every source", keys: ["p"], view: "global", hidden: true },
+  { id: "global.onlyResults", title: "Show only sources with results, or every source", keys: ["F"], view: "global", hidden: true },
   { id: "manga.up", title: "Previous chapter", keys: ["k", "Up"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.down", title: "Next chapter", keys: ["j", "Down"], view: ["manga", "manga-select"], hidden: true },
   { id: "manga.library", title: "Add to or remove from library", keys: ["a"], view: "manga", hidden: true },

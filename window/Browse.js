@@ -77,7 +77,8 @@ var PREFS = [
   { key: "pinnedSources", default: "[]" },
   { key: "lastUsedSource", default: "" },
   { key: "enabledLanguages", default: "[\"all\",\"en\"]" },
-  { key: "disabledSources", default: "[]" }
+  { key: "disabledSources", default: "[]" },
+  { key: "globalSearchHasResults", default: "off", options: ["off", "on"] }
 ]
 
 function idList(json) {
