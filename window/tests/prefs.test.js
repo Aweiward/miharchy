@@ -79,3 +79,10 @@ test("a choice without options takes any stored string, and an absent one keeps 
   assert.deepEqual(P.read(free, { manga: { meta: [{ key: "miharchy.excludedScanlators", value: "[\"A\"]" }] } }, P.defaults(free)), { excludedScanlators: "[\"A\"]" });
   assert.deepEqual(P.read(free, metas([]), P.defaults(free)), { excludedScanlators: "[]" });
 });
+
+test("force shows a value while on and leaves the stored choice alone", () => {
+  const stored = { libraryFilterDownloaded: "exclude", librarySort: "title" };
+  assert.deepEqual(P.force(stored, "libraryFilterDownloaded", "include", true), { libraryFilterDownloaded: "include", librarySort: "title" });
+  assert.equal(P.force(stored, "libraryFilterDownloaded", "include", false), stored);
+  assert.equal(stored.libraryFilterDownloaded, "exclude");
+});

@@ -39,6 +39,19 @@ test("updates run newest fetched first, a manga's chapters newest first within o
   assert.deepEqual(u.rows.map((r) => r.id), [2, 6, 5, 1]);
 });
 
+test("downloaded only lists only the downloaded updates, with each day's header on its first shown row", () => {
+  const nodes = [
+    chapter(2, other, at(2026, 10, 4, 14)),
+    chapter(5, manga, at(2026, 10, 4, 11), { isDownloaded: true }),
+    chapter(1, manga, at(2026, 10, 2, 10), { isDownloaded: true })
+  ];
+  const all = U.reduce(U.initial(), { type: "list", reply: list(nodes), config, now });
+  assert.deepEqual(all.rows.map((r) => r.id), [2, 5, 1]);
+  const only = U.reduce(U.initial(), { type: "list", reply: list(nodes), config, now, downloadedOnly: true });
+  assert.deepEqual(only.rows.map((r) => [r.id, r.header]), [[5, "Today"], [1, all.rows[2].header]]);
+  assert.equal(U.count(list(nodes).data, now), 3, "the bar mark still counts every update");
+});
+
 test("rows group by fetch day: Today, Yesterday, then the date", () => {
   const u = loaded([
     chapter(1, manga, at(2026, 10, 4, 14)),

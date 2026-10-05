@@ -86,6 +86,10 @@ _Avoid_: restore, import (these mean one-way overwrite)
 A one-way load of one backup file into the desktop library, as Mihon's restore does. It moves no baseline, so the next sync counts what it changed as desktop changes.
 _Avoid_: import, sync
 
+**Downloaded only**:
+A mode in which the Library, a manga's chapter list, the reader and Updates show only what is on disk, for reading offline.
+_Avoid_: offline mode
+
 **Incognito mode**:
 A mode in which reading leaves no trace: no read state, no history entry, no tracker progress.
 _Avoid_: private mode

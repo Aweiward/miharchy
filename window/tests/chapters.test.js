@@ -265,3 +265,10 @@ test("the typed amount is a whole number above 0, or 0", () => {
   assert.equal(Ch.count(" 12 "), 12);
   for (const t of ["0", "-3", "2.5", "abc", ""]) assert.equal(Ch.count(t), 0, t);
 });
+
+test("downloaded only drops chapters not on disk from the reader, whatever skip filtered says, but keeps the one opened", () => {
+  const only = Object.assign({}, noSkip, { downloaded: true });
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs({}), 4, only)), [4, 3, 2], "4 is opened, so it stays");
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs({}), 3, only)), [3, 2]);
+  assert.deepEqual(ids(Ch.readingOrder(list, prefs({}), 3, noSkip)), [4, 3, 2, 1]);
+});

@@ -57,7 +57,10 @@ Rectangle {
   // The chapters as listed; cursor and anchor index it. detail.chapters
   // stays in source order, newest first, for the reader.
   // The chapter choices and the excluded scanlators, as Chapters.js takes them.
-  readonly property var prefs: Object.assign({}, chapterPrefs.values, scanlatorPrefs.values)
+  // Downloaded only forces the Downloaded filter on, as Mihon's
+  // Manga.downloadedFilter does.
+  property bool downloadedOnly: false
+  readonly property var prefs: Prefs.force(Object.assign({}, chapterPrefs.values, scanlatorPrefs.values), "chapterFilterDownloaded", "include", downloadedOnly)
   readonly property var shown: detail ? Chapters.apply(detail.chapters, prefs) : []
   readonly property var next: Chapters.nextUnread(shown, prefs)
   readonly property string resume: detail ? Chapters.resumeLabel(detail.chapters, next) : ""

@@ -27,6 +27,7 @@ var META_PREFIX = Prefs.PREFIX
 var ROWS = [
   // Mihon's More screen toggles, also in the palette. The status bar and
   // the reader show them while on (modes()).
+  { key: "downloadedOnly", label: "Downloaded only", type: "bool", default: false, store: "meta" },
   { key: "incognito", label: "Incognito mode", type: "bool", default: false, store: "meta" },
   { key: "showNsfw", label: "Show NSFW sources", type: "bool", default: false, store: "meta" },
   {
@@ -310,7 +311,7 @@ function samePath(a, b) {
 }
 
 // The modes on, as the status bar names them beside the connection.
-var MODES = [["incognito", "incognito"]]
+var MODES = [["downloadedOnly", "downloaded only"], ["incognito", "incognito"]]
 
 function modes(values) {
   return MODES.filter(function(m) { return values[m[0]] === true }).map(function(m) { return m[1] })

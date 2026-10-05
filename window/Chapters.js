@@ -165,8 +165,9 @@ function passes(c, prefs) {
 
 // The reader's chapter list, like Mihon's ReaderViewModel.chapterList: the
 // manga's chosen sort, read ascending whatever the list's direction. skip:
-// the { read, filtered, dupe } reader settings. Skip read and skip filtered
-// drop chapters; skip duplicates keeps one chapter per chapter number: the
+// the { read, filtered, dupe, downloaded } reader settings (downloaded:
+// Downloaded only is on, which Mihon's reader applies whatever skip
+// filtered says). Skip read, skip filtered and downloaded drop chapters; skip duplicates keeps one chapter per chapter number: the
 // one opened, else one by its scanlator, else the first in reading order.
 // An excluded scanlator's chapters drop whatever the skip settings say, as
 // Mihon's applyScanlatorFilter. The chapter opened always stays. Newest
@@ -176,7 +177,7 @@ function readingOrder(chapters, prefs, chapterId, skip) {
   var gone = excluded(prefs)
   var opened = chapters.filter(function(c) { return c.id === chapterId })[0]
   var list = chapters.filter(function(c) {
-    return c === opened || gone.indexOf(c.scanlator) === -1 && !(skip.read && c.read) && !(skip.filtered && !passes(c, prefs))
+    return c === opened || gone.indexOf(c.scanlator) === -1 && !(skip.read && c.read) && !(skip.filtered && !passes(c, prefs)) && !(skip.downloaded && !c.downloaded)
   }).sort(function(a, b) {
     return (sort.value(a) - sort.value(b)) || (a.sourceOrder - b.sourceOrder)
   })

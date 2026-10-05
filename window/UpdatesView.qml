@@ -36,6 +36,7 @@ Item {
   // The download queue's items, for each update's marker.
   property var queue: []
 
+  property bool downloadedOnly: false
   readonly property var rows: updates.rows
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.id === view.cursorId }))
   readonly property var notice: Updates.notice(updates, configPath)
@@ -54,6 +55,7 @@ Item {
 
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
   onActiveChanged: load()
+  onDownloadedOnlyChanged: load()
   onRowsChanged: selected = Updates.keep(selected, rows)
   onConfigChanged: {
     listSeq++
@@ -82,7 +84,7 @@ Item {
     updates = Updates.reduce(updates, { type: "request" })
     send(Updates.listPayload(), function(reply) {
       if (seq !== view.listSeq) return
-      view.updates = Updates.reduce(view.updates, { type: "list", reply: reply, config: cfg, now: Date.now() })
+      view.updates = Updates.reduce(view.updates, { type: "list", reply: reply, config: cfg, now: Date.now(), downloadedOnly: view.downloadedOnly })
     })
   }
 

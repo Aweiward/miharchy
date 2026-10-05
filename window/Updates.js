@@ -91,9 +91,10 @@ function dayLabel(ms, now) {
   return day === Browse.day(y.getTime()) ? "Yesterday" : day
 }
 
-function rows(data, config, now) {
+// downloadedOnly: Downloaded only is on, so only downloaded chapters list.
+function rows(data, config, now, downloadedOnly) {
   var last = ""
-  return updates(data, now).map(function(c) {
+  return updates(data, now).filter(function(c) { return !downloadedOnly || c.isDownloaded === true }).map(function(c) {
     var day = dayLabel(Number(c.fetchedAt) * 1000, now)
     var row = {
       id: c.id,
@@ -127,7 +128,7 @@ function status(data) {
 
 // event.type:
 //   "request"   a list load went out
-//   "list"      { reply, config, now } for listPayload()
+//   "list"      { reply, config, now, downloadedOnly } for listPayload()
 //   "checking"  checkPayload() went out
 //   "status"    { reply } for statusPayload()
 function reduce(u, event) {
@@ -137,7 +138,7 @@ function reduce(u, event) {
     case "list":
       var r = event.reply
       if (r.state !== "ok") return copy(u, { state: r.state, message: r.message })
-      return copy(copy(u, status(r.data)), { state: "ok", message: "", rows: rows(r.data, event.config, event.now) })
+      return copy(copy(u, status(r.data)), { state: "ok", message: "", rows: rows(r.data, event.config, event.now, event.downloadedOnly) })
     case "checking":
       return copy(u, { checking: true })
     case "status":
