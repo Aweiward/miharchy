@@ -44,7 +44,7 @@ test("opening a chapter asks for its pages, which load from the server", () => {
   const l = loaded(12, 3);
   assert.equal(l.state, "ok");
   assert.equal(l.pages[0], "http://127.0.0.1:4590/api/v1/manga/5/chapter/12/page/0");
-  assert.equal(R.indicator(l), "1 / 3   right to left");
+  assert.equal(R.indicator(l, "screen", "60"), "1 / 3   right to left   fit screen");
   assert.equal(R.pagesPayload(l), null);
 });
 
@@ -145,7 +145,7 @@ test("m cycles the reading mode and saves it for the manga, keeping the page", (
   assert.deepEqual(R.modePayload(r).variables, { meta: { mangaId: 5, key: "miharchy.readingMode", value: "paged-ltr" } });
   r = R.reduce(r, { type: "mode" });
   assert.equal(r.mode, "webtoon");
-  assert.equal(R.indicator(r), "5 / 10   webtoon");
+  assert.equal(R.indicator(r, "screen", "60"), "5 / 10   webtoon   60%");
   assert.equal(R.reduce(r, { type: "mode" }).mode, "paged-rtl");
 });
 
@@ -180,9 +180,9 @@ test("in webtoon, scrolling past the end of the strip opens the next chapter", (
 test("keys: paged turns by page, webtoon scrolls by part of the view", () => {
   const paged = loaded(12, 4);
   const web = loaded(12, 4, {}, "webtoon");
-  assert.deepEqual(R.action(paged, "reader.down"), { turn: 1 });
-  assert.deepEqual(R.action(paged, "reader.halfUp"), { turn: -1 });
-  assert.deepEqual(R.action(paged, "reader.next"), { turn: 1 });
+  assert.deepEqual(R.action(paged, "reader.down", true, true), { turn: 1 }, "a page that fits the view turns at once");
+  assert.deepEqual(R.action(paged, "reader.halfUp", true, true), { turn: -1 });
+  assert.deepEqual(R.action(paged, "reader.next", true, true), { turn: 1 });
   assert.deepEqual(R.action(paged, "reader.left"), { turn: 1 }, "right-to-left: left is next");
   assert.deepEqual(R.action(web, "reader.down"), { scroll: 0.25 });
   assert.deepEqual(R.action(web, "reader.halfUp"), { scroll: -0.5 });
@@ -212,4 +212,74 @@ test("quitting waits for the reader's saves and deletes in flight, then quits on
   assert.equal(R.canQuit(waiting), false, "the quit waits for the write in flight");
   assert.equal(R.canQuit(R.exit(waiting, "wrote")), true, "the last reply quits");
   assert.equal(quit(waiting), waiting, "a second quit changes nothing, so it quits once");
+});
+
+test("a paged page taller than the view scrolls before it turns", () => {
+  const paged = loaded(12, 4);
+  assert.deepEqual(R.action(paged, "reader.down", false, true), { scroll: 0.25 }, "at its top, j scrolls down");
+  assert.deepEqual(R.action(paged, "reader.next", false, true), { scroll: 0.9 }, "Space scrolls too");
+  assert.deepEqual(R.action(paged, "reader.up", false, true), { turn: -1 }, "at its top, k turns back");
+  assert.deepEqual(R.action(paged, "reader.halfDown", true, false), { turn: 1 }, "at its bottom, d turns on");
+  assert.deepEqual(R.action(paged, "reader.halfUp", true, false), { scroll: -0.5 });
+  assert.deepEqual(R.action(paged, "reader.right", false, false), { turn: -1 }, "h and l always turn");
+});
+
+test("each fit sizes the page from its own aspect and the view", () => {
+  const view = { width: 1600, height: 1000 };
+  const tall = { width: 800, height: 1200 };
+  const wide = { width: 2000, height: 1000 };
+  assert.deepEqual(R.fit("screen", tall, view), { width: 800 * (1000 / 1200), height: 1000, sourceWidth: 0, sourceHeight: 1000 });
+  assert.deepEqual(R.fit("screen", wide, view), { width: 1600, height: 800, sourceWidth: 1600, sourceHeight: 0 });
+  assert.deepEqual(R.fit("width", tall, view), { width: 1600, height: 2400, sourceWidth: 1600, sourceHeight: 0 }, "fit width runs past the bottom");
+  assert.deepEqual(R.fit("height", wide, view), { width: 2000, height: 1000, sourceWidth: 0, sourceHeight: 1000 }, "fit height runs past the sides");
+  assert.deepEqual(R.fit("original", tall, view), { width: 800, height: 1200, sourceWidth: 0, sourceHeight: 0 }, "original decodes at the natural size");
+  const unknown = R.fit("width", { width: 0, height: 0 }, view);
+  assert.equal(unknown.sourceWidth, 1600, "a page still loading decodes at the view's width");
+  assert.ok(unknown.height > 0, "and takes room meanwhile");
+  assert.equal(R.fit("sideways", tall, view).height, 1000, "an unknown fit reads as fit screen");
+});
+
+test("the webtoon strip is a share of the window's width, in steps", () => {
+  assert.equal(R.stripWidth("60", 2000), 1200);
+  assert.equal(R.stripWidth("100", 2000), 2000);
+  const options = ["30", "40", "50"].map((value) => ({ value }));
+  assert.equal(R.step(options, "40", 1), "50");
+  assert.equal(R.step(options, "50", 1), "50", "the widest step stays");
+  assert.equal(R.step(options, "30", -1), "30", "the narrowest step stays");
+  assert.equal(R.step(options, "40", -1), "30");
+});
+
+test("the indicator names the fit in paged and the width in webtoon", () => {
+  const r = loaded(12, 3);
+  assert.equal(R.indicator(r, "width", "60"), "1 / 3   right to left   fit width");
+  assert.equal(R.indicator(Object.assign({}, r, { mode: "webtoon" }), "width", "60"), "1 / 3   webtoon   60%");
+});
+
+test("] and [ open the next and previous chapter where each was left", () => {
+  const next = R.reduce(Object.assign(loaded(12, 10), { page: 4 }), { type: "chapter", delta: 1 });
+  assert.equal(R.chapterName(next), "Ch. 3");
+  assert.equal(R.reduce(next, { type: "pages", reply: pages(13, 8, { lastPageRead: 5 }), config }).page, 5);
+  const back = R.reduce(loaded(12, 10), { type: "chapter", delta: -1 });
+  assert.equal(R.chapterName(back), "Ch. 1");
+  assert.equal(R.reduce(back, { type: "pages", reply: pages(11, 8, { lastPageRead: 2 }), config }).page, 2, "not at its end, unlike turning back");
+  assert.equal(R.reduce(loaded(13, 3), { type: "chapter", delta: 1 }).edge, "last");
+  assert.equal(R.reduce(loaded(11, 3), { type: "chapter", delta: -1 }).edge, "first");
+  const broken = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "pages", reply: M.reply(0, ""), config });
+  assert.equal(R.chapterName(R.reduce(broken, { type: "chapter", delta: 1 })), "Ch. 3", "a broken chapter can be skipped");
+});
+
+test("Home, End and a typed page number go to that page, within the chapter", () => {
+  const r = Object.assign(loaded(12, 10), { page: 4 });
+  const go = (page) => R.reduce(r, { type: "goto", page });
+  assert.equal(go(0).page, 0);
+  assert.equal(go(6).page, 6);
+  assert.equal(go(99).page, 9, "past the end goes to the last page");
+  assert.equal(go(-5).page, 0);
+  assert.equal(go(NaN), r, "no number, no jump");
+  assert.equal(go(9).read, true, "the last page marks the chapter read, as a turn there does");
+  assert.deepEqual(R.savePayload(go(6)).variables, { id: 12, patch: { lastPageRead: 6 } });
+  const loading = R.open(5, chapters, 12, "paged-rtl");
+  assert.equal(R.reduce(loading, { type: "goto", page: 3 }), loading, "nothing to go to before the pages load");
+  assert.equal(R.pageNumber(" 7 "), 6, "pages count from 1 on screen");
+  assert.ok(Number.isNaN(R.pageNumber("abc")));
 });

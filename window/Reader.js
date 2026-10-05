@@ -88,6 +88,9 @@ function last(r) {
 //                  at once with chapter, to the next or previous chapter
 //   "scroll"       { page, start, end } in webtoon: the page at the middle
 //                  of the view, and whether the strip is at its top or end
+//   "chapter"      { delta } to the next or previous chapter, where it
+//                  was left (Mihon's chapter buttons)
+//   "goto"         { page } in the chapter, clamped; NaN goes nowhere
 //   "mode"         the next reading mode
 //   "saving"       savePayload() went out
 //   "save-failed"  { chapterId }
@@ -113,6 +116,14 @@ function reduce(r, event) {
       // A last page shorter than half the view never reaches the middle.
       var shown = event.end ? last(r) : event.start ? 0 : Math.max(0, Math.min(last(r), event.page))
       return shown === r.page ? r : copy(r, { page: shown, read: r.read || shown === last(r), edge: "" })
+    case "chapter":
+      var i = r.index + event.delta
+      if (i < 0) return copy(r, { edge: "first" })
+      return i < r.chapters.length ? at(r, i, false) : copy(r, { edge: "last" })
+    case "goto":
+      if (r.state !== "ok" || isNaN(event.page)) return r
+      var g = Math.max(0, Math.min(last(r), event.page))
+      return copy(r, { page: g, read: r.read || g === last(r), edge: "" })
     case "mode":
       return copy(r, { mode: MODES[(MODES.indexOf(r.mode) + 1) % MODES.length] })
     case "saving":
@@ -154,14 +165,56 @@ function modePayload(r) {
 }
 
 // What a reader key does: { turn: delta } | { scroll: part of the view } |
-// null. In webtoon a key past the top or end of the strip turns, which
-// leaves the chapter, since the page there is the first or the last.
+// null. atEnd, atStart: whether the page (paged) or the strip (webtoon) is
+// at its bottom or top. A scroll key scrolls until that edge, then turns:
+// a page taller than the view reads down first. In webtoon the turn leaves
+// the chapter, since the page at either end is the first or the last.
 function action(r, id, atEnd, atStart) {
   var side = { "reader.left": "left", "reader.right": "right" }[id]
-  if (r.mode !== "webtoon") return side ? { turn: delta(r.mode, side) } : SCROLL[id] ? { turn: SCROLL[id] > 0 ? 1 : -1 } : null
-  if (side || !SCROLL[id]) return null
-  if (SCROLL[id] > 0 ? atEnd : atStart) return { turn: SCROLL[id] > 0 ? 1 : -1, chapter: true }
-  return { scroll: SCROLL[id] }
+  if (side) return r.mode === "webtoon" ? null : { turn: delta(r.mode, side) }
+  if (!SCROLL[id]) return null
+  var forward = SCROLL[id] > 0
+  if (!(forward ? atEnd : atStart)) return { scroll: SCROLL[id] }
+  return r.mode === "webtoon" ? { turn: forward ? 1 : -1, chapter: true } : { turn: forward ? 1 : -1 }
+}
+
+// The go-to field's text -> a page index, NaN for no number.
+function pageNumber(text) {
+  return parseInt(String(text).trim(), 10) - 1
+}
+
+// How a paged page fits the view: the pageFit setting's values, as Mihon's
+// image scale types. Stretch and smart fit are left out.
+var FIT_LABELS = { screen: "fit screen", width: "fit width", height: "fit height", original: "original size" }
+
+// fit: a pageFit value; page: the image's size so far (0 while it loads),
+// read for its aspect, and for its size in original; view: the reader's.
+// -> the size shown, and the decode size: one side only, 0 for free, so
+// the image keeps its own aspect and a guess made while it loads never
+// sticks.
+function fit(mode, page, view) {
+  var known = page.width > 0 && page.height > 0
+  var w = known ? page.width : 1
+  var h = known ? page.height : 1.4
+  var byWidth = view.width / w
+  var byHeight = view.height / h
+  if (mode === "original") return known ? { width: w, height: h, sourceWidth: 0, sourceHeight: 0 } : { width: view.width, height: view.width * h, sourceWidth: 0, sourceHeight: 0 }
+  var side = mode === "width" || (mode !== "height" && byWidth <= byHeight) ? "width" : "height"
+  var scale = side === "width" ? byWidth : byHeight
+  return { width: w * scale, height: h * scale, sourceWidth: side === "width" ? view.width : 0, sourceHeight: side === "height" ? view.height : 0 }
+}
+
+// The webtoonWidth setting: a percent of the window's width (Mihon's side
+// padding, the other way round).
+function stripWidth(percent, windowWidth) {
+  return Math.round(windowWidth * Number(percent) / 100)
+}
+
+// The value dir steps to from value in a choice row's options, stopping at
+// either end.
+function step(options, value, dir) {
+  var values = options.map(function(o) { return o.value })
+  return values[Math.max(0, Math.min(values.length - 1, values.indexOf(value) + dir))]
 }
 
 function slotOf(page) {
@@ -190,8 +243,11 @@ function canQuit(s) {
   return s.quitting && s.writes === 0
 }
 
-function indicator(r) {
-  return r.state === "ok" ? (r.page + 1) + " / " + r.pages.length + "   " + MODE_LABELS[r.mode] : ""
+// fit, width: the pageFit and webtoonWidth settings.
+function indicator(r, fit, width) {
+  if (r.state !== "ok") return ""
+  var shape = r.mode === "webtoon" ? width + "%" : FIT_LABELS[fit]
+  return (r.page + 1) + " / " + r.pages.length + "   " + MODE_LABELS[r.mode] + (shape ? "   " + shape : "")
 }
 
 if (typeof module !== "undefined") {
@@ -209,6 +265,10 @@ if (typeof module !== "undefined") {
     deletePayload: deletePayload,
     modePayload: modePayload,
     action: action,
+    pageNumber: pageNumber,
+    fit: fit,
+    stripWidth: stripWidth,
+    step: step,
     slotOf: slotOf,
     slots: slots,
     EXIT: EXIT,

@@ -16,13 +16,16 @@ var KEY = {
   Up: 0x01000013,
   Right: 0x01000014,
   Down: 0x01000015,
+  Home: 0x01000010,
+  End: 0x01000011,
   Space: 0x20,
   N: 0x4e,
   P: 0x50
 }
 
 // keys: printable characters match event.text; "Esc", "Enter", "Space",
-// "Tab", "Backtab" (Shift-Tab), "Backspace" and the arrows match the key code.
+// "Tab", "Backtab" (Shift-Tab), "Backspace", "Home", "End" and the arrows
+// match the key code.
 // hidden: reachable by key only, never listed in the palette.
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, source, global, or its panel: source-filters,
@@ -164,6 +167,14 @@ var commands = [
   { id: "reader.halfDown", title: "Half a view down", keys: ["d"], view: "reader", hidden: true },
   { id: "reader.halfUp", title: "Half a view up", keys: ["u"], view: "reader", hidden: true },
   { id: "reader.mode", title: "Next reading mode", keys: ["m"], view: "reader", hidden: true },
+  { id: "reader.nextChapter", title: "Next chapter", keys: ["]"], view: "reader", hidden: true },
+  { id: "reader.previousChapter", title: "Previous chapter", keys: ["["], view: "reader", hidden: true },
+  { id: "reader.first", title: "First page", keys: ["Home"], view: "reader", hidden: true },
+  { id: "reader.last", title: "Last page", keys: ["End"], view: "reader", hidden: true },
+  { id: "reader.goto", title: "Go to page", keys: ["g"], view: "reader", hidden: true },
+  { id: "reader.fit", title: "Next page fit", keys: ["z"], view: "reader", hidden: true },
+  { id: "reader.wider", title: "Wider webtoon strip", keys: ["+", "="], view: "reader", hidden: true },
+  { id: "reader.narrower", title: "Narrower webtoon strip", keys: ["-"], view: "reader", hidden: true },
   { id: "library.left", title: "Previous manga", keys: ["h", "Left"], view: "library", hidden: true },
   { id: "library.right", title: "Next manga", keys: ["l", "Right"], view: "library", hidden: true },
   { id: "library.up", title: "Row up", keys: ["k", "Up"], view: "library", hidden: true },
@@ -223,7 +234,7 @@ function keyEvent(key, text, modifiers) {
 function matches(label, ev) {
   if (label === "Esc") return ev.key === KEY.Escape
   if (label === "Enter") return ev.key === KEY.Return || ev.key === KEY.Enter
-  if (["Space", "Tab", "Backtab", "Backspace", "Left", "Up", "Right", "Down"].indexOf(label) !== -1) return ev.key === KEY[label]
+  if (["Space", "Tab", "Backtab", "Backspace", "Home", "End", "Left", "Up", "Right", "Down"].indexOf(label) !== -1) return ev.key === KEY[label]
   return !ev.ctrl && ev.text === label
 }
 

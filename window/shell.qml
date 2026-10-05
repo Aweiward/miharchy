@@ -228,7 +228,7 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var editing = settingsEditing ? "settings" : libraryView.editing ? "library" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
+    var editing = reader.editing ? "reader" : settingsEditing ? "settings" : libraryView.editing ? "library" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
     // An open sync result, download queue, reader, migration or manga
     // detail decides which keys apply, in that order; on Browse, the screen
     // or the panel over it does.
@@ -726,6 +726,11 @@ ShellRoot {
         config: root.config
         configPath: root.configPath
         deleteAfterRead: root.settingsState.values.deleteAfterRead
+        pageFit: root.settingsState.values.pageFit
+        webtoonWidth: root.settingsState.values.webtoonWidth
+        onKey: function(event) { event.accepted = root.handleKey(event) }
+        onEditEnded: keyRoot.forceActiveFocus()
+        onSetting: function(row, value) { root.saveSetting(row, value) }
         onClosed: function(chapterId) {
           mangaDetail.reread(chapterId)
           updatesView.load()
