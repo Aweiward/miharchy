@@ -256,7 +256,13 @@ function step(options, value, dir) {
 // The settings panel (s), Mihon's reader settings sheet: the manga's own
 // reading mode, then the Settings rows the reader reads, which apply to
 // every manga. A later reader setting is one more key here.
-var PANEL_KEYS = ["pageFit", "webtoonWidth", "skipRead", "skipFiltered", "skipDupe"]
+var PANEL_KEYS = ["pageFit", "webtoonWidth", "readerTheme", "skipRead", "skipFiltered", "skipDupe"]
+
+// The readerTheme setting -> the reader's background; themeColor for
+// "theme". Gray is Mihon's ReaderGrayBackgroundColor.
+function background(readerTheme, themeColor) {
+  return { black: "#000000", gray: "#202125", white: "#ffffff" }[readerTheme] || themeColor
+}
 
 function settingRow(key) {
   return Settings.ROWS.filter(function(row) { return row.key === key })[0]
@@ -326,6 +332,7 @@ if (typeof module !== "undefined") {
     stripWidth: stripWidth,
     step: step,
     PANEL_KEYS: PANEL_KEYS,
+    background: background,
     settingRow: settingRow,
     panelRows: panelRows,
     slotOf: slotOf,

@@ -56,7 +56,7 @@ Rectangle {
   signal setting(var row, var value)
 
   visible: open
-  color: theme.background
+  color: Reader.background(values.readerTheme, theme.background)
 
   // The chapter ids belong to the old server, so nothing saves.
   onConfigChanged: {

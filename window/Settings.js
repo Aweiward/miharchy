@@ -45,6 +45,17 @@ var ROWS = [
     key: "webtoonWidth", label: "Webtoon width", type: "choice", default: "60", store: "meta",
     options: ["30", "40", "50", "60", "70", "80", "90", "100"].map(function(v) { return { value: v, label: v + "% of the window" } })
   },
+  // Mihon's reader theme. Its automatic follows the phone's night mode;
+  // here the Omarchy theme's background does that, and stays the default.
+  {
+    key: "readerTheme", label: "Reader background", type: "choice", default: "theme", store: "meta",
+    options: [
+      { value: "theme", label: "Theme" },
+      { value: "black", label: "Black" },
+      { value: "gray", label: "Gray" },
+      { value: "white", label: "White" }
+    ]
+  },
   // Mihon's reader skips, applied as a chapter opens; the chapter opened
   // always stays.
   { key: "skipRead", label: "Skip read chapters", type: "bool", default: false, store: "meta" },
