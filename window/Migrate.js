@@ -9,7 +9,8 @@
 // tests/migrate.test.js pins it; MigrateView.qml sends the payloads.
 
 var OLD_QUERY = "query($id: Int!) { manga(id: $id) { id title categories { nodes { id } } meta { key value }"
-  + " chapters { nodes { id chapterNumber isRead isBookmarked isDownloaded } } } }"
+  + " chapters { nodes { id chapterNumber isRead isBookmarked isDownloaded } }"
+  + " trackRecords { nodes { id trackerId tracker { name } } } } }"
 var TARGET_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: true }) {"
   + " manga { id title } chapters { id chapterNumber isRead isBookmarked } } }"
 var LIBRARY_QUERY = "{ mangas(condition: { inLibrary: true }, orderBy: TITLE) { nodes { id title sourceId source { displayName } } }"
@@ -57,19 +58,35 @@ function plan(oldChapters, targetChapters) {
 // manga that joins it to the categories flagged default, and the clear
 // that follows takes those off too, so the target ends in exactly the old
 // manga's categories, as Mihon's SetMangaCategories does.
-function targetPayload(old, targetId, p) {
+// withTracks: the old manga's tracks go along, as in Mihon's
+// MigrateMangaUseCase. bindTrackRecord copies each record to the target in
+// the server's database, replacing the target's own track on that tracker;
+// it never calls the tracker, so it needs no login and pushes nothing.
+function targetPayload(old, targetId, p, withTracks) {
   var mode = (old.meta || []).filter(function(m) { return m.key === MODE_KEY })[0]
+  var tracks = withTracks ? trackRecords(old) : []
   var vars = { target: targetId, categories: old.categories.nodes.map(function(c) { return c.id }), read: p.read, bookmark: p.bookmark }
-  var query = "mutation($target: Int!, $categories: [Int!]!, $read: [Int!]!, $bookmark: [Int!]!" + (mode ? ", $mode: MangaMetaTypeInput!" : "") + ") {"
-    + " library: updateManga(input: { id: $target, patch: { inLibrary: true } }) { manga { id } }"
+  var params = ["$target: Int!", "$categories: [Int!]!", "$read: [Int!]!", "$bookmark: [Int!]!"]
+  var query = " library: updateManga(input: { id: $target, patch: { inLibrary: true } }) { manga { id } }"
     + " categories: updateMangaCategories(input: { id: $target, patch: { clearCategories: true, addToCategories: $categories } }) { manga { id } }"
     + " read: updateChapters(input: { ids: $read, patch: { isRead: true } }) { chapters { id } }"
     + " bookmark: updateChapters(input: { ids: $bookmark, patch: { isBookmarked: true } }) { chapters { id } }"
   if (mode) {
     vars.mode = { mangaId: targetId, key: MODE_KEY, value: mode.value }
+    params.push("$mode: MangaMetaTypeInput!")
     query += " mode: setMangaMeta(input: { meta: $mode }) { meta { key } }"
   }
-  return { query: query + " }", variables: vars }
+  tracks.forEach(function(t, i) {
+    vars["track" + i] = t.id
+    params.push("$track" + i + ": Int!")
+    query += " track" + i + ": bindTrackRecord(input: { mangaId: $target, trackRecordId: $track" + i + " }) { trackRecord { id } }"
+  })
+  return { query: "mutation(" + params.join(", ") + ") {" + query + " }", variables: vars }
+}
+
+// An OLD_QUERY manga node -> its tracks: [{ id, tracker }].
+function trackRecords(old) {
+  return ((old.trackRecords && old.trackRecords.nodes) || []).map(function(n) { return { id: n.id, tracker: String(n.tracker.name) } })
 }
 
 function downloaded(old) {
@@ -237,6 +254,7 @@ if (typeof module !== "undefined") {
     LIBRARY_QUERY: LIBRARY_QUERY,
     plan: plan,
     targetPayload: targetPayload,
+    trackRecords: trackRecords,
     oldPayload: oldPayload,
     downloaded: downloaded,
     similarity: similarity,

@@ -42,6 +42,7 @@ Rectangle {
   // once read: oldNode, chapters and plan.
   property var jobs: []
   property bool deleteDownloads: true
+  property bool withTracks: true
   property bool running: false
   property string busyText: ""
   // Bumped on close and on going back, so stale replies drop.
@@ -53,12 +54,13 @@ Rectangle {
   readonly property bool open: step !== ""
   readonly property var job: jobs.length ? jobs[0] : null
   readonly property int downloads: !batchMode && job && job.oldNode ? Migrate.downloaded(job.oldNode).length : 0
+  readonly property var tracks: !batchMode && job && job.oldNode ? Migrate.trackRecords(job.oldNode) : []
   readonly property string hint: ({
     search: "hjkl move   enter choose   / search   r retry   esc cancel   ",
     from: "j k move   enter choose   esc cancel   ",
     to: "j k move   enter choose   esc back   ",
     match: "j k move   h l another match or skip   enter continue   r retry   esc back   ",
-    confirm: "enter migrate   c copy   " + (batchMode || downloads ? "d downloads   " : "") + "esc back   ",
+    confirm: "enter migrate   c copy   " + (batchMode || downloads ? "d downloads   " : "") + (batchMode || tracks.length ? "t tracks   " : "") + "esc back   ",
     busy: running ? "" : "esc close   ",
     done: "j k move   enter close   "
   })[step] || ""
@@ -261,9 +263,10 @@ Rectangle {
     }
     var write = function() {
       var p = view.jobs[i]
-      view.send(Migrate.targetPayload(p.oldNode, p.target.id, p.plan), function(reply) {
+      var tracks = view.withTracks ? Migrate.trackRecords(p.oldNode).length : 0
+      view.send(Migrate.targetPayload(p.oldNode, p.target.id, p.plan, view.withTracks), function(reply) {
         if (reply.state !== "ok") return next("Failed: " + view.errorText(reply))
-        var done = (replace ? "Migrated. " : "Copied. ") + Migrate.planText(p.plan, p.chapters.length)
+        var done = (replace ? "Migrated. " : "Copied. ") + Migrate.planText(p.plan, p.chapters.length) + (tracks ? " " + tracks + (tracks === 1 ? " track" : " tracks") + " along." : "")
         var after = Migrate.oldPayload(p.oldNode, replace, view.deleteDownloads)
         if (!after) return next(done, true)
         view.send(after, function(r) {
@@ -416,6 +419,9 @@ Rectangle {
       case "migrate.downloads":
         deleteDownloads = !deleteDownloads
         break
+      case "migrate.tracks":
+        withTracks = !withTracks
+        break
     }
   }
 
@@ -532,12 +538,14 @@ Rectangle {
           lines.push({ text: "Migrate " + view.jobs.length + " of " + view.batch.manga.length + " manga from " + view.from.name + " to " + view.to.name + ".", strong: true })
           lines.push({ text: "Each keeps its read chapters, bookmarks and categories, matched by chapter number." })
           lines.push({ text: "d   Delete the old manga's downloads: " + (view.deleteDownloads ? "yes" : "no") })
+          lines.push({ text: "t   Take the old manga's tracks along: " + (view.withTracks ? "yes" : "no") })
         } else {
           var names = view.categories.filter(function(c) { return j.oldNode.categories.nodes.some(function(n) { return n.id === c.id }) }).map(function(c) { return c.name })
           lines.push({ text: "Migrate " + view.old.title + " from " + view.old.source + " to " + j.target.title + " on " + j.target.source + ".", strong: true })
           lines.push({ text: Migrate.planText(j.plan, j.chapters.length) })
           lines.push({ text: "Categories: " + (names.join(", ") || "Default") })
           if (view.downloads) lines.push({ text: "d   Delete its " + view.downloads + " downloaded chapters: " + (view.deleteDownloads ? "yes" : "no") })
+          if (view.tracks.length) lines.push({ text: "t   Take its tracks along (" + view.tracks.map(function(t) { return t.tracker }).join(", ") + "): " + (view.withTracks ? "yes" : "no") })
         }
         lines.push({ text: "enter   Migrate: the old manga leaves the library." })
         lines.push({ text: "c   Copy: the old manga stays in the library." })

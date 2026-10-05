@@ -301,6 +301,7 @@ var commands = [
   { id: "migrate.search", title: "Search another title", keys: ["/"], view: "migrate-search", hidden: true },
   { id: "migrate.copy", title: "Copy", keys: ["c"], view: "migrate-confirm", hidden: true },
   { id: "migrate.downloads", title: "Delete or keep the old downloads", keys: ["d"], view: "migrate-confirm", hidden: true },
+  { id: "migrate.tracks", title: "Take or leave the old tracks", keys: ["t"], view: "migrate-confirm", hidden: true },
   { id: "setup.activate", title: "Run step", keys: ["Enter", "Space"], view: "setup", hidden: true }
 ]
 
