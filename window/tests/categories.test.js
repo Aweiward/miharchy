@@ -72,3 +72,15 @@ test("a category flag or delete leaves the server's auto-download setting to its
   for (const p of [K.includePayload(cats, 4, "download"), K.includePayload(cats, 4, "update"), K.deletePayload(4)]) assert.doesNotMatch(p.query, /setSettings/);
   assert.deepEqual(K.deletePayload(4).variables, { id: 4 });
 });
+
+test("u and d cycle a category through unset, included and excluded, for updates and for auto-download", () => {
+  for (const [kind, field] of [["update", "includeInUpdate"], ["download", "includeInDownload"]]) {
+    const states = ["UNSET", "INCLUDE", "EXCLUDE"].map((s) => [{ id: 4, name: "Action", [kind]: s }]);
+    assert.deepEqual(states.map((c) => K.includePayload(c, 4, kind).variables), [
+      { id: 4, include: "INCLUDE" },
+      { id: 4, include: "EXCLUDE" },
+      { id: 4, include: "UNSET" }
+    ]);
+    assert.match(K.includePayload(states[0], 4, kind).query, new RegExp("patch: \\{ " + field + ": \\$include \\}"));
+  }
+});
