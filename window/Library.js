@@ -35,11 +35,19 @@ function filterKey(f) {
   return "libraryFilter" + f.id.charAt(0).toUpperCase() + f.id.slice(1)
 }
 
+// Mihon's display modes, its three cover grids folded into one; the grid's
+// columns follow the window width.
+var DISPLAYS = [
+  { id: "grid", label: "Cover grid" },
+  { id: "list", label: "List" }
+]
+
 // One sort for the whole library, as Mihon keeps it unless its per-category
 // display setting is on.
 var PREFS = [
   { key: "librarySort", default: "title", options: SORTS.map(function(s) { return s.id }) },
-  { key: "librarySortDirection", default: "asc", options: ["asc", "desc"] }
+  { key: "librarySortDirection", default: "asc", options: ["asc", "desc"] },
+  { key: "libraryDisplay", default: "grid", options: DISPLAYS.map(function(d) { return d.id }) }
 ].concat(FILTERS.map(function(f) { return { key: filterKey(f), default: "off", options: STATES } }))
 
 function sortOf(prefs) {
@@ -87,18 +95,28 @@ function apply(manga, prefs, query) {
 }
 
 // The panel: each filter with its state, then each sort with "asc" or
-// "desc" on the chosen one and "" on the rest.
+// "desc" on the chosen one and "" on the rest, then each display mode with
+// "picked" on the chosen one and "unpicked" on the rest.
 function rows(prefs) {
   return FILTERS.map(function(f) {
     return { kind: "filter", id: f.id, label: f.label, state: prefs[filterKey(f)] }
   }).concat(SORTS.map(function(s) {
     return { kind: "sort", id: s.id, label: s.label, state: s === sortOf(prefs) ? prefs.librarySortDirection : "" }
+  })).concat(DISPLAYS.map(function(d) {
+    return { kind: "display", id: d.id, label: d.label, state: d.id === prefs.libraryDisplay ? "picked" : "unpicked" }
   }))
+}
+
+// The other display mode, as { key, value } for Prefs: one key switches
+// between the grid and the list.
+function toggleDisplay(prefs) {
+  return { key: "libraryDisplay", value: prefs.libraryDisplay === "list" ? "grid" : "list" }
 }
 
 // What Enter on a panel row changes, as { key, value } for Prefs.
 function choose(prefs, row) {
   if (row.kind === "filter") return { key: filterKey(row), value: STATES[(STATES.indexOf(row.state) + 1) % STATES.length] }
+  if (row.kind === "display") return { key: "libraryDisplay", value: row.id }
   if (row.state) return { key: "librarySortDirection", value: row.state === "asc" ? "desc" : "asc" }
   return { key: "librarySort", value: row.id }
 }
@@ -128,6 +146,7 @@ if (typeof module !== "undefined") {
     PREFS: PREFS,
     apply: apply,
     rows: rows,
+    toggleDisplay: toggleDisplay,
     choose: choose,
     narrowed: narrowed,
     summary: summary

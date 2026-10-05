@@ -4,10 +4,11 @@ The Library view (key `1`): a cover grid of the server's library manga with unre
 
 ## Sub-features
 - Cover grid with unread-chapter badges (`unreadCount`), placeholder tiles for missing covers.
+- `L` switches between the cover grid and a list (cover, title, source, unread count), as do the panel's Display rows; global meta `miharchy.libraryDisplay` keeps it. In the list, `j`/`k` move one row. A source that is not installed shows its name from meta `miharchy.sourceNames` with "(not installed)".
 - Category switcher (`Tab` / `Shift-Tab`): All, Default, then user categories.
 - `/` opens the search field: title, author, artist or genre holds every typed word. `Enter` keeps the search, `Esc` in the field clears it; `Esc` on the grid clears a kept search, and quits only when there is none.
 - `F` opens the sort and filter panel (`j`/`k` move, `Enter`/`Space` change a row, `Esc`/`F` close). Filters cycle off → include `[+]` → exclude `[-]`: downloaded, unread, started, bookmarked, completed, tracked. Sorts: title, total chapters, last read, last update, unread count, latest chapter, date added; choosing the active sort again flips ↑/↓. The header names the search, the active filters and a non-default sort.
-- The sort and filters live in global meta `miharchy.librarySort`, `miharchy.librarySortDirection` and `miharchy.libraryFilter<Name>` (`window/Prefs.js`), so a restart keeps them. The search does not persist.
+- The sort, filters and display live in global meta `miharchy.librarySort`, `miharchy.librarySortDirection`, `miharchy.libraryDisplay` and `miharchy.libraryFilter<Name>` (`window/Prefs.js`), so a restart keeps them. The search does not persist.
 - `x` twice removes the manga under the cursor from the library; any other key disarms.
 - `u` checks the shown category for new chapters (`updateLibrary(categories: [id])`, Default is 0; All sends none and skips excluded categories). The footer says so until the next key; the Updates view shows the run.
 - `c` opens Categories: `u` there cycles a category's `includeInUpdate` UNSET, INCLUDE ("in updates"), EXCLUDE ("excluded from updates").

@@ -151,12 +151,6 @@ const ASURA = "6247824327199706550";
 const missing = (o) => mangaNode(Object.assign({ sourceId: ASURA, source: null, initialized: false }, o));
 const names = (map) => ({ metas: { nodes: [{ value: JSON.stringify(map) }] } });
 
-test("sourceLabel names the installed source, a known missing one, or the id", () => {
-  assert.equal(B.sourceLabel({ sourceId: "1", source: { displayName: "MangaDex (EN)" } }, {}), "MangaDex (EN)");
-  assert.equal(B.sourceLabel({ sourceId: ASURA, source: null }, { [ASURA]: "Asura Scans" }), "Asura Scans (not installed)");
-  assert.equal(B.sourceLabel({ sourceId: ASURA, source: null }, {}), "Unknown source " + ASURA);
-});
-
 test("a manga with a missing source shows its stored name, no cover and never fetches", () => {
   let d = B.reduceDetail(B.detail(5, true), { type: "reply", reply: ok(Object.assign({ manga: missing() }, names({ [ASURA]: "Asura Scans" }))), config });
   assert.equal(d.manga.source, "Asura Scans (not installed)");

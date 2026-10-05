@@ -5,9 +5,9 @@ import "Commands.js" as Commands
 import "Library.js" as Library
 
 // The Library view: the category switcher with the search field and a note
-// of the search, filters and sort in use, then the shown category's cover
-// grid with its cursor, or a notice in its place, and the sort and filter
-// panel over it. shell.qml owns the cursor, the shown category, the search
+// of the search, filters and sort in use, then the shown category as a cover
+// grid or a list (Library.PREFS libraryDisplay) with its cursor, or a notice
+// in its place, and the sort, filter and display panel over it. shell.qml owns the cursor, the shown category, the search
 // and the choices.
 Item {
   id: view
@@ -35,7 +35,9 @@ Item {
   readonly property var optionRows: Library.rows(prefs)
   readonly property alias searchField: field
 
-  readonly property int columns: Math.max(1, Math.floor(grid.width / grid.cellWidth))
+  readonly property bool listed: prefs.libraryDisplay === "list"
+  // How far j and k move the cursor.
+  readonly property int columns: listed ? 1 : Math.max(1, Math.floor(grid.width / grid.cellWidth))
 
   signal key(var event)
   signal editEnded()
@@ -45,7 +47,13 @@ Item {
   signal categoryPicked(int index)
   signal optionPicked(int index)
 
-  onCursorChanged: grid.positionViewAtIndex(cursor, GridView.Contain)
+  onCursorChanged: show()
+  onListedChanged: show()
+
+  function show() {
+    if (listed) list.positionViewAtIndex(cursor, ListView.Contain)
+    else grid.positionViewAtIndex(cursor, GridView.Contain)
+  }
 
   // A cover click moves the cursor as h, j, k and l do; a double click then
   // sends Enter. Not while the search field types.
@@ -134,9 +142,9 @@ Item {
     anchors.right: parent.right
     anchors.margins: view.theme.fontSize * 2
     anchors.topMargin: names.visible ? view.theme.fontSize : view.theme.fontSize * 2
-    visible: view.notice === null
+    visible: view.notice === null && !view.listed
     clip: true
-    model: view.manga
+    model: view.listed ? [] : view.manga
     cellWidth: view.theme.fontSize * 13
     cellHeight: cellWidth * 1.5 + view.theme.fontSize * 3
 
@@ -180,6 +188,82 @@ Item {
         elide: Text.ElideRight
         maximumLineCount: 2
         wrapMode: Text.Wrap
+      }
+    }
+  }
+
+  // Mihon's list: a small cover, the title with its source under it, and
+  // the unread count.
+  ListView {
+    id: list
+    anchors.fill: grid
+    visible: view.notice === null && view.listed
+    clip: true
+    model: view.listed ? view.manga : []
+
+    delegate: Rectangle {
+      id: row
+      required property var modelData
+      required property int index
+      readonly property bool current: index === view.cursor
+      readonly property bool armed: view.armed === modelData.id
+      width: list.width
+      height: view.theme.fontSize * 4
+      color: current ? view.theme.selected : "transparent"
+
+      MouseArea {
+        anchors.fill: parent
+        onClicked: view.point(row.index, false)
+        onDoubleClicked: view.point(row.index, true)
+      }
+
+      Cover {
+        id: rowCover
+        x: view.theme.fontSize * 0.5
+        anchors.verticalCenter: parent.verticalCenter
+        height: parent.height - view.theme.fontSize * 0.6
+        width: height / 1.5
+        theme: view.theme
+        config: view.config
+        source: row.modelData.cover
+        title: row.modelData.title
+      }
+
+      Column {
+        anchors.left: rowCover.right
+        anchors.leftMargin: view.theme.fontSize
+        anchors.right: unread.left
+        anchors.rightMargin: view.theme.fontSize
+        anchors.verticalCenter: parent.verticalCenter
+
+        Text {
+          width: parent.width
+          elide: Text.ElideRight
+          text: row.modelData.title
+          color: row.current ? view.theme.selectedText : view.theme.foreground
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSize
+        }
+
+        Text {
+          width: parent.width
+          elide: Text.ElideRight
+          text: row.armed ? "x again to remove from library" : row.modelData.source
+          color: row.armed ? view.theme.urgent : row.current ? view.theme.selectedText : view.theme.muted
+          font.family: view.theme.fontFamily
+          font.pixelSize: view.theme.fontSmall
+        }
+      }
+
+      Text {
+        id: unread
+        anchors.right: parent.right
+        anchors.rightMargin: view.theme.fontSize * 0.5
+        anchors.verticalCenter: parent.verticalCenter
+        text: row.modelData.unread ? row.modelData.unread + " unread" : ""
+        color: row.current ? view.theme.selectedText : view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
       }
     }
   }
@@ -242,14 +326,14 @@ Item {
           required property var modelData
           required property int index
           readonly property bool current: index === view.optionsCursor
-          readonly property bool on: modelData.state !== "" && modelData.state !== "off"
+          readonly property bool on: ["", "off", "unpicked"].indexOf(modelData.state) === -1
           width: options.width
 
-          // A heading before the first filter and the first sort.
+          // A heading before the first row of each kind.
           Text {
             visible: option.index === 0 || option.modelData.kind !== view.optionRows[option.index - 1].kind
             topPadding: option.index === 0 ? 0 : view.theme.fontSize * 0.8
-            text: option.modelData.kind === "filter" ? "Filter" : "Sort"
+            text: ({ filter: "Filter", sort: "Sort", display: "Display" })[option.modelData.kind]
             color: view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSmall
@@ -257,7 +341,7 @@ Item {
 
           Text {
             width: parent.width
-            text: ({ off: "[ ] ", include: "[+] ", exclude: "[-] ", "": "    ", asc: " ↑  ", desc: " ↓  " })[option.modelData.state] + option.modelData.label
+            text: ({ off: "[ ] ", include: "[+] ", exclude: "[-] ", "": "    ", asc: " ↑  ", desc: " ↓  ", picked: "(•) ", unpicked: "( ) " })[option.modelData.state] + option.modelData.label
             color: option.current ? view.theme.accent : option.on ? view.theme.foreground : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
