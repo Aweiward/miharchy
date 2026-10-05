@@ -288,7 +288,7 @@ ShellRoot {
       if (reply.state !== "ok") return failed(reply)
       var chapters = Browse.toChapters(reply.data.chapters.nodes)
       if (action === "read" || action === "unread") return root.markChapters(chapters, action, ids)
-      var payload = action === "download" ? Downloads.enqueuePayload(Downloads.unread(chapters)) : Downloads.removePayload(chapters, downloadsView.queue.items)
+      var payload = action === "download" ? Downloads.enqueuePayload(chapters.filter(function(c) { return !c.read && !c.downloaded })) : Downloads.removePayload(chapters, downloadsView.queue.items)
       if (action === "removeDeleting") {
         if (!payload) return remove()
         // The manga leave only once their downloads are gone.
