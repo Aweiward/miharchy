@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Scratch Suwayomi-Server for verification.
-#   server.sh start    start it, write $RUN/server.json, wait until GraphQL answers
+#   server.sh start    start it on a free port (kept in $RUN/port), write $RUN/server.json, wait until GraphQL answers
 #   server.sh doctor   read-only: is our instance up, on our port, answering with our credentials?
 #   server.sh stop     stop the instance this run started (by PID file), keep $RUN/evidence
+#   server.sh clean    remove the window copy ($RUN/app) and run home ($RUN/home), keep $RUN/evidence
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 
@@ -14,8 +15,16 @@ start)
   if [ -f "$RUN/server.pid" ] && kill -0 "$(cat "$RUN/server.pid")" 2>/dev/null; then
     echo "$RUN already has a running server (pid $(cat "$RUN/server.pid")); set your own MIHARCHY_VERIFY_DIR" >&2; exit 1
   fi
-  ss -ltn | grep -q ":$PORT " && { echo "port $PORT is taken; pick another MIHARCHY_VERIFY_PORT" >&2; exit 1; }
+  if [ -n "${MIHARCHY_VERIFY_PORT:-}" ]; then
+    PORT=$MIHARCHY_VERIFY_PORT
+    ss -ltn | grep -q ":$PORT " && { echo "port $PORT is taken; pick another MIHARCHY_VERIFY_PORT" >&2; exit 1; }
+  else
+    # A free port that no sibling run has picked: a sibling still starting has not bound its port yet.
+    used=$({ ss -ltnH | awk '{print $4}' | sed 's/.*://'; cat "$(dirname "$RUN")"/*/port 2>/dev/null || true; } | sort -u)
+    PORT=$(comm -23 <(seq 4591 4999 | sort) <(echo "$used") | shuf -n 1)
+  fi
   install -d -m 700 "$RUN" "$SERVER_DIR" "$SERVER_DIR/tmp" "$EVIDENCE"
+  echo "$PORT" > "$RUN/port"
   pw=$(openssl rand -hex 16)
   printf 'server.ip = "127.0.0.1"\nserver.port = %s\nserver.webUIEnabled = false\nserver.systemTrayEnabled = false\nserver.authMode = "basic_auth"\nserver.authUsername = "verify"\nserver.authPassword = "%s"\n' "$PORT" "$pw" > "$SERVER_DIR/server.conf"
   (umask 077; printf '{"url":"http://127.0.0.1:%s","username":"verify","password":"%s"}\n' "$PORT" "$pw" > "$SERVER_JSON")
@@ -42,7 +51,7 @@ doctor)
   [ "$owner" = "$pid" ] || { echo "port $PORT is owned by pid ${owner:-none}, not ours ($pid)"; exit 1; }
   unauth=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"query":"{aboutServer{version}}"}' "http://127.0.0.1:$PORT/api/graphql")
   v=$(gql '{"query":"{aboutServer{version}}"}' | jq -r '.data.aboutServer.version // empty')
-  echo "ok: pid $pid owns $PORT, Suwayomi $v, unauthenticated request -> $unauth"
+  echo "ok: pid $pid owns $PORT, Suwayomi $v, unauthenticated request -> $unauth, run dir $RUN"
   [ -n "$v" ] && [ "$unauth" = 401 ] ;;
 stop)
   if [ -f "$RUN/server.pid" ]; then
@@ -57,8 +66,11 @@ stop)
     n=${p#/proc/}; [ "$n" = "$$" ] && continue
     { tr '\0' ' ' < "$p/cmdline"; } 2>/dev/null | grep -qF -e "$SERVER_DIR/" -e "rootDir=$SERVER_DIR " && kill -9 "$n" 2>/dev/null || true
   done
-  ss -ltn | grep -q ":$PORT " && { echo "port $PORT still open" >&2; exit 1; }
-  rm -rf "$SERVER_DIR" "$SERVER_JSON" "$RUN/server.pid"
+  [ -n "$PORT" ] && ss -ltn | grep -q ":$PORT " && { echo "port $PORT still open" >&2; exit 1; }
+  rm -rf "$SERVER_DIR" "$SERVER_JSON" "$RUN/server.pid" "$RUN/port"
   echo "stopped; evidence kept in $EVIDENCE" ;;
-*) echo "usage: server.sh start|doctor|stop" >&2; exit 2 ;;
+clean)
+  rm -rf "$RUN/app" "$RUN/home"
+  echo "removed the window copy and run home; evidence kept in $EVIDENCE" ;;
+*) echo "usage: server.sh start|doctor|stop|clean" >&2; exit 2 ;;
 esac
