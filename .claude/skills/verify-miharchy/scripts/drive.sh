@@ -34,8 +34,10 @@ cd "$RUN"
 set +e
 # HOME is the run's own: the window runs the sync helper from $HOME/.local/share/miharchy/helper
 # and the helper keeps its baselines under user.home, so the real ones stay out of reach.
+# XDG_RUNTIME_DIR is the run's own too: the window writes server images there.
 mkdir -p "$RUN/home"
-HOME=$RUN/home JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$SERVER_JSON MIHARCHY_SERVER_ROOT=$SERVER_DIR MIHARCHY_SERVER_TMPDIR=$SERVER_DIR/tmp QT_QPA_PLATFORM=offscreen timeout "$secs" quickshell -p "$copy/window" > "$RUN/window.log" 2>&1
+install -d -m 700 "$RUN/runtime"
+HOME=$RUN/home XDG_RUNTIME_DIR=$RUN/runtime JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$SERVER_JSON MIHARCHY_SERVER_ROOT=$SERVER_DIR MIHARCHY_SERVER_TMPDIR=$SERVER_DIR/tmp QT_QPA_PLATFORM=offscreen timeout "$secs" quickshell -p "$copy/window" > "$RUN/window.log" 2>&1
 code=$?
 set -e
 grep -o 'DRIVER .*' "$RUN/window.log" | cut -c8- | tee "$EVIDENCE/drive.log"
