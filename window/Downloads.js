@@ -2,11 +2,17 @@
 
 // Downloads: the server's download queue and the chapters a manga detail
 // marks for download or removal. Pure, so tests/downloads.test.js pins it;
-// shell.qml polls the queue, and MangaDetail.qml and DownloadsView.qml send
+// DownloadsView.qml keeps the queue live, and it and MangaDetail.qml send
 // the payloads built here.
 
-var STATUS = "downloadStatus { state queue { state progress tries chapter { id name mangaId chapterNumber uploadDate } manga { id title } } }"
+var DOWNLOAD = "state progress tries chapter { id name mangaId chapterNumber uploadDate } manga { id title }"
+var STATUS = "downloadStatus { state queue { " + DOWNLOAD + " } }"
 var STATUS_QUERY = "{ " + STATUS + " }"
+// Its first result holds the whole queue (initial), each later one only
+// what changed. Past maxUpdates changes in one result the server leaves
+// them out (omittedUpdates), and the queue is due a STATUS_QUERY.
+var LIVE_QUERY = "subscription { downloadStatusChanged(input: { maxUpdates: 50 }) { state omittedUpdates"
+  + " initial { position " + DOWNLOAD + " } updates { type download { position " + DOWNLOAD + " } } } }"
 var ENQUEUE_MUTATION = "mutation($ids: [Int!]!) { enqueueChapterDownloads(input: { ids: $ids }) { " + STATUS + " } }"
 var DEQUEUE_MUTATION = "mutation($ids: [Int!]!) { dequeueChapterDownloads(input: { ids: $ids }) { " + STATUS + " } }"
 var DELETE_MUTATION = "mutation($ids: [Int!]!) { deleteDownloadedChapters(input: { ids: $ids }) { chapters { id isDownloaded } } }"
@@ -34,31 +40,59 @@ function statusIn(data) {
   return null
 }
 
-// event.type: "reply" { reply } for a poll or any download mutation.
+function item(d) {
+  return {
+    chapterId: d.chapter.id,
+    mangaId: d.chapter.mangaId,
+    manga: String(d.manga.title || ""),
+    chapter: String(d.chapter.name || ""),
+    chapterNumber: Number(d.chapter.chapterNumber),
+    uploadDate: Number(d.chapter.uploadDate),
+    state: d.state,
+    progress: Number(d.progress) || 0,
+    tries: d.tries
+  }
+}
+
+function queueOf(running, items) {
+  return { state: "ok", message: "", running: running, items: items }
+}
+
+// A finished download leaves the server's queue, as a dequeued one does.
+// The rest change in place, or move to their position when they are new
+// or moved.
+function changed(items, updates) {
+  var next = items.slice()
+  updates.forEach(function(u) {
+    var at = next.findIndex(function(i) { return i.chapterId === u.download.chapter.id })
+    if (at !== -1) next.splice(at, 1)
+    if (u.type === "DEQUEUED" || u.type === "FINISHED") return
+    next.splice(at !== -1 && u.type !== "POSITION" ? at : Math.min(u.download.position, next.length), 0, item(u.download))
+  })
+  return next
+}
+
+// event.type:
+//   "reply" { reply } for STATUS_QUERY or any download mutation
+//   "live"  { data } for a LIVE_QUERY result
 // A failed request keeps the queue shown and only changes state.
 function reduce(q, event) {
+  if (event.type === "live") {
+    var l = event.data.downloadStatusChanged
+    if (!l) return q
+    return queueOf(l.state === "STARTED", l.initial ? l.initial.map(item) : changed(q.items, l.updates || []))
+  }
   if (event.type !== "reply") return q
   var r = event.reply
   var s = r.state === "ok" ? statusIn(r.data) : null
   if (!s) return { state: r.state === "ok" ? q.state : r.state, message: r.message, running: q.running, items: q.items }
-  return {
-    state: "ok",
-    message: "",
-    running: s.state === "STARTED",
-    items: (s.queue || []).map(function(d) {
-      return {
-        chapterId: d.chapter.id,
-        mangaId: d.chapter.mangaId,
-        manga: String(d.manga.title || ""),
-        chapter: String(d.chapter.name || ""),
-        chapterNumber: Number(d.chapter.chapterNumber),
-        uploadDate: Number(d.chapter.uploadDate),
-        state: d.state,
-        progress: Number(d.progress) || 0,
-        tries: d.tries
-      }
-    })
-  }
+  return queueOf(s.state === "STARTED", (s.queue || []).map(item))
+}
+
+// Whether a LIVE_QUERY result left changes out, so the queue is due a
+// STATUS_QUERY.
+function omitted(data) {
+  return !!(data.downloadStatusChanged && data.downloadStatusChanged.omittedUpdates)
 }
 
 // The items in before that next no longer holds: finished, or taken out.
@@ -68,9 +102,10 @@ function left(before, next) {
   return before.filter(function(i) { return !still[i.chapterId] })
 }
 
+// The queue stays live while the overlay shows or anything waits in it.
 // Downloads the server starts on its own, as new chapters, show once the
-// overlay opens; nothing polls an idle queue.
-function polling(q, overlayOpen) {
+// overlay opens or a download reply lists them.
+function live(q, overlayOpen) {
   return overlayOpen || q.items.length > 0
 }
 
@@ -222,11 +257,13 @@ function marker(chapter, items) {
 if (typeof module !== "undefined") {
   module.exports = {
     STATUS_QUERY: STATUS_QUERY,
+    LIVE_QUERY: LIVE_QUERY,
     CLEAR_PAYLOAD: CLEAR_PAYLOAD,
     initial: initial,
     reduce: reduce,
+    omitted: omitted,
     left: left,
-    polling: polling,
+    live: live,
     marked: marked,
     enqueuePayload: enqueuePayload,
     removePayload: removePayload,

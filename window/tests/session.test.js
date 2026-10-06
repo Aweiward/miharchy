@@ -188,3 +188,20 @@ test("a changed server.json logs in again with the new credentials", async () =>
   assert.equal(server.requests.filter(isLogin).length, 2);
   assert.equal(server.requests.at(-1).url, "http://127.0.0.1:4591/api/graphql");
 });
+
+test("a live socket gets the session's token, and a fresh one for the token the server refused", async () => {
+  const { server, S, send } = setup();
+  const token = (stale) => new Promise((resolve) => S.token(config, stale, (failure, t) => resolve([failure, t])));
+  assert.deepEqual(await token(""), [null, "a1"], "the first one logs in");
+  await send();
+  assert.equal(server.requests.at(-1).headers.Authorization, "Bearer a1", "HTTP shares the socket's token");
+  assert.deepEqual(await token(""), [null, "a1"], "no request while the token holds");
+  assert.equal(server.requests.length, 2);
+  assert.deepEqual(await token("a1"), [null, "a2"], "a refused token refreshes");
+  assert.equal(server.requests.filter(isRefresh).length, 1);
+  server.password = "changed";
+  server.refresh.clear();
+  const [failure, t] = await token("a2");
+  assert.equal(failure.state, "unauthorized");
+  assert.equal(t, "");
+});

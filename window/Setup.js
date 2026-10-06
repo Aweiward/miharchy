@@ -24,6 +24,7 @@ var DESKTOP_FILE = ".local/share/applications/miharchy.desktop"
 var STEPS = [
   { id: "java", title: "Java 21 or newer", kind: "install", required: true, command: "sudo pacman -S jdk-openjdk" },
   { id: "suwayomi", title: "Suwayomi-Server", kind: "install", required: true, command: "yay -S suwayomi-server-bin" },
+  { id: "websockets", title: "Qt WebSockets", kind: "install", required: true, command: "sudo pacman -S qt6-websockets" },
   { id: "server", title: "Server service and credentials", kind: "run", required: true, prompt: "Run server/miharchy-server now?" },
   { id: "flaresolverr", title: "FlareSolverr (optional)", kind: "run", prompt: "Start the FlareSolverr container and turn it on in Suwayomi?" },
   { id: "syncFolder", title: "Sync folder", kind: "folder" },
@@ -42,6 +43,7 @@ var PROBE = [
   FINGERPRINT,
   "echo \"java $(java -version 2>&1 | head -n 1)\"",
   "test -x /usr/bin/suwayomi-server && echo suwayomi",
+  "test -e /usr/lib/qt6/qml/QtWebSockets/qmldir && echo websockets",
   "test -s \"$1\" && echo config",
   "echo \"unit $(systemctl --user is-enabled miharchy-server 2>/dev/null) $(systemctl --user is-active miharchy-server 2>/dev/null)\"",
   "cmp -s \"$4\" \"$HOME/" + UNIT_FILE + "\" && echo unitCurrent",
@@ -138,7 +140,7 @@ function javaMajor(line) {
 
 // The probe's output -> facts. docker is false when the command is absent.
 function parseProbe(text) {
-  var f = { java: 0, suwayomi: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", launcher: false, unitCurrent: false, basicAuth: false }
+  var f = { java: 0, suwayomi: false, websockets: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", launcher: false, unitCurrent: false, basicAuth: false }
   String(text).split("\n").forEach(function(line) {
     var sp = line.indexOf(" ")
     var key = sp === -1 ? line : line.slice(0, sp)
@@ -146,6 +148,7 @@ function parseProbe(text) {
     var words = rest.split(/\s+/)
     if (key === "java") f.java = javaMajor(rest)
     if (key === "suwayomi") f.suwayomi = true
+    if (key === "websockets") f.websockets = true
     if (key === "config") f.config = true
     if (key === "unit") {
       f.unitEnabled = words.indexOf("enabled") !== -1
@@ -252,6 +255,9 @@ function status(s, id) {
     case "suwayomi":
       if (p.suwayomi) return is("done", "/usr/bin/suwayomi-server is installed.")
       return is("todo", "Suwayomi-Server is not installed. Install it in a terminal, then press Enter to check again.")
+    case "websockets":
+      if (p.websockets) return is("done", "Qt WebSockets is installed.")
+      return is("todo", "Downloads and Updates need it to show changes as they happen. Install it in a terminal, then press Enter to check again.")
     case "server":
       if (status(s, "java").state !== "done" || !p.suwayomi) return is("waiting", "Needs Java and Suwayomi-Server first.")
       // Miharchy logs in with tokens (ADR 0005); servers set up before that run basic_auth.

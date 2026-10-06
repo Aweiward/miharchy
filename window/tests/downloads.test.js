@@ -61,12 +61,69 @@ test("left lists the items gone from the queue since the last poll", () => {
   assert.deepEqual(D.left(after.items, after.items), []);
 });
 
-test("the poll runs while the queue overlay shows or anything waits in the queue", () => {
+test("the queue stays live while the overlay shows or anything waits in it", () => {
   const empty = polled(D.initial(), { downloadStatus: status("STOPPED", []) });
   const busy = polled(D.initial(), { downloadStatus: status("STARTED", [item(13, "QUEUED", 0)]) });
-  assert.equal(D.polling(empty, false), false);
-  assert.equal(D.polling(empty, true), true);
-  assert.equal(D.polling(busy, false), true);
+  assert.equal(D.live(empty, false), false);
+  assert.equal(D.live(empty, true), true);
+  assert.equal(D.live(busy, false), true);
+});
+
+// downloadStatusChanged results, as measured on Suwayomi v2.3.
+const at = (position, i) => Object.assign({ position }, i);
+const changes = (q, state, updates, omittedUpdates) => D.reduce(q, { type: "live", data: { downloadStatusChanged: { state, omittedUpdates: !!omittedUpdates, initial: null, updates } } });
+const ids = (q) => q.items.map((i) => [i.chapterId, i.state, i.progress]);
+
+test("the subscription's first result is the whole queue, the later ones change it in place", () => {
+  assert.match(D.LIVE_QUERY, /^subscription \{ downloadStatusChanged\(input: \{ maxUpdates: \d+ \}\) \{ state omittedUpdates initial \{ position state progress /);
+  const first = D.reduce(D.initial(), { type: "live", data: { downloadStatusChanged: { state: "STARTED", omittedUpdates: false, initial: [at(0, item(13, "DOWNLOADING", 0.1)), at(1, item(14, "QUEUED", 0))], updates: [] } } });
+  assert.equal(first.state, "ok");
+  assert.equal(first.running, true);
+  assert.deepEqual(ids(first), [[13, "DOWNLOADING", 0.1], [14, "QUEUED", 0]]);
+  assert.equal(first.items[0].manga, "Spy Room");
+
+  const progress = changes(first, "STARTED", [{ type: "PROGRESS", download: at(0, item(13, "DOWNLOADING", 0.6)) }]);
+  assert.deepEqual(ids(progress), [[13, "DOWNLOADING", 0.6], [14, "QUEUED", 0]]);
+  const queued = changes(progress, "STARTED", [{ type: "QUEUED", download: at(2, item(15, "QUEUED", 0)) }]);
+  assert.deepEqual(ids(queued).map((i) => i[0]), [13, 14, 15], "a new download joins at its position");
+  const failed = changes(queued, "STARTED", [{ type: "ERROR", download: at(1, item(14, "ERROR", 0)) }]);
+  assert.deepEqual(ids(failed)[1], [14, "ERROR", 0]);
+  const stopped = changes(failed, "STOPPED", [{ type: "STOPPED", download: at(0, item(13, "QUEUED", 0.6)) }]);
+  assert.equal(stopped.running, false);
+  assert.deepEqual(ids(stopped).map((i) => i[0]), [13, 14, 15]);
+});
+
+test("a finished or dequeued download leaves the queue, and left() names it", () => {
+  const first = D.reduce(D.initial(), { type: "live", data: { downloadStatusChanged: { state: "STARTED", initial: [at(0, item(13, "DOWNLOADING", 0.9)), at(1, item(14, "QUEUED", 0, 6)), at(2, item(15, "QUEUED", 0))] } } });
+  const next = changes(first, "STARTED", [{ type: "FINISHED", download: at(0, item(13, "FINISHED", 1)) }, { type: "DEQUEUED", download: at(1, item(15, "QUEUED", 0)) }]);
+  assert.deepEqual(ids(next).map((i) => i[0]), [14]);
+  assert.deepEqual(D.left(first.items, next.items).map((i) => i.chapterId), [13, 15]);
+});
+
+test("a moved download takes its new position", () => {
+  const first = D.reduce(D.initial(), { type: "live", data: { downloadStatusChanged: { state: "STOPPED", initial: [at(0, item(13, "QUEUED", 0)), at(1, item(14, "QUEUED", 0)), at(2, item(15, "QUEUED", 0))] } } });
+  assert.deepEqual(ids(changes(first, "STOPPED", [{ type: "POSITION", download: at(0, item(15, "QUEUED", 0)) }])).map((i) => i[0]), [15, 13, 14]);
+  assert.deepEqual(ids(changes(first, "STOPPED", [{ type: "POSITION", download: at(9, item(13, "QUEUED", 0)) }])).map((i) => i[0]), [14, 15, 13], "past the end: last");
+});
+
+test("the server's results for the overlay's moves, dequeue and cancel all end in the server's order", () => {
+  // Measured: one POSITION per moved download, in the mutation's order,
+  // with only its target index; the downloads it pushes aside get none.
+  const queue = D.reduce(D.initial(), { type: "live", data: { downloadStatusChanged: { state: "STOPPED", initial: [1, 2, 3, 4, 5].map((id, i) => at(i, item(id, "QUEUED", 0))) } } });
+  const moved = changes(queue, "STOPPED", [{ type: "POSITION", download: at(0, item(3, "QUEUED", 0)) }]);
+  const sorted = changes(moved, "STOPPED", [{ type: "POSITION", download: at(0, item(5, "QUEUED", 0)) }, { type: "POSITION", download: at(1, item(4, "QUEUED", 0)) }]);
+  const dequeued = changes(sorted, "STOPPED", [{ type: "DEQUEUED", download: at(1, item(2, "QUEUED", 0)) }]);
+  assert.deepEqual(ids(dequeued).map((i) => i[0]), [5, 4, 3, 1], "what downloadStatus listed after the same mutations");
+  const cleared = changes(dequeued, "STOPPED", [5, 4, 3, 1].map((id) => ({ type: "DEQUEUED", download: at(0, item(id, "QUEUED", 0)) })));
+  assert.deepEqual(cleared.items, []);
+});
+
+test("a result that left changes out says so, so the subscription starts over", () => {
+  const first = D.reduce(D.initial(), { type: "live", data: { downloadStatusChanged: { state: "STARTED", initial: [] } } });
+  assert.equal(D.omitted({ downloadStatusChanged: { omittedUpdates: true } }), true);
+  assert.equal(D.omitted({ downloadStatusChanged: { omittedUpdates: false } }), false);
+  assert.equal(D.omitted({}), false);
+  assert.equal(D.reduce(first, { type: "live", data: {} }), first, "a result without the field changes nothing");
 });
 
 test("the marked chapters: the one under the cursor, or the range from the anchor in either direction", () => {

@@ -285,6 +285,7 @@ if (typeof module !== "undefined") {
     inLibraryPayload: inLibraryPayload,
     placeholder: placeholder,
     reply: reply,
+    errorText: errorText,
     coverUrl: coverUrl,
     serverImageUrl: serverImageUrl,
     initial: initial,

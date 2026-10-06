@@ -126,6 +126,13 @@ function renew(config, stale, back) {
   })
 }
 
+// The access token for a live socket's connection_init (LiveSocket.qml):
+// back(failure, token), failure as renew() gives. stale: the token the
+// server refused, or "".
+function token(config, stale, back) {
+  renew(config, stale, function(failure) { back(failure, failure ? "" : session.access) })
+}
+
 // Sends one request of a kind, done gets one answer. Returns { abort },
 // which answers done at once as a request with no answer (status 0).
 function call(config, url, payload, kind, done) {
@@ -174,6 +181,7 @@ if (typeof module !== "undefined") {
     loginPayload: loginPayload,
     refreshPayload: refreshPayload,
     send: send,
-    image: image
+    image: image,
+    token: token
   }
 }

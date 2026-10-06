@@ -20,16 +20,14 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // The view shows, so it loads and polls.
+  // The view shows, so it loads and follows the library update live.
   property bool active: false
   property var updates: Updates.initial()
   property int cursorId: -1
   property string error: ""
-  // Only the latest list load, open and poll may land.
+  // Only the latest list load and open may land.
   property int listSeq: 0
   property int openSeq: 0
-  property int pollSeq: 0
-  property bool polling: false
   // Chapter ids; actions take these, or the cursor's update with none.
   property var selected: []
   // x asked once; the next x deletes the downloads, as Mihon's
@@ -90,37 +88,27 @@ Item {
     })
   }
 
-  function poll() {
-    if (!config || polling) return
-    polling = true
-    var seq = ++pollSeq
-    send(Updates.statusPayload(), function(reply) {
-      if (seq !== view.pollSeq) return
-      view.polling = false
-      var before = view.updates
-      view.updates = Updates.reduce(before, { type: "status", reply: reply })
-      if (Updates.finished(before, view.updates)) view.load()
-    })
+  // A run, the server's scheduled ones too, ends with a reload of the list.
+  function follow(data) {
+    var before = updates
+    updates = Updates.reduce(before, { type: "live", data: data })
+    if (Updates.finished(before, updates)) load()
   }
 
   // categories: ids for Updates.checkPayload(). Returns whether a run
-  // started; one runs at a time.
+  // started; one runs at a time. Its progress comes live.
   function check(categories) {
     if (!config || updates.running || updates.checking) return false
     updates = Updates.reduce(updates, { type: "checking" })
     error = ""
-    // A poll sent before the run started would end the check.
-    pollSeq++
-    polling = false
     send(Updates.checkPayload(categories), function(reply) {
-      if (reply.state === "ok") return view.poll()
-      view.updates = Updates.reduce(view.updates, { type: "status", reply: reply })
+      if (reply.state === "ok") return
+      view.updates = Updates.reduce(view.updates, { type: "failed" })
       view.error = reply.message || Model.problem(reply, view.configPath).title
     })
     return true
   }
 
-  // A poll in flight could still say the run goes on, so it is dropped.
   function stop() {
     if (!config || !(updates.running || updates.checking)) return
     send(Updates.stopPayload(), function(reply) {
@@ -128,8 +116,6 @@ Item {
         view.error = reply.message || Model.problem(reply, view.configPath).title
         return
       }
-      view.pollSeq++
-      view.polling = false
       var before = view.updates
       view.updates = Updates.reduce(before, { type: "stopped" })
       if (Updates.finished(before, view.updates)) view.load()
@@ -250,14 +236,11 @@ Item {
     onFailed: function(reply) { view.error = reply.message || Model.problem(reply, view.configPath).title }
   }
 
-  // A scheduled run can start any time, so an idle view still looks now
-  // and then. Polling, not yet the libraryUpdateStatusChanged subscription
-  // that the token login allows (ADR 0005).
-  Timer {
-    interval: view.updates.running || view.updates.checking ? 1000 : 30000
+  LiveSocket {
+    config: view.config
+    query: Updates.LIVE_QUERY
     running: view.active && view.config !== null
-    repeat: true
-    onTriggered: view.poll()
+    onResult: function(data) { view.follow(data) }
   }
 
   Text {

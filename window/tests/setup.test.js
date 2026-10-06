@@ -12,7 +12,7 @@ const finish = (s, id, text) => S.reduce(S.reduce(s, { type: "start", id }), { t
 const server = (s, data) => S.reduce(s, { type: "server", reply: M.reply(200, JSON.stringify({ data })) });
 const states = (s) => Object.fromEntries(S.STEPS.map((st) => [st.id, S.status(s, st.id).state]));
 
-const READY = "java openjdk version \"26.0.2.1\" 2026-08-18\nsuwayomi\nconfig\nunit enabled active\nunitCurrent\ndocker \n";
+const READY = "java openjdk version \"26.0.2.1\" 2026-08-18\nsuwayomi\nwebsockets\nconfig\nunit enabled active\nunitCurrent\ndocker \n";
 const FLARE_ON = { flareSolverrEnabled: true, flareSolverrUrl: "http://127.0.0.1:8191", flareSolverrAsResponseFallback: true };
 const FLARE_OFF = { flareSolverrEnabled: false, flareSolverrUrl: "http://localhost:8191", flareSolverrAsResponseFallback: false };
 
@@ -79,18 +79,28 @@ test("nothing is decided before the first check", () => {
   assert.ok(S.STEPS.every((st) => S.action(s, st.id) === null));
 });
 
-test("a set-up machine shows steps 1-3 done and is complete", () => {
+test("a set-up machine shows steps 1-4 done and is complete", () => {
   const s = finish(S.initial(), "probe", READY);
-  assert.deepEqual(states(s), { java: "done", suwayomi: "done", server: "done", flaresolverr: "waiting", syncFolder: "waiting", helper: "waiting", launcher: "todo" });
+  assert.deepEqual(states(s), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "waiting", syncFolder: "waiting", helper: "waiting", launcher: "todo" });
   assert.equal(S.incomplete(s), false);
   const loaded = server(s, { settings: FLARE_OFF, metas: { nodes: [] } });
-  assert.deepEqual(states(loaded), { java: "done", suwayomi: "done", server: "done", flaresolverr: "todo", syncFolder: "todo", helper: "waiting", launcher: "todo" });
-  assert.equal(S.next(loaded), 3);
+  assert.deepEqual(states(loaded), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "todo", syncFolder: "todo", helper: "waiting", launcher: "todo" });
+  assert.equal(S.next(loaded), 4);
+});
+
+test("live updates need qt6-websockets, a step to install like Java", () => {
+  const s = finish(S.initial(), "probe", READY.replace("websockets\n", ""));
+  assert.equal(S.status(s, "websockets").state, "todo");
+  assert.equal(S.incomplete(s), true, "Downloads and Updates stop changing without it");
+  assert.equal(S.action(s, "websockets"), "check");
+  assert.equal(S.STEPS.find((st) => st.id === "websockets").command, "sudo pacman -S qt6-websockets");
+  const probed = S.parseProbe(S.parseJob(run(S.probeCommand("/none", "/none", "/none"), { PATH: "/none", HOME: "/none" })).output);
+  assert.equal(probed.websockets, fs.existsSync("/usr/lib/qt6/qml/QtWebSockets/qmldir"), "the probe looks where pacman installs the module");
 });
 
 test("missing pieces: each step says what to do, later steps wait", () => {
   const s = finish(S.initial(), "probe", "java sh: java: not found\nunit  \n");
-  assert.deepEqual(states(s), { java: "todo", suwayomi: "todo", server: "waiting", flaresolverr: "unavailable", syncFolder: "waiting", helper: "waiting", launcher: "todo" });
+  assert.deepEqual(states(s), { java: "todo", suwayomi: "todo", websockets: "todo", server: "waiting", flaresolverr: "unavailable", syncFolder: "waiting", helper: "waiting", launcher: "todo" });
   assert.match(S.status(s, "flaresolverr").detail, /needs FlareSolverr/);
   assert.equal(S.incomplete(s), true);
   assert.equal(S.next(s), 0);
@@ -154,7 +164,7 @@ test("running setup twice changes nothing: a done machine stays done after anoth
   const data = { settings: FLARE_ON, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/s" }] } };
   const once = server(finish(S.initial(), "probe", done), data);
   const twice = server(finish(once, "probe", done), data);
-  assert.deepEqual(states(twice), { java: "done", suwayomi: "done", server: "done", flaresolverr: "done", syncFolder: "done", helper: "done", launcher: "done" });
+  assert.deepEqual(states(twice), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "done", syncFolder: "done", helper: "done", launcher: "done" });
   assert.deepEqual(states(twice), states(once));
 });
 

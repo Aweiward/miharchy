@@ -29,6 +29,12 @@ The server is `/usr/bin/suwayomi-server` (AUR `suwayomi-server-bin`) with `-Dsuw
 
 The sync helper builds once per checkout: `sync/gradlew -p sync installDist` → `sync/build/install/miharchy-sync/bin/miharchy-sync`. Run it against the scratch server with `JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json`. For the window's sync, backup and restore, copy the build into `$RUN/home/.local/share/miharchy/helper/` (`cp -r sync/build/install/miharchy-sync/. $RUN/home/.local/share/miharchy/helper/`).
 
+`server.sh restart` stops and starts the same instance: same port, credentials and library. Use it to prove the window reconnects after a server restart; `stop` then `start` wipes the library and changes the credentials.
+
+## Live updates
+
+The download queue and Updates follow GraphQL subscriptions over a WebSocket (`window/LiveSocket.qml`), which needs `qt6-websockets`. Without the module the window still runs, with nothing live, and logs "Live updates need qt6-websockets". When it is not installed, extract the Arch package into a scratch dir (`pacman -Sp qt6-websockets` gives the URL; check the `.sig` with `pacman-key --verify`) and run `drive.sh` with `QML_IMPORT_PATH=<dir>/usr/lib/qt6/qml LD_LIBRARY_PATH=<dir>/usr/lib` in front: the one place a `VAR=...` prefix belongs. Each drive overwrites `$RUN/evidence/drive.log`, so copy it to its own name before the next drive. To show that nothing polls, point the drive at a logging proxy: write a copy of `$RUN/server.json` whose `url` is the proxy's port over `$RUN/server.json` (`gql.sh` and `server.sh` use `$RUN/port`, not the url), and log each request and WebSocket upgrade. Start the server with `MIHARCHY_VERIFY_TOKEN_EXPIRY=40s` to keep a socket open past its token, and run `server.sh restart` while a drive runs in the background to prove the reconnect. A library update only shows progress when the seeded manga pass the skip filters: `setSettings` with `excludeUnreadChapters`, `excludeNotStarted` and `excludeCompleted` false.
+
 ## Doctor
 
 ```sh

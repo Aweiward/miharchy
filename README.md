@@ -31,11 +31,12 @@ Setup lists the steps below. Move with `j` and `k`, press Enter on a step. A ste
 
 1. Java: `sudo pacman -S jdk-openjdk`.
 2. Suwayomi-Server: `yay -S suwayomi-server-bin`.
-3. Server: runs `server/miharchy-server`. It creates `~/.config/miharchy/server.json` with a random password and enables the `miharchy-server` user service on `127.0.0.1:4590`.
-4. FlareSolverr (optional, needs Docker): starts the `miharchy-flaresolverr` container on `127.0.0.1:8191` for Cloudflare sources.
-5. Sync folder: the folder Mihon and Miharchy exchange backups through.
-6. Sync helper: builds the sync helper into `~/.local/share/miharchy/helper`. The first build downloads Gradle and libraries and takes a few minutes. After `omarchy plugin update` the step shows "out of date" when the helper changed; build it again.
-7. App launcher entry: writes `~/.local/share/applications/miharchy.desktop`, so Miharchy shows in the app launcher (Super + Space).
+3. Qt WebSockets: `sudo pacman -S qt6-websockets`. The download queue and Updates use it to show changes as they happen.
+4. Server: runs `server/miharchy-server`. It creates `~/.config/miharchy/server.json` with a random password and enables the `miharchy-server` user service on `127.0.0.1:4590`.
+5. FlareSolverr (optional, needs Docker): starts the `miharchy-flaresolverr` container on `127.0.0.1:8191` for Cloudflare sources.
+6. Sync folder: the folder Mihon and Miharchy exchange backups through.
+7. Sync helper: builds the sync helper into `~/.local/share/miharchy/helper`. The first build downloads Gradle and libraries and takes a few minutes. After `omarchy plugin update` the step shows "out of date" when the helper changed; build it again.
+8. App launcher entry: writes `~/.local/share/applications/miharchy.desktop`, so Miharchy shows in the app launcher (Super + Space).
 
 ## Sync with Mihon
 

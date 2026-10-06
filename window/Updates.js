@@ -22,15 +22,16 @@ var STATUS_FIELDS = "libraryUpdateStatus { jobsInfo { isRunning finishedJobs tot
 // unread chapter, so a limit waits for a library big enough to need one.
 var UPDATES_QUERY = "{ chapters(filter: { inLibrary: { equalTo: true }, isRead: { equalTo: false } }) {"
   + " nodes { id name uploadDate fetchedAt sourceOrder isRead lastPageRead isBookmarked isDownloaded manga { id title thumbnailUrl inLibraryAt } } } " + STATUS_FIELDS + " }"
-var STATUS_QUERY = "{ " + STATUS_FIELDS + " }"
+// Each result holds the run's counts, the first one too; the last-checked
+// time and the skip filters come with the list, which reloads after a run.
+var LIVE_QUERY = "subscription { libraryUpdateStatusChanged(input: {}) { jobsInfo { isRunning finishedJobs totalJobs skippedMangasCount } } }"
 // The view's list: read updates too, and what the filters test. The
 // 3-month cut runs on the server here, since read chapters are most of a
 // library.
 var VIEW_QUERY = "query($since: LongString!) { chapters(filter: { inLibrary: { equalTo: true }, uploadDate: { greaterThan: $since } }) {"
   + " nodes { id name uploadDate fetchedAt sourceOrder isRead lastPageRead isBookmarked isDownloaded scanlator"
   + " manga { id title thumbnailUrl inLibraryAt categories { nodes { id } } meta { key value } } } } " + STATUS_FIELDS + " }"
-// Its own reply holds the status from before the run, so the view polls.
-// With no categories the server skips the excluded ones (Categories.js);
+// The run's progress comes through LIVE_QUERY. With no categories the server skips the excluded ones (Categories.js);
 // with categories it updates every manga in them, as Mihon's per-category
 // update does.
 var CHECK_MUTATION = "mutation($categories: [Int!]) { updateLibrary(input: { categories: $categories }) { clientMutationId } }"
@@ -176,9 +177,9 @@ function choose(prefs, row) {
 // data: the last list reply's data, which the filters run over again;
 // found: its updates before the filters.
 // running: the server runs a library update; checking: u asked for one and
-// no poll has answered yet. checkedAt: when the last run started, in ms.
-// stopped: null, or the user stopped the last run, at "finished / total"
-// ("" before the first poll).
+// the server has not shown the run yet. checkedAt: when the last run
+// started, in ms. stopped: null, or the user stopped the last run, at
+// "finished / total" ("" before the run showed).
 function initial() {
   return { state: "loading", message: "", rows: [], data: null, found: 0, running: false, checking: false, finished: 0, total: 0, skipped: 0, skipReasons: [], checkedAt: 0, stopped: null }
 }
@@ -190,10 +191,6 @@ function listPayload() {
 
 function viewPayload(now) {
   return { query: VIEW_QUERY, variables: { since: String(since(now)) } }
-}
-
-function statusPayload() {
-  return { query: STATUS_QUERY }
 }
 
 // categories: ids to update, or none for the whole library.
@@ -244,16 +241,20 @@ function rows(data, config, now, prefs) {
   })
 }
 
-function status(data) {
-  var j = (data.libraryUpdateStatus && data.libraryUpdateStatus.jobsInfo) || {}
+function jobs(j) {
   return {
     running: j.isRunning === true,
     finished: j.finishedJobs || 0,
     total: j.totalJobs || 0,
-    skipped: j.skippedMangasCount || 0,
-    skipReasons: SKIP_FILTERS.filter(function(f) { return data.settings && data.settings[f[0]] === true }).map(function(f) { return f[1] }),
-    checkedAt: Number(data.lastUpdateTimestamp && data.lastUpdateTimestamp.timestamp) || 0
+    skipped: j.skippedMangasCount || 0
   }
+}
+
+function status(data) {
+  var s = jobs((data.libraryUpdateStatus && data.libraryUpdateStatus.jobsInfo) || {})
+  s.skipReasons = SKIP_FILTERS.filter(function(f) { return data.settings && data.settings[f[0]] === true }).map(function(f) { return f[1] })
+  s.checkedAt = Number(data.lastUpdateTimestamp && data.lastUpdateTimestamp.timestamp) || 0
+  return s
 }
 
 // event.type:
@@ -261,8 +262,9 @@ function status(data) {
 //   "list"      { reply, config, now, prefs } for viewPayload()
 //   "filter"    { config, now, prefs }: the filters changed
 //   "checking"  checkPayload() went out
+//   "failed"    checkPayload() failed
 //   "stopped"   stopPayload() succeeded
-//   "status"   { reply } for statusPayload()
+//   "live"      { data } for a LIVE_QUERY result
 function reduce(u, event) {
   switch (event.type) {
     case "request":
@@ -270,7 +272,7 @@ function reduce(u, event) {
     case "list":
       var r = event.reply
       if (r.state !== "ok") return copy(u, { state: r.state, message: r.message })
-      return reduce(copy(withStatus(u, r.data), { state: "ok", message: "", data: r.data }), { type: "filter", config: event.config, now: event.now, prefs: event.prefs })
+      return reduce(copy(withStatus(u, status(r.data)), { state: "ok", message: "", data: r.data }), { type: "filter", config: event.config, now: event.now, prefs: event.prefs })
     case "filter":
       if (!u.data) return u
       return copy(u, { rows: rows(u.data, event.config, event.now, event.prefs), found: recent(u.data, event.now).length })
@@ -279,17 +281,23 @@ function reduce(u, event) {
     case "stopped":
       if (!u.running && !u.checking) return u
       return copy(u, { running: false, checking: false, stopped: u.total ? u.finished + " / " + u.total : "" })
-    case "status":
-      if (event.reply.state !== "ok") return copy(u, { running: false, checking: false })
-      return copy(withStatus(u, event.reply.data), { checking: false })
+    case "failed":
+      return copy(u, { running: false, checking: false })
+    case "live":
+      var l = event.data.libraryUpdateStatusChanged
+      if (!l) return u
+      var s = jobs(l.jobsInfo || {})
+      // A run opens with a result of all zeros, before it counts the
+      // library; u's check waits past it. ponytail: a library with no
+      // manga sends nothing more, so its check shows until C stops it.
+      return copy(withStatus(u, s), { checking: u.checking && !(s.running || s.total || s.skipped) })
   }
   return u
 }
 
 // The server forgets a stopped run's counts, so the stop stays in u until
 // a run starts.
-function withStatus(u, data) {
-  var s = status(data)
+function withStatus(u, s) {
   return copy(copy(u, s), { stopped: s.running ? null : u.stopped })
 }
 
@@ -365,7 +373,7 @@ if (typeof module !== "undefined") {
     initial: initial,
     rows: rows,
     listPayload: listPayload,
-    statusPayload: statusPayload,
+    LIVE_QUERY: LIVE_QUERY,
     checkPayload: checkPayload,
     stopPayload: stopPayload,
     reduce: reduce,
