@@ -201,6 +201,16 @@ Panel {
 
         Text {
           width: parent.width
+          visible: text !== ""
+          wrapMode: Text.Wrap
+          text: Mark.warning(root.mark)
+          color: Color.urgent
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
+
+        Text {
+          width: parent.width
           visible: root.notice !== null
           wrapMode: Text.Wrap
           text: root.notice ? root.notice.title : ""

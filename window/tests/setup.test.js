@@ -158,6 +158,20 @@ test("running setup twice changes nothing: a done machine stays done after anoth
   assert.deepEqual(states(twice), states(once));
 });
 
+test("a server newer than the checked version shows a warning and changes no step", () => {
+  const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\n");
+  const data = (version) => ({ settings: FLARE_ON, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/s" }] }, aboutServer: { version } });
+  const probed = finish(S.initial(), "probe", done);
+  const newer = server(probed, data("v2.5.0"));
+  assert.match(S.SERVER_QUERY, /aboutServer \{ version \}/);
+  assert.equal(S.warning(newer), "Suwayomi-Server v2.5.0 is newer than the version Miharchy has checked (v2.4.2366). It should work, but report problems.");
+  assert.deepEqual(states(newer), states(server(probed, data("v2.4.2366"))));
+  assert.equal(S.incomplete(newer), false);
+  assert.deepEqual(S.unoffered(newer), []);
+  for (const v of ["v2.3.2243", "v2.4.2366"]) assert.equal(S.warning(server(probed, data(v))), "", v);
+  assert.equal(S.warning(probed), "", "nothing before the server answers");
+});
+
 test("a server that does not answer keeps the server-backed steps waiting", () => {
   const s = S.reduce(finish(S.initial(), "probe", READY), { type: "server", reply: M.reply(0, "") });
   assert.equal(s.server, null);

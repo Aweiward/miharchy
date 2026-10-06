@@ -1,5 +1,6 @@
 .pragma library
 .import "Settings.js" as Settings
+.import "Session.js" as Session
 
 // The setup screen's steps and state. Pure, so tests/setup.test.js pins it;
 // SetupView.qml runs the commands built here and feeds their output back.
@@ -76,7 +77,7 @@ var FLARE_SCRIPT = [
   "exit 1"
 ].join("\n")
 
-var SERVER_QUERY = "{ settings { flareSolverrEnabled flareSolverrUrl flareSolverrAsResponseFallback } metas { nodes { key value } } }"
+var SERVER_QUERY = "{ settings { flareSolverrEnabled flareSolverrUrl flareSolverrAsResponseFallback } metas { nodes { key value } } aboutServer { version } }"
 
 // A job's argv. The script's output, stderr included, ends with its exit
 // status on the last line, because Process gives no order between its exit
@@ -167,7 +168,7 @@ function parseProbe(text) {
 var OFFERED_META = Settings.META_PREFIX + "setupOffered"
 
 // A GraphQL reply (Model.reply) to SERVER_QUERY -> { flare, syncFolder,
-// offered }.
+// offered, version }.
 function parseServer(data) {
   var metas = (data.metas && data.metas.nodes) || []
   var value = function(key) {
@@ -175,7 +176,13 @@ function parseServer(data) {
     return m ? String(m.value) : ""
   }
   var offered = value(OFFERED_META)
-  return { flare: data.settings || {}, syncFolder: value(Settings.META_PREFIX + "syncFolder"), offered: offered ? offered.split(",") : [] }
+  return { flare: data.settings || {}, syncFolder: value(Settings.META_PREFIX + "syncFolder"), offered: offered ? offered.split(",") : [], version: (data.aboutServer && data.aboutServer.version) || "" }
+}
+
+// The newer-server warning above the steps, or "". It opens nothing and
+// leaves every step's state alone.
+function warning(s) {
+  return s.server ? Session.versionWarning(s.server.version) : ""
 }
 
 // setup.probe: parseProbe() facts, null before the first check.
@@ -357,6 +364,7 @@ if (typeof module !== "undefined") {
     initial: initial,
     reduce: reduce,
     status: status,
+    warning: warning,
     action: action,
     incomplete: incomplete,
     offers: offers,

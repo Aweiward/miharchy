@@ -12,6 +12,33 @@
 var LOGIN = "mutation($username: String!, $password: String!) { login(input: { username: $username, password: $password }) { accessToken refreshToken } }"
 var REFRESH = "mutation($refreshToken: String!) { refreshToken(input: { refreshToken: $refreshToken }) { accessToken } }"
 
+// The newest Suwayomi-Server version this login has been checked against
+// (ADR 0005). Setup and the mark warn about a newer server; nothing refuses
+// it. The AUR package (#43) reads this line for its suwayomi-server-bin<=
+// dependency, so it stays one quoted literal.
+var APPROVED_SUWAYOMI = "v2.4.2366"
+
+// "v2.4.2366" -> [2, 4, 2366]; anything else -> null.
+function versionParts(version) {
+  var m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(version || ""))
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+}
+
+// An unparsable version counts as not newer: a warning about it helps no one.
+function newerThanApproved(version) {
+  var v = versionParts(version)
+  var a = versionParts(APPROVED_SUWAYOMI)
+  if (!v) return false
+  for (var i = 0; i < 3; i++) if (v[i] !== a[i]) return v[i] > a[i]
+  return false
+}
+
+// The warning for aboutServer's version, or "".
+function versionWarning(version) {
+  if (!newerThanApproved(version)) return ""
+  return "Suwayomi-Server " + version + " is newer than the version Miharchy has checked (" + APPROVED_SUWAYOMI + "). It should work, but report problems."
+}
+
 // key: the config the tokens belong to. waiting: the callbacks of the login
 // or refresh in flight, null while none is.
 var session = { key: "", access: "", refresh: "", waiting: null }
@@ -140,6 +167,10 @@ function image(config, url, done) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+    APPROVED_SUWAYOMI: APPROVED_SUWAYOMI,
+    versionParts: versionParts,
+    newerThanApproved: newerThanApproved,
+    versionWarning: versionWarning,
     loginPayload: loginPayload,
     refreshPayload: refreshPayload,
     send: send,

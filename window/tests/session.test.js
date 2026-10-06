@@ -77,6 +77,16 @@ function setup() {
 const isLogin = (r) => r.body && /login\(/.test(r.body);
 const isRefresh = (r) => r.body && /refreshToken\(/.test(r.body);
 
+test("only a server newer than the checked version, in any part, counts as newer", () => {
+  const S = load("Session.js");
+  assert.ok(S.versionParts(S.APPROVED_SUWAYOMI), "the approved version parses");
+  for (const v of ["v2.3.2243", "v2.4.2366", "v2.4.999", "v1.9.9999", "2.4.2366"]) assert.equal(S.newerThanApproved(v), false, v);
+  for (const v of ["v2.4.2400", "v2.5.0", "v2.5.2300", "v3.0.0", "2.4.2367"]) assert.equal(S.newerThanApproved(v), true, v);
+  for (const v of ["", null, undefined, "garbage", "v2.5", "v2.5.0-SNAPSHOT", "r2400"]) assert.equal(S.newerThanApproved(v), false, String(v));
+  assert.equal(S.versionWarning("v2.4.2366"), "");
+  assert.match(S.versionWarning("v2.5.0"), /^Suwayomi-Server v2\.5\.0 is newer than the version Miharchy has checked \(v2\.4\.2366\)\./);
+});
+
 test("the first requests share one login, then carry only the access token", async () => {
   const { server, send } = setup();
   const replies = await Promise.all([send(), send(), send()]);
