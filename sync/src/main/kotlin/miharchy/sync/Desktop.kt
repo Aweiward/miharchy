@@ -24,7 +24,6 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Path
-import java.util.Base64
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 
@@ -74,10 +73,25 @@ class Snapshot(
     val trackRecordIds: Map<Pair<MangaKey, Int>, Int>,
 )
 
+private const val LOGIN =
+    "mutation(\$username: String!, \$password: String!) { login(input: { username: \$username, password: \$password }) { accessToken refreshToken } }"
+private const val REFRESH = "mutation(\$refreshToken: String!) { refreshToken(input: { refreshToken: \$refreshToken }) { accessToken } }"
+
+/**
+ * Whether Suwayomi refused the access token: under ui_login, GraphQL answers a missing or expired one with 200 and an
+ * `Unauthorized` error, a file request with 401.
+ */
+fun refusedToken(status: Int, body: String): Boolean = status == 401 || status == 200 && runCatching {
+    Json.parseToJsonElement(body).jsonObject["errors"]?.jsonArray?.firstOrNull()?.str("message")?.lineSequence()?.first()?.endsWith(" : Unauthorized")
+}.getOrNull() == true
+
 class Desktop(private val config: ServerConfig) {
     private val http = HttpClient.newHttpClient()
-    private val auth = "Basic " + Base64.getEncoder().encodeToString("${config.username}:${config.password}".toByteArray())
     private val endpoint = URI.create(config.url.trimEnd('/') + "/api/graphql")
+
+    /** ui_login's tokens (ADR 0005): a run logs in once and keeps them in memory only. */
+    private var access: String? = null
+    private var refresh: String? = null
 
     /** The folder Setup or Settings stored in meta `miharchy.syncFolder`, or null when none is set. */
     fun syncFolder(): String? = query(
@@ -118,10 +132,9 @@ class Desktop(private val config: ServerConfig) {
             "mutation(\$flags: PartialBackupFlagsInput!) { createBackup(input: { flags: \$flags }) { url } }",
             buildJsonObject { put("flags", flags) },
         ).obj("createBackup").str("url")
-        val response = http.send(
-            HttpRequest.newBuilder(endpoint.resolve(url)).header("Authorization", auth).GET().build(),
-            HttpResponse.BodyHandlers.ofByteArray(),
-        )
+        val response = authorized(HttpRequest.newBuilder(endpoint.resolve(url)).GET(), HttpResponse.BodyHandlers.ofByteArray()) {
+            it.statusCode() == 401
+        }
         check(response.statusCode() == 200) { "Suwayomi answered HTTP ${response.statusCode()} for the backup" }
         return response.body()
     }
@@ -352,11 +365,49 @@ class Desktop(private val config: ServerConfig) {
     )
 
     private fun send(request: HttpRequest.Builder): JsonObject {
-        val response = http.send(request.header("Authorization", auth).build(), HttpResponse.BodyHandlers.ofString())
+        val response = authorized(request, HttpResponse.BodyHandlers.ofString()) { refusedToken(it.statusCode(), it.body()) }
         check(response.statusCode() == 200) { "Suwayomi answered HTTP ${response.statusCode()}: ${response.body().take(500)}" }
         val json = Json.parseToJsonElement(response.body()).jsonObject
         json["errors"]?.let { error("Suwayomi GraphQL error: $it") }
         return json.obj("data")
+    }
+
+    /** Sends [request] with the access token. A refused token is renewed once, and the request goes once more. */
+    private fun <T> authorized(
+        request: HttpRequest.Builder,
+        handler: HttpResponse.BodyHandler<T>,
+        refused: (HttpResponse<T>) -> Boolean,
+    ): HttpResponse<T> {
+        fun attempt(token: String) = http.send(request.copy().header("Authorization", "Bearer $token").build(), handler)
+        val response = attempt(access ?: login())
+        return if (refused(response)) attempt(renew()) else response
+    }
+
+    /** A new access token from the refresh token, or from a new login when the refresh fails. */
+    private fun renew(): String =
+        refresh?.let { tokens(REFRESH, buildJsonObject { put("refreshToken", it) }, "refreshToken") }?.str("accessToken")?.also { access = it }
+            ?: login()
+
+    private fun login(): String {
+        val tokens = tokens(LOGIN, buildJsonObject { put("username", config.username); put("password", config.password) }, "login")
+            ?: error("Suwayomi refused the login with the username and password in server.json.")
+        refresh = tokens.str("refreshToken")
+        return tokens.str("accessToken").also { access = it }
+    }
+
+    /** A login or refresh mutation's [field], or null when it fails. It sends no token: login refuses one. */
+    private fun tokens(query: String, variables: JsonObject, field: String): JsonObject? {
+        val response = http.send(
+            HttpRequest.newBuilder(endpoint)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(buildJsonObject { put("query", query); put("variables", variables) }.toString()))
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        if (response.statusCode() != 200) return null
+        val json = runCatching { Json.parseToJsonElement(response.body()).jsonObject }.getOrNull() ?: return null
+        if (json["errors"] != null) return null
+        return (json["data"] as? JsonObject)?.get(field) as? JsonObject
     }
 }
 
