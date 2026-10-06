@@ -58,8 +58,15 @@ Item {
   signal optionPicked(int index)
   signal pickPicked(int index)
 
-  onCursorChanged: show()
+  // Once the rows changed too: the cursor follows its manga (shell.qml) in
+  // the same turn as the rows change, in either order.
+  onCursorChanged: Qt.callLater(show)
   onListedChanged: show()
+
+  RowModel {
+    id: rows
+    items: view.manga
+  }
 
   function show() {
     if (listed) list.positionViewAtIndex(cursor, ListView.Contain)
@@ -155,7 +162,7 @@ Item {
     anchors.topMargin: names.visible ? view.theme.fontSize : view.theme.fontSize * 2
     visible: view.notice === null && !view.listed
     clip: true
-    model: view.listed ? [] : view.manga
+    model: view.listed ? [] : rows
     cellWidth: view.theme.fontSize * 13
     cellHeight: cellWidth * 1.5 + view.theme.fontSize * 3
 
@@ -220,7 +227,7 @@ Item {
     anchors.fill: grid
     visible: view.notice === null && view.listed
     clip: true
-    model: view.listed ? view.manga : []
+    model: view.listed ? rows : []
 
     delegate: Rectangle {
       id: row

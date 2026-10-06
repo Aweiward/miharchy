@@ -207,7 +207,10 @@ Item {
     anchors.topMargin: head.visible ? view.theme.fontSize : view.theme.fontSize * 2
     visible: view.notice === null
     clip: true
-    model: view.entries
+    model: RowModel {
+      items: view.entries
+      key: function(e) { return e.mangaId }
+    }
 
     delegate: Column {
       id: entry
@@ -215,7 +218,8 @@ Item {
       required property int index
       readonly property bool current: index === view.cursor
       readonly property string day: History.day(modelData.at, view.now)
-      readonly property bool firstOfDay: index === 0 || History.day(view.entries[index - 1].at, view.now) !== day
+      // While the rows catch up with entries, index - 1 may be past its end.
+      readonly property bool firstOfDay: index === 0 || !view.entries[index - 1] || History.day(view.entries[index - 1].at, view.now) !== day
       width: list.width
 
       Text {

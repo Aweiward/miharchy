@@ -263,7 +263,7 @@ Item {
     anchors.topMargin: view.theme.fontSize
     visible: view.notice === null
     clip: true
-    model: view.rows
+    model: RowModel { items: view.rows }
 
     delegate: Column {
       id: entry

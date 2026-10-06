@@ -226,3 +226,70 @@ test("a chapter to open at launch is two ids, else nothing", () => {
   assert.equal(M.chapterTarget("12 x"), null);
   assert.equal(M.chapterTarget("12 3.5"), null);
 });
+
+// What a ListModel holds after the ops, as RowModel.qml applies them.
+const applyOps = (rows, c, items) => {
+  if (c.reset) return items.slice();
+  const out = rows.slice();
+  for (const op of c.ops) {
+    if (op[0] === "remove") out.splice(op[1], op[2]);
+    else if (op[0] === "insert") out.splice(op[1], 0, ...op[2]);
+    else if (op[0] === "move") out.splice(op[2], 0, out.splice(op[1], 1)[0]);
+    else out[op[1]] = op[2];
+  }
+  return out;
+};
+const manga = (n) => Array.from({ length: n }, (_, i) => ({ id: i + 1, title: "M" + (i + 1), unread: 3 }));
+const kinds = (c) => c.reset ? "reset" : c.ops.map((o) => o[0]).join(" ");
+
+test("a list changes in place: one op per manga read, removed, added back or moved", () => {
+  const all = manga(30);
+  const without7 = all.filter((m) => m.id !== 7);
+  const cases = [
+    ["one manga read", all, all.map((m) => m.id === 7 ? { ...m, unread: 0 } : m), "set"],
+    ["one removed", all, without7, "remove"],
+    ["one added back", without7, all, "insert"],
+    ["its sort key changed: to the front", all, [all[19], ...all.filter((m) => m.id !== 20)], "move"],
+    ["read and moved to the end", all, [...all.filter((m) => m.id !== 3), { ...all[2], unread: 0 }], "move set"],
+    ["a search keeps three", all, [all[1], all[14], all[28]], "remove remove remove remove"],
+    ["clearing it inserts the rest in runs", [all[1], all[14], all[28]], all, "insert insert insert insert"],
+    ["nothing changed", all, all.map((m) => ({ ...m })), ""]
+  ];
+  for (const [what, before, items, ops] of cases) {
+    const c = M.listChanges(before, items);
+    assert.equal(kinds(c), ops, what);
+    assert.deepEqual(applyOps(before, c, items), items, what);
+  }
+});
+
+test("a list resets when most rows move, on its first fill, or when a key repeats", () => {
+  const all = manga(30);
+  assert.equal(M.listChanges(all, all.slice().reverse()).reset, true, "a sort flipped");
+  assert.equal(M.listChanges([], all).reset, true, "the first fill");
+  assert.equal(M.listChanges(all, [all[0], all[0]]).reset, true, "a key twice");
+  assert.equal(M.listChanges([all[0], all[0], all[1]], [all[0], all[1]]).reset, true, "a key twice in the rows shown");
+  assert.equal(kinds(M.listChanges(all, [])), "remove", "emptied: one remove");
+});
+
+test("any removal, insertion, reorder and update of a list ends as the new list", () => {
+  let seed = 7;
+  const rand = (n) => Math.floor((seed = (seed * 1103515245 + 12345) % 2147483648) / 65536) % n;
+  for (let round = 0; round < 500; round++) {
+    const before = manga(1 + rand(40));
+    const items = before.filter(() => rand(4)).map((m) => rand(5) ? m : { ...m, unread: 0 });
+    for (let i = rand(4); i > 0; i--) items.splice(rand(items.length + 1), 0, { id: 100 + i, title: "new" });
+    for (let i = rand(4); i > 0 && items.length; i--) items.splice(rand(items.length), 0, items.splice(rand(items.length), 1)[0]);
+    assert.deepEqual(applyOps(before, M.listChanges(before, items), items), items, "round " + round);
+  }
+});
+
+test("the cursor stays on its manga, or goes to the nearest one that stayed", () => {
+  const all = manga(10);
+  assert.equal(M.follow(all, [all[9], ...all.slice(0, 9)], 4), 5, "a row moved in before it");
+  assert.equal(M.follow(all, all.filter((m) => m.id < 3 || m.id > 4), 4), 2, "two left before it");
+  assert.equal(M.follow(all, all.filter((m) => m.id !== 5), 4), 4, "it left: the next one");
+  assert.equal(M.follow(all, all.slice(0, 3), 6), 2, "it and all after it left: the last one before");
+  assert.equal(M.follow([], all, 3), 0);
+  assert.equal(M.follow(all, [], 3), 0);
+  assert.equal(M.follow([{ mangaId: 1 }, { mangaId: 2 }], [{ mangaId: 2 }, { mangaId: 1 }], 0, (e) => e.mangaId), 1, "by another key");
+});

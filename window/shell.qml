@@ -88,10 +88,13 @@ ShellRoot {
       ? librarySelected.length + " selected   v select   A all   I invert   R read   U unread   d download   X delete downloads   C categories   x remove   esc clear   "
       : "enter open   space read   v select   x remove   " + (libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (libraryPrefs.libraryDisplay === "list" ? "L grid   " : "L list   ") + (switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D queue   s sync   ")
 
-  onSwitcherIndexChanged: libraryCursor = 0
-  // A removed manga leaves the grid, so the cursor may point past its end.
+  // The shown category as onShownChanged last saw it.
+  property var libraryWas: null
+  // The cursor stays on its manga when rows move or leave, or goes to the
+  // nearest one when its own leaves; another category starts at the top.
   onShownChanged: {
-    libraryCursor = Math.max(0, Math.min(shown.manga.length - 1, libraryCursor))
+    libraryCursor = libraryWas && libraryWas.id === shown.id ? Model.follow(libraryWas.manga, shown.manga, libraryCursor) : 0
+    libraryWas = shown
     librarySelected = Updates.keep(librarySelected, shown.manga)
   }
 

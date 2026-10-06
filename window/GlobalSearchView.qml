@@ -89,7 +89,10 @@ Item {
     anchors.margins: view.theme.fontSize * 2
     clip: true
     spacing: view.theme.fontSize
-    model: view.search ? view.search.groups : []
+    model: RowModel {
+      items: view.search ? view.search.groups : []
+      key: function(g) { return g.source.id }
+    }
 
     delegate: Column {
       id: group
@@ -139,7 +142,7 @@ Item {
         visible: group.modelData.items.length > 0
         orientation: ListView.Horizontal
         clip: true
-        model: group.modelData.items
+        model: RowModel { items: group.modelData.items }
         currentIndex: group.current ? view.cursor.col : -1
         highlightFollowsCurrentItem: false
         onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Contain)
