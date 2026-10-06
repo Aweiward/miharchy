@@ -203,10 +203,6 @@ function stopPayload() {
   return { query: "mutation { updateStop(input: {}) { clientMutationId } }" }
 }
 
-function pad(n) {
-  return n < 10 ? "0" + n : String(n)
-}
-
 function dayLabel(ms, now) {
   var day = Browse.day(ms)
   if (day === Browse.day(now)) return "Today"
@@ -320,7 +316,7 @@ function progress(u, now) {
   if (u.stopped !== null) return "Stopped checking for new chapters" + (u.stopped ? " at " + u.stopped : "")
   if (!u.checkedAt) return "Never checked"
   var d = new Date(u.checkedAt)
-  return "Last checked " + dayLabel(u.checkedAt, now) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes())
+  return "Last checked " + dayLabel(u.checkedAt, now) + " " + Model.pad(d.getHours()) + ":" + Model.pad(d.getMinutes())
     + skippedText(u)
 }
 

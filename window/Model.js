@@ -407,6 +407,7 @@ if (typeof module !== "undefined") {
     failure: failure,
     failedAt: failedAt,
     again: again,
+    pad: pad,
     chapterTarget: chapterTarget,
     viewIndex: viewIndex,
     listChanges: listChanges,

@@ -95,12 +95,8 @@ function progress(entry) {
   return "page " + (entry.page + 1) + (entry.pages > 0 ? " / " + entry.pages : "")
 }
 
-function pad(n) {
-  return n < 10 ? "0" + n : String(n)
-}
-
 function date(d) {
-  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
+  return d.getFullYear() + "-" + Model.pad(d.getMonth() + 1) + "-" + Model.pad(d.getDate())
 }
 
 // The day heading for a time, against now; both in epoch seconds.
@@ -114,7 +110,7 @@ function day(at, now) {
 
 function time(at) {
   var d = new Date(at * 1000)
-  return pad(d.getHours()) + ":" + pad(d.getMinutes())
+  return Model.pad(d.getHours()) + ":" + Model.pad(d.getMinutes())
 }
 
 // The entries whose manga title holds query, ignoring case, as Mihon's

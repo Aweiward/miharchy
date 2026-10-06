@@ -269,15 +269,11 @@ function titleCase(s) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-function pad(n) {
-  return n < 10 ? "0" + n : String(n)
-}
-
 function day(ms) {
   var t = Number(ms)
   if (!t) return ""
   var d = new Date(t)
-  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
+  return d.getFullYear() + "-" + Model.pad(d.getMonth() + 1) + "-" + Model.pad(d.getDate())
 }
 
 // Mihon has no layout field, so the layout comes from what sources say.
