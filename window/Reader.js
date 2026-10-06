@@ -67,9 +67,9 @@ function delta(readingMode, side) {
 // out. toEnd: entered backwards, so it opens on its last page.
 // edge: "first" | "last" when a turn ran past the first or last chapter.
 // transition: the transition page shown past either end, or null (see
-// transition()).
+// transition()). retried, failedAt: see Model.failure().
 function at(r, index, toEnd) {
-  return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", pages: [], page: 0, half: 0, read: false, wasRead: false, saved: null, edge: "", transition: null })
+  return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", pages: [], page: 0, half: 0, read: false, wasRead: false, saved: null, edge: "", transition: null, retried: "", failedAt: 0 })
 }
 
 // Mihon's calculateChapterGap: how many whole chapter numbers lie between
@@ -271,7 +271,7 @@ function spread(r, layout, fitMode, view, zoom) {
 }
 
 // event.type:
-//   "pages"        { reply, config } for the chapter open
+//   "pages"        { reply, config, now } for the chapter open
 //   "turn"         { delta, chapter?, always, offline, layout? } by one
 //                  page, spread or half page (see turnTo); past
 //                  either end, or at once with chapter, to the transition
@@ -293,13 +293,15 @@ function spread(r, layout, fitMode, view, zoom) {
 function reduce(r, event) {
   switch (event.type) {
     case "pages":
-      if (event.reply.state !== "ok") return copy(r, { state: event.reply.state, message: event.reply.message })
-      var f = event.reply.data.fetchChapterPages
-      var pages = (f.pages || []).map(function(p) { return Model.coverUrl(event.config, p) })
-      if (!pages.length) return copy(r, { state: "error", message: "This chapter has no pages." })
+      var f = event.reply.state === "ok" ? event.reply.data.fetchChapterPages : null
+      var pages = f ? (f.pages || []).map(function(p) { return Model.coverUrl(event.config, p) }) : []
+      if (!pages.length) {
+        var why = f ? { state: "error", message: "This chapter has no pages." } : { state: event.reply.state, message: event.reply.message }
+        return copy(r, { state: why.state, message: why.message, retried: "", failedAt: Model.failedAt(r.retried, why, event.now) })
+      }
       var c = f.chapter
       var page = r.toEnd ? pages.length - 1 : c.isRead ? 0 : Math.max(0, Math.min(pages.length - 1, c.lastPageRead || 0))
-      return copy(r, { state: "ok", pages: pages, page: page, half: r.toEnd ? 1 : 0, read: c.isRead === true || page === pages.length - 1, wasRead: c.isRead === true })
+      return copy(r, { state: "ok", pages: pages, page: page, half: r.toEnd ? 1 : 0, read: c.isRead === true || page === pages.length - 1, wasRead: c.isRead === true, retried: "" })
     case "turn":
       if (r.state === "loading") return r
       var dir = event.delta > 0 ? "next" : "prev"
@@ -340,7 +342,7 @@ function reduce(r, event) {
     case "bookmarked":
       return copy(r, { chapters: r.chapters.map(function(c) { return c.id === event.chapterId ? copy(c, { bookmarked: event.bookmarked }) : c }) })
     case "retry":
-      return r.state === "loading" || r.state === "ok" ? r : copy(r, { state: "loading", message: "" })
+      return r.state === "loading" || r.state === "ok" ? r : copy(r, { state: "loading", message: "", retried: Model.failure(r), failedAt: 0 })
   }
   return r
 }
