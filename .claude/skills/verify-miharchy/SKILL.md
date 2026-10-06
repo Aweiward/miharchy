@@ -25,16 +25,16 @@ Runs must never share a run dir: `stop` kills whatever server that dir recorded,
 .claude/skills/verify-miharchy/scripts/seed.sh eu.kanade.tachiyomi.extension.en.weebcentral   # more extensions by pkgName
 ```
 
-The server is `/usr/bin/suwayomi-server` (AUR `suwayomi-server-bin`) with `-Dsuwayomi.tachidesk.config.server.rootDir=$RUN/server` and `-Djava.io.tmpdir=$RUN/server/tmp` (its page and cover cache; the default `/tmp/Tachidesk` is the user's server's too), `basic_auth` with random credentials written to `$RUN/server.json`. Ready = `aboutServer{version}` answers with those credentials. `start` returns then: the server runs detached (`setsid -f`, its own session, output in `$RUN/server.log`), so `server.sh start | tee` and a backgrounded `start` both end. A fresh server downloads JCEF (~250 MB) on first start into its root dir; that is normal.
+The server is `/usr/bin/suwayomi-server` (AUR `suwayomi-server-bin`) with `-Dsuwayomi.tachidesk.config.server.rootDir=$RUN/server` and `-Djava.io.tmpdir=$RUN/server/tmp` (its page and cover cache; the default `/tmp/Tachidesk` is the user's server's too), `ui_login` with random credentials written to `$RUN/server.json`, as Miharchy runs its own server (ADR 0005). Ready = a login with those credentials succeeds and its access token reads `aboutServer{version}` and `mangas`. Access tokens last 5 minutes; `MIHARCHY_VERIFY_TOKEN_EXPIRY=30s` on `start` shortens them (`server.jwtTokenExpiry`), so a drive can outlive one and prove the refresh. `gql.sh` logs in on each call (`token` in `env.sh`). `start` returns then: the server runs detached (`setsid -f`, its own session, output in `$RUN/server.log`), so `server.sh start | tee` and a backgrounded `start` both end. A fresh server downloads JCEF (~250 MB) on first start into its root dir; that is normal.
 
 The sync helper builds once per checkout: `sync/gradlew -p sync installDist` → `sync/build/install/miharchy-sync/bin/miharchy-sync`. Run it against the scratch server with `JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json`. For the window's sync, backup and restore, copy the build into `$RUN/home/.local/share/miharchy/helper/` (`cp -r sync/build/install/miharchy-sync/. $RUN/home/.local/share/miharchy/helper/`).
 
 ## Doctor
 
 ```sh
-.claude/skills/verify-miharchy/scripts/server.sh doctor    # "ok: pid N owns <port>, Suwayomi v…, unauthenticated request -> 401, run dir <RUN>"
+.claude/skills/verify-miharchy/scripts/server.sh doctor    # "ok: pid N owns <port>, Suwayomi v…, request without a token -> Unauthorized, run dir <RUN>"
 ```
-Run it first whenever anything looks off. It fails if the PID file is missing, the process is dead, another process owns the port, or auth is not enforced.
+Run it first whenever anything looks off. It fails if the PID file is missing, the process is dead, another process owns the port, the login fails, or auth is not enforced.
 
 ## Drive
 
