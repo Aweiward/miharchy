@@ -7,7 +7,7 @@ const Images = load("Images.js");
 // A fake server and file system: fetches wait until answered, files are a map.
 function world(idleBytes, maxAge) {
   const w = { requests: [], files: new Map(), time: 0 };
-  w.cache = Images.cache("/run/images/", idleBytes, maxAge === undefined ? 60000 : maxAge, () => w.time);
+  w.cache = Images.cache("/run/images/", 4242, idleBytes, maxAge === undefined ? 60000 : maxAge, () => w.time);
   w.fetch = (url, done) => w.requests.push({ url, done });
   w.answer = (i, r) => w.requests[i].done(r || { status: 200, data: new ArrayBuffer(10), contentType: "image/png" });
   w.holder = (name) => {
@@ -215,5 +215,51 @@ test("each fetch writes a new file name, under the dir", () => {
   w.hold("u", b);
   w.answer(1);
   assert.notEqual(a.shown[0].file, b.shown[0].file);
-  assert.ok(a.shown[0].file.startsWith("/run/images/"));
+  assert.ok(a.shown[0].file.startsWith("/run/images/4242-"), "named for the process");
+});
+
+// Boot at 1000 s, 100 ticks per second: pid 7 started at 1100 s, pid 8 at
+// 1500 s, pid 9 (this window) at 2000 s.
+const listing = (files) => [
+  ...files.map(([mtime, name]) => `f ${mtime} ${name}`),
+  "b 1000", "t 100", "p 7 10000", "p 8 50000", "p 9 100000", "",
+].join("\n");
+
+test("sweep removes the files of gone processes and unprefixed ones, and keeps a running process's", () => {
+  const out = Images.sweep(listing([
+    [1200, "7-abc-1"], [1600, "8-def-3"], [1600, "12-ghi-1"], [1600, "xyz-4"], [1600, "9-jkl-2"],
+  ]), "/run/images/", 9);
+  assert.deepEqual(out, ["/run/images/12-ghi-1", "/run/images/xyz-4"]);
+});
+
+test("sweep removes a file older than the process now holding its PID", () => {
+  const out = Images.sweep(listing([[1300, "8-old-1"], [1501, "8-new-1"]]), "/run/images/", 9);
+  assert.deepEqual(out, ["/run/images/8-old-1"]);
+});
+
+test("sweep never removes this window's files", () => {
+  assert.deepEqual(Images.sweep(listing([[10, "9-own-1"]]), "/run/images/", 9), []);
+});
+
+test("sweep of an empty or missing dir removes nothing", () => {
+  assert.deepEqual(Images.sweep(listing([]), "/run/images/", 9), []);
+  assert.deepEqual(Images.sweep("", "/run/images/", 9), []);
+});
+
+test("sweepCommand lists only regular files directly in the dir, and the running processes", () => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), cp = require("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "images-")) + "/";
+  const own = `${process.pid}-a-1`;
+  fs.writeFileSync(dir + own, "x");
+  fs.writeFileSync(dir + "1-old-1", "x");
+  fs.utimesSync(dir + "1-old-1", new Date("2000-01-01"), new Date("2000-01-01"));
+  fs.mkdirSync(dir + "sub");
+  fs.writeFileSync(dir + "sub/2-b-1", "x");
+  fs.symlinkSync(dir + own, dir + "3-c-1");
+  const [cmd, ...args] = Images.sweepCommand(dir);
+  const text = cp.execFileSync(cmd, args, { encoding: "utf8" });
+  fs.rmSync(dir, { recursive: true });
+  assert.deepEqual(text.split("\n").filter((l) => l.startsWith("f ")).map((l) => l.split(" ")[2]).sort(), ["1-old-1", own]);
+  assert.match(text, new RegExp(`^p ${process.pid} \\d+$`, "m"));
+  assert.deepEqual(Images.sweep(text, dir, 0), [dir + "1-old-1"], "a file newer than its running process stays; one older than pid 1 goes");
 });

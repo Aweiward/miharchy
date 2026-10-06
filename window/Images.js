@@ -23,20 +23,60 @@
 var IDLE_BYTES = 128 * 1024 * 1024
 var MAX_AGE = 10 * 60 * 1000
 
-// dir: where the files go, with a trailing slash. now() -> ms.
-function cache(dir, idleBytes, maxAge, now) {
-  // Files left by an earlier window stay in the dir: a random prefix per
-  // process keeps a new one's names apart from them.
-  var prefix = dir + Math.random().toString(36).slice(2) + "-"
+// dir: where the files go, with a trailing slash. pid: this process's, so
+// a later window can tell whose files these are (sweep). now() -> ms.
+function cache(dir, pid, idleBytes, maxAge, now) {
+  // An earlier window with this PID may have left files: the random part
+  // keeps a new one's names apart from them.
+  var prefix = dir + pid + "-" + Math.random().toString(36).slice(2) + "-"
   return { prefix: prefix, idleBytes: idleBytes, maxAge: maxAge, now: now, seq: 0, entries: {}, idle: [], idleSize: 0, written: {} }
 }
 
 var processCache = null
 
 // This process's cache: .pragma library keeps one copy per process.
-function shared(dir) {
-  if (!processCache) processCache = cache(dir, IDLE_BYTES, MAX_AGE, Date.now)
+function shared(dir, pid) {
+  if (!processCache) processCache = cache(dir, pid, IDLE_BYTES, MAX_AGE, Date.now)
   return processCache
+}
+
+// A window that crashes or is killed leaves its files behind. A new window
+// lists the dir and the running processes with this command, and sweep()
+// picks the files to remove. Lines: "f <mtime s> <name>" for each regular
+// file directly in dir, "b <boot time s>", "t <clock ticks per s>", and
+// "p <pid> <start, ticks since boot>" for each running process.
+function sweepCommand(dir) {
+  return ["sh", "-c",
+    "find \"$1\" -mindepth 1 -maxdepth 1 -type f -printf 'f %Ts %f\\n'\n" +
+    "while read -r k v _; do [ \"$k\" = btime ] && echo \"b $v\"; done < /proc/stat\n" +
+    "echo \"t $(getconf CLK_TCK)\"\n" +
+    "for s in /proc/[0-9]*/stat; do read -r l 2>/dev/null < \"$s\" || continue; p=${s#/proc/}; l=${l##*) }; set -- $l; echo \"p ${p%/stat} ${20}\"; done",
+    "sh", dir]
+}
+
+// The paths in dir to remove, from sweepCommand's output: files with no
+// PID in their name (older builds), files whose process is gone, and files
+// older than their process, whose PID a new process took. selfPid's files
+// always stay.
+function sweep(text, dir, selfPid) {
+  var files = [], start = {}, boot = 0, tick = 100
+  text.split("\n").forEach(function(line) {
+    var m = /^(f|b|t|p) (\S+)(?: (.+))?$/.exec(line)
+    if (!m) return
+    if (m[1] === "f") files.push({ mtime: Number(m[2]), name: m[3] })
+    else if (m[1] === "b") boot = Number(m[2])
+    else if (m[1] === "t") tick = Number(m[2])
+    else start[m[2]] = Number(m[3])
+  })
+  return files.filter(function(f) {
+    var m = /^(\d+)-/.exec(f.name)
+    if (!m) return true
+    if (m[1] === String(selfPid)) return false
+    if (!(m[1] in start)) return true
+    // A minute's slack: a clock set forward after a window starts moves its
+    // computed start past the files it wrote first.
+    return f.mtime < boot + start[m[1]] / tick - 60
+  }).map(function(f) { return dir + f.name })
 }
 
 function current(c, e) {
@@ -131,5 +171,5 @@ function drain(c) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { IDLE_BYTES: IDLE_BYTES, MAX_AGE: MAX_AGE, cache: cache, hold: hold, release: release, drain: drain }
+  module.exports = { IDLE_BYTES: IDLE_BYTES, MAX_AGE: MAX_AGE, cache: cache, hold: hold, release: release, drain: drain, sweepCommand: sweepCommand, sweep: sweep }
 }
