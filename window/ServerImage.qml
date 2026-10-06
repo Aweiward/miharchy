@@ -2,11 +2,12 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "Model.js" as Model
+import "Session.js" as Session
 
-// An Image that loads the server's own images with the Authorization
-// header. Image sends no headers and does not share XHR's cookies, so an
-// XHR fetches the bytes into a file in $XDG_RUNTIME_DIR and the Image shows
-// that file. Any other host loads as a plain Image, without credentials.
+// An Image that loads the server's own images with the access token.
+// Image sends no headers, so Session.image fetches the bytes into a file in
+// $XDG_RUNTIME_DIR and the Image shows that file. Any other host loads as a
+// plain Image, without the token.
 Image {
   id: image
 
@@ -49,28 +50,23 @@ Image {
     source = ""
     fetchFailed = false
     release()
-    var req = Model.imageRequest(config, url)
-    if (!req) {
+    var server = Model.serverImageUrl(config, url)
+    if (!server) {
       source = url
       return
     }
     var wanted = url
-    var xhr = new XMLHttpRequest()
-    xhr.responseType = "arraybuffer"
-    xhr.onreadystatechange = function() {
+    Session.image(config, server, function(r) {
       // A grid change may destroy this image before its bytes arrive.
-      if (xhr.readyState !== XMLHttpRequest.DONE || !image || wanted !== image.url) return
-      if (xhr.status !== 200) {
+      if (!image || wanted !== image.url) return
+      if (r.status !== 200) {
         image.fetchFailed = true
         return
       }
-      file.path = image.dir + image.key + "-" + Qt.md5(req.url)
-      file.setData(xhr.response)
-      image.contentType = xhr.getResponseHeader("Content-Type") || ""
+      file.path = image.dir + image.key + "-" + Qt.md5(server)
+      file.setData(r.data)
+      image.contentType = r.contentType
       if (!image.fetchFailed) image.source = "file://" + file.path
-    }
-    xhr.open("GET", req.url)
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send()
+    })
   }
 }

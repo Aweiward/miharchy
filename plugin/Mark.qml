@@ -5,6 +5,7 @@ import qs.Commons
 import qs.Ui
 import "Mark.js" as Mark
 import "../window/Model.js" as Model
+import "../window/Session.js" as Session
 import "../window/Sync.js" as Sync
 
 // The mark in the Omarchy bar and its popup of recent updates. It stays thin
@@ -66,18 +67,12 @@ Panel {
     if (!config) return
     var seq = ++pollSeq
     var cfg = config
-    var req = Model.request(cfg, Mark.listPayload())
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState !== XMLHttpRequest.DONE || seq !== root.pollSeq) return
-      root.mark = Mark.reduce(root.mark, { type: "reply", reply: Model.reply(xhr.status, xhr.responseText), config: cfg, now: Date.now() })
+    Session.send(cfg, Mark.listPayload(), function(reply) {
+      if (seq !== root.pollSeq) return
+      root.mark = Mark.reduce(root.mark, { type: "reply", reply: reply, config: cfg, now: Date.now() })
       var n = Mark.notification(root.mark)
       if (n) Quickshell.execDetached(Mark.notifyCommand(n, root.launcher, root.notifyIcon))
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
+    })
   }
 
   // One GraphQL query to localhost a minute; opening the popup polls too.

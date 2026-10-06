@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "Commands.js" as Commands
 import "Model.js" as Model
+import "Session.js" as Session
 import "Extensions.js" as Extensions
 
 // The Browse view's extension list and extension repos. It talks to the
@@ -70,15 +71,7 @@ Item {
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
 
   function send(payload, done) {
-    var req = Model.request(config, payload)
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState === XMLHttpRequest.DONE) done(Model.reply(xhr.status, xhr.responseText))
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
+    return Session.send(config, payload, done)
   }
 
   function load() {

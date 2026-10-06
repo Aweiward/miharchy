@@ -7,6 +7,7 @@ import "Chapters.js" as Chapters
 import "Commands.js" as Commands
 import "Downloads.js" as Downloads
 import "Model.js" as Model
+import "Session.js" as Session
 import "Prefs.js" as Prefs
 import "Reader.js" as Reader
 import "Settings.js" as Settings
@@ -104,15 +105,7 @@ Rectangle {
   }
 
   function send(payload, done) {
-    var req = Model.request(config, payload)
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState === XMLHttpRequest.DONE) done(Model.reply(xhr.status, xhr.responseText))
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
+    return Session.send(config, payload, done)
   }
 
   // manga: the manga detail's; chapters: newest first, as it lists them;

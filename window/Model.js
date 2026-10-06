@@ -43,37 +43,6 @@ function parseConfig(text) {
   return { url: c.url.replace(/\/+$/, ""), username: c.username, password: c.password }
 }
 
-var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-
-// Standard base64 of a string's UTF-8 bytes. Qt.btoa(string) is deprecated
-// and encodes differently from the Web API.
-function base64(text) {
-  var bytes = []
-  var utf8 = unescape(encodeURIComponent(text))
-  for (var i = 0; i < utf8.length; i++) bytes.push(utf8.charCodeAt(i))
-  var out = ""
-  for (var j = 0; j < bytes.length; j += 3) {
-    var n = (bytes[j] << 16) | ((bytes[j + 1] || 0) << 8) | (bytes[j + 2] || 0)
-    out += B64.charAt(n >> 18 & 63) + B64.charAt(n >> 12 & 63)
-    out += j + 1 < bytes.length ? B64.charAt(n >> 6 & 63) : "="
-    out += j + 2 < bytes.length ? B64.charAt(n & 63) : "="
-  }
-  return out
-}
-
-// payload: { query, variables? } -> what an XHR to the server needs.
-function request(config, payload) {
-  return {
-    url: config.url + "/api/graphql",
-    authorization: "Basic " + base64(config.username + ":" + config.password),
-    body: JSON.stringify(payload)
-  }
-}
-
-function libraryRequest(config) {
-  return request(config, { query: LIBRARY_QUERY })
-}
-
 // Puts a manga in the library or takes it out. Its chapters, read state
 // and downloads stay, as in Mihon.
 function inLibraryPayload(mangaId, inLibrary) {
@@ -99,7 +68,7 @@ function serverPath(config, url) {
 }
 
 // The URL an image loads from: a server path made absolute, anything else
-// untouched. It never carries credentials; see imageRequest.
+// untouched. It never carries credentials; see serverImageUrl.
 function coverUrl(config, thumbnailUrl) {
   if (!thumbnailUrl) return ""
   var url = String(thumbnailUrl)
@@ -108,13 +77,13 @@ function coverUrl(config, thumbnailUrl) {
 }
 
 // QML Image can't send an Authorization header, so ServerImage.qml fetches
-// a server image itself: { url, authorization } for the server's own
-// images, null for any other host, which gets no credentials and loads
-// as a plain Image.
-function imageRequest(config, url) {
+// a server image itself, with the access token: the absolute URL of the
+// server's own images, null for any other host, which gets no token and
+// loads as a plain Image.
+function serverImageUrl(config, url) {
   if (!config || !url) return null
   var path = serverPath(config, String(url))
-  return path === null ? null : { url: config.url + path, authorization: request(config, {}).authorization }
+  return path === null ? null : config.url + path
 }
 
 // Whether a cover shows the title tile instead of the image.
@@ -137,7 +106,7 @@ function conn(state, extra) {
 // event.type:
 //   "config-missing"  server.json is absent or unreadable
 //   "request"         a library request went out
-//   "response"        { status, body, config } with status 0 for no answer
+//   "response"        { reply, config }, reply as reply() gives
 function reduce(connection, event) {
   switch (event.type) {
     case "config-missing":
@@ -146,7 +115,7 @@ function reduce(connection, event) {
       // Keep the shown library while a reload is in flight.
       return conn("loading", connection.state === "ok" ? { manga: connection.manga, categories: connection.categories } : {})
     case "response":
-      return fromResponse(event.status, event.body, event.config)
+      return fromResponse(event.reply, event.config)
   }
   return connection
 }
@@ -164,7 +133,11 @@ function reply(status, body) {
   } catch (e) {
     return fail("error", "The server sent a reply that is not JSON.")
   }
-  if (json.errors && json.errors.length) return fail("error", errorText(json.errors[0].message))
+  if (json.errors && json.errors.length) {
+    var message = errorText(json.errors[0].message)
+    // ui_login answers a missing or expired access token this way, with 200.
+    return message === "Unauthorized" ? fail("unauthorized") : fail("error", message)
+  }
   return { state: "ok", message: "", data: json.data || {} }
 }
 
@@ -194,8 +167,7 @@ function sourceLabel(n, names) {
   return name ? name + " (not installed)" : "Unknown source " + n.sourceId
 }
 
-function fromResponse(status, body, config) {
-  var r = reply(status, body)
+function fromResponse(r, config) {
   if (r.state !== "ok") return conn(r.state, { message: r.message })
   var nodes = r.data.mangas && r.data.mangas.nodes
   if (!Array.isArray(nodes)) return conn("error", { message: "The server's reply has no library." })
@@ -310,14 +282,11 @@ if (typeof module !== "undefined") {
     parseNames: parseNames,
     sourceLabel: sourceLabel,
     parseConfig: parseConfig,
-    base64: base64,
-    request: request,
-    libraryRequest: libraryRequest,
     inLibraryPayload: inLibraryPayload,
     placeholder: placeholder,
     reply: reply,
     coverUrl: coverUrl,
-    imageRequest: imageRequest,
+    serverImageUrl: serverImageUrl,
     initial: initial,
     reduce: reduce,
     switcher: switcher,
