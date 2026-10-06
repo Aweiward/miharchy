@@ -72,7 +72,7 @@ Image {
   }
 
   function release(copy) {
-    if (copy) Images.release(Images.shared(dir), copy, image, keepIdle)
+    if (copy) Images.release(Images.shared(dir, Quickshell.processId), copy, image, keepIdle)
   }
 
   // The new copy is held before the old one goes, so a reload of the same
@@ -88,7 +88,7 @@ Image {
     if (!server) source = url
     else {
       var c = config
-      held = Images.hold(Images.shared(dir), server, image, function(u, done) { Session.image(c, u, done) })
+      held = Images.hold(Images.shared(dir, Quickshell.processId), server, image, function(u, done) { Session.image(c, u, done) })
     }
     release(old)
   }

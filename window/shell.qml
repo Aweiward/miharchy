@@ -17,6 +17,7 @@ import "Storage.js" as Storage
 import "Prefs.js" as Prefs
 import "Updates.js" as Updates
 import "Restart.js" as Restart
+import "Images.js" as Images
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -106,6 +107,21 @@ ShellRoot {
     command: Restart.fingerprintCommand(Quickshell.shellDir)
     stdout: StdioCollector {
       onStreamFinished: root.code = Restart.check(root.code, text)
+    }
+  }
+
+  // Server images left in the runtime dir by windows that crashed or were
+  // killed go at start (Images.sweep).
+  Process {
+    id: imageSweep
+    readonly property string dir: Quickshell.env("XDG_RUNTIME_DIR") + "/miharchy/images/"
+    command: Images.sweepCommand(dir)
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var paths = Images.sweep(text, imageSweep.dir, Quickshell.processId)
+        if (paths.length) Quickshell.execDetached(["rm", "-f", "--"].concat(paths))
+      }
     }
   }
 
