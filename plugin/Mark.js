@@ -1,5 +1,6 @@
 .pragma library
 .import "../window/Model.js" as Model
+.import "../window/Session.js" as Session
 .import "../window/Updates.js" as Updates
 
 // The mark and its popup: the unread update count, a dot when the updates
@@ -17,14 +18,15 @@ var NOTIFY_KEY = "miharchy.notifyNewChapters"
 // Updates.rows. A failure clears both, so a dead server shows no stale count.
 // top: the highest update chapter id seen, null before the first answer;
 // fresh: the updates above the top before this answer, which the
-// notification names; notify: the Settings row.
+// notification names; notify: the Settings row; version: aboutServer's.
 function initial() {
-  return { state: "loading", message: "", count: 0, rows: [], top: null, fresh: [], notify: true }
+  return { state: "loading", message: "", count: 0, rows: [], top: null, fresh: [], notify: true, version: "" }
 }
 
-// One poll: the window's updates and the notification setting.
+// One poll: the window's updates, the notification setting and the server's
+// version.
 function listPayload() {
-  return { query: Updates.listPayload().query.replace(/\}\s*$/, "notify: metas(condition: { key: \"" + NOTIFY_KEY + "\" }) { nodes { value } } }") }
+  return { query: Updates.listPayload().query.replace(/\}\s*$/, "notify: metas(condition: { key: \"" + NOTIFY_KEY + "\" }) { nodes { value } } aboutServer { version } }") }
 }
 
 // A chapter is new when its id is above every update seen before:
@@ -34,15 +36,16 @@ function listPayload() {
 function reduce(mark, event) {
   switch (event.type) {
     case "config-missing":
-      return { state: "no-config", message: "", count: 0, rows: [], top: null, fresh: [], notify: mark.notify }
+      return { state: "no-config", message: "", count: 0, rows: [], top: null, fresh: [], notify: mark.notify, version: "" }
     case "reply":
       var r = event.reply
-      if (r.state !== "ok") return { state: r.state, message: r.message, count: 0, rows: [], top: mark.top, fresh: [], notify: mark.notify }
+      if (r.state !== "ok") return { state: r.state, message: r.message, count: 0, rows: [], top: mark.top, fresh: [], notify: mark.notify, version: "" }
       var rows = Updates.rows(r.data, event.config, event.now)
       var top = rows.reduce(function(t, row) { return Math.max(t, row.id) }, mark.top || 0)
       var fresh = mark.top === null ? [] : rows.filter(function(row) { return row.id > mark.top })
       var setting = (r.data.notify && r.data.notify.nodes[0]) || null
-      return { state: "ok", message: "", count: rows.length, rows: rows.slice(0, LIMIT), top: top, fresh: fresh, notify: !setting || setting.value !== "false" }
+      var version = (r.data.aboutServer && r.data.aboutServer.version) || ""
+      return { state: "ok", message: "", count: rows.length, rows: rows.slice(0, LIMIT), top: top, fresh: fresh, notify: !setting || setting.value !== "false", version: version }
   }
   return mark
 }
@@ -85,10 +88,17 @@ function down(mark) {
   return mark.state !== "ok" && mark.state !== "loading"
 }
 
+// The newer-server warning (Session.versionWarning), or "". It sits beside
+// the count and the list; it never makes the mark look down.
+function warning(mark) {
+  return mark.state === "ok" ? Session.versionWarning(mark.version) : ""
+}
+
 function tooltip(mark) {
   if (down(mark)) return "Miharchy: " + Model.problem(mark, "").title
   if (mark.state === "loading") return "Miharchy"
-  return "Miharchy: " + (mark.count ? mark.count + " new chapter" + (mark.count === 1 ? "" : "s") : "no new chapters")
+  var text = "Miharchy: " + (mark.count ? mark.count + " new chapter" + (mark.count === 1 ? "" : "s") : "no new chapters")
+  return warning(mark) ? text + "\n" + warning(mark) : text
 }
 
 // { title, detail } in place of the popup's list, or null.
@@ -107,6 +117,7 @@ if (typeof module !== "undefined") {
     notifyCommand: notifyCommand,
     label: label,
     down: down,
+    warning: warning,
     tooltip: tooltip,
     notice: notice
   }

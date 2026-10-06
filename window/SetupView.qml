@@ -171,6 +171,16 @@ Item {
       font.pixelSize: view.theme.fontSize
     }
 
+    Text {
+      width: Math.min(parent.width, view.theme.fontSize * 60)
+      visible: text !== ""
+      wrapMode: Text.Wrap
+      text: Setup.warning(view.setup)
+      color: view.theme.urgent
+      font.family: view.theme.fontFamily
+      font.pixelSize: view.theme.fontSize
+    }
+
     Column {
       width: Math.min(parent.width, view.theme.fontSize * 60)
 
