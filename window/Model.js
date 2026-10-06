@@ -265,6 +265,28 @@ function problem(connection, configPath) {
   return null
 }
 
+// A retry that ends in the failure it retried, so r never looks like it
+// did nothing. A view keeps retried: failure() of its state as r goes out,
+// or "", and failedAt: failedAt() of the reply, else 0.
+function failure(s) {
+  return s.state === "loading" || s.state === "ok" ? "" : s.state + " " + s.message
+}
+
+function failedAt(retried, reply, now) {
+  return retried !== "" && retried === failure(reply) ? now : 0
+}
+
+function pad(n) {
+  return n < 10 ? "0" + n : String(n)
+}
+
+// problem p, saying when s failed again.
+function again(p, s) {
+  if (!p || !s.failedAt) return p
+  var t = new Date(s.failedAt)
+  return { title: p.title, detail: p.detail + " Failed again at " + pad(t.getHours()) + ":" + pad(t.getMinutes()) + ":" + pad(t.getSeconds()) + "." }
+}
+
 // "<mangaId> <chapterId>", as the launcher's open-chapter passes it in
 // MIHARCHY_OPEN_CHAPTER -> { mangaId, chapterId }, or null.
 function chapterTarget(text) {
@@ -382,6 +404,10 @@ if (typeof module !== "undefined") {
     switcherIndex: switcherIndex,
     notice: notice,
     problem: problem,
+    failure: failure,
+    failedAt: failedAt,
+    again: again,
+    pad: pad,
     chapterTarget: chapterTarget,
     viewIndex: viewIndex,
     listChanges: listChanges,

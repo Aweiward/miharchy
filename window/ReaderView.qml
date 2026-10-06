@@ -81,7 +81,7 @@ Rectangle {
     next[url] = { width: w, height: h }
     pageSizes = next
   }
-  readonly property var problem: reader ? Model.problem(reader, configPath) : null
+  readonly property var problem: reader ? Model.again(Model.problem(reader, configPath), reader) : null
 
   // The chapter the reader showed last, when it closed.
   signal closed(int chapterId)
@@ -158,7 +158,7 @@ Rectangle {
     var cfg = config
     send(payload, function(reply) {
       if (seq !== view.pagesSeq) return
-      view.reader = Reader.reduce(view.reader, { type: "pages", reply: reply, config: cfg })
+      view.reader = Reader.reduce(view.reader, { type: "pages", reply: reply, config: cfg, now: Date.now() })
       view.layoutStrip()
       view.save()
       view.downloadAhead()

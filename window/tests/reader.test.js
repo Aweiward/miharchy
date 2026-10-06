@@ -203,6 +203,22 @@ test("a failed page fetch shows the problem and r fetches again", () => {
   assert.equal(R.chapterName(turn(r, 1)), "Ch. 3", "a broken chapter can still be skipped");
 });
 
+test("a retry that ends in the same failure says when it failed again", () => {
+  const at = (h, m, s) => new Date(2026, 9, 6, h, m, s).getTime();
+  const retry = (r, reply, now) => R.reduce(R.reduce(r, { type: "retry" }), { type: "pages", reply, config, now });
+  const notice = (r) => M.again(M.problem(r, "/c"), r).detail;
+  let r = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "pages", reply: M.reply(0, ""), config, now: at(15, 0, 50) });
+  assert.doesNotMatch(notice(r), /again/, "the first failure is not 'again'");
+  r = retry(r, M.reply(0, ""), at(15, 0, 57));
+  assert.match(notice(r), / Failed again at 15:00:57\.$/);
+  r = retry(r, M.reply(0, ""), at(15, 1, 4));
+  assert.match(notice(r), / Failed again at 15:01:04\.$/, "each retry moves the time");
+  r = retry(r, pages(12, 0), at(15, 1, 10));
+  assert.equal(notice(r), "This chapter has no pages. Press r to retry.", "another failure is news of its own");
+  r = retry(retry(r, pages(12, 3), at(15, 2, 0)), pages(12, 0), at(15, 2, 5));
+  assert.doesNotMatch(notice(r), /again/, "a success in between starts over");
+});
+
 test("six image slots hold the page shown, the next three and the previous two", () => {
   const r = Object.assign(loaded(12, 20), { page: 7 });
   const s = R.slots(r);
