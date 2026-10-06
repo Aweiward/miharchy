@@ -293,6 +293,42 @@ test("the probe reports whether the installed server unit matches the plugin's c
   assert.equal(probe().unitCurrent, true);
 });
 
+test("server/miharchy-server moves a basic_auth server to ui_login once, keeping its credentials", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-auth-"));
+  const log = path.join(home, "systemctl.log");
+  const bin = stubs({ systemctl: "echo \"$*\" >> " + log });
+  const env = { PATH: bin + ":" + process.env.PATH, HOME: home };
+  const script = path.join(__dirname, "../../server/miharchy-server");
+  const conf = path.join(home, ".local/share/miharchy/suwayomi/server.conf");
+  const creds = { url: "http://127.0.0.1:4590", username: "miharchy", password: "old-password" };
+  fs.mkdirSync(path.dirname(conf), { recursive: true });
+  fs.mkdirSync(path.join(home, ".config/miharchy"), { recursive: true });
+  fs.writeFileSync(path.join(home, ".config/miharchy/server.json"), JSON.stringify(creds));
+  run([script], env);
+  // Suwayomi rewrites the file in its own form, with the mode it was given.
+  fs.writeFileSync(conf, fs.readFileSync(conf, "utf8").replace(/^server\.(\w+) = (.*)$/gm, "server.$1 = $2 # default: x").replace("\"ui_login\"", "\"basic_auth\""));
+  fs.writeFileSync(log, "");
+  const probe = () => S.parseProbe(S.parseJob(run(S.probeCommand("/none", home, path.join(home, "window")), env)).output);
+  assert.equal(probe().basicAuth, true);
+
+  assert.match(run([script], env), /config changed: yes/);
+  const text = fs.readFileSync(conf, "utf8");
+  assert.match(text, /^server\.authMode = "ui_login"$/m);
+  assert.doesNotMatch(text, /basic_auth/);
+  assert.match(text, /^server\.authPassword = "old-password"/m);
+  assert.match(fs.readFileSync(log, "utf8"), /restart miharchy-server\.service/);
+  assert.equal(probe().basicAuth, false);
+  assert.match(run([script], env), /config changed: no/, "a rerun changes nothing");
+});
+
+test("a running server on basic_auth is due again, and keeps Setup open", () => {
+  const old = finish(S.initial(), "probe", READY + "basicAuth\n");
+  assert.equal(S.status(old, "server").state, "outdated");
+  assert.match(S.status(old, "server").detail, /basic_auth/);
+  assert.equal(S.action(old, "server"), "confirm");
+  assert.equal(S.incomplete(old), true);
+});
+
 test("a running server with an outdated unit is due again, and keeps Setup open", () => {
   const stale = finish(S.initial(), "probe", READY.replace("unitCurrent\n", ""));
   assert.equal(S.status(stale, "server").state, "outdated");
