@@ -274,6 +274,90 @@ function viewIndex(id) {
   return -1
 }
 
+// How a ListModel that shows `shown` becomes `items`, rows matched by
+// key(item), the id by default. A view applies the ops in place
+// (RowModel.qml), so the cells of the rows that stay keep their decoded
+// covers: a new array as a view's model rebuilds every cell (#219).
+// { reset: true } when most rows change, else { reset: false, ops }, ops in
+// the order to apply them:
+//   ["remove", index, count]   ["insert", index, [item, ...]]
+//   ["move", from, to]         ["set", index, item]
+// Past one insert or move per two new rows a reset is cheaper: each op is
+// a model signal and a layout, and the cells on screen then show other
+// manga anyway, as after a sort flips. A remove or a set never counts: it
+// brings no other manga in, so a search that narrows stays in place.
+function listChanges(shown, items, key) {
+  key = key || function(x) { return x.id }
+  var at = new Map()
+  items.forEach(function(x, i) { at.set(key(x), i) })
+  if (!shown.length || at.size !== items.length) return { reset: true }
+  var ops = []
+  var keys = shown.map(key)
+  // From the end, so each index still holds.
+  for (var i = keys.length - 1; i >= 0; i--) {
+    if (at.has(keys[i])) continue
+    var end = i
+    while (i > 0 && !at.has(keys[i - 1])) i--
+    ops.push(["remove", i, end - i + 1])
+  }
+  keys = keys.filter(function(k) { return at.has(k) })
+  var stay = rising(keys.map(function(k) { return at.get(k) }))
+  // From the end too: each row goes just before the row after it, already
+  // in place. Rows in `stay` keep their order, so they never move.
+  for (var j = items.length - 1; j >= 0; j--) {
+    var k = key(items[j])
+    var to = j + 1 < items.length ? keys.indexOf(key(items[j + 1])) : keys.length
+    var from = keys.indexOf(k)
+    var last = ops[ops.length - 1]
+    if (from === -1) {
+      if (last && last[0] === "insert" && last[1] === to) last[2].unshift(items[j])
+      else ops.push(["insert", to, [items[j]]])
+      keys.splice(to, 0, k)
+    } else if (!stay.has(j)) {
+      keys.splice(from, 1)
+      if (from < to) to--
+      keys.splice(to, 0, k)
+      if (from !== to) ops.push(["move", from, to])
+    }
+  }
+  var changed = ops.filter(function(op) { return op[0] !== "remove" }).length
+  var old = new Map()
+  shown.forEach(function(x) { old.set(key(x), x) })
+  items.forEach(function(x, n) {
+    if (old.has(key(x)) && JSON.stringify(old.get(key(x))) !== JSON.stringify(x)) ops.push(["set", n, x])
+  })
+  return changed * 2 > items.length ? { reset: true } : { reset: false, ops: ops }
+}
+
+// The values of seq in its longest rising run (an LIS), as a Set.
+// ponytail: O(n²), fine for a library of hundreds; patience sorting if it
+// ever holds thousands.
+function rising(seq) {
+  var len = []
+  var prev = []
+  var best = -1
+  for (var i = 0; i < seq.length; i++) {
+    len[i] = 1
+    prev[i] = -1
+    for (var j = 0; j < i; j++) if (seq[j] < seq[i] && len[j] + 1 > len[i]) { len[i] = len[j] + 1; prev[i] = j }
+    if (best === -1 || len[i] > len[best]) best = i
+  }
+  var out = new Set()
+  for (i = best; i !== -1; i = prev[i]) out.add(seq[i])
+  return out
+}
+
+// Where a cursor on row `index` of `before` goes in `after`, rows matched
+// by key(item), the id by default: onto the same row, else onto the
+// nearest row after it that stayed, else the nearest before it, else 0.
+function follow(before, after, index, key) {
+  key = key || function(x) { return x.id }
+  var keys = after.map(key)
+  for (var i = index; i < before.length; i++) if (keys.indexOf(key(before[i])) !== -1) return keys.indexOf(key(before[i]))
+  for (i = Math.min(index, before.length) - 1; i >= 0; i--) if (keys.indexOf(key(before[i])) !== -1) return keys.indexOf(key(before[i]))
+  return 0
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     VIEWS: VIEWS,
@@ -295,6 +379,8 @@ if (typeof module !== "undefined") {
     notice: notice,
     problem: problem,
     chapterTarget: chapterTarget,
-    viewIndex: viewIndex
+    viewIndex: viewIndex,
+    listChanges: listChanges,
+    follow: follow
   }
 }
