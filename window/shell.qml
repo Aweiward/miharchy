@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "Model.js" as Model
+import "Session.js" as Session
 import "Commands.js" as Commands
 import "Settings.js" as Settings
 import "Setup.js" as Setup
@@ -185,17 +186,10 @@ ShellRoot {
 
   // Loads and saves alike: every reply carries the values it touched.
   function sendSettings(payload) {
-    var req = Model.request(config, payload)
     settingsState = Settings.reduce(settingsState, { type: "request" })
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState !== XMLHttpRequest.DONE) return
-      root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: Model.reply(xhr.status, xhr.responseText) })
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
+    Session.send(config, payload, function(reply) {
+      root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
+    })
   }
 
   PrefStore {
@@ -242,15 +236,7 @@ ShellRoot {
   }
 
   function send(payload, done) {
-    var req = Model.request(config, payload)
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState === XMLHttpRequest.DONE) done(Model.reply(xhr.status, xhr.responseText))
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
+    return Session.send(config, payload, done)
   }
 
   // The one path that marks chapters, from any view. action: "read",
@@ -388,18 +374,11 @@ ShellRoot {
 
   function fetchLibrary() {
     var cfg = config
-    var req = Model.libraryRequest(cfg)
     var seq = ++requestSeq
     connection = Model.reduce(connection, { type: "request" })
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState !== XMLHttpRequest.DONE || seq !== root.requestSeq) return
-      root.connection = Model.reduce(root.connection, { type: "response", status: xhr.status, body: xhr.responseText, config: cfg })
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
+    Session.send(cfg, { query: Model.LIBRARY_QUERY }, function(reply) {
+      if (seq === root.requestSeq) root.connection = Model.reduce(root.connection, { type: "response", reply: reply, config: cfg })
+    })
   }
 
   // The one key path: the window and the palette field both land here.

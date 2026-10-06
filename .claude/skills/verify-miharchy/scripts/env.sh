@@ -10,3 +10,10 @@ SERVER_DIR=$RUN/server
 SERVER_JSON=$RUN/server.json
 EVIDENCE=$RUN/evidence
 if [ "$PORT" = 4590 ]; then echo "refusing port 4590: that is the user's real server" >&2; exit 1; fi
+
+# A fresh access token from the server's ui_login, empty when the login fails.
+token() {
+  jq -n --slurpfile c "$SERVER_JSON" '{query: "mutation($u: String!, $p: String!) { login(input: {username: $u, password: $p}) { accessToken } }", variables: {u: $c[0].username, p: $c[0].password}}' \
+    | curl -s -m 30 -H 'content-type: application/json' -X POST -d @- "http://127.0.0.1:$PORT/api/graphql" \
+    | jq -r '.data.login.accessToken // empty' 2>/dev/null || true
+}

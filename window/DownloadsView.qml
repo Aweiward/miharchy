@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "Model.js" as Model
+import "Session.js" as Session
 import "Downloads.js" as Downloads
 
 // The download queue over the whole window, and the poll behind it. The
@@ -53,16 +54,10 @@ Rectangle {
 
   function send(payload) {
     if (!config) return
-    var req = Model.request(config, payload)
     var s = ++seq
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState === XMLHttpRequest.DONE && s === view.seq) view.apply(Model.reply(xhr.status, xhr.responseText))
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
+    Session.send(config, payload, function(reply) {
+      if (s === view.seq) view.apply(reply)
+    })
   }
 
   function poll() {

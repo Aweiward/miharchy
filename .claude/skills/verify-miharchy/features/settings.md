@@ -12,7 +12,7 @@ Press `5`. The "Clear the cache" row comes after the last setting row ("Create a
 ## Seeding varied state
 `server.sh start` gives the scratch server its own `java.io.tmpdir` (`$RUN/server/tmp`), and `drive.sh` sets `MIHARCHY_SERVER_ROOT` and `MIHARCHY_SERVER_TMPDIR` to match. Never clear the cache of a server started without it: its cache is the shared `/tmp/Tachidesk`, the user's server's too.
 
-Fill the cache over REST with the server.json credentials: `fetchChapterPages(input:{chapterId})`, then GET each returned page path (fills `tmp/Tachidesk/manga-cache`), and GET `/api/v1/manga/<id>/thumbnail` for manga not in the library (fills `tmp/Tachidesk/thumbnails`).
+Fill the cache over REST with an access token (`Authorization: Bearer`, from `token` in `scripts/env.sh`): `fetchChapterPages(input:{chapterId})`, then GET each returned page path (fills `tmp/Tachidesk/manga-cache`), and GET `/api/v1/manga/<id>/thumbnail` for manga not in the library (fills `tmp/Tachidesk/thumbnails`).
 
 ## Driving it with drive.sh
 ```js

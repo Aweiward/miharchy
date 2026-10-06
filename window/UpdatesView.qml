@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "Commands.js" as Commands
 import "Model.js" as Model
+import "Session.js" as Session
 import "Browse.js" as Browse
 import "Updates.js" as Updates
 import "Downloads.js" as Downloads
@@ -75,15 +76,7 @@ Item {
   }
 
   function send(payload, done) {
-    var req = Model.request(config, payload)
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState === XMLHttpRequest.DONE) done(Model.reply(xhr.status, xhr.responseText))
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
+    return Session.send(config, payload, done)
   }
 
   function load() {
@@ -258,8 +251,8 @@ Item {
   }
 
   // A scheduled run can start any time, so an idle view still looks now
-  // and then. Polling, not the libraryUpdateStatusChanged subscription:
-  // QML's WebSocket sends no Authorization header, which basic_auth needs.
+  // and then. Polling, not yet the libraryUpdateStatusChanged subscription
+  // that the token login allows (ADR 0005).
   Timer {
     interval: view.updates.running || view.updates.checking ? 1000 : 30000
     running: view.active && view.config !== null

@@ -33,7 +33,7 @@ port=$port
 webUIEnabled=false
 systemTrayEnabled=false
 initialOpenInBrowserEnabled=false
-authMode="basic_auth"
+authMode="ui_login"
 authUsername="$username"
 authPassword="$password"
 CONF

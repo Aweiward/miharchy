@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
-import "Model.js" as Model
+import "Session.js" as Session
 import "Browse.js" as Browse
 import "Downloads.js" as Downloads
 import "Chapters.js" as Chapters
@@ -116,15 +116,7 @@ Rectangle {
   }
 
   function send(payload, done) {
-    var req = Model.request(config, payload)
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState === XMLHttpRequest.DONE) done(Model.reply(xhr.status, xhr.responseText))
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
+    return Session.send(config, payload, done)
   }
 
   // fromSource: opened while browsing a source, so it refreshes once.

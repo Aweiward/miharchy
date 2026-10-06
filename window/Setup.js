@@ -12,6 +12,7 @@ var CONTAINER = "miharchy-flaresolverr"
 // so the helper builds and installs here, never in the plugin's sync/.
 var HELPER_DIR = ".local/share/miharchy/helper"
 var UNIT_FILE = ".config/systemd/user/miharchy-server.service"
+var SERVER_CONF = ".local/share/miharchy/suwayomi/server.conf"
 var DESKTOP_FILE = ".local/share/applications/miharchy.desktop"
 
 // kind "install": the user runs command in a terminal; Enter checks again.
@@ -43,6 +44,7 @@ var PROBE = [
   "test -s \"$1\" && echo config",
   "echo \"unit $(systemctl --user is-enabled miharchy-server 2>/dev/null) $(systemctl --user is-active miharchy-server 2>/dev/null)\"",
   "cmp -s \"$4\" \"$HOME/" + UNIT_FILE + "\" && echo unitCurrent",
+  "grep -qiE '^server\\.authMode *= *\"?basic_auth' \"$HOME/" + SERVER_CONF + "\" 2>/dev/null && echo basicAuth",
   "command -v docker >/dev/null && echo \"docker $(docker inspect -f '{{.State.Running}}' " + CONTAINER + " 2>/dev/null)\"",
   "command -v javac >/dev/null && echo javac",
   "echo \"helperSource $(fingerprint \"$2\")\"",
@@ -135,7 +137,7 @@ function javaMajor(line) {
 
 // The probe's output -> facts. docker is false when the command is absent.
 function parseProbe(text) {
-  var f = { java: 0, suwayomi: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", launcher: false, unitCurrent: false }
+  var f = { java: 0, suwayomi: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", launcher: false, unitCurrent: false, basicAuth: false }
   String(text).split("\n").forEach(function(line) {
     var sp = line.indexOf(" ")
     var key = sp === -1 ? line : line.slice(0, sp)
@@ -155,6 +157,7 @@ function parseProbe(text) {
     if (key === "javac") f.javac = true
     if (key === "launcher") f.launcher = true
     if (key === "unitCurrent") f.unitCurrent = true
+    if (key === "basicAuth") f.basicAuth = true
     if (key === "helperSource") f.helperSource = rest.trim()
     if (key === "helperInstalled") f.helperInstalled = rest.trim()
   })
@@ -244,6 +247,8 @@ function status(s, id) {
       return is("todo", "Suwayomi-Server is not installed. Install it in a terminal, then press Enter to check again.")
     case "server":
       if (status(s, "java").state !== "done" || !p.suwayomi) return is("waiting", "Needs Java and Suwayomi-Server first.")
+      // Miharchy logs in with tokens (ADR 0005); servers set up before that run basic_auth.
+      if (p.config && p.unitEnabled && p.unitActive && p.basicAuth) return is("outdated", "The server still uses basic_auth. Press Enter to run server/miharchy-server again; it moves the server to token login and keeps your credentials.")
       if (p.config && p.unitEnabled && p.unitActive && !p.unitCurrent) return is("outdated", "The plugin's server unit changed. Press Enter to run server/miharchy-server again; it keeps your credentials.")
       if (p.config && p.unitEnabled && p.unitActive) return is("done", "miharchy-server is enabled and running.")
       return is("todo", "Press Enter to run server/miharchy-server. It creates the credentials and enables the user service.")

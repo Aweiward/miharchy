@@ -7,7 +7,7 @@
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 
-gql() { curl -s -m 30 -u "$(jq -r .username "$SERVER_JSON"):$(jq -r .password "$SERVER_JSON")" -H 'content-type: application/json' -X POST -d "$1" "http://127.0.0.1:$PORT/api/graphql"; }
+gql() { curl -s -m 30 -H "Authorization: Bearer $(token)" -H 'content-type: application/json' -X POST -d "$1" "http://127.0.0.1:$PORT/api/graphql"; }
 
 case "${1:-}" in
 start)
@@ -26,7 +26,7 @@ start)
   install -d -m 700 "$RUN" "$SERVER_DIR" "$SERVER_DIR/tmp" "$EVIDENCE"
   echo "$PORT" > "$RUN/port"
   pw=$(openssl rand -hex 16)
-  printf 'server.ip = "127.0.0.1"\nserver.port = %s\nserver.webUIEnabled = false\nserver.systemTrayEnabled = false\nserver.authMode = "basic_auth"\nserver.authUsername = "verify"\nserver.authPassword = "%s"\n' "$PORT" "$pw" > "$SERVER_DIR/server.conf"
+  printf 'server.ip = "127.0.0.1"\nserver.port = %s\nserver.webUIEnabled = false\nserver.systemTrayEnabled = false\nserver.authMode = "ui_login"\nserver.authUsername = "verify"\nserver.authPassword = "%s"\nserver.jwtTokenExpiry = "%s"\n' "$PORT" "$pw" "${MIHARCHY_VERIFY_TOKEN_EXPIRY:-5m}" > "$SERVER_DIR/server.conf"
   (umask 077; printf '{"url":"http://127.0.0.1:%s","username":"verify","password":"%s"}\n' "$PORT" "$pw" > "$SERVER_JSON")
   # Suwayomi caches pages and covers in <java.io.tmpdir>/Tachidesk; the default
   # /tmp is shared with the user's server, so a cache clear here would empty it.
@@ -34,7 +34,7 @@ start)
   # with the caller's stdout, so `start | cat` and a backgrounded start both end.
   ( cd /tmp && setsid -f /usr/bin/suwayomi-server -Dsuwayomi.tachidesk.config.server.rootDir="$SERVER_DIR" -Djava.io.tmpdir="$SERVER_DIR/tmp" > "$RUN/server.log" 2>&1 < /dev/null )
   for _ in $(seq 120); do
-    v=$(gql '{"query":"{aboutServer{version}}"}' 2>/dev/null | jq -r '.data.aboutServer.version // empty' 2>/dev/null || true)
+    v=$(gql '{"query":"{aboutServer{version} mangas{totalCount}}"}' 2>/dev/null | jq -r '.data.aboutServer.version // empty' 2>/dev/null || true)
     if [ -n "$v" ]; then
       # The launcher wraps java, so record the process that owns the port.
       ss -ltnp | grep ":$PORT " | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2 > "$RUN/server.pid"
@@ -49,10 +49,11 @@ doctor)
   kill -0 "$pid" 2>/dev/null || { echo "pid $pid is not running"; exit 1; }
   owner=$(ss -ltnp | grep ":$PORT " | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2)
   [ "$owner" = "$pid" ] || { echo "port $PORT is owned by pid ${owner:-none}, not ours ($pid)"; exit 1; }
-  unauth=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"query":"{aboutServer{version}}"}' "http://127.0.0.1:$PORT/api/graphql")
-  v=$(gql '{"query":"{aboutServer{version}}"}' | jq -r '.data.aboutServer.version // empty')
-  echo "ok: pid $pid owns $PORT, Suwayomi $v, unauthenticated request -> $unauth, run dir $RUN"
-  [ -n "$v" ] && [ "$unauth" = 401 ] ;;
+  # ui_login answers a request without a token with 200 and an Unauthorized error.
+  unauth=$(curl -s -X POST -H 'content-type: application/json' -d '{"query":"{mangas{totalCount}}"}' "http://127.0.0.1:$PORT/api/graphql" | jq -r '.errors[0].message // "data" | split("\r")[0] | sub(".* : "; "")')
+  v=$(gql '{"query":"{aboutServer{version} mangas{totalCount}}"}' | jq -r '.data.aboutServer.version // empty')
+  echo "ok: pid $pid owns $PORT, Suwayomi $v, request without a token -> $unauth, run dir $RUN"
+  [ -n "$v" ] && [ "$unauth" = Unauthorized ] ;;
 stop)
   if [ -f "$RUN/server.pid" ]; then
     pid=$(cat "$RUN/server.pid")

@@ -1,5 +1,5 @@
 import QtQuick
-import "Model.js" as Model
+import "Session.js" as Session
 import "Prefs.js" as Prefs
 
 // One view's choices (a Prefs.js table) as the server keeps them, global or
@@ -26,18 +26,10 @@ QtObject {
   onConfigChanged: pump()
 
   function send(payload, done) {
-    var req = Model.request(config, payload)
-    var xhr = new XMLHttpRequest()
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState !== XMLHttpRequest.DONE) return
-      var reply = Model.reply(xhr.status, xhr.responseText)
+    Session.send(config, payload, function(reply) {
       if (reply.state !== "ok") store.failed(reply)
       done(reply)
-    }
-    xhr.open("POST", req.url)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.setRequestHeader("Authorization", req.authorization)
-    xhr.send(req.body)
+    })
   }
 
   // Switches to a manga's choices, or the global ones with -1.

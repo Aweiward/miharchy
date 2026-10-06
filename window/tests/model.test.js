@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const M = require("./load")("Model.js");
 
 const config = { url: "http://127.0.0.1:4590", username: "miharchy", password: "s3cret" };
-const respond = (status, body) => ({ type: "response", status, body: typeof body === "string" ? body : JSON.stringify(body), config });
+const respond = (status, body) => ({ type: "response", reply: M.reply(status, typeof body === "string" ? body : JSON.stringify(body)), config });
 
 test("five views in glossary order, keyed 1-5", () => {
   assert.deepEqual(M.VIEWS.map((v) => v.title), ["Library", "Updates", "History", "Browse", "Settings"]);
@@ -22,19 +22,6 @@ test("parseConfig rejects missing, broken or incomplete config", () => {
   }
 });
 
-test("libraryRequest targets the GraphQL endpoint with user:password", () => {
-  const r = M.libraryRequest(config);
-  assert.equal(r.url, "http://127.0.0.1:4590/api/graphql");
-  assert.equal(r.authorization, "Basic " + Buffer.from("miharchy:s3cret").toString("base64"));
-  assert.match(JSON.parse(r.body).query, /inLibrary: true/);
-});
-
-test("base64 matches node's encoder for every padding length and UTF-8", () => {
-  for (const s of ["", "a", "ab", "abc", "abcd", "miharchy:" + "f".repeat(48), "ünï:cødé"]) {
-    assert.equal(M.base64(s), Buffer.from(s, "utf8").toString("base64"), s);
-  }
-});
-
 test("the connection starts loading", () => {
   assert.equal(M.initial().state, "loading");
 });
@@ -44,6 +31,8 @@ test("transitions: missing config, request, and each kind of answer", () => {
   assert.equal(M.reduce(s0, { type: "config-missing" }).state, "no-config");
   assert.equal(M.reduce(s0, respond(0, "")).state, "down");
   assert.equal(M.reduce(s0, respond(401, "Unauthorized")).state, "unauthorized");
+  // ui_login refuses a missing or expired token with HTTP 200 and this error.
+  assert.equal(M.reduce(s0, respond(200, { errors: [{ message: "Exception while fetching data (/mangas) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized" }] })).state, "unauthorized");
   assert.equal(M.reduce(s0, respond(200, { data: { mangas: { nodes: [] } } })).state, "ok");
 
   const e500 = M.reduce(s0, respond(500, "boom"));
@@ -151,7 +140,7 @@ test("no image URL carries userinfo, whatever the password", () => {
     { id: 2, title: "B", thumbnailUrl: "http://127.0.0.1:4590/api/v1/manga/2/thumbnail", source: { id: "1" }, unreadCount: 0, categories: { nodes: [] } }
   ] } } }), config: cfg });
   const urls = library.manga.map((m) => m.cover);
-  for (const url of ["/x", "http://127.0.0.1:4590/x"]) urls.push(M.coverUrl(cfg, url), M.imageRequest(cfg, url).url);
+  for (const url of ["/x", "http://127.0.0.1:4590/x"]) urls.push(M.coverUrl(cfg, url), M.serverImageUrl(cfg, url));
   assert.equal(urls.length, 6);
   for (const url of urls) {
     assert.ok(url.startsWith("http://127.0.0.1:4590/"), url);
@@ -159,14 +148,12 @@ test("no image URL carries userinfo, whatever the password", () => {
   }
 });
 
-test("imageRequest sends the credentials in a header, to the server's own origin only", () => {
-  assert.deepEqual(M.imageRequest(config, "http://127.0.0.1:4590/api/v1/manga/1/thumbnail"), {
-    url: "http://127.0.0.1:4590/api/v1/manga/1/thumbnail",
-    authorization: M.libraryRequest(config).authorization
-  });
-  for (const url of hostile) assert.equal(M.imageRequest(config, url), null, url);
-  assert.equal(M.imageRequest(config, ""), null);
-  assert.equal(M.imageRequest(null, "/x"), null);
+test("serverImageUrl takes the server's own origin only, which gets the token", () => {
+  assert.equal(M.serverImageUrl(config, "/api/v1/manga/1/thumbnail"), "http://127.0.0.1:4590/api/v1/manga/1/thumbnail");
+  assert.equal(M.serverImageUrl(config, "http://127.0.0.1:4590/api/v1/manga/1/thumbnail"), "http://127.0.0.1:4590/api/v1/manga/1/thumbnail");
+  for (const url of hostile) assert.equal(M.serverImageUrl(config, url), null, url);
+  assert.equal(M.serverImageUrl(config, ""), null);
+  assert.equal(M.serverImageUrl(null, "/x"), null);
 });
 
 test("notice: a clear message per state, none over a filled library", () => {
