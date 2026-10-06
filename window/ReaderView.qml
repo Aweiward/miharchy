@@ -6,6 +6,7 @@ import Quickshell.Io
 import "Chapters.js" as Chapters
 import "Commands.js" as Commands
 import "Downloads.js" as Downloads
+import "Images.js" as Images
 import "Model.js" as Model
 import "Session.js" as Session
 import "Prefs.js" as Prefs
@@ -223,7 +224,26 @@ Rectangle {
 
   function exitStep(event) {
     exit = Reader.exit(exit, event)
-    if (Reader.canQuit(exit)) Qt.quit()
+    if (Reader.canQuit(exit)) exitNow()
+  }
+
+  // The server images sit in the runtime dir, which is RAM, and no
+  // ServerImage is destroyed on the way out: empty their files here.
+  function exitNow() {
+    Images.drain().forEach(function(path) {
+      // FileView skips a write of the text it already holds.
+      imageFile.path = path
+      imageFile.setText(" ")
+      imageFile.setText("")
+    })
+    Qt.quit()
+  }
+
+  FileView {
+    id: imageFile
+    preload: false
+    blockWrites: true
+    printErrors: false
   }
 
   // A page change saves after a pause; leaving the chapter saves it first.
@@ -499,7 +519,7 @@ Rectangle {
   Timer {
     id: quitTimeout
     interval: 2000
-    onTriggered: Qt.quit()
+    onTriggered: view.exitNow()
   }
 
   // The page shown, sized by the page fit. A page larger than the view
@@ -551,6 +571,7 @@ Rectangle {
           onImplicitHeightChanged: view.sized(url, implicitWidth, implicitHeight)
           config: view.config
           url: slot.held ? slot.held.url : ""
+          keepIdle: false
           // Decoded at the size shown, not the scan's: six full-size scans
           // would hold hundreds of megabytes. Stretch, as the size already
           // keeps the aspect.
@@ -595,6 +616,7 @@ Rectangle {
       height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : width * 1.4
       config: view.config
       url: modelData
+      keepIdle: false
       sourceSize.width: width
       fillMode: Image.PreserveAspectFit
       asynchronous: true
