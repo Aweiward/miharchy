@@ -54,6 +54,14 @@ test("a Suwayomi exception reads as its message, without the wrapper or stack", 
   assert.equal(M.reply(200, JSON.stringify(body)).message, "HTTP error 404");
 });
 
+test("CEF is disabled names the server's WebView and the Settings row; other errors stay raw", () => {
+  const body = { errors: [{ message: "Exception while fetching data (/fetchManga) : CEF is disabled\n\tat CEFManager$CefException" }] };
+  const p = M.problem(M.reply(200, JSON.stringify(body)), "/c");
+  assert.equal(p.title + ". " + p.detail, "This source needs the server's WebView (KCEF), which is off. Turn it on in Settings.");
+  const other = M.problem({ state: "error", message: "HTTP error 500" }, "/c");
+  assert.equal(other.title + ". " + other.detail, "The server sent an error. HTTP error 500 Press r to retry.");
+});
+
 test("a reload keeps the shown library; a failed one drops it", () => {
   const ok = M.reduce(M.initial(), respond(200, { data: { mangas: { nodes: [{ id: 1, title: "A", thumbnailUrl: null }] } } }));
   const reloading = M.reduce(ok, { type: "request" });

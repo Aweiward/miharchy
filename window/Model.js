@@ -257,6 +257,9 @@ function problem(connection, configPath) {
     case "unauthorized":
       return { title: "The server rejected the credentials", detail: "Check username and password in " + configPath + ". Press r to retry." }
     case "error":
+      // Suwayomi's answer to a source that runs part of its site in KCEF
+      // while the server setting kcefEnabled is off.
+      if (/^CEF is disabled/.test(connection.message)) return { title: "This source needs the server's WebView (KCEF), which is off", detail: "Turn it on in Settings." }
       return { title: "The server sent an error", detail: connection.message + " Press r to retry." }
   }
   return null

@@ -229,7 +229,7 @@ Item {
             height: band.height + (rowError.visible ? rowError.height : 0)
             color: current ? view.theme.selected : "transparent"
             onCurrentChanged: if (current) view.reveal(row)
-            // A commit's error shows under the row it is about.
+            // A commit's error, or the row's note, shows under the row.
             onHeightChanged: if (current) view.reveal(row)
 
             Item {
@@ -245,10 +245,11 @@ Item {
               leftPadding: view.theme.fontSize * 0.75
               rightPadding: view.theme.fontSize * 0.75
               bottomPadding: view.theme.fontSize * 0.5
-              visible: row.editingThis && view.editError !== ""
+              readonly property bool failed: row.editingThis && view.editError !== ""
+              visible: failed || (row.current && !view.editing && !!row.modelData.note)
               wrapMode: Text.Wrap
-              text: view.editError
-              color: view.theme.urgent
+              text: failed ? view.editError : row.modelData.note || ""
+              color: failed ? view.theme.urgent : view.theme.selectedText
               font.family: view.theme.fontFamily
               font.pixelSize: view.theme.fontSmall
             }
