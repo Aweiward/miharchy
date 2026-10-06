@@ -91,59 +91,78 @@ test("the notice: loading, a failed connection, or no updates", () => {
   assert.equal(U.notice(loaded([chapter(1, manga, at(2026, 10, 4, 14))]), "/s.json"), null);
 });
 
-test("a check runs until a status poll says the server finished it", () => {
+// A libraryUpdateStatusChanged result, as measured on Suwayomi v2.3.
+const live = (o) => ({ type: "live", data: { libraryUpdateStatusChanged: status(o) } });
+const reload = (u, s, checked) => U.reduce(u, { type: "list", reply: list([], s || status(), checked), config, now });
+
+test("a check runs live until the server finishes it, then the list reloads with its time", () => {
   const idle = loaded([], status({ finishedJobs: 2, totalJobs: 2 }), at(2026, 10, 4, 3));
   assert.equal(idle.running, false);
   assert.match(U.checkPayload().query, /updateLibrary\(input: \{ categories: \$categories \}\)/);
   assert.deepEqual(U.checkPayload().variables, { categories: null }, "no categories: the whole library, without the excluded ones");
   assert.deepEqual(U.checkPayload([4]).variables, { categories: [4] });
+  assert.match(U.LIVE_QUERY, /^subscription \{ libraryUpdateStatusChanged\(input: \{\}\) \{ jobsInfo \{ isRunning finishedJobs totalJobs skippedMangasCount \} \} \}$/);
   const asked = U.reduce(idle, { type: "checking" });
   assert.equal(U.progress(asked, now), "Checking for new chapters");
-  const running = U.reduce(asked, { type: "status", reply: ok({ libraryUpdateStatus: status({ isRunning: true, finishedJobs: 1, totalJobs: 4 }), lastUpdateTimestamp: { timestamp: String(at(2026, 10, 4, 14, 59)) } }) });
-  assert.equal(U.finished(asked, running), false);
+  const reset = U.reduce(asked, live({}));
+  assert.equal(reset.checking, true, "the run opens with all zeros, before it counts the library");
+  assert.equal(U.finished(asked, reset), false);
+  const running = U.reduce(reset, live({ isRunning: true, finishedJobs: 1, totalJobs: 4 }));
+  assert.equal(U.finished(reset, running), false);
   assert.equal(U.progress(running, now), "Checking for new chapters 1 / 4");
-  const done = U.reduce(running, { type: "status", reply: ok({ libraryUpdateStatus: status({ finishedJobs: 4, totalJobs: 4 }), lastUpdateTimestamp: { timestamp: String(at(2026, 10, 4, 14, 59)) } }) });
+  const done = U.reduce(running, live({ finishedJobs: 4, totalJobs: 4 }));
   assert.equal(U.finished(running, done), true, "the list reloads once the run ends");
-  assert.equal(U.progress(done, now), "Last checked Today 14:59");
+  assert.equal(U.progress(reload(done, status({ finishedJobs: 4, totalJobs: 4 }), at(2026, 10, 4, 14, 59)), now), "Last checked Today 14:59");
+});
+
+test("a run the server starts on its own shows live too", () => {
+  const idle = loaded([], status(), at(2026, 10, 4, 3));
+  const scheduled = U.reduce(U.reduce(idle, live({})), live({ isRunning: true, totalJobs: 6 }));
+  assert.equal(U.progress(scheduled, now), "Checking for new chapters 0 / 6");
+  assert.equal(U.finished(scheduled, U.reduce(scheduled, live({ finishedJobs: 6, totalJobs: 6 }))), true);
+  assert.equal(U.reduce(idle, { type: "live", data: {} }), idle, "a result without the field changes nothing");
 });
 
 test("a stopped run says where it stopped until the next run starts", () => {
-  const poll = (o) => ({ type: "status", reply: ok({ libraryUpdateStatus: status(o), lastUpdateTimestamp: { timestamp: String(at(2026, 10, 4, 14, 59)) } }) });
   assert.match(U.stopPayload().query, /updateStop\(input: \{\}\)/);
-  const running = U.reduce(U.reduce(loaded([]), { type: "checking" }), poll({ isRunning: true, finishedJobs: 3, totalJobs: 10 }));
+  const running = U.reduce(U.reduce(loaded([]), { type: "checking" }), live({ isRunning: true, finishedJobs: 3, totalJobs: 10 }));
   const stopped = U.reduce(running, { type: "stopped" });
   assert.equal(U.finished(running, stopped), true, "the list reloads with what the run found");
   assert.equal(U.progress(stopped, now), "Stopped checking for new chapters at 3 / 10");
-  const after = U.reduce(stopped, poll({}));
+  const after = U.reduce(stopped, live({}));
   assert.equal(U.progress(after, now), "Stopped checking for new chapters at 3 / 10", "the server forgets the counts; the line keeps them");
   assert.equal(U.reduce(U.initial(), { type: "stopped" }).stopped, null, "nothing running, nothing stopped");
-  assert.equal(U.progress(U.reduce(U.reduce(loaded([]), { type: "checking" }), { type: "stopped" }), now), "Stopped checking for new chapters", "stopped before the first poll");
+  assert.equal(U.progress(U.reduce(U.reduce(loaded([]), { type: "checking" }), { type: "stopped" }), now), "Stopped checking for new chapters", "stopped before the run showed");
   assert.equal(U.progress(U.reduce(after, { type: "checking" }), now), "Checking for new chapters", "u starts over");
-  assert.equal(U.progress(U.reduce(after, poll({ isRunning: true, finishedJobs: 0, totalJobs: 5 })), now), "Checking for new chapters 0 / 5", "so does a scheduled run");
+  assert.equal(U.progress(U.reduce(after, live({ isRunning: true, finishedJobs: 0, totalJobs: 5 })), now), "Checking for new chapters 0 / 5", "so does a scheduled run");
 });
 
 test("a check the server skips entirely still ends, and says what it skipped", () => {
   const asked = U.reduce(loaded([]), { type: "checking" });
-  const skipped = U.reduce(asked, { type: "status", reply: ok({ libraryUpdateStatus: status({ skippedMangasCount: 3 }), lastUpdateTimestamp: { timestamp: String(at(2026, 10, 3, 9, 5)) } }) });
+  const skipped = U.reduce(U.reduce(asked, live({})), live({ skippedMangasCount: 3 }));
   assert.equal(U.finished(asked, skipped), true);
-  assert.equal(U.progress(skipped, now), "Last checked Yesterday 09:05, 3 manga skipped");
-  assert.equal(U.finished(skipped, skipped), false, "an idle poll reloads nothing");
+  const reloaded = reload(skipped, status({ skippedMangasCount: 3 }), at(2026, 10, 3, 9, 5));
+  assert.equal(U.progress(reloaded, now), "Last checked Yesterday 09:05, 3 manga skipped");
+  assert.equal(U.finished(reloaded, U.reduce(reloaded, live({ skippedMangasCount: 3 }))), false, "an idle result reloads nothing");
 });
 
 test("skipped manga name the skip filters that are on", () => {
-  const poll = (settings) => U.reduce(loaded([]), { type: "status", reply: ok({ libraryUpdateStatus: status({ skippedMangasCount: 4 }), lastUpdateTimestamp: { timestamp: String(at(2026, 10, 4, 9, 5)) }, settings }) });
-  assert.match(U.statusPayload().query, /settings \{ excludeUnreadChapters excludeNotStarted excludeCompleted \}/);
-  assert.equal(U.progress(poll({ excludeUnreadChapters: true, excludeNotStarted: false, excludeCompleted: true }), now),
+  const listed = (settings) => U.reduce(U.initial(), { type: "list", reply: ok({ chapters: { nodes: [] }, libraryUpdateStatus: status({ skippedMangasCount: 4 }), lastUpdateTimestamp: { timestamp: String(at(2026, 10, 4, 9, 5)) }, settings }), config, now });
+  assert.match(U.viewPayload(now).query, /settings \{ excludeUnreadChapters excludeNotStarted excludeCompleted \}/);
+  assert.equal(U.progress(listed({ excludeUnreadChapters: true, excludeNotStarted: false, excludeCompleted: true }), now),
     "Last checked Today 09:05, 4 skipped: unread chapters, completed (change in Settings)");
-  assert.equal(U.progress(poll({ excludeUnreadChapters: false, excludeNotStarted: true, excludeCompleted: false }), now),
+  assert.equal(U.progress(listed({ excludeUnreadChapters: false, excludeNotStarted: true, excludeCompleted: false }), now),
     "Last checked Today 09:05, 4 skipped: not started (change in Settings)");
-  assert.equal(U.progress(poll({ excludeUnreadChapters: false, excludeNotStarted: false, excludeCompleted: false }), now),
+  assert.equal(U.progress(listed({ excludeUnreadChapters: false, excludeNotStarted: false, excludeCompleted: false }), now),
     "Last checked Today 09:05, 4 manga skipped", "with every filter off, an excluded category or the source skipped them");
+  const filtered = listed({ excludeUnreadChapters: true, excludeNotStarted: false, excludeCompleted: false });
+  assert.deepEqual(U.reduce(filtered, live({ skippedMangasCount: 4 })).skipReasons, ["unread chapters"], "a live result keeps the reasons and time the list brought");
+  assert.equal(U.reduce(filtered, live({ skippedMangasCount: 4 })).checkedAt, filtered.checkedAt);
 });
 
-test("a failed poll ends the check and keeps the last known status", () => {
+test("a failed check ends and keeps the last known status", () => {
   const asked = U.reduce(loaded([], status(), at(2026, 10, 1, 8)), { type: "checking" });
-  const lost = U.reduce(asked, { type: "status", reply: M.reply(0, "") });
+  const lost = U.reduce(asked, { type: "failed" });
   assert.equal(lost.running, false);
   assert.equal(lost.checking, false);
   assert.equal(U.progress(lost, now), "Last checked 2026-10-01 08:00");

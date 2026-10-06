@@ -5,11 +5,10 @@ import "Model.js" as Model
 import "Session.js" as Session
 import "Downloads.js" as Downloads
 
-// The download queue over the whole window, and the poll behind it. The
-// window has no WebSocket module for Suwayomi's downloadStatusChanged
-// subscription, so it asks for the status each second while the overlay
-// shows or anything waits in the queue. Downloads.js decides; shell.qml
-// forwards every "downloads." command to run().
+// The download queue over the whole window, kept live by Suwayomi's
+// downloadStatusChanged subscription while the overlay shows or anything
+// waits in the queue. Downloads.js decides; shell.qml forwards every
+// "downloads." command to run().
 Rectangle {
   id: view
 
@@ -36,20 +35,28 @@ Rectangle {
   visible: open
   color: theme.background
 
+  // The first look at the queue; the subscription takes over once the
+  // overlay opens or a download waits.
   onConfigChanged: {
     seq++
     queue = Downloads.initial()
-    if (config) poll()
+    send({ query: Downloads.STATUS_QUERY })
   }
 
-  // Any reply that carries the download status: a poll's, or a mutation's
-  // sent from here or from the manga detail.
-  function apply(reply) {
-    var next = Downloads.reduce(queue, { type: "reply", reply: reply })
+  function update(event) {
+    var next = Downloads.reduce(queue, event)
     var gone = Downloads.left(queue.items, next.items)
     queue = next
     cursor = Math.max(0, Math.min(cursor, queue.items.length - 1))
     if (gone.length) leftQueue(gone)
+  }
+
+  // Any reply that carries the download status: the first look's, or a
+  // mutation's sent from here or from the manga detail. While the
+  // subscription runs it carries every change, and a reply's status can be
+  // older than its last result, so the reply is left out.
+  function apply(reply) {
+    if (!live.subscribed) update({ type: "reply", reply: reply })
   }
 
   function send(payload) {
@@ -58,10 +65,6 @@ Rectangle {
     Session.send(config, payload, function(reply) {
       if (s === view.seq) view.apply(reply)
     })
-  }
-
-  function poll() {
-    send({ query: Downloads.STATUS_QUERY })
   }
 
   // The cursor stays on its download wherever the new order puts it.
@@ -78,7 +81,6 @@ Rectangle {
     switch (id) {
       case "downloads.open":
         open = true
-        poll()
         break
       case "downloads.close":
         open = false
@@ -110,11 +112,17 @@ Rectangle {
     }
   }
 
-  Timer {
-    interval: 1000
-    repeat: true
-    running: view.config !== null && Downloads.polling(view.queue, view.open)
-    onTriggered: view.poll()
+  // A result that left changes out restarts the subscription, whose first
+  // result holds the whole queue.
+  LiveSocket {
+    id: live
+    config: view.config
+    query: Downloads.LIVE_QUERY
+    running: view.config !== null && Downloads.live(view.queue, view.open)
+    onResult: function(data) {
+      view.update({ type: "live", data: data })
+      if (Downloads.omitted(data)) Qt.callLater(live.restart)
+    }
   }
 
   // Over the whole window: a click never reaches the view below.
