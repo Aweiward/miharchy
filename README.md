@@ -23,7 +23,7 @@ omarchy plugin update miharchy
 omarchy-restart-shell
 ```
 
-The shell can keep the old bar mark in memory, so restart it to see bar changes. A window that is open keeps running the old code: within half a minute its status bar shows "new version   Q restart". Press `Q` or click it. The window saves what the reader read, quits, and opens again on the new code.
+Run `omarchy-restart-shell` after every update. The shell reloads the plugin when its files change, but it reuses its cached copy of the plugin's code ([omacom/omarchy#6981](https://github.com/omacom/omarchy/issues/6981)), so the bar mark keeps running the old code until the shell restarts. A window that is open keeps running the old code: within half a minute its status bar shows "new version   Q restart". Press `Q` or click it. The window saves what the reader read, quits, and opens again on the new code.
 
 ## Setup
 
