@@ -106,6 +106,18 @@ test("a moved download takes its new position", () => {
   assert.deepEqual(ids(changes(first, "STOPPED", [{ type: "POSITION", download: at(9, item(13, "QUEUED", 0)) }])).map((i) => i[0]), [14, 15, 13], "past the end: last");
 });
 
+test("the server's results for the overlay's moves, dequeue and cancel all end in the server's order", () => {
+  // Measured: one POSITION per moved download, in the mutation's order,
+  // with only its target index; the downloads it pushes aside get none.
+  const queue = D.reduce(D.initial(), { type: "live", data: { downloadStatusChanged: { state: "STOPPED", initial: [1, 2, 3, 4, 5].map((id, i) => at(i, item(id, "QUEUED", 0))) } } });
+  const moved = changes(queue, "STOPPED", [{ type: "POSITION", download: at(0, item(3, "QUEUED", 0)) }]);
+  const sorted = changes(moved, "STOPPED", [{ type: "POSITION", download: at(0, item(5, "QUEUED", 0)) }, { type: "POSITION", download: at(1, item(4, "QUEUED", 0)) }]);
+  const dequeued = changes(sorted, "STOPPED", [{ type: "DEQUEUED", download: at(1, item(2, "QUEUED", 0)) }]);
+  assert.deepEqual(ids(dequeued).map((i) => i[0]), [5, 4, 3, 1], "what downloadStatus listed after the same mutations");
+  const cleared = changes(dequeued, "STOPPED", [5, 4, 3, 1].map((id) => ({ type: "DEQUEUED", download: at(0, item(id, "QUEUED", 0)) })));
+  assert.deepEqual(cleared.items, []);
+});
+
 test("a result that left changes out says so, so the subscription starts over", () => {
   const first = D.reduce(D.initial(), { type: "live", data: { downloadStatusChanged: { state: "STARTED", initial: [] } } });
   assert.equal(D.omitted({ downloadStatusChanged: { omittedUpdates: true } }), true);
