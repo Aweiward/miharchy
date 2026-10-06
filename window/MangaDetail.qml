@@ -163,7 +163,7 @@ Rectangle {
     var cfg = config
     send(payload, function(reply) {
       if (seq !== view.detailSeq) return
-      view.detail = Browse.reduceDetail(view.detail, { type: "reply", reply: reply, config: cfg })
+      view.detail = Browse.reduceDetail(view.detail, { type: "reply", reply: reply, config: cfg, now: Date.now() })
       view.advance()
     })
   }

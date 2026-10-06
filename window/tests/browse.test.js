@@ -245,6 +245,21 @@ test("a source fetch that fails keeps the cached manga and says why", () => {
   assert.equal(B.detailPayload(d), null);
 });
 
+const at = (h, m, s) => new Date(2026, 9, 6, h, m, s).getTime();
+
+test("a refresh that ends in the same failure says when it failed again", () => {
+  let d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode({ initialized: false }) }), config });
+  d = B.reduceDetail(d, { type: "reply", reply: fail("CEF is disabled"), config, now: at(15, 0, 50) });
+  assert.equal(B.notice(d, "/c").detail, "Turn it on in Settings.", "the first failure is not 'again'");
+  d = B.reduceDetail(B.reduceDetail(d, { type: "refresh" }), { type: "reply", reply: fail("CEF is disabled"), config, now: at(15, 0, 57) });
+  assert.equal(B.notice(d, "/c").detail, "Turn it on in Settings. Failed again at 15:00:57.");
+  d = B.reduceDetail(B.reduceDetail(d, { type: "refresh" }), { type: "reply", reply: fail("Cloudflare bypass currently disabled"), config, now: at(15, 1, 3) });
+  assert.doesNotMatch(B.notice(d, "/c").detail, /again/, "another failure is news of its own");
+  d = B.reduceDetail(B.reduceDetail(d, { type: "refresh" }), { type: "reply", reply: ok({ fetchMangaAndChapters: { manga: mangaNode({ chapters: undefined }), chapters: [] } }), config, now: at(15, 2, 0) });
+  d = B.reduceDetail(B.reduceDetail(d, { type: "reread" }), { type: "reply", reply: fail("Cloudflare bypass currently disabled"), config, now: at(15, 3, 0) });
+  assert.doesNotMatch(B.notice(d, "/c").detail, /again/, "a success in between starts over");
+});
+
 const ASURA = "6247824327199706550";
 const missing = (o) => mangaNode(Object.assign({ sourceId: ASURA, source: null, initialized: false }, o));
 const names = (map) => ({ metas: { nodes: [{ value: JSON.stringify(map) }] } });

@@ -251,9 +251,15 @@ function reduceListing(l, event) {
 // source fetch already ran, so a manga the source leaves empty is not
 // fetched in a loop. fromSource: opened
 // while browsing a source, where cached details can be stale, so it always
-// refreshes once after showing the cache.
+// refreshes once after showing the cache. retried: the failure a refresh
+// retries, as failure(), or "". failedAt: when that refresh ended in the
+// same failure, else 0, so r never looks like it did nothing.
 function detail(mangaId, fromSource) {
-  return { mangaId: mangaId, fromSource: fromSource === true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null }
+  return { mangaId: mangaId, fromSource: fromSource === true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null, retried: "", failedAt: 0 }
+}
+
+function failure(s) {
+  return s.state === "loading" || s.state === "ok" ? "" : s.state + " " + s.message
 }
 
 function detailPayload(d) {
@@ -338,7 +344,7 @@ function toChapters(nodes) {
   })
 }
 
-// event.type: "reply" { reply, config } for the step in flight | "refresh"
+// event.type: "reply" { reply, config, now } for the step in flight | "refresh"
 // | "reread" the cache, as after reading | "library-request"
 // | "library-reply" { reply } | "categories-reply" { reply }
 // | "downloads-reply" { reply } from any Downloads.js mutation
@@ -346,7 +352,7 @@ function toChapters(nodes) {
 function reduceDetail(d, event) {
   switch (event.type) {
     case "refresh":
-      return copy(d, { step: "fetch", state: "loading", message: "", flare: false })
+      return copy(d, { step: "fetch", state: "loading", message: "", flare: false, retried: failure(d), failedAt: 0 })
     case "reread":
       return copy(d, { step: "read", fetched: true })
     case "reply":
@@ -354,7 +360,10 @@ function reduceDetail(d, event) {
         var ext = event.reply.state === "ok" ? event.reply.data.extensions.nodes[0] : null
         return copy(d, { step: null, extension: ext ? { installed: ext.isInstalled === true } : null })
       }
-      if (event.reply.state !== "ok") return copy(copy(d, failed(event.reply)), { step: null })
+      if (event.reply.state !== "ok") {
+        var why = failed(event.reply)
+        return copy(copy(d, why), { step: null, retried: "", failedAt: d.retried !== "" && d.retried === failure(why) ? event.now : 0 })
+      }
       if (d.step === "read") {
         var n = event.reply.data.manga
         var names = Model.parseNames(event.reply.data)
@@ -372,7 +381,7 @@ function reduceDetail(d, event) {
         })
       }
       var f = event.reply.data.fetchMangaAndChapters
-      return copy(d, { manga: toManga(event.config, f.manga, d.sourceNames), chapters: toChapters(f.chapters), step: null, state: "ok", fetched: true })
+      return copy(d, { manga: toManga(event.config, f.manga, d.sourceNames), chapters: toChapters(f.chapters), step: null, state: "ok", fetched: true, retried: "" })
     case "library-request":
       return copy(d, { busy: true, libraryError: "" })
     case "library-reply":
@@ -455,8 +464,11 @@ function gridChanges(shown, items) {
 // { title, detail } for a listing or detail that failed or came back empty,
 // else null. localFolder: where the local source reads, for its how-to.
 function notice(s, configPath, localFolder) {
-  if (s.flare) return { title: "This source needs FlareSolverr", detail: "It sits behind Cloudflare. Turn FlareSolverr on in Setup or Settings, then press r." }
-  var p = Model.problem(s, configPath)
+  var p = s.flare ? { title: "This source needs FlareSolverr", detail: "It sits behind Cloudflare. Turn FlareSolverr on in Setup or Settings, then press r." } : Model.problem(s, configPath)
+  if (p && s.failedAt) {
+    var t = new Date(s.failedAt)
+    return { title: p.title, detail: p.detail + " Failed again at " + pad(t.getHours()) + ":" + pad(t.getMinutes()) + ":" + pad(t.getSeconds()) + "." }
+  }
   if (p) return p
   if (s.state === "ok" && s.items && s.items.length === 0 && s.mode !== "search" && s.source && s.source.id === LOCAL_SOURCE) {
     return { title: "No local manga", detail: "Put a folder per manga in " + localFolder + ", holding a folder of images or a .cbz per chapter. Then press p. Settings sets the folder." }

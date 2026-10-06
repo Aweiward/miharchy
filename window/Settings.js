@@ -17,7 +17,8 @@
 //   along with every save; a category row's options are the user's
 //   categories, so activate() and display() take them.
 //   A text or folder row may add notSameAs, the key of a folder row it
-//   must differ from.
+//   must differ from. Any row may add note, a line shown under it while
+//   the cursor is on it.
 // An action row { key, label, type: "action", command } stores nothing:
 // Enter runs the command id, and the view shows its outcome as the value.
 // A later setting is one more entry here.
@@ -95,6 +96,9 @@ var ROWS = [
   // FlareSolverr solves the challenge (docs/spikes/extension-spike.md).
   { key: "flareSolverrEnabled", label: "FlareSolverr", type: "bool", default: false, store: "server", whenOn: { flareSolverrAsResponseFallback: true } },
   { key: "flareSolverrUrl", label: "FlareSolverr URL", type: "text", default: "http://127.0.0.1:8191", store: "server", pattern: /^https?:\/\/\S+$/, hint: "Enter a URL that starts with http:// or https://." },
+  // Suwayomi's built-in Chromium, which some sources run part of their
+  // site in. The server applies it without a restart.
+  { key: "kcefEnabled", label: "Server WebView (KCEF)", type: "bool", default: true, store: "server", note: "Some sources need it. The first use downloads Chromium, about 250 MB." },
   // The server runs the library update on this schedule, in hours, so it
   // runs with the window closed. It takes 0 (off) or at least 6.
   {

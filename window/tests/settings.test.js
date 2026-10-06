@@ -90,6 +90,11 @@ test("turning FlareSolverr on also turns on the response fallback; off leaves it
   assert.equal(s.values.flareSolverrEnabled, true);
 });
 
+test("the server's WebView row saves kcefEnabled alone and notes the Chromium download", () => {
+  assert.deepEqual(S.savePayload(row("kcefEnabled"), false).variables.s, { kcefEnabled: false });
+  assert.match(row("kcefEnabled").note, /Chromium, about 250 MB/);
+});
+
 test("a failed request keeps the shown values and carries the error state", () => {
   const loaded = S.reduce(S.initial(), ok({ settings: { flareSolverrEnabled: true }, metas: { nodes: [] } }));
   for (const [status, state] of [[0, "down"], [401, "unauthorized"], [500, "error"]]) {
