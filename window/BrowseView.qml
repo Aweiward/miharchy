@@ -157,8 +157,9 @@ Item {
     listing = Browse.reduceListing(listing, { type: "request" })
     send(payload, function(reply) {
       if (seq !== view.listingSeq) return
+      var before = view.listing.items
       view.listing = Browse.reduceListing(view.listing, { type: "reply", reply: reply, config: cfg })
-      if (view.listing.items.length && view.gridCursor >= view.listing.items.length - grid.columns * 2) view.moreManga()
+      if (Browse.loadAgain(before, view.listing.items, view.listing.hasNext, view.gridCursor, grid.columns, grid.atEnd)) view.moreManga()
     })
   }
 
@@ -205,7 +206,7 @@ Item {
   function moveGrid(delta) {
     if (!listing || !listing.items.length) return
     gridCursor = Math.max(0, Math.min(listing.items.length - 1, gridCursor + delta))
-    if (gridCursor >= listing.items.length - grid.columns * 2) moreManga()
+    if (Browse.nearEnd(listing.items, gridCursor, grid.columns)) moreManga()
   }
 
   function closeSearch() {

@@ -352,6 +352,16 @@ test("the grid appends a page and marks a row in place; only a new listing clear
   assert.deepEqual(ids(B.gridChanges(more.items, first.items)), { reset: true, append: [1, 2], marks: [] }, "fewer items: a new listing");
 });
 
+test("a page reply loads the next one when the cursor is near the end or a duplicate page leaves the grid at its end", () => {
+  const items = (n) => Array.from({ length: n }, (_, i) => ({ id: i }));
+  assert.equal(B.loadAgain(items(40), items(40), true, 0, 7, true), true, "nothing added at the end");
+  assert.equal(B.loadAgain(items(40), items(40), true, 0, 7, false), false, "nothing added, away from the end");
+  assert.equal(B.loadAgain(items(40), items(40), false, 39, 7, true), false, "the last page");
+  assert.equal(B.loadAgain(items(20), items(40), true, 0, 7, true), false, "a page added, cursor far from the end");
+  assert.equal(B.loadAgain(items(20), items(40), true, 26, 7, false), true, "a page added, cursor in the last two rows");
+  assert.equal(B.loadAgain([], [], true, 0, 7, true), false, "an empty listing");
+});
+
 test("sources show English and multi-language ones unless every language is asked for", () => {
   const data = { sources: { nodes: [src({ id: "5", displayName: "MangaDex (EN)", lang: "en" }), src({ id: "6", displayName: "MangaDex (JA)", lang: "ja" }), src({ id: "7", displayName: "Comick", lang: "all" })] } };
   assert.deepEqual(B.sources(ok(data), config, false).sources.map((x) => x.id), ["7", "5"]);

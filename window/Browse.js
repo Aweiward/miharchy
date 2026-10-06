@@ -424,6 +424,22 @@ function markInLibrary(l, mangaId, inLibrary) {
   return copy(l, { items: l.items.map(function(m) { return m.id === mangaId ? copy(m, { inLibrary: inLibrary }) : m }) })
 }
 
+// Whether the grid cursor sits in the last two rows: the next page loads.
+function nearEnd(items, cursor, columns) {
+  return cursor >= items.length - columns * 2
+}
+
+// Whether a page reply should load the next page at once: the cursor is
+// near the end, or the page added nothing (all duplicates) while the grid
+// shows its end, where no wheel can reach the end again.
+// ponytail: a source that answers duplicates with hasNext forever keeps
+// loading while the grid sits at its end; cap the empty pages in a row if
+// one shows up.
+function loadAgain(before, after, hasNext, cursor, columns, atEnd) {
+  if (!hasNext || !after.length) return false
+  return nearEnd(after, cursor, columns) || (after.length === before.length && atEnd)
+}
+
 // How the grid's model goes from the items it shows to the listing's:
 // reset (clear it first: a new listing), append (the rows to add) and
 // marks ([index, inLibrary] rows to update in place). A page more or a
@@ -452,6 +468,8 @@ function notice(s, configPath, localFolder) {
 if (typeof module !== "undefined") {
   module.exports = {
     gridChanges: gridChanges,
+    nearEnd: nearEnd,
+    loadAgain: loadAgain,
     SOURCES_QUERY: SOURCES_QUERY,
     sources: sources,
     PREFS: PREFS,

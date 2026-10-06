@@ -17,6 +17,7 @@ Item {
   property var notice: null
 
   readonly property alias searchField: field
+  readonly property alias atEnd: grid.atYEnd
   readonly property int columns: Math.max(1, Math.floor(grid.width / grid.cellWidth))
 
   signal key(var event)
