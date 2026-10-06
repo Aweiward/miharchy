@@ -267,6 +267,7 @@ test("a list resets when most rows move, on its first fill, or when a key repeat
   assert.equal(M.listChanges(all, all.slice().reverse()).reset, true, "a sort flipped");
   assert.equal(M.listChanges([], all).reset, true, "the first fill");
   assert.equal(M.listChanges(all, [all[0], all[0]]).reset, true, "a key twice");
+  assert.equal(M.listChanges([all[0], all[0], all[1]], [all[0], all[1]]).reset, true, "a key twice in the rows shown");
   assert.equal(kinds(M.listChanges(all, [])), "remove", "emptied: one remove");
 });
 

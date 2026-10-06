@@ -290,9 +290,10 @@ function listChanges(shown, items, key) {
   key = key || function(x) { return x.id }
   var at = new Map()
   items.forEach(function(x, i) { at.set(key(x), i) })
-  if (!shown.length || at.size !== items.length) return { reset: true }
-  var ops = []
   var keys = shown.map(key)
+  // A key twice (a source can send a manga on two pages) has no one place.
+  if (!shown.length || at.size !== items.length || new Set(keys).size !== keys.length) return { reset: true }
+  var ops = []
   // From the end, so each index still holds.
   for (var i = keys.length - 1; i >= 0; i--) {
     if (at.has(keys[i])) continue
