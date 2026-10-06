@@ -338,15 +338,18 @@ test("a library change shows on the source grid without a reload", () => {
   assert.deepEqual(B.markInLibrary(l, 2, false).items.map((m) => m.inLibrary), [true, false]);
 });
 
-test("the grid keeps its place for a page more or a library mark, not for a new listing", () => {
+test("the grid appends a page and marks a row in place; only a new listing clears it", () => {
   const first = B.reduceListing(B.reduceListing(B.listing({ id: "9", name: "S" }, "popular", ""), { type: "request" }), { type: "reply", reply: page([1, 2], true), config });
   const more = B.reduceListing(B.reduceListing(first, { type: "request" }), { type: "reply", reply: page([3, 4], false), config });
-  assert.equal(B.continues(first.items, more.items), true, "a page more");
-  assert.equal(B.continues(first.items, B.markInLibrary(first, 2, true).items), true, "a library mark");
+  const ids = (c) => ({ reset: c.reset, append: c.append.map((m) => m.id), marks: c.marks });
+  assert.deepEqual(ids(B.gridChanges(first.items, more.items)), { reset: false, append: [3, 4], marks: [] }, "a page more");
+  assert.deepEqual(ids(B.gridChanges(more.items, B.markInLibrary(more, 3, true).items)), { reset: false, append: [], marks: [[2, true]] }, "a library mark");
+  assert.deepEqual(ids(B.gridChanges(more.items, more.items)), { reset: false, append: [], marks: [] }, "a request: nothing");
   const search = B.reduceListing(B.reduceListing(B.listing({ id: "9", name: "S" }, "search", "x"), { type: "request" }), { type: "reply", reply: page([5, 6], false), config });
-  assert.equal(B.continues(more.items, search.items), false, "a new search starts at the top");
-  assert.equal(B.continues([], first.items), false, "the first page starts at the top");
-  assert.equal(B.continues(more.items, first.items), false, "fewer items: a new listing");
+  assert.deepEqual(ids(B.gridChanges(more.items, search.items)), { reset: true, append: [5, 6], marks: [] }, "a new search starts over");
+  assert.deepEqual(ids(B.gridChanges(more.items, [])), { reset: true, append: [], marks: [] }, "a new listing empties the grid");
+  assert.deepEqual(ids(B.gridChanges([], first.items)), { reset: false, append: [1, 2], marks: [] }, "the first page");
+  assert.deepEqual(ids(B.gridChanges(more.items, first.items)), { reset: true, append: [1, 2], marks: [] }, "fewer items: a new listing");
 });
 
 test("sources show English and multi-language ones unless every language is asked for", () => {

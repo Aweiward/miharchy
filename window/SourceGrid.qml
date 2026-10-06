@@ -26,14 +26,20 @@ Item {
 
   onCursorChanged: grid.positionViewAtIndex(cursor, GridView.Contain)
 
-  // Set here, not bound, so a page more keeps the grid's place.
+  // A ListModel, not the items array: a new array as the model rebuilds
+  // every cell and jumps to the top, which reported the grid's end and
+  // started the next page on each reply (#214).
   readonly property var items: listing ? listing.items : []
+  property var shown: []
   onItemsChanged: {
-    var y = grid.contentY
-    var keep = Browse.continues(grid.model || [], items)
-    grid.model = items
-    if (keep) grid.contentY = y
+    var c = Browse.gridChanges(shown, items)
+    if (c.reset) rows.clear()
+    c.marks.forEach(function(m) { rows.setProperty(m[0], "inLibrary", m[1]) })
+    c.append.forEach(function(m) { rows.append({ title: m.title, cover: m.cover, inLibrary: m.inLibrary }) })
+    shown = items
   }
+
+  ListModel { id: rows }
 
   Item {
     id: head
@@ -136,11 +142,15 @@ Item {
     clip: true
     cellWidth: view.theme.fontSize * 13
     cellHeight: cellWidth * 1.5 + view.theme.fontSize * 3
-    onAtYEndChanged: if (atYEnd) view.nearEnd()
+    model: rows
+    // Not an emptied grid: a new listing has its first page in flight.
+    onAtYEndChanged: if (atYEnd && count) view.nearEnd()
 
     delegate: Item {
       id: cell
-      required property var modelData
+      required property string title
+      required property string cover
+      required property bool inLibrary
       required property int index
       readonly property bool current: index === view.cursor
       width: grid.cellWidth
@@ -159,15 +169,15 @@ Item {
         height: width * 1.5
         theme: view.theme
         config: view.config
-        source: cell.modelData.cover
-        title: cell.modelData.title
+        source: cell.cover
+        title: cell.title
         current: cell.current
 
         Rectangle {
           anchors.top: parent.top
           anchors.right: parent.right
           anchors.margins: view.theme.fontSize / 3
-          visible: cell.modelData.inLibrary
+          visible: cell.inLibrary
           width: badge.implicitWidth + view.theme.fontSize * 0.6
           height: badge.implicitHeight + view.theme.fontSize * 0.2
           color: view.theme.accent
@@ -188,7 +198,7 @@ Item {
         anchors.topMargin: view.theme.fontSize / 2
         anchors.left: coverBox.left
         anchors.right: coverBox.right
-        text: cell.modelData.title
+        text: cell.title
         color: cell.current ? view.theme.selectedText : view.theme.foreground
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall

@@ -142,8 +142,7 @@ Item {
   }
 
   function openListing(mode, query, filters) {
-    // Before the new listing lands: the emptied grid reports its end at
-    // once, and the page that starts must carry the new number.
+    // Drops a page still due for the old listing.
     listingSeq++
     listing = Browse.listing(listing.source, mode, query, filters)
     gridCursor = 0

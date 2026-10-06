@@ -424,12 +424,16 @@ function markInLibrary(l, mangaId, inLibrary) {
   return copy(l, { items: l.items.map(function(m) { return m.id === mangaId ? copy(m, { inLibrary: inLibrary }) : m }) })
 }
 
-// Whether the grid's new items continue the ones it showed: a page more or
-// a library mark, not a new listing. The grid then keeps its scroll place;
-// a new model would put it back at the top under a wheel that just
-// reached the end.
-function continues(before, after) {
-  return before.length > 0 && after.length >= before.length && after[0].id === before[0].id
+// How the grid's model goes from the items it shows to the listing's:
+// reset (clear it first: a new listing), append (the rows to add) and
+// marks ([index, inLibrary] rows to update in place). A page more or a
+// library mark leaves the rows shown alone, so their covers, the scroll
+// place and a click in progress stay.
+function gridChanges(shown, items) {
+  var reset = shown.length > 0 && (items.length < shown.length || items[0].id !== shown[0].id)
+  var marks = []
+  if (!reset) shown.forEach(function(m, i) { if (items[i].inLibrary !== m.inLibrary) marks.push([i, items[i].inLibrary]) })
+  return { reset: reset, append: items.slice(reset ? 0 : shown.length), marks: marks }
 }
 
 // { title, detail } for a listing or detail that failed or came back empty,
@@ -447,7 +451,7 @@ function notice(s, configPath, localFolder) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    continues: continues,
+    gridChanges: gridChanges,
     SOURCES_QUERY: SOURCES_QUERY,
     sources: sources,
     PREFS: PREFS,
