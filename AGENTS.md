@@ -49,7 +49,7 @@ Read the doc for the area before you change it.
 
 ## Current work
 
-The v1 base is built and merged. The work now is Mihon parity for v1.0.0, tracked in #134 (milestone v1.0.0). Almost every parity item is merged. One is left: logging in to a source in a WebView (#98). Outside the milestone, the AUR package (#43) is open. Check `gh issue list --milestone v1.0.0` for the current list, and work items through `ready-for-agent` issues.
+The v1 base is built and merged. The work now is Mihon parity for v1.0.0, tracked in #134 (milestone v1.0.0). Every parity item but one is merged. Before v1.0.0, Miharchy moves to token login and pins the Suwayomi version (ADR 0005). Logging in to a source in a WebView (#98) left the milestone: it waits for an upstream Suwayomi change. Outside the milestone, the AUR package (#43) is open and ships after token login. Check `gh issue list --milestone v1.0.0` for the current list, and work items through `ready-for-agent` issues.
 
 Verified on the user's phone (2026-10-04): stock Mihon restores a `miharchy-*.tachibk` export from a real 216-manga library without issues. The FlareSolverr Setup step ran on the user's machine; `docs/spikes/cloudflare-solvers.md` compares it with Byparr.
 
