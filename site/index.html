@@ -257,6 +257,7 @@ code { font-family: var(--mono); color: var(--green); }
 .two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 32px; align-items: start; }
 .keys { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .keys li { color: var(--fg-dim); }
+.sync + .keys { margin-top: 32px; max-width: 80ch; }
 
 /* Sync diagram. */
 .sync { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch; gap: 0; }
@@ -425,6 +426,25 @@ footer img { width: 32px; height: 32px; display: inline-block; vertical-align: m
   </div>
 </section>
 
+<section id="peek" aria-labelledby="peek-h">
+  <p class="label">Bonus track · the peek</p>
+  <h2 id="peek-h">One key, over anything</h2>
+  <p class="lede">Press <kbd>Super + M</kbd> while you work. Miharchy slides in over the workspace you are on, on the next chapter to read. Press it again and it slides away. Only a tiling desktop can do this: Mihon is on your phone, Suwayomi is in a browser tab.</p>
+  <div class="sync" role="img" aria-label="Diagram: from any workspace, Super + M shows Miharchy on its own Hyprland special workspace, open on the next chapter to read; the same key hides it.">
+    <div class="node"><span class="dev">Any workspace</span><h3>You, working</h3><p>A terminal, an editor, a browser. Nothing moves.</p></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="node"><span class="dev">One key</span><h3>Super + M</h3><p>Setup adds the bind to your Hyprland bindings, once.</p></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="node"><span class="dev">Special workspace</span><h3>The peek</h3><p>The reader, on the next chapter of the manga you read last.</p></div>
+  </div>
+  <ul class="keys">
+    <li>The same key, or a workspace switch, hides the peek. It comes back on the page you left.</li>
+    <li>The next chapter comes from your read state, so a chapter you finished on the phone counts after a sync.</li>
+    <li>A window you already placed on a workspace stays there: the key brings it up and resumes.</li>
+    <li>Nothing left to read? The peek opens your Library with its search.</li>
+  </ul>
+</section>
+
 <section id="sync" aria-labelledby="sync-h">
   <p class="label">Dubbing · phone ⇄ desktop</p>
   <h2 id="sync-h">Syncs with Mihon</h2>
@@ -476,6 +496,7 @@ footer img { width: 32px; height: 32px; display: inline-block; vertical-align: m
     <li><b>Sync folder</b>The folder Mihon and Miharchy share.</li>
     <li><b>Sync helper</b>Builds the sync helper once, a few minutes.</li>
     <li><b>App launcher entry</b>Miharchy in Super + Space.</li>
+    <li><b>Peek key</b>Super + M shows and hides the peek.</li>
   </ol>
   <p class="note">Update with <code>omarchy plugin update miharchy</code>, then <code>omarchy-restart-shell</code> so the bar runs the new code. The <a href="https://github.com/Aweiward/miharchy#readme">README</a> has the details and how to uninstall.</p>
 </section>
