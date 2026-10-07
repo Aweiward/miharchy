@@ -151,6 +151,16 @@ test("continue reading takes the next unread chapter by the manga's own chapter 
   assert.equal(L.continueChapter(chapters.map((c) => ({ ...c, read: true })), cp()), null);
 });
 
+test("continue reading takes a manga's excluded scanlators and Downloaded only, as the chapter list does", () => {
+  const ch = (id, number, read, extra) => ({ id, number, sourceOrder: number, read, downloaded: false, bookmarked: false, uploadDate: 0, scanlator: "", ...extra });
+  const meta = [{ key: "miharchy.excludedScanlators", value: "[\"Bad\"]" }];
+  const global = [{ key: "miharchy.chapterSortDirection", value: "asc" }];
+  const chapters = [ch(3, 3, false, { downloaded: true }), ch(2, 2, false), ch(1, 1, false, { scanlator: "Bad" })];
+  assert.equal(L.continueChapter(chapters, L.chapterPrefs({ metas: { nodes: global }, manga: { meta } }, false)).id, 2);
+  assert.equal(L.continueChapter(chapters, L.chapterPrefs({ metas: { nodes: global }, manga: { meta } }, true)).id, 3);
+  assert.equal(L.chapterPrefs({}, false).chapterSortDirection, "desc", "an empty reply gives the defaults");
+});
+
 test("the change category rows say whether all, some or none of the chosen manga are in each category", () => {
   const cats = [{ id: 1, name: "Action" }, { id: 2, name: "Drama" }, { id: 3, name: "Later" }];
   const chosen = [manga(1, "a", { categories: [1, 2] }), manga(2, "b", { categories: [1] })];

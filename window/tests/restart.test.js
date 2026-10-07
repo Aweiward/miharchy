@@ -43,13 +43,13 @@ test("the relaunch waits for the old process to end, then runs the launcher with
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-relaunch-"));
   const out = path.join(dir, "out");
   const launcher = path.join(dir, "miharchy");
-  fs.writeFileSync(launcher, '#!/bin/sh\necho "ran chapter=${MIHARCHY_OPEN_CHAPTER-unset} view=${MIHARCHY_OPEN_VIEW-unset}" > "' + out + '"\n', { mode: 0o755 });
+  fs.writeFileSync(launcher, '#!/bin/sh\necho "ran chapter=${MIHARCHY_OPEN_CHAPTER-unset} view=${MIHARCHY_OPEN_VIEW-unset} peek=${MIHARCHY_PEEK-unset}" > "' + out + '"\n', { mode: 0o755 });
   const old = spawn("sleep", ["30"]);
   const cmd = R.relaunchCommand(old.pid, launcher);
-  const waiter = spawn(cmd[0], cmd.slice(1), { env: { ...process.env, MIHARCHY_OPEN_CHAPTER: "1 2", MIHARCHY_OPEN_VIEW: "updates" } });
+  const waiter = spawn(cmd[0], cmd.slice(1), { env: { ...process.env, MIHARCHY_OPEN_CHAPTER: "1 2", MIHARCHY_OPEN_VIEW: "updates", MIHARCHY_PEEK: "1" } });
   await new Promise((r) => setTimeout(r, 600));
   assert.equal(fs.existsSync(out), false, "the launcher waits while the old window runs");
   old.kill();
   await new Promise((r) => waiter.on("exit", r));
-  assert.equal(fs.readFileSync(out, "utf8"), "ran chapter=unset view=unset\n");
+  assert.equal(fs.readFileSync(out, "utf8"), "ran chapter=unset view=unset peek=unset\n");
 });

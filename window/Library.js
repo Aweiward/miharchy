@@ -155,6 +155,15 @@ function tabLabel(entry, prefs, query) {
 // Mihon's continue reading button: the manga's next unread chapter, by its
 // own chapter filters and sort (Chapters.PREFS), or null. chapters: as
 // Browse.toChapters() builds them.
+// A manga's chapter choices for its next chapter: its chapter prefs and
+// excluded scanlators over the global defaults, with Downloaded only
+// forced on. data: a reply to Prefs.loadPayload(CHAPTER_PREFS, mangaId).
+var CHAPTER_PREFS = Chapters.PREFS.concat(Chapters.SCANLATOR_PREFS)
+
+function chapterPrefs(data, downloadedOnly) {
+  return Prefs.force(Prefs.read(CHAPTER_PREFS, data, Prefs.defaults(CHAPTER_PREFS)), "chapterFilterDownloaded", "include", downloadedOnly)
+}
+
 function continueChapter(chapters, chapterPrefs) {
   return Chapters.nextUnread(Chapters.apply(chapters, chapterPrefs), chapterPrefs)
 }
@@ -246,6 +255,8 @@ if (typeof module !== "undefined") {
     rows: rows,
     toggleDisplay: toggleDisplay,
     badges: badges,
+    CHAPTER_PREFS: CHAPTER_PREFS,
+    chapterPrefs: chapterPrefs,
     continueChapter: continueChapter,
     chaptersPayload: chaptersPayload,
     removePayload: removePayload,

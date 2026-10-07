@@ -28,7 +28,7 @@ function check(state, output) {
 // `quickshell -n` refuses to start while the old window runs. An ended
 // process its parent has not reaped yet counts as ended. The new window
 // opens on the Library, not on what started the old one.
-var RELAUNCH = 'while [ -d "/proc/$1" ] && ! grep -qs "^State:.Z" "/proc/$1/status"; do sleep 0.2; done; unset MIHARCHY_OPEN_CHAPTER MIHARCHY_OPEN_VIEW; exec "$2"'
+var RELAUNCH = 'while [ -d "/proc/$1" ] && ! grep -qs "^State:.Z" "/proc/$1/status"; do sleep 0.2; done; unset MIHARCHY_OPEN_CHAPTER MIHARCHY_OPEN_VIEW MIHARCHY_PEEK; exec "$2"'
 
 function relaunchCommand(pid, launcher) {
   return ["sh", "-c", RELAUNCH, "sh", String(pid), launcher]

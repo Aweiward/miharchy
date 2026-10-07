@@ -363,7 +363,7 @@ test("a running server with an outdated unit is due again, and keeps Setup open"
 });
 
 // The peek key step, against a temporary HOME and a stub hyprctl whose binds are SUPER (64) + the keys given.
-function peekHome(bindings, superKeys) {
+function peekHome(bindings, superKeys, hyprctl) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-peek-"));
   const file = path.join(home, ".config/hypr/bindings.lua");
   if (bindings !== null) {
@@ -371,11 +371,14 @@ function peekHome(bindings, superKeys) {
     fs.writeFileSync(file, bindings);
   }
   const binds = JSON.stringify((superKeys || []).map((key) => ({ modmask: 64, key })).concat([{ modmask: 65, key: "M" }]));
-  const bin = stubs({ hyprctl: "[ \"$*\" = 'binds -j' ] && echo '" + binds + "'" });
+  fs.mkdirSync(path.join(home, ".config/hypr"), { recursive: true });
+  fs.writeFileSync(path.join(home, ".config/hypr/bindings.conf"), "# old\n");
+  const bin = stubs({ hyprctl: hyprctl || "[ \"$*\" = 'binds -j' ] && echo '" + binds + "'" });
   const env = { ...process.env, HOME: home, PATH: bin + ":" + process.env.PATH };
   return {
     file,
     add: () => S.parseJob(run(S.runCommand("peekKey", { windowDir: "/p q/window" }), env)),
+    conf: () => fs.readFileSync(path.join(home, ".config/hypr/bindings.conf"), "utf8"),
     state: () => S.status(finish(S.initial(), "probe", run(S.probeCommand("/none", "/s", "/p q/window"), env)), "peekKey").state
   };
 }
@@ -390,6 +393,7 @@ test("the peek key step adds SUPER + M to bindings.lua once, then counts as done
   assert.equal(t.state(), "done");
   assert.equal(t.add().code, 0);
   assert.equal(fs.readFileSync(t.file, "utf8"), "-- mine\n\n" + PEEK_LINE + "\n", "a rerun writes nothing");
+  assert.equal(t.conf(), "# old\n", "bindings.conf stays as it is");
 });
 
 test("the peek key step shows the line instead when SUPER + M is taken or bindings.lua is missing", () => {
@@ -411,4 +415,14 @@ test("a peek bind the user moved to another key counts as done and is left alone
   assert.equal(t.state(), "done");
   t.add();
   assert.equal(fs.readFileSync(t.file, "utf8"), moved);
+});
+
+test("a commented-out peek bind does not count, and a hyprctl that cannot list the binds leaves the line to paste", () => {
+  const commented = peekHome("-- " + PEEK_LINE + "\n");
+  assert.equal(commented.state(), "todo");
+  const blind = peekHome("-- mine\n", [], "exit 1");
+  const r = blind.add();
+  assert.notEqual(r.code, 0);
+  assert.ok(r.output.includes(PEEK_LINE), r.output);
+  assert.equal(fs.readFileSync(blind.file, "utf8"), "-- mine\n");
 });

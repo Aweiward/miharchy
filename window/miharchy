@@ -41,7 +41,13 @@ if [ "$1" = peek ]; then
     focus
     exit 0
   fi
-  MIHARCHY_OPEN_VIEW=peek setsid -f quickshell -n -p "$dir" >/dev/null 2>&1
+  # A second press while the window starts must not start another.
+  # ponytail: a launcher killed mid-start leaves the marker until logout;
+  # check its age if that bites.
+  marker=${XDG_RUNTIME_DIR:-/tmp}/miharchy/peek-starting
+  mkdir -p "${marker%/*}" && mkdir "$marker" 2>/dev/null || exit 0
+  trap 'rmdir "$marker"' EXIT
+  MIHARCHY_PEEK=1 setsid -f quickshell -n -p "$dir" >/dev/null 2>&1
   i=0
   until address; do
     i=$((i + 1))

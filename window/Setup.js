@@ -16,6 +16,10 @@ var UNIT_FILE = ".config/systemd/user/miharchy-server.service"
 var SERVER_CONF = ".local/share/miharchy/suwayomi/server.conf"
 var DESKTOP_FILE = ".local/share/applications/miharchy.desktop"
 var BINDINGS_FILE = ".config/hypr/bindings.lua"
+var PEEK_KEY = "SUPER + M"
+// A bindings.lua line that runs `miharchy peek` (peekLine quotes the path)
+// and is not a Lua comment.
+var HAS_PEEK_KEY = "grep -qsE \"^[[:space:]]*[^[:space:]-].*miharchy'? peek\""
 
 // kind "install": the user runs command in a terminal; Enter checks again.
 // kind "run":     Miharchy runs the step after the user confirms with y;
@@ -31,7 +35,7 @@ var STEPS = [
   { id: "syncFolder", title: "Sync folder", kind: "folder" },
   { id: "helper", title: "Sync helper", kind: "run", prompt: "Build the sync helper now? It takes a few minutes." },
   { id: "launcher", title: "App launcher entry", kind: "run", prompt: "Add Miharchy to the app launcher?" },
-  { id: "peekKey", title: "Peek key", kind: "run", prompt: "Add SUPER + M, which shows and hides a peek, to your Hyprland bindings?" }
+  { id: "peekKey", title: "Peek key", kind: "run", prompt: "Add " + PEEK_KEY + ", which shows and hides a peek, to your Hyprland bindings?" }
 ]
 
 // sha256 over every file in a sync/ folder except build output, so a
@@ -55,17 +59,19 @@ var PROBE = [
   "echo \"helperSource $(fingerprint \"$2\")\"",
   "echo \"helperInstalled $(test -x \"$HOME/" + HELPER_DIR + "/bin/miharchy-sync\" && cat \"$HOME/" + HELPER_DIR + "/source.sha256\")\"",
   "printf '%s' \"$3\" | cmp -s - \"$HOME/" + DESKTOP_FILE + "\" && echo launcher",
-  "grep -qsE \"miharchy'? peek\" \"$HOME/" + BINDINGS_FILE + "\" && echo peekKey"
+  HAS_PEEK_KEY + " \"$HOME/" + BINDINGS_FILE + "\" && echo peekKey"
 ].join("\n")
 
 // $1 is peekLine(). A bind the user already has, on any key, stays as it
-// is; a taken SUPER + M or a missing file leaves the line to paste.
+// is; a taken key, binds hyprctl cannot list or a missing file leave the
+// line to paste.
 var PEEK_SCRIPT = [
   "file=$HOME/" + BINDINGS_FILE,
-  "grep -qsE \"miharchy'? peek\" \"$file\" && { echo \"$file already has a peek key.\"; exit 0; }",
+  HAS_PEEK_KEY + " \"$file\" && { echo \"$file already has a peek key.\"; exit 0; }",
   "test -f \"$file\" || { echo \"There is no $file. Add this line to your Hyprland bindings: $1\"; exit 1; }",
-  "hyprctl binds -j 2>/dev/null | jq -e '.[] | select(.modmask == 64 and (.key | ascii_upcase) == \"M\")' >/dev/null && { echo \"SUPER + M is taken. Add this line to $file with a free key: $1\"; exit 1; }",
-  "printf '\\n%s\\n' \"$1\" >> \"$file\" && echo \"Added SUPER + M to $file.\""
+  "binds=$(hyprctl binds -j 2>/dev/null) || { echo \"Hyprland did not list its binds. Add this line to $file with a free key: $1\"; exit 1; }",
+  "printf '%s' \"$binds\" | jq -e '.[] | select(.modmask == 64 and (.key | ascii_upcase) == \"M\")' >/dev/null && { echo \"" + PEEK_KEY + " is taken. Add this line to $file with a free key: $1\"; exit 1; }",
+  "printf '\\n%s\\n' \"$1\" >> \"$file\" && echo \"Added " + PEEK_KEY + " to $file.\""
 ].join("\n")
 
 // $1 is the plugin's sync/. Gradle writes build/, .gradle/ and .kotlin/
@@ -124,7 +130,7 @@ function desktopEntry(windowDir) {
 // command through a shell, so the path is single-quoted inside a Lua string.
 function peekLine(windowDir) {
   var cmd = "'" + String(windowDir + "/miharchy").replace(/'/g, "'\\''") + "' peek"
-  return "o.bind(\"SUPER + M\", \"Miharchy peek\", " + JSON.stringify(cmd) + ")"
+  return "o.bind(\"" + PEEK_KEY + "\", \"Miharchy peek\", " + JSON.stringify(cmd) + ")"
 }
 
 function probeCommand(configPath, syncDir, windowDir) {
@@ -306,7 +312,7 @@ function status(s, id) {
       return is("todo", "Press Enter to add Miharchy to the app launcher: ~/" + DESKTOP_FILE + ".")
     case "peekKey":
       if (p.peekKey) return is("done", "A key in ~/" + BINDINGS_FILE + " shows and hides a peek.")
-      return is("todo", "Press Enter to add SUPER + M, which shows and hides a peek, to ~/" + BINDINGS_FILE + ".")
+      return is("todo", "Press Enter to add " + PEEK_KEY + ", which shows and hides a peek, to ~/" + BINDINGS_FILE + ".")
   }
   return is("checking", "")
 }
