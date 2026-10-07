@@ -350,6 +350,14 @@ function offers(s) {
   return keys
 }
 
+// Whether this window makes the one-time offer. One started on a target
+// (a peek, a chapter, Updates) opens something else, so Setup would never
+// show and the offer would be lost; the next plain launch makes it.
+// env: the window's MIHARCHY_PEEK, MIHARCHY_OPEN_CHAPTER, MIHARCHY_OPEN_VIEW.
+function offersOnStart(env) {
+  return !env.MIHARCHY_PEEK && !env.MIHARCHY_OPEN_CHAPTER && !env.MIHARCHY_OPEN_VIEW
+}
+
 // Due steps the user has not been shown yet; Setup opens once for these.
 function unoffered(s) {
   var seen = s.server ? s.server.offered : []
@@ -405,6 +413,7 @@ if (typeof module !== "undefined") {
     action: action,
     incomplete: incomplete,
     offers: offers,
+    offersOnStart: offersOnStart,
     unoffered: unoffered,
     offerPayload: offerPayload,
     next: next,

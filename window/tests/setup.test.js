@@ -426,3 +426,11 @@ test("a commented-out peek bind does not count, and a hyprctl that cannot list t
   assert.ok(r.output.includes(PEEK_LINE), r.output);
   assert.equal(fs.readFileSync(blind.file, "utf8"), "-- mine\n");
 });
+
+test("only a window started with no open target makes the one-time offer", () => {
+  assert.equal(S.offersOnStart({}), true, "a plain launch");
+  assert.equal(S.offersOnStart({ MIHARCHY_PEEK: "1" }), false, "a peek opens the reader");
+  assert.equal(S.offersOnStart({ MIHARCHY_OPEN_CHAPTER: "5 9" }), false, "an update row opens the reader");
+  assert.equal(S.offersOnStart({ MIHARCHY_OPEN_VIEW: "updates" }), false, "a notification opens Updates");
+  assert.equal(S.offersOnStart({ MIHARCHY_OPEN_CHAPTER: "", MIHARCHY_OPEN_VIEW: "" }), true, "empty values are no target");
+});

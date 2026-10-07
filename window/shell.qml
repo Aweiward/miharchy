@@ -1005,6 +1005,7 @@ ShellRoot {
           configPath: root.configPath
           home: Quickshell.env("HOME")
           onKey: function(event) { event.accepted = root.handleKey(event) }
+          offers: Setup.offersOnStart({ MIHARCHY_PEEK: Quickshell.env("MIHARCHY_PEEK"), MIHARCHY_OPEN_CHAPTER: Quickshell.env("MIHARCHY_OPEN_CHAPTER"), MIHARCHY_OPEN_VIEW: Quickshell.env("MIHARCHY_OPEN_VIEW") })
           onNeeded: if (root.view === "library") root.view = "setup"
           onWrote: configFile.reload()
           onEditEnded: keyRoot.forceActiveFocus()

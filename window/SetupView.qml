@@ -28,6 +28,8 @@ Item {
   property string folder: ""
   property bool checked: false
   property bool offered: false
+  // Setup.offersOnStart() for this window.
+  property bool offers: true
   // The window runs from the repo's window/, beside server/ and sync/.
   readonly property string serverScript: Quickshell.shellPath("../server/miharchy-server")
   readonly property string syncDir: Quickshell.shellPath("../sync")
@@ -77,7 +79,7 @@ Item {
   // Once a session: open on optional steps the user has not been shown, then
   // record them so a skipped step stays quiet until it changes.
   function offer() {
-    if (offered || !Setup.unoffered(setup).length) return
+    if (offered || !offers || !Setup.unoffered(setup).length) return
     offered = true
     needed()
     post(Setup.offerPayload(setup), function() {})
