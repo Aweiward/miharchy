@@ -37,6 +37,16 @@ Setup lists the steps below. Move with `j` and `k`, press Enter on a step. A ste
 6. Sync folder: the folder Mihon and Miharchy exchange backups through.
 7. Sync helper: builds the sync helper into `~/.local/share/miharchy/helper`. The first build downloads Gradle and libraries and takes a few minutes. After `omarchy plugin update` the step shows "out of date" when the helper changed; build it again.
 8. App launcher entry: writes `~/.local/share/applications/miharchy.desktop`, so Miharchy shows in the app launcher (Super + Space).
+9. Peek key: adds `SUPER + M` to `~/.config/hypr/bindings.lua`, once. If `SUPER + M` is taken, or the file is missing, Setup shows the line to add yourself with another key. A bind you moved to another key stays as it is.
+
+## Peek
+
+Press `SUPER + M` from any workspace. Miharchy opens over it as a peek, on the next chapter to read: the first unread chapter of the manga you read last, by that manga's chapter filters. Press `SUPER + M` again to hide it. Switching workspaces hides it too, and the next press brings it back on the same page.
+
+- The peek lives on its own Hyprland special workspace, `special:miharchy`, like Omarchy's scratchpad.
+- If the window is already open on a normal workspace, the key focuses it there and resumes. It never moves a window you placed.
+- With nothing left to read, the peek opens the Library with its search.
+- From a terminal: `~/.config/omarchy/plugins/miharchy/window/miharchy peek`.
 
 ## Sync with Mihon
 
