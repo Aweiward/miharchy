@@ -63,7 +63,7 @@ test("install commands are shown, never run, and no step uses sudo", () => {
   assert.equal(S.STEPS.find((st) => st.id === "suwayomi").command, "yay -S suwayomi-server-bin");
   assert.equal(S.runCommand("java", {}), null);
   assert.equal(S.runCommand("suwayomi", {}), null);
-  for (const id of ["server", "flaresolverr", "syncFolder", "helper", "launcher"]) assert.doesNotMatch(S.runCommand(id, { serverScript: "x", folder: "/", syncDir: "/s", windowDir: "/w" }).join(" "), /sudo|pacman|yay/, id);
+  for (const id of ["server", "flaresolverr", "syncFolder", "helper", "launcher", "peekKey"]) assert.doesNotMatch(S.runCommand(id, { serverScript: "x", folder: "/", syncDir: "/s", windowDir: "/w" }).join(" "), /sudo|pacman|yay/, id);
 });
 
 test("FlareSolverr runs as a restarting container bound to localhost", () => {
@@ -81,10 +81,10 @@ test("nothing is decided before the first check", () => {
 
 test("a set-up machine shows steps 1-4 done and is complete", () => {
   const s = finish(S.initial(), "probe", READY);
-  assert.deepEqual(states(s), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "waiting", syncFolder: "waiting", helper: "waiting", launcher: "todo" });
+  assert.deepEqual(states(s), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "waiting", syncFolder: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
   assert.equal(S.incomplete(s), false);
   const loaded = server(s, { settings: FLARE_OFF, metas: { nodes: [] } });
-  assert.deepEqual(states(loaded), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "todo", syncFolder: "todo", helper: "waiting", launcher: "todo" });
+  assert.deepEqual(states(loaded), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "todo", syncFolder: "todo", helper: "waiting", launcher: "todo", peekKey: "todo" });
   assert.equal(S.next(loaded), 4);
 });
 
@@ -100,7 +100,7 @@ test("live updates need qt6-websockets, a step to install like Java", () => {
 
 test("missing pieces: each step says what to do, later steps wait", () => {
   const s = finish(S.initial(), "probe", "java sh: java: not found\nunit  \n");
-  assert.deepEqual(states(s), { java: "todo", suwayomi: "todo", websockets: "todo", server: "waiting", flaresolverr: "unavailable", syncFolder: "waiting", helper: "waiting", launcher: "todo" });
+  assert.deepEqual(states(s), { java: "todo", suwayomi: "todo", websockets: "todo", server: "waiting", flaresolverr: "unavailable", syncFolder: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
   assert.match(S.status(s, "flaresolverr").detail, /needs FlareSolverr/);
   assert.equal(S.incomplete(s), true);
   assert.equal(S.next(s), 0);
@@ -160,16 +160,16 @@ test("the sync folder is stored as miharchy.syncFolder meta and read back", () =
 });
 
 test("running setup twice changes nothing: a done machine stays done after another check", () => {
-  const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\n");
+  const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\npeekKey\n");
   const data = { settings: FLARE_ON, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/s" }] } };
   const once = server(finish(S.initial(), "probe", done), data);
   const twice = server(finish(once, "probe", done), data);
-  assert.deepEqual(states(twice), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "done", syncFolder: "done", helper: "done", launcher: "done" });
+  assert.deepEqual(states(twice), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "done", syncFolder: "done", helper: "done", launcher: "done", peekKey: "done" });
   assert.deepEqual(states(twice), states(once));
 });
 
 test("a server newer than the checked version shows a warning and changes no step", () => {
-  const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\n");
+  const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\npeekKey\n");
   const data = (version) => ({ settings: FLARE_ON, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/s" }] }, aboutServer: { version } });
   const probed = finish(S.initial(), "probe", done);
   const newer = server(probed, data("v2.5.0"));
@@ -283,23 +283,23 @@ const serverWith = (s, offered) => server(s, { settings: FLARE_OFF, metas: { nod
 test("optional steps that are due get offered once, keyed by state", () => {
   const s = serverWith(finish(S.initial(), "probe", MACHINE));
   assert.equal(S.incomplete(s), false, "every required step is done");
-  const due = ["flaresolverr:todo", "helper:outdated:new123456789", "launcher:todo"];
+  const due = ["flaresolverr:todo", "helper:outdated:new123456789", "launcher:todo", "peekKey:todo"];
   assert.deepEqual(S.offers(s), due);
   assert.deepEqual(S.unoffered(s), due);
   assert.deepEqual(S.offerPayload(s).variables, { key: "miharchy.setupOffered", value: due.join(",") });
 });
 
 test("a step already offered does not reopen Setup, a newly due one does", () => {
-  const seen = serverWith(finish(S.initial(), "probe", MACHINE), "flaresolverr:todo,helper:outdated:new123456789,launcher:todo");
+  const seen = serverWith(finish(S.initial(), "probe", MACHINE), "flaresolverr:todo,helper:outdated:new123456789,launcher:todo,peekKey:todo");
   assert.deepEqual(S.unoffered(seen), []);
-  const updated = serverWith(finish(S.initial(), "probe", MACHINE.replace("helperSource new1234567890abcdef", "helperSource zzz9876543210fedcb")), "flaresolverr:todo,helper:outdated:new123456789,launcher:todo");
+  const updated = serverWith(finish(S.initial(), "probe", MACHINE.replace("helperSource new1234567890abcdef", "helperSource zzz9876543210fedcb")), "flaresolverr:todo,helper:outdated:new123456789,launcher:todo,peekKey:todo");
   assert.deepEqual(S.unoffered(updated), ["helper:outdated:zzz987654321"], "a plugin update that changes sync/ is offered once more");
 });
 
 test("nothing is offered before the server answers, and waiting or unavailable steps are never offered", () => {
   assert.deepEqual(S.unoffered(finish(S.initial(), "probe", MACHINE)), [], "no server reply yet");
   const s = serverWith(finish(S.initial(), "probe", READY.replace("docker \n", "")));
-  assert.deepEqual(S.offers(s), ["launcher:todo"], "no javac means the helper waits; no docker means FlareSolverr is unavailable");
+  assert.deepEqual(S.offers(s), ["launcher:todo", "peekKey:todo"], "no javac means the helper waits; no docker means FlareSolverr is unavailable");
 });
 
 test("the probe reports whether the installed server unit matches the plugin's copy", () => {
@@ -360,4 +360,69 @@ test("a running server with an outdated unit is due again, and keeps Setup open"
   assert.equal(S.action(stale, "server"), "confirm");
   assert.equal(S.incomplete(stale), true);
   assert.equal(S.status(finish(S.initial(), "probe", READY), "server").state, "done");
+});
+
+// The peek key step, against a temporary HOME and a stub hyprctl whose binds are SUPER (64) + the keys given.
+function peekHome(bindings, superKeys, hyprctl) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-peek-"));
+  const file = path.join(home, ".config/hypr/bindings.lua");
+  if (bindings !== null) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, bindings);
+  }
+  const binds = JSON.stringify((superKeys || []).map((key) => ({ modmask: 64, key })).concat([{ modmask: 65, key: "M" }]));
+  fs.mkdirSync(path.join(home, ".config/hypr"), { recursive: true });
+  fs.writeFileSync(path.join(home, ".config/hypr/bindings.conf"), "# old\n");
+  const bin = stubs({ hyprctl: hyprctl || "[ \"$*\" = 'binds -j' ] && echo '" + binds + "'" });
+  const env = { ...process.env, HOME: home, PATH: bin + ":" + process.env.PATH };
+  return {
+    file,
+    add: () => S.parseJob(run(S.runCommand("peekKey", { windowDir: "/p q/window" }), env)),
+    conf: () => fs.readFileSync(path.join(home, ".config/hypr/bindings.conf"), "utf8"),
+    state: () => S.status(finish(S.initial(), "probe", run(S.probeCommand("/none", "/s", "/p q/window"), env)), "peekKey").state
+  };
+}
+const PEEK_LINE = "o.bind(\"SUPER + M\", \"Miharchy peek\", \"'/p q/window/miharchy' peek\")";
+
+test("the peek key step adds SUPER + M to bindings.lua once, then counts as done", () => {
+  const t = peekHome("-- mine\n");
+  assert.equal(t.state(), "todo");
+  const r = t.add();
+  assert.equal(r.code, 0, r.output);
+  assert.equal(fs.readFileSync(t.file, "utf8"), "-- mine\n\n" + PEEK_LINE + "\n");
+  assert.equal(t.state(), "done");
+  assert.equal(t.add().code, 0);
+  assert.equal(fs.readFileSync(t.file, "utf8"), "-- mine\n\n" + PEEK_LINE + "\n", "a rerun writes nothing");
+  assert.equal(t.conf(), "# old\n", "bindings.conf stays as it is");
+});
+
+test("the peek key step shows the line instead when SUPER + M is taken or bindings.lua is missing", () => {
+  const taken = peekHome("-- mine\n", ["M"]);
+  const r = taken.add();
+  assert.notEqual(r.code, 0);
+  assert.ok(r.output.includes(PEEK_LINE), r.output);
+  assert.equal(fs.readFileSync(taken.file, "utf8"), "-- mine\n");
+  const missing = peekHome(null);
+  const m = missing.add();
+  assert.notEqual(m.code, 0);
+  assert.ok(m.output.includes(PEEK_LINE), m.output);
+  assert.equal(fs.existsSync(missing.file), false);
+});
+
+test("a peek bind the user moved to another key counts as done and is left alone", () => {
+  const moved = "o.bind(\"SUPER + ALT + P\", \"Peek\", \"/p/window/miharchy peek\")\n";
+  const t = peekHome(moved);
+  assert.equal(t.state(), "done");
+  t.add();
+  assert.equal(fs.readFileSync(t.file, "utf8"), moved);
+});
+
+test("a commented-out peek bind does not count, and a hyprctl that cannot list the binds leaves the line to paste", () => {
+  const commented = peekHome("-- " + PEEK_LINE + "\n");
+  assert.equal(commented.state(), "todo");
+  const blind = peekHome("-- mine\n", [], "exit 1");
+  const r = blind.add();
+  assert.notEqual(r.code, 0);
+  assert.ok(r.output.includes(PEEK_LINE), r.output);
+  assert.equal(fs.readFileSync(blind.file, "utf8"), "-- mine\n");
 });

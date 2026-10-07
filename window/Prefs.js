@@ -102,6 +102,7 @@ if (typeof module !== "undefined") {
     TRI_STATE: TRI_STATE,
     force: force,
     defaults: defaults,
+    keys: keys,
     loadPayload: loadPayload,
     savePayload: savePayload,
     resetPayload: resetPayload,

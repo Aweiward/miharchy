@@ -18,6 +18,7 @@ import "Prefs.js" as Prefs
 import "Updates.js" as Updates
 import "Restart.js" as Restart
 import "Images.js" as Images
+import "History.js" as History
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -62,6 +63,8 @@ ShellRoot {
   property int requestSeq: 0
   // { mangaId, chapterId } to read once the config loads, or null.
   property var pendingChapter: Model.chapterTarget(Quickshell.env("MIHARCHY_OPEN_CHAPTER"))
+  // The launcher's peek starts a window with MIHARCHY_PEEK=1.
+  property bool pendingPeek: Quickshell.env("MIHARCHY_PEEK") === "1"
 
   // Manga ids picked with v. The actions take these, or the cursor's
   // manga with none, as on Updates.
@@ -168,6 +171,7 @@ ShellRoot {
     sendSettings(Settings.loadPayload())
     libraryStore.load()
     if (pendingChapter) openChapter(pendingChapter)
+    else if (pendingPeek) peek()
   }
 
   // The mark's update rows land here, through the launcher's open-chapter.
@@ -191,8 +195,40 @@ ShellRoot {
     view = "updates"
   }
 
+  // The launcher's peek: the reader on the next chapter to read
+  // (History.peekTarget), else the Library with its search open.
+  function peek() {
+    pendingPeek = true
+    if (!config) return
+    pendingPeek = false
+    var cfg = config
+    var library = function(reply) {
+      if (reader.open) reader.close()
+      mangaDetail.close()
+      downloadsView.open = false
+      root.view = "library"
+      if (reply && reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
+      else libraryView.openSearch()
+    }
+    send({ query: History.QUERY }, function(reply) {
+      if (reply.state !== "ok") return library(reply)
+      var entries = History.reduce(History.initial(), { type: "reply", reply: reply, config: cfg }).entries
+      if (!entries.length) return library()
+      root.send(History.peekPayload(entries), function(data) {
+        if (data.state !== "ok") return library(data)
+        var target = History.peekTarget(entries, data.data, root.downloadedOnly)
+        if (target) root.openChapter(target)
+        else library()
+      })
+    })
+  }
+
   IpcHandler {
     target: "miharchy"
+
+    function peek(): void {
+      root.peek()
+    }
 
     function openChapter(mangaId: int, chapterId: int): void {
       root.openChapter({ mangaId: mangaId, chapterId: chapterId })
@@ -314,9 +350,8 @@ ShellRoot {
         root.libraryError = Browse.notice(d, root.configPath).title
         return
       }
-      root.send(Prefs.loadPayload(Chapters.PREFS, m.id), function(saved) {
-        var prefs = Prefs.read(Chapters.PREFS, saved.state === "ok" ? saved.data : {}, Prefs.defaults(Chapters.PREFS))
-        var next = Library.continueChapter(d.chapters, prefs)
+      root.send(Prefs.loadPayload(Library.CHAPTER_PREFS, m.id), function(saved) {
+        var next = Library.continueChapter(d.chapters, Library.chapterPrefs(saved.state === "ok" ? saved.data : {}, root.downloadedOnly))
         if (next) reader.start(d.manga, d.chapters, next.id, root.settingsState.values.defaultReadingMode)
         else root.libraryNote = "No next chapter of " + m.title + " passes its chapter filters."
       })

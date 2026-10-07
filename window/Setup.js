@@ -15,6 +15,11 @@ var HELPER_DIR = ".local/share/miharchy/helper"
 var UNIT_FILE = ".config/systemd/user/miharchy-server.service"
 var SERVER_CONF = ".local/share/miharchy/suwayomi/server.conf"
 var DESKTOP_FILE = ".local/share/applications/miharchy.desktop"
+var BINDINGS_FILE = ".config/hypr/bindings.lua"
+var PEEK_KEY = "SUPER + M"
+// A bindings.lua line that runs `miharchy peek` (peekLine quotes the path)
+// and is not a Lua comment.
+var HAS_PEEK_KEY = "grep -qsE \"^[[:space:]]*[^[:space:]-].*miharchy'? peek\""
 
 // kind "install": the user runs command in a terminal; Enter checks again.
 // kind "run":     Miharchy runs the step after the user confirms with y;
@@ -29,7 +34,8 @@ var STEPS = [
   { id: "flaresolverr", title: "FlareSolverr (optional)", kind: "run", prompt: "Start the FlareSolverr container and turn it on in Suwayomi?" },
   { id: "syncFolder", title: "Sync folder", kind: "folder" },
   { id: "helper", title: "Sync helper", kind: "run", prompt: "Build the sync helper now? It takes a few minutes." },
-  { id: "launcher", title: "App launcher entry", kind: "run", prompt: "Add Miharchy to the app launcher?" }
+  { id: "launcher", title: "App launcher entry", kind: "run", prompt: "Add Miharchy to the app launcher?" },
+  { id: "peekKey", title: "Peek key", kind: "run", prompt: "Add " + PEEK_KEY + ", which shows and hides a peek, to your Hyprland bindings?" }
 ]
 
 // sha256 over every file in a sync/ folder except build output, so a
@@ -52,7 +58,20 @@ var PROBE = [
   "command -v javac >/dev/null && echo javac",
   "echo \"helperSource $(fingerprint \"$2\")\"",
   "echo \"helperInstalled $(test -x \"$HOME/" + HELPER_DIR + "/bin/miharchy-sync\" && cat \"$HOME/" + HELPER_DIR + "/source.sha256\")\"",
-  "printf '%s' \"$3\" | cmp -s - \"$HOME/" + DESKTOP_FILE + "\" && echo launcher"
+  "printf '%s' \"$3\" | cmp -s - \"$HOME/" + DESKTOP_FILE + "\" && echo launcher",
+  HAS_PEEK_KEY + " \"$HOME/" + BINDINGS_FILE + "\" && echo peekKey"
+].join("\n")
+
+// $1 is peekLine(). A bind the user already has, on any key, stays as it
+// is; a taken key, binds hyprctl cannot list or a missing file leave the
+// line to paste.
+var PEEK_SCRIPT = [
+  "file=$HOME/" + BINDINGS_FILE,
+  HAS_PEEK_KEY + " \"$file\" && { echo \"$file already has a peek key.\"; exit 0; }",
+  "test -f \"$file\" || { echo \"There is no $file. Add this line to your Hyprland bindings: $1\"; exit 1; }",
+  "binds=$(hyprctl binds -j 2>/dev/null) || { echo \"Hyprland did not list its binds. Add this line to $file with a free key: $1\"; exit 1; }",
+  "printf '%s' \"$binds\" | jq -e '.[] | select(.modmask == 64 and (.key | ascii_upcase) == \"M\")' >/dev/null && { echo \"" + PEEK_KEY + " is taken. Add this line to $file with a free key: $1\"; exit 1; }",
+  "printf '\\n%s\\n' \"$1\" >> \"$file\" && echo \"Added " + PEEK_KEY + " to $file.\""
 ].join("\n")
 
 // $1 is the plugin's sync/. Gradle writes build/, .gradle/ and .kotlin/
@@ -107,6 +126,13 @@ function desktopEntry(windowDir) {
   ].join("\n")
 }
 
+// The bindings.lua line for the plugin's window/: Omarchy's o.bind runs its
+// command through a shell, so the path is single-quoted inside a Lua string.
+function peekLine(windowDir) {
+  var cmd = "'" + String(windowDir + "/miharchy").replace(/'/g, "'\\''") + "' peek"
+  return "o.bind(\"" + PEEK_KEY + "\", \"Miharchy peek\", " + JSON.stringify(cmd) + ")"
+}
+
 function probeCommand(configPath, syncDir, windowDir) {
   return command(PROBE, [configPath, syncDir, desktopEntry(windowDir), windowDir.replace(/\/window$/, "") + "/server/miharchy-server.service"])
 }
@@ -119,6 +145,7 @@ function runCommand(id, ctx) {
     case "flaresolverr": return command(FLARE_SCRIPT)
     case "syncFolder": return command("test -d \"$1\" || { echo \"$1 is not a folder.\"; exit 1; }", [ctx.folder])
     case "helper": return command(BUILD_SCRIPT, [ctx.syncDir])
+    case "peekKey": return command(PEEK_SCRIPT, [peekLine(ctx.windowDir)])
     case "launcher": return command("file=$HOME/" + DESKTOP_FILE + "\nmkdir -p \"$(dirname \"$file\")\" && printf '%s' \"$1\" > \"$file\" && echo \"Wrote $file.\"", [desktopEntry(ctx.windowDir)])
   }
   return null
@@ -140,7 +167,7 @@ function javaMajor(line) {
 
 // The probe's output -> facts. docker is false when the command is absent.
 function parseProbe(text) {
-  var f = { java: 0, suwayomi: false, websockets: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", launcher: false, unitCurrent: false, basicAuth: false }
+  var f = { java: 0, suwayomi: false, websockets: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", launcher: false, peekKey: false, unitCurrent: false, basicAuth: false }
   String(text).split("\n").forEach(function(line) {
     var sp = line.indexOf(" ")
     var key = sp === -1 ? line : line.slice(0, sp)
@@ -160,6 +187,7 @@ function parseProbe(text) {
     }
     if (key === "javac") f.javac = true
     if (key === "launcher") f.launcher = true
+    if (key === "peekKey") f.peekKey = true
     if (key === "unitCurrent") f.unitCurrent = true
     if (key === "basicAuth") f.basicAuth = true
     if (key === "helperSource") f.helperSource = rest.trim()
@@ -282,6 +310,9 @@ function status(s, id) {
     case "launcher":
       if (p.launcher) return is("done", "Miharchy is in the app launcher.")
       return is("todo", "Press Enter to add Miharchy to the app launcher: ~/" + DESKTOP_FILE + ".")
+    case "peekKey":
+      if (p.peekKey) return is("done", "A key in ~/" + BINDINGS_FILE + " shows and hides a peek.")
+      return is("todo", "Press Enter to add " + PEEK_KEY + ", which shows and hides a peek, to ~/" + BINDINGS_FILE + ".")
   }
   return is("checking", "")
 }
