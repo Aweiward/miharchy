@@ -467,6 +467,7 @@ function notice(s, configPath, localFolder) {
 if (typeof module !== "undefined") {
   module.exports = {
     gridChanges: gridChanges,
+    toChapters: toChapters,
     nearEnd: nearEnd,
     loadAgain: loadAgain,
     SOURCES_QUERY: SOURCES_QUERY,

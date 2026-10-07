@@ -116,6 +116,10 @@ _Avoid_: panel, dropdown
 The full Miharchy window, with the views and the reader.
 _Avoid_: panel, client, app
 
+**Peek**:
+The window while it sits on Miharchy's own Hyprland special workspace, shown over the current workspace. The peek key shows and hides it, and it opens on the next chapter to read.
+_Avoid_: scratchpad, overlay, quick read
+
 **View**:
 One screen of the window: Library, Updates, History, Browse or Settings. Exactly one view shows at a time.
 _Avoid_: tab, page, mode

@@ -13,7 +13,8 @@ const STUBS = {
   quickshell: `#!/bin/sh
 echo "quickshell $* | MIHARCHY_OPEN_CHAPTER=$MIHARCHY_OPEN_CHAPTER\${STUB_VIEW:+ view=$MIHARCHY_OPEN_VIEW}" >> "$STUB_LOG"
 case "$1" in
-  list) printf '%s\\n' "$STUB_LIST" ;;
+  -n) touch "$STUB_LOG.started" ;;
+  list) if [ -e "$STUB_LOG.started" ] && [ -n "$STUB_LIST_AFTER" ]; then printf '%s\\n' "$STUB_LIST_AFTER"; else printf '%s\\n' "$STUB_LIST"; fi ;;
   ipc) exit "$STUB_IPC_RC" ;;
 esac`,
   hyprctl: `#!/bin/sh
@@ -28,8 +29,9 @@ const NONE = 'No running instances for "' + dir + '/shell.qml"\nUse --all to lis
 const RUNNING = JSON.stringify([{ config_path: dir + "/shell.qml", pid: 42 }]);
 const CLIENTS = JSON.stringify([
   { address: "0xshell", pid: 7, class: "org.quickshell", title: "Miharchy" },
-  { address: "0xmiharchy", pid: 42, class: "org.quickshell", title: "Miharchy" },
+  { address: "0xmiharchy", pid: 42, class: "org.quickshell", title: "Miharchy", workspace: { id: 3, name: "3" } },
 ]);
+const PEEKED = CLIENTS.replace('"name":"3"', '"name":"special:miharchy"');
 
 function run(args, env) {
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-launcher-"));
@@ -92,4 +94,36 @@ test("open-chapter with no window running starts one on that chapter", () => {
   const calls = run(["open-chapter", "5", "9"]);
   assert.deepEqual(launches(calls), ["quickshell -n -p " + dir + " | MIHARCHY_OPEN_CHAPTER=5 9"]);
   assert.deepEqual(dispatches(calls), []);
+});
+
+const LUA_TOGGLE = 'hyprctl dispatch hl.dsp.workspace.toggle_special("miharchy")';
+const LUA_MOVE = 'hyprctl dispatch hl.dsp.window.move({ workspace = "special:miharchy", follow = false, window = "address:0xmiharchy" })';
+
+test("peek shows or hides a window that is already a peek, and sends it nothing", () => {
+  const calls = run(["peek"], { STUB_LIST: RUNNING, STUB_CLIENTS: PEEKED, STUB_IPC_RC: "0" });
+  assert.deepEqual(dispatches(calls), [LUA_TOGGLE]);
+  assert.deepEqual(calls.filter((c) => c.startsWith("quickshell ipc")), []);
+  assert.deepEqual(launches(calls), []);
+});
+
+test("peek on a window in a normal workspace resumes it and focuses it there, never moving it", () => {
+  const calls = run(["peek"], { STUB_LIST: RUNNING, STUB_IPC_RC: "0" });
+  assert.ok(calls.includes("quickshell ipc -p " + dir + " call miharchy peek | MIHARCHY_OPEN_CHAPTER="));
+  assert.deepEqual(dispatches(calls), [LUA_FOCUS]);
+  assert.deepEqual(launches(calls), []);
+});
+
+test("peek with no window running starts one as a peek, moves it to the special workspace and shows it", () => {
+  const calls = run(["peek"], { STUB_LIST_AFTER: RUNNING, STUB_VIEW: "1" });
+  assert.deepEqual(launches(calls), ["quickshell -n -p " + dir + " | MIHARCHY_OPEN_CHAPTER= view=peek"]);
+  assert.deepEqual(dispatches(calls), [LUA_MOVE, LUA_TOGGLE]);
+});
+
+test("a Hyprland without the Lua dispatcher gets movetoworkspacesilent and togglespecialworkspace", () => {
+  const calls = run(["peek"], { STUB_LIST_AFTER: RUNNING, STUB_LUA_RC: "1" });
+  assert.deepEqual(dispatches(calls), [LUA_MOVE, "hyprctl dispatch movetoworkspacesilent special:miharchy,address:0xmiharchy", LUA_TOGGLE, "hyprctl dispatch togglespecialworkspace miharchy"]);
+});
+
+test("peek gives up with an error when the new window never shows up", () => {
+  assert.throws(() => run(["peek"]), /Command failed/);
 });

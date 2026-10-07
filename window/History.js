@@ -1,5 +1,9 @@
 .pragma library
 .import "Model.js" as Model
+.import "Prefs.js" as Prefs
+.import "Chapters.js" as Chapters
+.import "Library.js" as Library
+.import "Browse.js" as Browse
 
 // The History view: the chapters the user opened, one entry per manga (its
 // most recent chapter, as in Mihon), newest first. Pure, so
@@ -130,9 +134,42 @@ function notice(h, configPath, query) {
   return { title: "No history yet", detail: "Chapters you open show up here." }
 }
 
+// The chapters and chapter prefs peekTarget() reads, for the newest
+// entries' manga.
+// ponytail: the 20 newest History manga; a peek past 20 fully read ones
+// opens the Library. Page further if that bites.
+function peekPayload(entries) {
+  return {
+    query: "query($ids: [Int!], $keys: [String!]) { metas(filter: { key: { in: $keys } }) { nodes { key value } }"
+      + " mangas(filter: { id: { in: $ids } }) { nodes { id meta { key value }"
+      + " chapters { nodes { id name chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder } } } } }",
+    variables: { ids: entries.slice(0, 20).map(function(e) { return e.mangaId }), keys: Prefs.keys(Chapters.PREFS) }
+  }
+}
+
+// The peek's resume rule: the next chapter of the newest History manga
+// that has one, by that manga's chapter filters, sort and scanlators, as
+// Library.continueChapter. entries: entries(); data: peekPayload()'s reply.
+// -> { mangaId, chapterId }, or null when no manga has one.
+function peekTarget(entries, data, downloadedOnly) {
+  var table = Chapters.PREFS.concat(Chapters.SCANLATOR_PREFS)
+  var byId = {}
+  ;((data.mangas && data.mangas.nodes) || []).forEach(function(m) { byId[m.id] = m })
+  for (var i = 0; i < entries.length; i++) {
+    var m = byId[entries[i].mangaId]
+    if (!m) continue
+    var prefs = Prefs.force(Prefs.read(table, { metas: data.metas, manga: m }, Prefs.defaults(table)), "chapterFilterDownloaded", "include", downloadedOnly)
+    var next = Library.continueChapter(Browse.toChapters(m.chapters.nodes), prefs)
+    if (next) return { mangaId: m.id, chapterId: next.id }
+  }
+  return null
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     QUERY: QUERY,
+    peekPayload: peekPayload,
+    peekTarget: peekTarget,
     initial: initial,
     reduce: reduce,
     removePayload: removePayload,
