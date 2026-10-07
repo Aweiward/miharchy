@@ -1,6 +1,6 @@
 # Miharchy
 
-Miharchy is a manga reader for Omarchy. It reads from Mihon's extension ecosystem and shares a library with Mihon on a phone.
+Miharchy is a manga reader for Omarchy. It reads Mihon-compatible extensions and shares a library with Mihon on a phone.
 
 ## Language
 
@@ -15,11 +15,11 @@ The built-in source (id 0) that reads manga from a folder on disk: a folder per 
 _Avoid_: local library, offline source
 
 **Extension**:
-A package from a Mihon extension repo that provides one or more sources.
-_Avoid_: plugin, addon
+A Mihon-compatible package from an extension repo that provides one or more sources.
+_Avoid_: plugin, addon, Mihon's extensions
 
 **Extension repo**:
-A published index of extensions that the user adds by URL.
+A third-party published index of extensions that the user adds by URL. Miharchy provides none, as Mihon provides none.
 _Avoid_: store, registry
 
 **Manga**:

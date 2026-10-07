@@ -1,10 +1,12 @@
-<a href="https://aweiward.github.io/miharchy/"><img src="site/banner.png" alt="Miharchy: a keyboard-first manga reader for Omarchy. Mihon's extensions on the desktop, your library synced with Mihon on your phone." width="1280"></a>
+<a href="https://aweiward.github.io/miharchy/"><img src="site/banner.png" alt="Miharchy: a keyboard-first manga reader for Omarchy. Mihon-compatible extensions on the desktop, your library synced with Mihon on your phone." width="1280"></a>
 
 # Miharchy
 
 See it in action on [aweiward.github.io/miharchy](https://aweiward.github.io/miharchy/).
 
-A manga reader that feels native on [Omarchy](https://omarchy.org). It uses [Mihon](https://github.com/mihonapp/mihon)'s sources and extensions through [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server), and it syncs your library with Mihon on your phone.
+A manga reader that feels native on [Omarchy](https://omarchy.org). It runs [Mihon](https://github.com/mihonapp/mihon)-compatible extensions from the extension repos you add, through [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server), and it syncs your library with Mihon on your phone.
+
+Miharchy is not affiliated with Mihon, Suwayomi or Omarchy. It provides no extensions or extension repos and hosts no content. Extension repos are third-party: add only ones you trust.
 
 Status: early. See `GLOSSARY.md` and `docs/adr/`.
 
