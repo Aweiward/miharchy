@@ -19,7 +19,7 @@ A scratch server has no tracker login, and every `updateTrack` calls the tracker
 Never let `o` or `y` reach the desktop: put stub `xdg-open` and `wl-copy` that log their arguments first on `PATH` for `drive.sh`.
 ```js
 [
-  [5000, function() { root.libraryCursor = root.shown.manga.findIndex(function(m) { return m.id === 21 }); key("Enter") }],
+  [5000, function() { root.libraryCursor = root.shown.manga.findIndex(function(m) { return m.id === <a manga with track records> }); key("Enter") }],
   [6000, function() { key("t") }],
   [3000, function() { log("rows", trackPanel.panel.rows.map(function(r) { return [r.tracker.name, r.record && r.record.url] })) }],
   [500, function() { key("y") }],
@@ -27,7 +27,7 @@ Never let `o` or `y` reach the desktop: put stub `xdg-open` and `wl-copy` that l
 ]
 ```
 
-A login without an account, with `xdg-open` stubbed: pick the first tracker with an `authUrl` from `settingsView.trackers.list`, set `root.settingsCursor = Settings.ROWS.length + 1 + i`, Enter, wait 3 s; the stub got the link. Set the focused field to `nope`, Enter, log `settingsView.trackers.login.error`, Esc. Never paste a real callback or send credentials: those reach the provider.
+A login without an account, with `xdg-open` stubbed: pick the first tracker with an `authUrl` from `settingsView.trackers.list`, set `root.settingsCursor = Settings.ROWS.length + 1 + i`, Enter, wait 3 s; the stub got the link. Set the focused field (`find(settingsView, function(i) { return i.activeFocus && i.cursorPosition !== undefined })`) to `nope`, Enter, log `settingsView.trackers.login.error`, Esc. Never paste a real callback or send credentials: those reach the provider.
 
 The push itself: on a logged-out tracker `trackProgress` changes no record, but the server logs each one: `grep "trackChapter(mangaId" $RUN/server/logs/application.log` gains a line per push (none under never). The ask prompt needs a logged-in tracker to come up by itself; set `root.trackAsk = { mangaIds: [id], chapter: n }` to show it, then click the `y update` hint part (`hintBar.children`).
 

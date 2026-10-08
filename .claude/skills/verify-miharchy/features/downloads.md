@@ -32,14 +32,15 @@ Proof. Set up with `gql.sh`: every chapter of both seeded manga downloaded (enqu
 
 ## Setup
 
-Enqueuing starts the downloader a moment later, and MangaDex finishes a chapter in seconds, so a queue to drive must be stopped after the enqueue:
+Enqueuing starts the downloader about a second later, and MangaDex finishes a chapter in seconds, so a queue to drive must be stopped after that start. A stop sent before it does nothing: the delayed start runs anyway (Suwayomi v2.3.2243). Wait until `state` reads `STARTED`, then stop once:
 
 ```sh
 .claude/skills/verify-miharchy/scripts/gql.sh 'mutation { deleteDownloadedChapters(input:{ids:[4,5,6]}) { chapters { id } } }'
 .claude/skills/verify-miharchy/scripts/gql.sh 'mutation { enqueueChapterDownloads(input:{ids:[4,5,6]}) { downloadStatus { state } } }'
-.claude/skills/verify-miharchy/scripts/gql.sh 'mutation { stopDownloader(input:{}) { downloadStatus { state } } }'
+.claude/skills/verify-miharchy/scripts/gql.sh '{ downloadStatus { state } }'     # repeat until STARTED
 .claude/skills/verify-miharchy/scripts/gql.sh 'mutation { stopDownloader(input:{}) { downloadStatus { state } } }'
 ```
+Check that `downloadStatus { state queue { chapter { id } } }` still reads `STOPPED` with every chapter a few seconds later.
 
 ## Drive
 

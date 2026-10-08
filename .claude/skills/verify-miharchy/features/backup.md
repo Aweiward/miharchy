@@ -13,7 +13,7 @@ Automatic backups are Suwayomi's own schedule, set from Settings: "Automatic bac
 Palette (`:`) then "Create a backup", or Settings (`5`), the "Create a backup" row, Enter. Either way Settings shows the row with "writing", then "Wrote <file>" or the helper's message.
 
 ## Driving it with drive.sh
-The window runs the helper Setup installs under `$HOME`; `drive.sh` gives it `$RUN/home`; install the checkout's build there, as `restore.md` shows. Then:
+The window runs the helper Setup installs under `$HOME`; `drive.sh` gives it `$RUN/home`; install the checkout's build there, as `restore.md` shows. Create the backup folder first (`mkdir -p <scratch>/backups`): the row refuses a missing one with "<folder> is not a folder." Then:
 ```js
 [
   [3000, function() { root.run("view.settings") }],

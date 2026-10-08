@@ -25,7 +25,7 @@ Press `4`, pick a source with `j`/`k`, `Enter`.
   [3000, function() { log("inLibrary", mangaDetail.detail.manga.inLibrary); grab("detail-added"); done() }]
 ]
 ```
-Read back: the manga's `inLibrary` is true; `Library` shows it.
+Read back: the manga's `inLibrary` is true; `Library` shows it. `seed.sh --library N` puts the first N popular MangaDex manga in the library, so on a seeded server the first grid item is already there and `a` removes it: press `l` past them before `Enter` (or seed without `--library`).
 
 Filters and settings. Move to a row by label, not by count; a group or list adds rows when open:
 ```js
