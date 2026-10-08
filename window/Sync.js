@@ -129,7 +129,7 @@ function report(s) {
 function oneLine(s) {
   switch (s.state) {
     case "running": return "Syncing"
-    case "held": return "Sync held: it would remove much. Open the window to review."
+    case "held": return "Sync held: it would remove much. Press s in the window to review it."
     case "failed": return s.message
     case "done":
       var u = s.unreachable.length

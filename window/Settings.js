@@ -189,6 +189,8 @@ var ROWS = [
   { key: "pageFolder", label: "Save pages to", type: "folder", default: "", store: "meta", blank: "~/Pictures/Miharchy" },
   // Setup sets it too; the sync helper reads it from the server.
   { key: "syncFolder", label: "Sync folder", type: "folder", default: "", store: "meta", blank: "not set", notSameAs: "backupPath" },
+  // The bar mark reads it, and syncs when a new phone backup lands there.
+  { key: "autoSync", label: "Sync when a phone backup arrives", type: "bool", default: false, store: "meta" },
   // Mihon's backup options. Manual and automatic backups share Suwayomi's
   // automatic backup settings, so one folder holds both. Never the sync
   // folder: the sync would read Suwayomi's backups as phone backups. The

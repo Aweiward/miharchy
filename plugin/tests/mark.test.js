@@ -60,10 +60,12 @@ const other = { id: 8, title: "Normal Girl", thumbnailUrl: null, inLibraryAt: se
 const withNotify = (nodes, value) => M.reply(200, JSON.stringify({ data: { chapters: { nodes }, notify: { nodes: value === undefined ? [] : [{ value }] } } }));
 const poll = (m, r) => Mark.reduce(m, { type: "reply", reply: r, config, now });
 
-test("the poll asks for the notification setting and the server's version in the same query", () => {
+test("the poll asks for the notification and sync settings and the server's version in the same query", () => {
   const q = Mark.listPayload().query;
   assert.match(q, /chapters\(filter:/);
-  assert.match(q, /notify: metas\(condition: \{ key: "miharchy.notifyNewChapters" \}\) \{ nodes \{ value \} \} aboutServer \{ version \} \}$/);
+  assert.match(q, /notify: metas\(condition: \{ key: "miharchy.notifyNewChapters" \}\) \{ nodes \{ value \} \} /);
+  assert.match(q, /autoSync: metas\(condition: \{ key: "miharchy.autoSync" \}\) \{ nodes \{ value \} \} /);
+  assert.match(q, /syncFolder: metas\(condition: \{ key: "miharchy.syncFolder" \}\) \{ nodes \{ value \} \} aboutServer \{ version \} \}$/);
   assert.equal(q.split("{").length, q.split("}").length, "braces balance");
 });
 
@@ -142,4 +144,72 @@ test("the notification goes out once across bars, and a click opens Updates", ()
     "Normal Girl",
     "launcher open-updates"
   ]);
+});
+
+const withSync = (autoSync, syncFolder) => M.reply(200, JSON.stringify({ data: {
+  chapters: { nodes: [] },
+  autoSync: { nodes: autoSync === undefined ? [] : [{ value: autoSync }] },
+  syncFolder: { nodes: syncFolder === undefined ? [] : [{ value: syncFolder }] }
+} }));
+
+test("the poll reads the sync Settings rows; a failure keeps them", () => {
+  const on = poll(Mark.initial(), withSync("true", "/home/u/Sync"));
+  assert.equal(on.autoSync, true);
+  assert.equal(on.syncFolder, "/home/u/Sync");
+  assert.equal(poll(on, withSync("false", "/home/u/Sync")).autoSync, false);
+  const unset = poll(on, withSync());
+  assert.equal(unset.autoSync, false, "off unless set");
+  assert.equal(unset.syncFolder, "");
+  assert.deepEqual([Mark.initial().autoSync, Mark.initial().syncFolder], [false, ""]);
+  const down = poll(on, M.reply(0, ""));
+  assert.deepEqual([down.autoSync, down.syncFolder], [true, "/home/u/Sync"]);
+  const missing = Mark.reduce(on, { type: "config-missing" });
+  assert.deepEqual([missing.autoSync, missing.syncFolder], [true, "/home/u/Sync"]);
+});
+
+test("the phone check finds the newest phone backup the sync has not merged", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { execFileSync } = require("node:child_process");
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "mark-home-"));
+  const folder = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mark-sync-")), "Phone sync");
+  fs.mkdirSync(folder);
+  const t = Math.floor(Date.now() / 1000);
+  const file = (dir, name, age) => {
+    const p = path.join(dir, name);
+    fs.writeFileSync(p, "");
+    fs.utimesSync(p, t - age, t - age);
+    return p;
+  };
+  const [cmd, ...args] = Mark.phoneCheckCommand(folder);
+  const check = () => execFileSync(cmd, args, { env: { ...process.env, HOME: home }, encoding: "utf8" }).trim();
+
+  assert.equal(check(), "", "an empty folder");
+  file(folder, "older.tachibk", 3600);
+  const newest = file(folder, "com.mihon_2026-10-08.tachibk", 600);
+  file(folder, "miharchy-2026-10-08.tachibk", 60);
+  file(folder, "arriving.tachibk", 5);
+  file(folder, "notes.txt", 60);
+  assert.equal(check(), (t - 600) + ".0000000000 " + newest, "no baseline: the newest phone backup old enough, never an export");
+
+  const state = path.join(home, ".local/share/miharchy/sync");
+  fs.mkdirSync(state, { recursive: true });
+  file(state, "phone-baseline.tachibk", 300);
+  assert.equal(check(), "", "a baseline newer than every phone backup");
+  const later = file(folder, "later.tachibk", 120);
+  assert.equal(check(), (t - 120) + ".0000000000 " + later, "a phone backup after the baseline");
+});
+
+const done = (changes) => ({ state: "done", backup: "b.tachibk", changes, export: "miharchy-x.tachibk", unreachable: [] });
+
+test("a sync on a phone backup notifies its result, and stays quiet when it changed nothing or lost the race", () => {
+  assert.deepEqual(Mark.syncNotification(done(["marked 3 chapters read", "bookmarked 1 chapters"]), "sync-1"),
+    { key: "sync-1", title: "Synced from the phone", body: "marked 3 chapters read\nbookmarked 1 chapters" });
+  assert.equal(Mark.syncNotification(done([]), "sync-1"), null);
+  assert.deepEqual(Mark.syncNotification({ state: "held", backup: "b.tachibk", changes: ["removed 9 manga from the library"] }, "sync-1"),
+    { key: "sync-1", title: "Sync held", body: "The phone backup would remove much. Press s in the window to review it." });
+  assert.equal(Mark.syncNotification({ state: "failed", message: "A sync is already running." }, "sync-1"), null);
+  assert.deepEqual(Mark.syncNotification({ state: "failed", message: "The sync folder is not set." }, "sync-1"),
+    { key: "sync-1", title: "Sync failed", body: "The sync folder is not set." });
 });

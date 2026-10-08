@@ -45,6 +45,9 @@ A sync holds when it would remove at least 5 manga that are also at least 10% of
 ```
 Proof: `held` shows state `held` with the count lines, `after-esc` keeps 6, `library-after` is 1, `undo-path` ends in `sync/pre-sync.tachibk`, `library-final` is 6, and `mangas(condition:{inLibrary:true}){ totalCount }` reads 6. A further sync with `phone2.tachibk` still newest reports "no changes" and keeps 6. The `MarkUnread` branch needs a phone backup without chapters; `HoldTest` pins it.
 
+## Sync on a new phone backup
+With meta `miharchy.autoSync` "true", the bar mark starts the sync when a new phone backup lands (`docs/agents/plugin.md`). The trigger lives in the mark, which `drive.sh` does not run, so `plugin/tests/mark.test.js` proves it: the real `find` against temp folders and a temp `HOME` (newest old-enough phone backup, `miharchy-*` and files under 30 s skipped, nothing newer than the baseline) and the notification for each result. The sync it starts is the helper drive above.
+
 ## Gotchas
 - Build fixture backups with the model classes in `sync/src/main/kotlin/eu/kanade/...` (see `sync/src/test`); a user's real backup holds personal data — counts only in any report, delete copies.
 - Never build `sync/` inside an installed plugin clone (`~/.config/omarchy/plugins/miharchy`): the shell reloads the plugin on every write there.

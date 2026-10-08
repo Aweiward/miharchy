@@ -12,21 +12,32 @@ var LIMIT = 10
 
 // The Settings row "Notify about new chapters", in global meta.
 var NOTIFY_KEY = "miharchy.notifyNewChapters"
+// The Settings rows "Sync when a phone backup arrives" and "Sync folder".
+var AUTO_SYNC_KEY = "miharchy.autoSync"
+var SYNC_FOLDER_KEY = "miharchy.syncFolder"
 
 // mark.state: "loading" | "ok" | "no-config" | "down" | "unauthorized" | "error"
 // count: every unread update; rows: the newest LIMIT of them, as
 // Updates.rows. A failure clears both, so a dead server shows no stale count.
 // top: the highest update chapter id seen, null before the first answer;
 // fresh: the updates above the top before this answer, which the
-// notification names; notify: the Settings row; version: aboutServer's.
+// notification names; notify, autoSync, syncFolder: the Settings rows;
+// version: aboutServer's.
 function initial() {
-  return { state: "loading", message: "", count: 0, rows: [], top: null, fresh: [], notify: true, version: "" }
+  return { state: "loading", message: "", count: 0, rows: [], top: null, fresh: [], notify: true, version: "", autoSync: false, syncFolder: "" }
 }
 
-// One poll: the window's updates, the notification setting and the server's
-// version.
+// One poll: the window's updates, the notification and sync settings and
+// the server's version.
 function listPayload() {
-  return { query: Updates.listPayload().query.replace(/\}\s*$/, "notify: metas(condition: { key: \"" + NOTIFY_KEY + "\" }) { nodes { value } } aboutServer { version } }") }
+  return { query: Updates.listPayload().query.replace(/\}\s*$/, "notify: metas(condition: { key: \"" + NOTIFY_KEY + "\" }) { nodes { value } } "
+    + "autoSync: metas(condition: { key: \"" + AUTO_SYNC_KEY + "\" }) { nodes { value } } "
+    + "syncFolder: metas(condition: { key: \"" + SYNC_FOLDER_KEY + "\" }) { nodes { value } } aboutServer { version } }") }
+}
+
+function metaValue(data, alias) {
+  var node = data[alias] && data[alias].nodes[0]
+  return node ? node.value : null
 }
 
 // A chapter is new when its id is above every update seen before:
@@ -36,16 +47,19 @@ function listPayload() {
 function reduce(mark, event) {
   switch (event.type) {
     case "config-missing":
-      return { state: "no-config", message: "", count: 0, rows: [], top: null, fresh: [], notify: mark.notify, version: "" }
+      return { state: "no-config", message: "", count: 0, rows: [], top: null, fresh: [], notify: mark.notify, version: "", autoSync: mark.autoSync, syncFolder: mark.syncFolder }
     case "reply":
       var r = event.reply
-      if (r.state !== "ok") return { state: r.state, message: r.message, count: 0, rows: [], top: mark.top, fresh: [], notify: mark.notify, version: "" }
+      if (r.state !== "ok") return { state: r.state, message: r.message, count: 0, rows: [], top: mark.top, fresh: [], notify: mark.notify, version: "", autoSync: mark.autoSync, syncFolder: mark.syncFolder }
       var rows = Updates.rows(r.data, event.config, event.now)
       var top = rows.reduce(function(t, row) { return Math.max(t, row.id) }, mark.top || 0)
       var fresh = mark.top === null ? [] : rows.filter(function(row) { return row.id > mark.top })
-      var setting = (r.data.notify && r.data.notify.nodes[0]) || null
       var version = (r.data.aboutServer && r.data.aboutServer.version) || ""
-      return { state: "ok", message: "", count: rows.length, rows: rows.slice(0, LIMIT), top: top, fresh: fresh, notify: !setting || setting.value !== "false", version: version }
+      return {
+        state: "ok", message: "", count: rows.length, rows: rows.slice(0, LIMIT), top: top, fresh: fresh,
+        notify: metaValue(r.data, "notify") !== "false", version: version,
+        autoSync: metaValue(r.data, "autoSync") === "true", syncFolder: metaValue(r.data, "syncFolder") || ""
+      }
   }
   return mark
 }
@@ -79,6 +93,38 @@ function notifyCommand(n, launcher, icon) {
   return ["sh", "-c", NOTIFY_SCRIPT, "sh", n.key, n.title, n.body, launcher, icon]
 }
 
+// The newest phone backup in the sync folder newer than the helper's phone
+// baseline, as "<mtime> <path>", or nothing. The miharchy-* files are the
+// desktop's exports; a file younger than 30 s may still be arriving. With
+// no baseline yet, any phone backup counts: the first sync.
+var PHONE_CHECK_SCRIPT = "base=\"$HOME/.local/share/miharchy/sync/phone-baseline.tachibk\"\n"
+  + "dir=$1\n"
+  + "set --\n"
+  + "[ -e \"$base\" ] && set -- -newer \"$base\"\n"
+  + "find \"$dir\" -maxdepth 1 -type f -name '*.tachibk' ! -name 'miharchy-*' -mmin +0.5 \"$@\" -printf '%T@ %p\\n' 2>/dev/null | sort -n | tail -n 1\n"
+  + "exit 0"
+
+function phoneCheckCommand(folder) {
+  return ["sh", "-c", PHONE_CHECK_SCRIPT, "sh", folder]
+}
+
+// The desktop notification for a sync the mark started on a new phone
+// backup (Sync.reduce's state once the job ended), or null. key names the
+// marker, as notification's does.
+function syncNotification(sync, key) {
+  switch (sync.state) {
+    case "done":
+      return sync.changes.length ? { key: key, title: "Synced from the phone", body: sync.changes.join("\n") } : null
+    case "held":
+      return { key: key, title: "Sync held", body: "The phone backup would remove much. Press s in the window to review it." }
+    case "failed":
+      // Another bar, or the window, got there first.
+      if (sync.message === "A sync is already running.") return null
+      return { key: key, title: "Sync failed", body: sync.message }
+  }
+  return null
+}
+
 // The count beside the mark: nothing when zero.
 function label(mark) {
   return mark.state === "ok" && mark.count ? String(mark.count) : ""
@@ -110,11 +156,15 @@ function notice(mark, configPath) {
 if (typeof module !== "undefined") {
   module.exports = {
     LIMIT: LIMIT,
+    AUTO_SYNC_KEY: AUTO_SYNC_KEY,
+    SYNC_FOLDER_KEY: SYNC_FOLDER_KEY,
     initial: initial,
     listPayload: listPayload,
     reduce: reduce,
     notification: notification,
     notifyCommand: notifyCommand,
+    phoneCheckCommand: phoneCheckCommand,
+    syncNotification: syncNotification,
     label: label,
     down: down,
     warning: warning,
