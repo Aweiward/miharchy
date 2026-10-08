@@ -13,7 +13,7 @@ A recipe takes its ids from the seed it names: read them with `gql.sh` or from t
 | History | `history.md` | `/` narrows the entries to titles holding the search, `Enter` keeps it, `Esc` clears it |
 | Updates | `updates.md` | the list matches the 3-month update rule and the `F` filters (read back `miharchy.updates*` meta), `u` runs a library update, the selection actions change the server and the mark's count |
 | Settings | `settings.md` | a row change lands in `settings` or `metas`; downloads and cache sizes match `du` on the scratch server, Enter on "Clear the cache" empties its cache and reports the bytes freed, downloads keep their size |
-| Sync | `sync.md` | the helper merges a phone backup and writes `miharchy-*.tachibk` |
+| Sync | `sync.md` | the helper merges a phone backup and writes `miharchy-*.tachibk`; a backup that would remove much is held (library unchanged, no export, baselines unchanged) until `y`, and "Undo the last sync" restores `pre-sync.tachibk` |
 | Restore a backup | `restore.md` | the window lists the missing sources and trackers, restores the file, and the next sync keeps what it restored |
 | Backups | `backup.md` | "Create a backup" writes `miharchy-backup-*.tachibk` to the backup folder with what the include rows choose; the sync folder is refused |
 | Download queue | `downloads.md` | moves and sorts land in `downloadStatus.queue` order; `X X` empties the queue; CBZ, auto-download and delete-after-read settings and category flags change what the server keeps on disk |
