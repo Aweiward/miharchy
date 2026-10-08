@@ -83,7 +83,7 @@ Proof standard:
 
 ```sh
 .claude/skills/verify-miharchy/scripts/server.sh stop      # stops java + JCEF helpers of this run, closes the port, deletes $RUN/server, server.json and port
-.claude/skills/verify-miharchy/scripts/server.sh clean     # removes the window copy and helper home, when done
+.claude/skills/verify-miharchy/scripts/server.sh clean     # removes the window copy, run home, runtime dir and restart clones, when done
 ```
 Evidence in `$RUN/evidence/` stays. Run `stop` after every failed attempt too, so ports and processes don't pile up. A SIGSTOPped server (hang tests) needs `kill -CONT` before `stop`.
 

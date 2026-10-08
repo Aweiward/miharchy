@@ -4,7 +4,7 @@
 #   server.sh doctor   read-only: is our instance up, on our port, answering with our credentials?
 #   server.sh restart  stop and start the same instance: same port, credentials and library
 #   server.sh stop     stop the instance this run started (by PID file), keep $RUN/evidence
-#   server.sh clean    remove the window copy ($RUN/app) and run home ($RUN/home), keep $RUN/evidence
+#   server.sh clean    remove the window copy ($RUN/app), run home ($RUN/home), runtime dir ($RUN/runtime) and restart clones ($RUN/rs), keep $RUN/evidence
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 
@@ -86,7 +86,7 @@ stop)
   rm -rf "$SERVER_DIR" "$SERVER_JSON" "$RUN/port"
   echo "stopped; evidence kept in $EVIDENCE" ;;
 clean)
-  rm -rf "$RUN/app" "$RUN/home"
-  echo "removed the window copy and run home; evidence kept in $EVIDENCE" ;;
+  rm -rf "$RUN/app" "$RUN/home" "$RUN/runtime" "$RUN/rs"
+  echo "removed the window copy, run home, runtime dir and restart clones; evidence kept in $EVIDENCE" ;;
 *) echo "usage: server.sh start|doctor|restart|stop|clean" >&2; exit 2 ;;
 esac

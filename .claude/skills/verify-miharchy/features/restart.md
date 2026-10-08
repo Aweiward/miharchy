@@ -9,7 +9,7 @@ Leave the window open, run `omarchy plugin update miharchy`, wait up to 30 s, pr
 
 ## Driving it
 `drive.sh` copies `window/` and cannot update it, so drive from a scratch git clone instead:
-1. `git clone --bare -b <branch> <repo> origin.git`, then two clones of it: `clone` (the window runs here) and `upstream`.
+1. In `$RUN/rs`: `git clone --bare -b <branch> <repo> origin.git`, then two clones of it: `clone` (the window runs here) and `upstream`.
 2. `.claude/skills/verify-miharchy/scripts/patch-window.py clone/window steps-one.js $RUN/evidence` (the edits `drive.sh` makes), commit and push. In `upstream`, pull, restore `shell.qml` and `SetupView.qml` from `HEAD~1`, run `patch-window.py upstream/window steps-two.js $RUN/evidence`, and also change a few QML components (`HintBar.qml`, `LibraryView.qml`): an update that touches only `shell.qml` or JS would not have reloaded even with the watch on. Push.
 3. Start `clone/window/miharchy` (the launcher, so `quickshell -n` and `quickshell list` see the same path) through `timeout 120 .claude/skills/verify-miharchy/scripts/qs.sh env $RUN/rs/clone/window/miharchy` (the environment `drive.sh` gives the window), with a logging `hyprctl` stub first on `PATH` that prints `[]`; the launcher's `focus()` must never reach the compositor.
 4. About 10 s in, `git -C clone pull --ff-only`. Steps one wait past the 30 s check, log `root.code` and `codeHint.text`, grab, then `click()` the `Q restart` part (`find(codeHint, ...)`) or, in the reader, turn a page and `key("Q")` within 1 s.
