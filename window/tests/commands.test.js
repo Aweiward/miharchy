@@ -577,6 +577,14 @@ test("Sync now runs from the palette or s on the Library and Updates; its result
   assert.equal(C.dispatch(result, text("s")), null, "a second s does not start another sync over the result");
 });
 
+test("a held sync applies on y and keeps the library on Esc; Undo the last sync is in the palette", () => {
+  const held = screen("sync-held");
+  assert.equal(C.dispatch(held, text("y")), "sync.apply");
+  for (const k of [key(C.KEY.Escape), text("q"), key(C.KEY.Return)]) assert.equal(C.dispatch(held, k), "sync.close");
+  assert.equal(C.dispatch(screen("sync"), text("y")), null, "y applies nothing once a sync is done");
+  assert.ok(C.paletteRows("undo").some((c) => c.id === "sync.undo"));
+});
+
 test("M on a manga migrates it; M on the sources screen or the palette migrates a whole source", () => {
   assert.equal(C.dispatch(screen("manga"), text("M")), "manga.migrate");
   assert.equal(C.dispatch(screen("manga"), text("m")), null);

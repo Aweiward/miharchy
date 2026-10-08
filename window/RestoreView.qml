@@ -34,15 +34,20 @@ Rectangle {
     editEnded()
   }
 
+  // Opens the panel; a path fills the field over the last one.
+  function openFile(path) {
+    open = true
+    restore = Restore.reduce(restore, { type: "open", folder: folder, path: path })
+    if (editing) {
+      field.text = restore.path
+      field.forceActiveFocus()
+    }
+  }
+
   function run(id) {
     switch (id) {
       case "restore.open":
-        open = true
-        restore = Restore.reduce(restore, { type: "open", folder: folder })
-        if (editing) {
-          field.text = restore.path
-          field.forceActiveFocus()
-        }
+        openFile("")
         break
       case "restore.commit":
         restore = Restore.reduce(restore, { type: "check", text: field.text, home: Quickshell.env("HOME") })

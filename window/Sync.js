@@ -13,10 +13,15 @@ var HELPER_DIR = Setup.HELPER_DIR
 var NOT_BUILT = 127
 
 // The helper takes the sync folder from meta miharchy.syncFolder and holds
-// a lock, so the window and the popup start it the same way.
-function command(devHelper) {
-  return helperCommand(devHelper, ["sync", "--json"])
+// a lock, so the window and the popup start it the same way. apply runs a
+// sync the helper held.
+function command(devHelper, apply) {
+  return helperCommand(devHelper, ["sync", "--json"].concat(apply ? ["--apply"] : []))
 }
+
+// The desktop baseline before the last sync, under $HOME; restoring it
+// undoes that sync.
+var PRE_SYNC = ".local/share/miharchy/sync/pre-sync.tachibk"
 
 // The helper run with args, which reach it as arguments, never as shell text.
 function helperCommand(devHelper, args) {
@@ -57,7 +62,9 @@ function basename(path) {
   return String(path).replace(/^.*\//, "")
 }
 
-// sync.state: "idle" | "running" | "done" | "failed"
+// sync.state: "idle" | "running" | "held" | "done" | "failed"
+// held: backup and changes, as for done. The helper stopped before it
+// changed anything, because the changes look like a lost phone backup.
 // done: changes (count lines), backup (the phone backup's file name, or ""),
 // export (the file name written for the phone) and unreachable (rows of
 // { manga, chapter, change } the user repeats in Mihon; chapter holds the
@@ -70,10 +77,13 @@ function initial() {
 // event.type:
 //   "start"   the job started
 //   "finish"  { text } the job's collected output
+//   "apply"   the user applies a held sync
 function reduce(s, event) {
   switch (event.type) {
     case "start":
       return { state: "running" }
+    case "apply":
+      return s.state === "held" ? { state: "running", apply: true } : s
     case "finish":
       return result(Setup.parseJob(event.text))
   }
@@ -91,6 +101,7 @@ function result(job) {
     var n = summary.changes.filter(function(ch) { return ch.type === c[0] }).length
     return n ? c[1].replace("%d", n) : ""
   }).filter(function(l) { return l })
+  if (summary.held) return { state: "held", backup: basename(summary.backup), changes: changes }
   return {
     state: "done",
     backup: summary.backup ? basename(summary.backup) : "",
@@ -102,9 +113,11 @@ function result(job) {
   }
 }
 
-// The lines the window shows for a done sync, above the unreachable list.
-// The window's font is monospace, so spaces indent.
+// The lines the window shows for a held or done sync, above the
+// unreachable list. The window's font is monospace, so spaces indent.
 function report(s) {
+  if (s.state === "held") return ["The phone backup " + s.backup + " would change much, so the sync stopped before it changed anything:"]
+    .concat(s.changes.map(function(l) { return "  " + l }), ["y applies it. Esc keeps the library as it is."])
   var lines = [s.backup ? "Merged the phone backup " + s.backup + ":" : "No phone backup in the sync folder yet."]
   if (s.backup) lines = lines.concat((s.changes.length ? s.changes : ["no changes"]).map(function(l) { return "  " + l }))
   lines.push("Wrote " + s.export + ". Restore it in Mihon to bring the desktop's changes to the phone.")
@@ -116,6 +129,7 @@ function report(s) {
 function oneLine(s) {
   switch (s.state) {
     case "running": return "Syncing"
+    case "held": return "Sync held: it would remove much. Open the window to review."
     case "failed": return s.message
     case "done":
       var u = s.unreachable.length
@@ -129,6 +143,7 @@ if (typeof module !== "undefined") {
     DEV_HELPER: DEV_HELPER,
     HELPER_DIR: HELPER_DIR,
     NOT_BUILT: NOT_BUILT,
+    PRE_SYNC: PRE_SYNC,
     command: command,
     helperCommand: helperCommand,
     initial: initial,

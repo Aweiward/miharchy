@@ -20,7 +20,7 @@ import kotlin.io.path.name
 import kotlin.io.path.readBytes
 import kotlin.system.exitProcess
 
-private const val USAGE = """usage: miharchy-sync sync [--folder <sync folder>] [--dry-run] [--json]
+private const val USAGE = """usage: miharchy-sync sync [--folder <sync folder>] [--dry-run] [--apply] [--json]
        miharchy-sync check <backup file>
        miharchy-sync restore <backup file>
        miharchy-sync backup <folder>"""
@@ -41,6 +41,8 @@ data class Summary(
     /** The backup written for the phone, or null on a dry run. */
     val export: String?,
     val unreachable: List<Unreachable>,
+    /** The changes look like a lost phone backup, so the sync stopped before it changed anything; --apply runs it. */
+    val held: Boolean = false,
 )
 
 fun main(args: Array<String>) {
@@ -53,12 +55,13 @@ fun main(args: Array<String>) {
     }
     val folderArg = args.toList().zipWithNext().firstOrNull { it.first == "--folder" }?.second
     val dryRun = "--dry-run" in args
+    val apply = "--apply" in args
     val asJson = "--json" in args
 
     // Held until the process exits, so a sync from the popup and one from the window never interleave.
     lockState() ?: fail("A sync is already running.")
     val summary = try {
-        sync(folderArg, dryRun)
+        sync(folderArg, dryRun, apply)
     } catch (e: Exception) {
         fail(e.message ?: e.toString())
     }
@@ -66,7 +69,7 @@ fun main(args: Array<String>) {
 }
 
 /** Merges the newest phone backup in, then exports the desktop; the baselines move only once both landed. */
-private fun sync(folderArg: String?, dryRun: Boolean): Summary {
+private fun sync(folderArg: String?, dryRun: Boolean, apply: Boolean): Summary {
     val config = ServerConfig.load()
     val desktop = Desktop(config)
     val folder = Path.of(folderArg ?: desktop.syncFolder() ?: fail("No sync folder is set. Choose one in Setup or Settings."))
@@ -78,12 +81,14 @@ private fun sync(folderArg: String?, dryRun: Boolean): Summary {
     val phoneBaseline = stateDir.resolve("phone-baseline.tachibk").takeIf { it.exists() }?.let { decodeBackup(it.readBytes()) }
     val desktopBaseline = stateDir.resolve("desktop-baseline.tachibk").takeIf { it.exists() }?.let { decodeBackup(it.readBytes()) }
 
-    val changes = if (phoneBytes == null || phoneNow == null) emptyList() else {
-        val phoneUrls = (phoneNow.backupManga + phoneBaseline?.backupManga.orEmpty()).map { it.url }.toSet()
-        merge(phoneBaseline?.toLibrary(), phoneNow.toLibrary(), desktop.snapshot(phoneUrls).library, desktopBaseline?.toLibrary())
-            .also { if (!dryRun) desktop.apply(it, phoneBytes, phoneUrls) }
-    }
-    if (dryRun) return Summary(config.url, folder.toString(), phoneFile?.toString(), true, changes, null, emptyList())
+    val phoneUrls = (phoneNow?.backupManga.orEmpty() + phoneBaseline?.backupManga.orEmpty()).map { it.url }.toSet()
+    // The snapshot also holds the phone's manga outside the desktop library; the hold counts only the library.
+    val desktopNow = phoneNow?.let { desktop.snapshot(phoneUrls).library }
+    val changes = if (phoneNow == null || desktopNow == null) emptyList()
+    else merge(phoneBaseline?.toLibrary(), phoneNow.toLibrary(), desktopNow, desktopBaseline?.toLibrary())
+    val held = !apply && holds(changes, desktopNow?.manga?.values?.count { it.inLibrary } ?: 0)
+    if (dryRun || held) return Summary(config.url, folder.toString(), phoneFile?.toString(), dryRun, changes, null, emptyList(), held)
+    phoneBytes?.let { desktop.apply(changes, it, phoneUrls) }
 
     // The baseline too, so a library imported before names were kept gets them on its next sync.
     val storedNames = desktop.sourceNames()
@@ -92,7 +97,10 @@ private fun sync(folderArg: String?, dryRun: Boolean): Summary {
 
     val exported = forMihon(desktop.export(), desktop.notes())
     val exportFile = writeExport(folder, exportName(Instant.now()), exported)
-    writePrivately(stateDir.resolve("desktop-baseline.tachibk"), exported)
+    // The undo point: a sync overrides a desktop value only while it equals this baseline, and a restore only adds.
+    val desktopBaselineFile = stateDir.resolve("desktop-baseline.tachibk")
+    if (desktopBaselineFile.exists()) writePrivately(stateDir.resolve("pre-sync.tachibk"), desktopBaselineFile.readBytes())
+    writePrivately(desktopBaselineFile, exported)
     phoneBytes?.let { writePrivately(stateDir.resolve("phone-baseline.tachibk"), it) }
 
     val lost = (phoneNow ?: phoneBaseline)?.let { unreachable(it, decodeBackup(exported)) }.orEmpty()
@@ -215,8 +223,9 @@ fun describe(summary: Summary): String {
     if (summary.backup == null) {
         lines += "No phone backup in the sync folder yet."
     } else {
-        lines += "${if (summary.dryRun) "Would apply" else "Applied"} phone backup ${summary.backup}"
+        lines += "${if (summary.dryRun || summary.held) "Would apply" else "Applied"} phone backup ${summary.backup}"
         lines += counts.ifEmpty { listOf("no changes") }.map { "  $it" }
+        if (summary.held) lines += "Held: this would change much, so the sync changed nothing. Run again with --apply to apply it."
     }
     summary.export?.let { lines += "Wrote $it. Restore it in Mihon to bring the desktop's changes to the phone." }
     if (summary.unreachable.isNotEmpty()) {

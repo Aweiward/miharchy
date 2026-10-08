@@ -19,6 +19,7 @@ import "Updates.js" as Updates
 import "Restart.js" as Restart
 import "Images.js" as Images
 import "History.js" as History
+import "Sync.js" as Sync
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -442,7 +443,7 @@ ShellRoot {
     // An open restore, sync result, download queue, reader, migration or manga
     // detail decides which keys apply, in that order; on Browse, the screen
     // or the panel over it does.
-    var scope = trackAsk ? "track-ask" : restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? "sync" : downloadsView.open ? "downloads" : reader.open ? (reader.panelOpen ? "reader-settings" : "reader")
+    var scope = trackAsk ? "track-ask" : restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? (syncView.sync.state === "held" ? "sync-held" : "sync") : downloadsView.open ? "downloads" : reader.open ? (reader.panelOpen ? "reader-settings" : "reader")
       : migrateView.open ? "migrate-" + migrateView.step
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.dupesOpen ? "manga-duplicates" : mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.downloadsOpen ? "manga-download" : mangaDetail.selecting ? "manga-select" : "manga")
@@ -576,6 +577,10 @@ ShellRoot {
     }
     if (id.indexOf("updates.") === 0) {
       updatesView.run(id)
+      return
+    }
+    if (id === "sync.undo") {
+      restoreView.openFile(Quickshell.env("HOME") + "/" + Sync.PRE_SYNC)
       return
     }
     if (id.indexOf("sync.") === 0) {

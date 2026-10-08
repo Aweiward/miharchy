@@ -15,7 +15,7 @@ Rectangle {
   property bool open: false
   property var sync: Sync.initial()
   readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
-  readonly property var report: sync.state === "done" ? Sync.report(sync) : []
+  readonly property var report: sync.state === "done" || sync.state === "held" ? Sync.report(sync) : []
 
   // A sync finished and changed the desktop library.
   signal synced()
@@ -32,6 +32,12 @@ Rectangle {
         if (sync.state === "running") return
         sync = Sync.reduce(sync, { type: "start" })
         proc.command = Sync.command(devHelper)
+        proc.running = true
+        break
+      case "sync.apply":
+        if (sync.state !== "held") return
+        sync = Sync.reduce(sync, { type: "apply" })
+        proc.command = Sync.command(devHelper, true)
         proc.running = true
         break
       case "sync.close":
@@ -78,7 +84,7 @@ Rectangle {
 
       Text {
         width: parent.width
-        visible: view.sync.state !== "done"
+        visible: !view.report.length
         wrapMode: Text.Wrap
         text: view.sync.state === "running" ? "Syncing with the sync folder. This takes a few seconds." : view.sync.message || ""
         color: view.sync.state === "failed" ? view.theme.urgent : view.theme.muted
@@ -122,7 +128,7 @@ Rectangle {
       HintBar {
         id: hint
         theme: view.theme
-        text: view.sync.state === "running" ? "esc hide (the sync goes on)" : "esc close"
+        text: view.sync.state === "running" ? "esc hide (the sync goes on)" : view.sync.state === "held" ? "y apply   esc keep" : "esc close"
         onKey: function(event) { view.key(event) }
       }
     }

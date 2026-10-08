@@ -120,6 +120,23 @@ fun merge(phoneBaseline: Library?, phoneNow: Library, desktopNow: Library, deskt
     return newCategories.distinct().map(::CreateCategory) + changes
 }
 
+/** Fewer removals never hold, so pruning a small library goes through. */
+const val HOLD_REMOVALS = 5
+/** Removals hold only from this share of the library, so a big library's cleanup goes through. */
+const val HOLD_REMOVAL_PERCENT = 10
+/** A backup made with chapters off drops read state by the hundred; a real phone session marks a few unread. */
+const val HOLD_UNREAD = 50
+
+/**
+ * True when [changes] look like a lost or partial phone backup (a fresh Mihon, another phone) more than like edits:
+ * the merge reads a manga missing from the backup as removed and a missing chapter as unread.
+ */
+fun holds(changes: List<Change>, librarySize: Int): Boolean {
+    val removals = changes.count { it is RemoveFromLibrary }
+    return (removals >= HOLD_REMOVALS && removals * 100 >= librarySize * HOLD_REMOVAL_PERCENT) ||
+        changes.count { it is MarkUnread } >= HOLD_UNREAD
+}
+
 /** Unchanged on the phone keeps the desktop value; changed on the phone only takes it; both changed resolves. */
 private fun <T> pick(pB: T, pN: T, dB: T, dN: T, resolve: (T, T) -> T): T = when {
     pN == pB -> dN
