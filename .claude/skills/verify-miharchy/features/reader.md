@@ -51,19 +51,35 @@ Jumps (Home/End are key codes, so call `root.handleKey`; the go-to field is `rea
 ```
 Fit and width: `reader.shown` is what the pager shows (`Reader.spread`): its `items` hold each page shown with its `x`, `width`, `height` (the size shown) and, for a split page, `imageX`/`imageWidth`; `reader.pageSizes` holds each decoded image size by URL. The paged Flickable is the child of `reader` with `contentX` and no `cacheBuffer` (`reader.children`). Log `contentY`, `atYBeginning`, `atYEnd` around `j`/Space to show scroll-before-turn. The strip is the child with `cacheBuffer`; its `width` follows `reader.webtoonWidth`. Grab in its own step, before the next key: `grab` lands a frame later, and a fit change reloads the page.
 
-Auto-scroll in webtoon (set manga meta `miharchy.readingMode` to `webtoon` with `setMangaMeta` first; the strip is `find(reader, function(i) { return i.cacheBuffer !== undefined && i.cacheBuffer > 0 })`):
+Auto-scroll. Seed two library manga; give the first in the Library (the title sort puts it first) manga meta `miharchy.readingMode` = `webtoon` and the second `paged-ltr` with `setMangaMeta`. Webtoon: `a` at 1x, three `+` to 3x, `j` stops it, the quit saves the page:
 ```js
 [
-  [4000, function() { key("Enter") }],
-  [5000, function() { key("Enter") }],
-  [6000, function() { key("a") }],
-  [2000, function() { log("y1", find(reader, function(i) { return i.cacheBuffer !== undefined && i.cacheBuffer > 0 }).contentY) }],
-  [2000, function() { log("y2", [find(reader, function(i) { return i.cacheBuffer !== undefined && i.cacheBuffer > 0 }).contentY, reader.autoSpeed]) }],  // y2 > y1, speed 1
-  [100,  function() { key("j") }],
-  [500,  function() { log("stopped", reader.autoSpeed); root.run("window.quit") }]  // 0
+ [5000, function(){ log("first", root.shown.manga[0].id); key("Enter") }],
+ [5000, function(){ key("Enter") }],
+ [7000, function(){ root.v.s = find(reader, function(i){ return i.cacheBuffer !== undefined && i.cacheBuffer > 0 }); log("open", [reader.reader.mode, reader.reader.chapters[reader.reader.index].id, reader.reader.page, root.v.s.contentY]); key("a") }],
+ [2000, function(){ log("t2", [reader.autoSpeed, root.v.s.contentY]); key("+"); key("+"); key("+") }],
+ [500, function(){ log("speed", reader.autoSpeed); grab("auto-strip") }],
+ [8000, function(){ log("t10", [reader.autoSpeed, root.v.s.contentY, reader.reader.page]); key("j") }],
+ [300, function(){ root.v.y = root.v.s.contentY; log("stopped", reader.autoSpeed) }],
+ [1500, function(){ log("still", [root.v.s.contentY - root.v.y, reader.reader.page]); root.run("window.quit") }]
 ]
 ```
-Paged: set global meta `miharchy.autoScrollSpeed` to "3" (a turn every 2.7 s), `key("a")`, wait 6 s and log `reader.reader.page`, two pages on. Read back `lastPageRead` with `gql.sh` as above.
+Proof: `t2` shows `contentY` above `open`'s, `t10` far above at speed 3, `stopped` is 0 and `still` is 0 (no drift after the stop). Read back `manga(id){ chapters{ nodes{ id lastPageRead } } }` (the page shown) and `metas(filter:{key:{equalTo:"miharchy.autoScrollSpeed"}})`, which reads "3": the speed saves once it settles, so quick presses never leave an older one.
+
+Paged at 3x (a turn every 2.7 s; the speed saved above), then the chapter's end. End stops it; `a` on the last page turns onto the transition page and stops there:
+```js
+[
+ [5000, function(){ key("l"); log("cursor-manga", root.shown.manga[root.libraryCursor].id); key("Enter") }],
+ [5000, function(){ key("Enter") }],
+ [7000, function(){ root.v.c = reader.reader.chapters[reader.reader.index].id; log("open", [reader.reader.mode, root.v.c, reader.reader.page, reader.reader.pages.length]); key("a") }],
+ [6000, function(){ log("t6", [reader.autoSpeed, reader.reader.page]); grab("auto-paged") }],
+ [300, function(){ root.handleKey({ key: 0x01000011, text: "", modifiers: 0 }) }],
+ [1500, function(){ log("end", [reader.autoSpeed, reader.reader.page, reader.reader.pages.length]); key("a") }],
+ [4000, function(){ log("at-end", [reader.autoSpeed, reader.reader.transition !== null, reader.reader.chapters[reader.reader.index].id === root.v.c]); grab("auto-transition") }],
+ [500, function(){ root.run("window.quit") }]
+]
+```
+Proof: `t6` is `[3, 2]` (two pages in 6 s); `end` has speed 0; `at-end` is `[0, true, true]`: stopped, transition page shown, same chapter.
 
 ## Gotchas
 - Suwayomi clamps `lastPageRead` to `pageCount` (-1 until pages are fetched); the reader fetches pages first.
