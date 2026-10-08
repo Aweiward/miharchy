@@ -482,6 +482,22 @@ function zoomStep(zoom, dir) {
   return ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i + dir))]
 }
 
+// Auto-scroll (a): the speeds + and - step through while it runs, the
+// autoScrollSpeed setting's options as numbers.
+var AUTO_SPEEDS = settingRow("autoScrollSpeed").options.map(function(o) { return Number(o.value) })
+
+// What one auto-scroll tick does at speed, every interval ms: in the strip
+// it moves scroll pixels, at 1x a view height in about 20 s; paged, it
+// turns as Space does, at 1x every 8 s.
+function autoPlan(readingMode, speed, viewHeight) {
+  return strip(readingMode) ? { interval: 16, scroll: viewHeight * speed / 1250 } : { interval: Math.round(8000 / speed) }
+}
+
+function autoSpeedStep(speed, dir) {
+  var i = Math.max(0, AUTO_SPEEDS.indexOf(speed))
+  return AUTO_SPEEDS[Math.max(0, Math.min(AUTO_SPEEDS.length - 1, i + dir))]
+}
+
 // A scroll position along one axis kept inside the content: origin, the
 // content's start; content and view, their sizes.
 function within(pos, origin, content, view) {
@@ -513,7 +529,7 @@ function step(options, value, dir) {
 // The settings panel (s), Mihon's reader settings sheet: the manga's own
 // reading mode, then the Settings rows the reader reads, which apply to
 // every manga. A later reader setting is one more key here.
-var PANEL_KEYS = ["pageFit", "dualPageView", "dualPageSplit", "webtoonWidth", "readerTheme", "keepScreenOn", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
+var PANEL_KEYS = ["pageFit", "dualPageView", "dualPageSplit", "webtoonWidth", "autoScrollSpeed", "readerTheme", "keepScreenOn", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
 
 // The readerTheme setting -> the reader's background; themeColor for
 // "theme". Gray is Mihon's ReaderGrayBackgroundColor.
@@ -561,11 +577,11 @@ function canQuit(s) {
 }
 
 // fit, width: the pageFit and webtoonWidth settings; zoom: the page's,
-// named only when it is on.
-function indicator(r, fit, width, zoom) {
+// named only when it is on. auto: the auto-scroll speed, 0 while it is off.
+function indicator(r, fit, width, zoom, auto) {
   if (r.state !== "ok") return ""
   var shape = strip(r.mode) ? width + "%" : FIT_LABELS[fit] + (zoom > 1 ? "   zoom " + Math.round(zoom * 100) + "%" : "")
-  return (r.page + 1) + " / " + r.pages.length + "   " + MODE_LABELS[r.mode] + (shape ? "   " + shape : "")
+  return (r.page + 1) + " / " + r.pages.length + "   " + MODE_LABELS[r.mode] + (shape ? "   " + shape : "") + (auto ? "   auto " + auto + "x" : "")
 }
 
 if (typeof module !== "undefined") {
@@ -600,6 +616,9 @@ if (typeof module !== "undefined") {
     fit: fit,
     ZOOMS: ZOOMS,
     zoomStep: zoomStep,
+    AUTO_SPEEDS: AUTO_SPEEDS,
+    autoPlan: autoPlan,
+    autoSpeedStep: autoSpeedStep,
     within: within,
     zoomedAt: zoomedAt,
     stripWidth: stripWidth,

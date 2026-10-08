@@ -59,6 +59,9 @@ Rectangle {
   // The paged zoom on top of the page fit (Reader.ZOOMS). It holds across
   // pages and chapters, and starts at 1 as the reader opens.
   property real zoom: 1
+  // The auto-scroll speed while a runs it, 0 while it is off.
+  property real autoSpeed: 0
+  readonly property var autoPlan: open ? Reader.autoPlan(reader.mode, autoSpeed || 1, height) : null
   // Each page's image size by URL, once its slot decodes it: what spreads
   // and split pages need to know (Reader.spreadAt).
   property var pageSizes: ({})
@@ -99,6 +102,7 @@ Rectangle {
   onConfigChanged: {
     endEdit()
     panelOpen = false
+    autoSpeed = 0
     saveTimer.stop()
     pagesSeq++
     reader = null
@@ -117,6 +121,7 @@ Rectangle {
     var defaults = Prefs.defaults(table)
     source = { chapters: chapters, prefs: defaults }
     zoom = 1
+    autoSpeed = 0
     reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title)
     pageSizes = {}
     aheadFor = -1
@@ -139,6 +144,7 @@ Rectangle {
   function close() {
     endEdit()
     panelOpen = false
+    autoSpeed = 0
     save()
     leave()
     pagesSeq++
@@ -353,8 +359,21 @@ Rectangle {
     else setting(row(p.key), Settings.activate(row(p.key), values[p.key]).save)
   }
 
+  // a starts and stops auto-scroll; while it runs + and - change its speed
+  // and any other command stops it.
   function run(id) {
     note = ""
+    if (id === "reader.autoScroll") {
+      autoSpeed = autoSpeed > 0 ? 0 : Number(values.autoScrollSpeed) || 1
+      return
+    }
+    if (autoSpeed > 0 && (id === "reader.zoomIn" || id === "reader.zoomOut")) {
+      autoSpeed = Reader.autoSpeedStep(autoSpeed, id === "reader.zoomIn" ? 1 : -1)
+      speedSave.speed = autoSpeed
+      speedSave.restart()
+      return
+    }
+    autoSpeed = 0
     switch (id) {
       case "reader.settings":
         panelOpen = true
@@ -442,13 +461,53 @@ Rectangle {
         else zoomTo(1)
         return
     }
+    act(id, values.alwaysShowChapterTransition)
+  }
+
+  // A command that reads on or back. always: whether a turn out of the
+  // chapter shows the transition page.
+  function act(id, always) {
     if (inStrip) track()
     var f = flick()
-    var act = Reader.action(reader, id, f.atYEnd, f.atYBeginning, { left: !f.atXBeginning, right: !f.atXEnd })
-    if (!act) return
-    if ("scroll" in act) scroll(act.scroll)
-    else if ("pan" in act) scroll(act.pan, true)
-    else go({ type: "turn", delta: act.turn, chapter: act.chapter === true, always: values.alwaysShowChapterTransition, offline: offline, layout: layout })
+    var a = Reader.action(reader, id, f.atYEnd, f.atYBeginning, { left: !f.atXBeginning, right: !f.atXEnd })
+    if (!a) return
+    if ("scroll" in a) scroll(a.scroll)
+    else if ("pan" in a) scroll(a.pan, true)
+    else go({ type: "turn", delta: a.turn, chapter: a.chapter === true, always: always, offline: offline, layout: layout })
+  }
+
+  // Paged, auto-scroll turns as Space does, always onto the transition
+  // page at the chapter's end, where it stops: it never opens the next
+  // chapter by itself.
+  function autoTick() {
+    if (reader.state !== "ok" || reader.transition !== null || (inStrip && strip.atYEnd)) {
+      autoSpeed = 0
+      return
+    }
+    if (!inStrip) {
+      act("reader.next", true)
+      if (reader.transition !== null) autoSpeed = 0
+      return
+    }
+    strip.pinToEnd = false
+    strip.contentY = Reader.within(strip.contentY + autoPlan.scroll, strip.originY, strip.contentHeight, strip.height)
+  }
+
+  // One save once the speed settles: a save per press can land out of
+  // order, and an older speed would win.
+  Timer {
+    id: speedSave
+    interval: 500
+    property real speed: 1
+    onTriggered: view.setting(view.row("autoScrollSpeed"), String(speed))
+  }
+
+  Timer {
+    id: autoTimer
+    repeat: true
+    running: view.autoSpeed > 0 && view.open && !view.editing && !view.panelOpen
+    interval: view.autoPlan ? view.autoPlan.interval : 1000
+    onTriggered: view.autoTick()
   }
 
   function tap(x, y) {
@@ -707,7 +766,9 @@ Rectangle {
     readonly property real dragDistance: 10
     anchors.fill: parent
     enabled: view.open
+    // A click, a drag or the wheel stops auto-scroll, as a key does.
     onPressed: function(mouse) {
+      view.autoSpeed = 0
       var f = view.flick()
       scrollAnimation.stop()
       panAnimation.stop()
@@ -729,6 +790,7 @@ Rectangle {
     // Each click of a quick pair turns, as each tap does in Mihon.
     onDoubleClicked: function(mouse) { if (!dragged) view.tap(mouse.x, mouse.y) }
     onWheel: function(wheel) {
+      view.autoSpeed = 0
       if (view.editing) return
       if (wheel.modifiers & Qt.ControlModifier) {
         var z = Reader.wheel(wheelRest, wheel.angleDelta.y)
@@ -885,7 +947,7 @@ Rectangle {
     anchors.right: parent.right
     anchors.bottom: parent.bottom
     anchors.margins: view.theme.fontSize
-    text: view.reader ? Reader.indicator(view.reader, view.pageFit, view.webtoonWidth, view.zoom) : ""
+    text: view.reader ? Reader.indicator(view.reader, view.pageFit, view.webtoonWidth, view.zoom, view.autoSpeed) : ""
     color: view.theme.muted
     font.family: view.theme.fontFamily
     font.pixelSize: view.theme.fontSmall

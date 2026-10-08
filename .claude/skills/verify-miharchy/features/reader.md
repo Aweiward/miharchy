@@ -10,6 +10,7 @@ The reader overlay: paged (right to left, left to right, vertical) or a strip (w
 - Reader background (Settings row and panel row `readerTheme`, global meta `miharchy.readerTheme`): theme (the default, the Omarchy theme's background), black, gray (Mihon's `#202125`) or white. `reader.color` is it, and it shows in captures.
 - Chapter transition (Mihon's `ChapterTransition`, `reader.reader.transition`): a turn past the last page (or the first) shows a page with the finished and the next chapter (or the previous and the current), "There's no next chapter" past the end, a warning when the chapter numbers skip (Mihon's `calculateChapterGap`, over the reader's list, so skipped chapters count) and one when that chapter is not downloaded while offline (`reader.offline`: no default route, checked as each chapter loads). A turn its way opens that chapter; a turn back returns to the page. Always show chapter transition (Settings and panel row, meta `miharchy.alwaysShowChapterTransition`, default on as in Mihon) off shows it only at either end, on a gap or offline. In webtoon the strip's end shows it, and scrolling up leaves it. Log `reader.reader.transition` (`dir`, `from`, `to`, `gap`, `missing`). A gap to drive: mark a middle chapter read (`updateChapter`) and turn skip read on.
 - Keep the screen on (Settings and panel row, meta `miharchy.keepScreenOn`, default on): shell.qml's `idleInhibitor` (Quickshell's `IdleInhibitor` on `window`) is enabled while the reader shows and the row is on, so hypridle neither dims nor locks. Offscreen there is no Wayland surface, so a drive proves only `idleInhibitor.enabled`; never run the window on the real compositor to check the lock.
+- Auto-scroll (not in Mihon): `a` starts or stops it (`reader.autoSpeed`, 0 while off). In the strip a 16 ms timer moves `contentY` (1x: a view height in about 20 s) and `track()` saves the read state as for any scroll; paged, it runs Space's path every 8 s at 1x (`Reader.autoPlan`). It starts at the Settings and panel row `autoScrollSpeed` (meta `miharchy.autoScrollSpeed`, "0.5" to "3", default "1"); while it runs `+`/`-` step the speed and save it. Any other key, a click, a drag or the wheel stops it, as do the strip's end and the transition page: a paged turn off the last page always shows the transition page, so it never opens the next chapter. The indicator adds "auto 1.5x".
 - `]`/`[` open the next/previous chapter where it was left; Home/End go to the first/last page; `g` opens a go-to-page field.
 - The offline warning cannot be driven by changing the network; a drive sets `reader.offline = true` to show it (a simulated signal) after the pages load, since every chapter load probes the route again and overwrites it, and `tests/reader.test.js` pins the rule.
 - `o` opens the chapter's page on the source's site with `xdg-open`; `y` copies its link with `wl-copy -- <url>` (the server's `ChapterType.realUrl`, carried by `Browse.toChapters` and `Reader.relist`). The bottom-left line says "Link copied", or that the server has no link. Prove it with stubs: put `xdg-open` and `wl-copy` scripts that append their arguments to a file first on `PATH` before `drive.sh`, never the real ones.
@@ -49,6 +50,20 @@ Jumps (Home/End are key codes, so call `root.handleKey`; the go-to field is `rea
 ]
 ```
 Fit and width: `reader.shown` is what the pager shows (`Reader.spread`): its `items` hold each page shown with its `x`, `width`, `height` (the size shown) and, for a split page, `imageX`/`imageWidth`; `reader.pageSizes` holds each decoded image size by URL. The paged Flickable is the child of `reader` with `contentX` and no `cacheBuffer` (`reader.children`). Log `contentY`, `atYBeginning`, `atYEnd` around `j`/Space to show scroll-before-turn. The strip is the child with `cacheBuffer`; its `width` follows `reader.webtoonWidth`. Grab in its own step, before the next key: `grab` lands a frame later, and a fit change reloads the page.
+
+Auto-scroll in webtoon (set manga meta `miharchy.readingMode` to `webtoon` with `setMangaMeta` first; the strip is `find(reader, function(i) { return i.cacheBuffer !== undefined && i.cacheBuffer > 0 })`):
+```js
+[
+  [4000, function() { key("Enter") }],
+  [5000, function() { key("Enter") }],
+  [6000, function() { key("a") }],
+  [2000, function() { log("y1", find(reader, function(i) { return i.cacheBuffer !== undefined && i.cacheBuffer > 0 }).contentY) }],
+  [2000, function() { log("y2", [find(reader, function(i) { return i.cacheBuffer !== undefined && i.cacheBuffer > 0 }).contentY, reader.autoSpeed]) }],  // y2 > y1, speed 1
+  [100,  function() { key("j") }],
+  [500,  function() { log("stopped", reader.autoSpeed); root.run("window.quit") }]  // 0
+]
+```
+Paged: set global meta `miharchy.autoScrollSpeed` to "3" (a turn every 2.7 s), `key("a")`, wait 6 s and log `reader.reader.page`, two pages on. Read back `lastPageRead` with `gql.sh` as above.
 
 ## Gotchas
 - Suwayomi clamps `lastPageRead` to `pageCount` (-1 until pages are fetched); the reader fetches pages first.

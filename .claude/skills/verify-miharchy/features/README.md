@@ -9,7 +9,7 @@ A recipe takes its ids from the seed it names: read them with `gql.sh` or from t
 | Library | `library.md` | the grid shows the server's library, categories, search and filters narrow it, the sort orders it, choices survive a restart, `x x` removes |
 | Browse and add | `browse.md` | a source lists manga, the detail opens, `a` toggles `inLibrary`; `p` pins land in `miharchy.pinnedSources` and the pinned and last used sources list first; the `l` panel's languages and hidden sources land in `miharchy.enabledLanguages` and `miharchy.disabledSources` and narrow Sources and global search; global search `p` limits it to pinned sources and `F` hides sources with nothing |
 | Manga chapter actions | `manga.md` | `R`/`u`/`P` change `isRead`/`lastPageRead`, the Library badge follows; `b` sets `isBookmarked`; `F` filter and sort land in manga meta `miharchy.chapter*`; Space resumes |
-| Reader | `reader.md` | pages render, `lastPageRead`/`isRead` saved, quit flushes the save |
+| Reader | `reader.md` | pages render, `lastPageRead`/`isRead` saved, quit flushes the save, `a` auto-scrolls |
 | History | `history.md` | `/` narrows the entries to titles holding the search, `Enter` keeps it, `Esc` clears it |
 | Updates | `updates.md` | the list matches the 3-month update rule and the `F` filters (read back `miharchy.updates*` meta), `u` runs a library update, the selection actions change the server and the mark's count |
 | Settings | `settings.md` | a row change lands in `settings` or `metas`; downloads and cache sizes match `du` on the scratch server, Enter on "Clear the cache" empties its cache and reports the bytes freed, downloads keep their size |

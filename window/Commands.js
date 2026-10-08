@@ -262,6 +262,7 @@ var commands = [
   { id: "reader.zoomOut", title: "Zoom out, or a narrower strip", keys: ["-"], view: "reader", hidden: true },
   { id: "reader.zoomReset", title: "Reset the zoom", keys: ["0"], view: "reader", hidden: true },
   { id: "reader.settings", title: "Reader settings", keys: ["s"], view: "reader", hidden: true },
+  { id: "reader.autoScroll", title: "Auto-scroll on or off", keys: ["a"], view: "reader", hidden: true },
   { id: "reader.settingsUp", title: "Previous setting", keys: ["k", "Up"], view: "reader-settings", hidden: true },
   { id: "reader.settingsDown", title: "Next setting", keys: ["j", "Down"], view: "reader-settings", hidden: true },
   { id: "reader.settingsChoose", title: "Change setting", keys: ["Enter", "Space"], view: "reader-settings", hidden: true },
