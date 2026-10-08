@@ -23,6 +23,6 @@ MIHARCHY_PEEK=1 .claude/skills/verify-miharchy/scripts/drive.sh steps.js 40
 ```
 Proof: `peek` logs `["updates", true, [<the chapter>, 2]]`: the reader opened the newest History manga's next chapter at its `lastPageRead`.
 
-The resume path on a running window: start a drive without the variable and, while it runs, send `XDG_RUNTIME_DIR=$RUN/runtime quickshell ipc -p $RUN/app/window call miharchy peek` from the shell (the launcher's call); a later step logs the same target.
+The resume path on a running window: start a drive without the variable and, while it runs, send `.claude/skills/verify-miharchy/scripts/qs.sh ipc call miharchy peek` from the shell (the launcher's call); a later step logs the same target.
 
 The launcher's Hyprland side (toggle, move, focus, the 3 s wait, the `peek-starting` marker) needs a compositor. Never run `window/miharchy peek` from a verify run; `node --test window/tests/launcher.test.js` covers it with stub `quickshell` and `hyprctl`.

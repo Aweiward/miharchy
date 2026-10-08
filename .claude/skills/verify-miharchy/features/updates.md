@@ -52,7 +52,7 @@ The actions, after the seed recipe in Gotchas. Give the 20th row's chapter a pag
 Read back: `.claude/skills/verify-miharchy/scripts/gql.sh '{ chapters(filter:{id:{in:[...]}}){ nodes{ id isRead isBookmarked isDownloaded lastPageRead } } }'`, and the mark's count as in Gotchas.
 
 ## Gotchas
-- Chapters fetched when a manga joins the library are backlog, not updates; to create updates, add a manga to the library before fetching its chapters, or remove chapter rows (see past PRs). Recipe: take MangaDex `fetchSourceManga(type: LATEST)` (recent uploads pass the 3-month rule), `updateManga(patch: {inLibrary: true})` each, wait 2 s, then `fetchMangaAndChapters` each. Three manga gave 29 updates.
+- Chapters fetched when a manga joins the library are backlog, not updates; to create updates, add a manga to the library before fetching its chapters, or remove chapter rows (see past PRs). `seed.sh --updates N` does it: it adds N MangaDex LATEST manga (recent uploads pass the 3-month rule) to the library, waits 2 s, then fetches their chapters. The row count depends on the manga: three gave 29 updates, two gave 7.
 - To prove the mark's count after an action, run `UPDATES_QUERY` through `gql.sh` and pass the reply to `Updates.count` in node (`window/tests/load.js` loads it); it must equal `updatesView.rows.length` in the drive log.
 - Server filters (`excludeUnreadChapters`, `excludeNotStarted`, `excludeCompleted`) default on and skip most manga on a fresh server.
 - `updateMangas` (Settings "Refresh metadata during library updates", default off) makes the library update also fetch each manga's title, cover and description.
