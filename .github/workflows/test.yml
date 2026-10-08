@@ -21,6 +21,19 @@ jobs:
           node-version: 24
       - run: npm test
 
+  qml:
+    runs-on: ubuntu-latest
+    # qmllint resolves Quickshell's imports, which Arch packages.
+    container: archlinux:latest
+    defaults:
+      run:
+        working-directory: window
+    steps:
+      - run: pacman -Syu --noconfirm --needed qt6-declarative qt6-websockets quickshell nodejs npm
+        working-directory: /
+      - uses: actions/checkout@v4
+      - run: npm run lint:qml
+
   sync:
     runs-on: ubuntu-latest
     defaults:

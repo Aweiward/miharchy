@@ -17,3 +17,12 @@ token() {
     | curl -s -m 30 -H 'content-type: application/json' -X POST -d @- "http://127.0.0.1:$PORT/api/graphql" \
     | jq -r '.data.login.accessToken // empty' 2>/dev/null || true
 }
+
+# Runs "$@" with the environment a verify run gives the window: the run's own
+# home (the sync helper and its baselines), runtime dir (server images and
+# Quickshell's IPC, list and logs), server and offscreen platform.
+window_env() {
+  mkdir -p "$RUN/home"
+  install -d -m 700 "$RUN/runtime"
+  HOME=$RUN/home XDG_RUNTIME_DIR=$RUN/runtime JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$SERVER_JSON MIHARCHY_SERVER_ROOT=$SERVER_DIR MIHARCHY_SERVER_TMPDIR=$SERVER_DIR/tmp QT_QPA_PLATFORM=offscreen "$@"
+}
