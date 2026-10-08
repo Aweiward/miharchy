@@ -109,7 +109,7 @@ test("a held sync lists what it would change, applies only on y, and the popup o
     "  removed 6 manga from the library",
     "y applies it. Esc keeps the library as it is."
   ]);
-  assert.equal(S.oneLine(s), "Sync held: it would remove much. Open the window to review.");
+  assert.equal(S.oneLine(s), "Sync held: it would remove much. Press s in the window to review it.");
   assert.deepEqual(S.reduce(s, { type: "apply" }), { state: "running", apply: true });
   const done = finish(JSON.stringify(summary), 0);
   assert.equal(S.reduce(done, { type: "apply" }), done, "apply does nothing unless a sync is held");
