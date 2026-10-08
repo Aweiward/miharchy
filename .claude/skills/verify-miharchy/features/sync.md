@@ -23,6 +23,28 @@ JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json \
 ```
 Proof: the backup's favorites are in the library (a first sync takes the union of phone and desktop, so on a seeded server the count is higher), a `miharchy-*.tachibk` exists in the folder, both baselines exist (mode 600, dir 700), a rerun answers `"changes":[]` (without `--json` it prints "no changes"). A quick phone backup: copy a `miharchy-backup-*.tachibk` from "Create a backup" (`backup.md`) into the folder under another name; the sync skips `miharchy-*` names. For the window path, install the helper into `$RUN/home` (see `restore.md`; `drive.sh` runs the window with `HOME=$RUN/home`), set global meta `miharchy.syncFolder` to the folder (`setGlobalMeta`; the window runs `sync --json` with no `--folder`, and without the meta the helper answers "No sync folder is set"), drive `key("s")` on Library and log `syncView.sync` and `syncView.report`.
 
+## Hold and undo
+A sync holds when it would remove at least 5 manga that are also at least 10% of the library, or mark at least 50 chapters unread (`holds` in `Merge.kt`). Fixture, with the helper as above and the sync folder in meta `miharchy.syncFolder`:
+1. `seed.sh --library 6`. Write a good phone backup: `miharchy-sync backup $RUN/stage`, then move the file into the sync folder as `phone1.tachibk`, and sync once, so both baselines exist.
+2. `updateMangas(input:{ids:[<5 of the 6>], patch:{inLibrary:false}})`, `miharchy-sync backup $RUN/stage` (rename it `phone2.tachibk`), then put the 5 back with `inLibrary:true`. Copy `phone2.tachibk` into the sync folder last, so it is the newest.
+3. `--dry-run` reports "removed 5 manga from the library"; a plain run prints "Held", and the library, the folder and both baselines stay as they were.
+```js
+[
+  [4000, function() { log("library", root.connection.manga.length); key("s") }],
+  [20000, function() { log("held", syncView.sync); grab("sync-held") }],
+  [500, function() { key("Esc"); log("after-esc", [syncView.open, root.connection.manga.length]) }],
+  [500, function() { key("s") }],
+  [20000, function() { key("y") }],
+  [25000, function() { log("applied", syncView.sync) }],
+  [3000, function() { key("Esc"); log("library-after", root.connection.manga.length); root.run("sync.undo") }],
+  [800, function() { log("undo-path", restoreView.restore.path); key("Enter") }],
+  [10000, function() { key("Enter") }],
+  [20000, function() { log("undo-done", restoreView.restore.step); key("Esc") }],
+  [4000, function() { log("library-final", root.connection.manga.length); done() }]
+]
+```
+Proof: `held` shows state `held` with the count lines, `after-esc` keeps 6, `library-after` is 1, `undo-path` ends in `sync/pre-sync.tachibk`, `library-final` is 6, and `mangas(condition:{inLibrary:true}){ totalCount }` reads 6. A further sync with `phone2.tachibk` still newest reports "no changes" and keeps 6. The `MarkUnread` branch needs a phone backup without chapters; `HoldTest` pins it.
+
 ## Gotchas
 - Build fixture backups with the model classes in `sync/src/main/kotlin/eu/kanade/...` (see `sync/src/test`); a user's real backup holds personal data — counts only in any report, delete copies.
 - Never build `sync/` inside an installed plugin clone (`~/.config/omarchy/plugins/miharchy`): the shell reloads the plugin on every write there.

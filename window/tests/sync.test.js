@@ -34,12 +34,12 @@ function stub(file, script) {
 
 // Runs the real command with stand-in helper scripts: dev is the one in a
 // checkout's sync/build, installed the one Setup builds under HOME.
-async function run(dev, installed) {
+async function run(dev, installed, apply) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
   const file = path.join(dir, "miharchy-sync");
   if (dev !== null) stub(file, dev);
   if (installed) stub(path.join(dir, "home", S.HELPER_DIR, "bin", "miharchy-sync"), installed);
-  const argv = S.command(file);
+  const argv = S.command(file, apply);
   const { stdout } = await execFile(argv[0], argv.slice(1), { env: { ...process.env, HOME: path.join(dir, "home") } });
   return S.reduce({ state: "running" }, { type: "finish", text: stdout });
 }
@@ -96,6 +96,29 @@ test("the helper Setup installed runs before a checkout's build", async () => {
   const s = await run("echo 'dev build'; exit 1", "echo '" + JSON.stringify(summary) + "'");
   assert.equal(s.state, "done");
   assert.deepEqual(await run("echo 'dev build'; exit 1"), { state: "failed", message: "dev build" });
+});
+
+const removals = Array.from({ length: 6 }, (_, i) => ({ type: "removeFromLibrary", manga: { source: "1", url: "/m" + i }, title: "M" + i }));
+const heldSummary = { ...summary, changes: removals, export: null, unreachable: [], held: true };
+
+test("a held sync lists what it would change, applies only on y, and the popup only points at the window", () => {
+  const s = finish(JSON.stringify(heldSummary), 0);
+  assert.deepEqual(s, { state: "held", backup: "app.mihon_2026-10-04_09-06.tachibk", changes: ["removed 6 manga from the library"] });
+  assert.deepEqual(S.report(s), [
+    "The phone backup app.mihon_2026-10-04_09-06.tachibk would change much, so the sync stopped before it changed anything:",
+    "  removed 6 manga from the library",
+    "y applies it. Esc keeps the library as it is."
+  ]);
+  assert.equal(S.oneLine(s), "Sync held: it would remove much. Open the window to review.");
+  assert.deepEqual(S.reduce(s, { type: "apply" }), { state: "running", apply: true });
+  const done = finish(JSON.stringify(summary), 0);
+  assert.equal(S.reduce(done, { type: "apply" }), done, "apply does nothing unless a sync is held");
+});
+
+test("only an applied sync passes --apply to the helper", async () => {
+  const echo = "[ \"$*\" = 'sync --json --apply' ] && echo '" + JSON.stringify(summary) + "' || echo '" + JSON.stringify(heldSummary) + "'";
+  assert.equal((await run(echo, null, true)).state, "done");
+  assert.equal((await run(echo)).state, "held");
 });
 
 test("a helper that is not built points at Setup, never at a build in the plugin folder", async () => {

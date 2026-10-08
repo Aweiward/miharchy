@@ -55,7 +55,8 @@ function failed(job) {
 }
 
 // event.type:
-//   "open"     { folder } the panel opens; an empty path starts in the sync folder
+//   "open"     { folder, path } the panel opens on path, else on the last
+//              path, else in the sync folder
 //   "check"    { text, home } the user entered a path; one that is not
 //              absolute stays in "path" with error
 //   "checked"  { text } the check job's collected output
@@ -66,7 +67,7 @@ function reduce(s, event) {
   switch (event.type) {
     case "open":
       if (s.step === "checking" || s.step === "running") return s
-      return { step: "path", path: s.path || (event.folder ? event.folder + "/" : "") }
+      return { step: "path", path: event.path || s.path || (event.folder ? event.folder + "/" : "") }
     case "check":
       var path = resolvePath(event.text, event.home)
       if (!path) return { step: "path", path: event.text, error: "Enter an absolute path, such as ~/Sync/Mihon/backup.tachibk." }

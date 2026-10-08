@@ -86,6 +86,10 @@ _Avoid_: sync base, snapshot, last backup
 A user-started exchange of backups through the sync folder, which merges in both directions.
 _Avoid_: restore, import (these mean one-way overwrite)
 
+**Held**:
+A sync that stopped before it changed anything, because the phone backup would remove much. The window applies it on request; the popup never does.
+_Avoid_: paused, blocked
+
 **Restore**:
 A one-way load of one backup file into the desktop library, as Mihon's restore does. It moves no baseline, so the next sync counts what it changed as desktop changes.
 _Avoid_: import, sync

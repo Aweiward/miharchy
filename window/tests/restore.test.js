@@ -18,6 +18,13 @@ test("the path starts in the sync folder and keeps the last file", () => {
   assert.equal(R.reduce(running, { type: "open", folder: "/y" }), running);
 });
 
+test("Undo the last sync opens on the file it names, over the last file and the sync folder", () => {
+  const done = { step: "done", path: "/x/b.tachibk", progress: { state: "SUCCESS", mangaProgress: 0, totalManga: 0 } };
+  const pre = "/home/u/.local/share/miharchy/sync/pre-sync.tachibk";
+  assert.deepEqual(R.reduce(done, { type: "open", folder: "/home/u/Sync", path: pre }), { step: "path", path: pre });
+  assert.deepEqual(R.reduce(R.initial(), { type: "open", folder: "/home/u/Sync", path: pre }), { step: "path", path: pre });
+});
+
 test("a path is absolute or starts with ~; any other stays in the field with a hint", () => {
   const check = (text) => R.reduce(R.initial(), { type: "check", text: text, home: "/home/u" });
   assert.deepEqual(check(" ~/Sync/a.tachibk "), { step: "checking", path: "/home/u/Sync/a.tachibk" });
