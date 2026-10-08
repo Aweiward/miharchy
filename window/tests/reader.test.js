@@ -380,6 +380,28 @@ test("the indicator names the fit in paged and the width in webtoon", () => {
   assert.equal(R.indicator(Object.assign({}, r, { mode: "webtoon" }), "width", "60"), "1 / 3   webtoon   60%");
   assert.equal(R.indicator(r, "width", "60", 2), "1 / 3   right to left   fit width   zoom 200%");
   assert.equal(R.indicator(r, "width", "60", 1), "1 / 3   right to left   fit width", "no zoom, no word");
+  assert.equal(R.indicator(r, "width", "60", 1, 1.5), "1 / 3   right to left   fit width   auto 1.5x");
+  assert.equal(R.indicator(r, "width", "60", 1, 0), "1 / 3   right to left   fit width", "auto-scroll off, no word");
+});
+
+test("auto-scroll moves the strip a steady distance per tick and turns paged pages on a timer, both faster with speed", () => {
+  const strip = R.autoPlan("webtoon", 1, 1000);
+  assert.equal(strip.interval, 16);
+  assert.ok(Math.abs(1000 / (strip.scroll * 1000 / strip.interval) - 20) < 0.1, "1x moves a view height in about 20 s");
+  assert.equal(R.autoPlan("continuous-vertical", 2, 1000).scroll, strip.scroll * 2);
+  assert.deepEqual(R.autoPlan("paged-rtl", 1, 1000), { interval: 8000 });
+  assert.deepEqual(R.autoPlan("paged-vertical", 2, 1000), { interval: 4000 });
+});
+
+test("+ and - step the auto-scroll speed through the setting's options, stopping at either end", () => {
+  const S = require("./load")("Settings.js");
+  const row = S.ROWS.find((r) => r.key === "autoScrollSpeed");
+  assert.deepEqual(R.AUTO_SPEEDS.map(String), row.options.map((o) => o.value), "a saved speed is a setting option");
+  assert.ok(R.PANEL_KEYS.includes("autoScrollSpeed"), "the reader's settings panel offers it");
+  assert.equal(R.autoSpeedStep(1, 1), 1.5);
+  assert.equal(R.autoSpeedStep(1, -1), 0.75);
+  assert.equal(R.autoSpeedStep(3, 1), 3);
+  assert.equal(R.autoSpeedStep(0.5, -1), 0.5);
 });
 
 test("zoom scales the fitted page and decodes it at that size; + and - step, stopping at either end", () => {

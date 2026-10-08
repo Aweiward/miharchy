@@ -70,6 +70,12 @@ var ROWS = [
     key: "webtoonWidth", label: "Webtoon width", type: "choice", default: "60", store: "meta",
     options: ["30", "40", "50", "60", "70", "80", "90", "100"].map(function(v) { return { value: v, label: v + "% of the window" } })
   },
+  // Not in Mihon: a in the reader scrolls the strip or turns the pages at
+  // this speed (Reader.AUTO_SPEEDS reads its options); + and - step it.
+  {
+    key: "autoScrollSpeed", label: "Auto-scroll speed", type: "choice", default: "1", store: "meta",
+    options: ["0.5", "0.75", "1", "1.5", "2", "3"].map(function(v) { return { value: v, label: v + "x" } })
+  },
   // Mihon's reader theme. Its automatic follows the phone's night mode;
   // here the Omarchy theme's background does that, and stays the default.
   {
