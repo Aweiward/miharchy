@@ -21,7 +21,7 @@ cp <fixture>.tachibk $RUN/home/r.tachibk
 ```
 Steps: `root.run("restore.open")`, set `restoreView.pathField.text = "~/r.tachibk"`, `key("Enter")`, wait for `restoreView.restore.step === "confirm"`, `key("Enter")`, wait for `"done"`. Log `restoreView.restore`.
 
-For criterion "the next sync keeps it", drive the helper directly with `JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json`:
+For criterion "the next sync keeps it", drive the helper directly through `.claude/skills/verify-miharchy/scripts/qs.sh env $RUN/home/.local/share/miharchy/helper/bin/miharchy-sync <args>`:
 1. `sync --folder $RUN/folder` with phone backup P1, then `restore R`: the baselines' sha256 do not change.
 2. Put phone backup P2 (newer mtime) in the folder, where the phone removed a manga R touched and one R did not, then `sync`: the touched one stays in the library, the other leaves; a second `sync` prints "no changes".
 
