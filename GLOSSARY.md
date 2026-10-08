@@ -83,7 +83,7 @@ The last backup seen from one side: for the phone, the last phone backup ingeste
 _Avoid_: sync base, snapshot, last backup
 
 **Sync**:
-A user-started exchange of backups through the sync folder, which merges in both directions.
+An exchange of backups through the sync folder, which merges in both directions. It is started by the user, or by a new phone backup when the Settings row is on.
 _Avoid_: restore, import (these mean one-way overwrite)
 
 **Held**:
@@ -162,7 +162,7 @@ _Avoid_: interstitial, chapter break
 ## Flagged ambiguities
 
 - Mihon calls a manga an "entry" in places. Resolved: Miharchy says **manga**.
-- "Sync" can mean live sync, as in SyncYomi. Resolved: in v1 **sync** means the user-started backup exchange only.
+- "Sync" can mean live sync, as in SyncYomi. Resolved: in v1 **sync** means the backup exchange only, started by the user or by a new phone backup.
 - "Page" means one image of a chapter. Resolved: a screen of the window is a **view**, never a page.
 - "Default" is a category in Suwayomi (id 0) and in Mihon's UI. Resolved: Default means a manga is in no **category**; it is never a user category, and the Library shows it only once user categories exist.
 - "Base" first meant one backup shared by both sides. Resolved: each side has its own **baseline**, because the phone may never restore what the desktop wrote.

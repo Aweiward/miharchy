@@ -26,6 +26,11 @@ Panel {
   property int cursor: 0
   // Only the latest poll may land.
   property int pollSeq: 0
+  // The phone backup ("<mtime> <path>") the mark last synced on its own:
+  // each is tried once, so a failed or held sync does not rerun every poll.
+  property string lastTried: ""
+  // The running sync started on a phone backup, so it notifies.
+  property bool autoRun: false
 
   readonly property var rows: mark.rows
   readonly property var notice: Mark.notice(mark, configPath)
@@ -72,7 +77,24 @@ Panel {
       root.mark = Mark.reduce(root.mark, { type: "reply", reply: reply, config: cfg, now: Date.now() })
       var n = Mark.notification(root.mark)
       if (n) Quickshell.execDetached(Mark.notifyCommand(n, root.launcher, root.notifyIcon))
+      if (root.mark.autoSync && root.mark.syncFolder && root.sync.state !== "running" && !phoneCheck.running) {
+        phoneCheck.command = Mark.phoneCheckCommand(root.mark.syncFolder)
+        phoneCheck.running = true
+      }
     })
+  }
+
+  Process {
+    id: phoneCheck
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var found = text.trim()
+        if (!found || found === root.lastTried || root.sync.state === "running") return
+        root.lastTried = found
+        root.autoRun = true
+        root.startSync()
+      }
+    }
   }
 
   // One GraphQL query to localhost a minute; opening the popup polls too.
@@ -108,6 +130,12 @@ Panel {
     stdout: StdioCollector {
       onStreamFinished: {
         root.sync = Sync.reduce(root.sync, { type: "finish", text: text })
+        if (root.autoRun) {
+          // The backup's mtime: the same on every bar, so one marker.
+          var n = Mark.syncNotification(root.sync, "sync-" + root.lastTried.split(" ")[0].replace(/[^0-9]/g, ""))
+          if (n) Quickshell.execDetached(Mark.notifyCommand(n, root.launcher, root.notifyIcon))
+          root.autoRun = false
+        }
         root.poll()
       }
     }
