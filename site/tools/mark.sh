@@ -16,7 +16,9 @@ cp -r "$shell/Commons" "$shell/Ui" "$root/"
 cp "$here/mark/KeyboardPanel.qml" "$root/Ui/KeyboardPanel.qml"
 cp "$here/mark/harness.qml" "$root/shell.qml"
 cp -r "$REPO/plugin" "$REPO/window" "$REPO/icons" "$clone/"
-HOME=$RUN/home MIHARCHY_SERVER_JSON=$SERVER_JSON QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=2 CLONE=$clone SHOT=$EVIDENCE/mark \
+# The mark can run the sync helper, and Java takes user.home from the passwd entry, not $HOME:
+# without JAVA_OPTS the helper writes the user's real ~/.local/share/miharchy/sync baselines.
+HOME=$RUN/home JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$SERVER_JSON QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=2 CLONE=$clone SHOT=$EVIDENCE/mark \
   timeout 40 quickshell -p "$root" > "$RUN/mark/run.log" 2>&1 || true
 grep -E "HARNESS|ERROR|rror" "$RUN/mark/run.log" | tail -5
 ls "$EVIDENCE/mark-bar.png" "$EVIDENCE/mark-popup.png"
