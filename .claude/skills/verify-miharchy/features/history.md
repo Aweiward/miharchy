@@ -4,7 +4,7 @@ The History view (key `3`): one entry per manga, its last opened chapter, newest
 
 ## Sub-features
 - `Enter` resumes the entry's chapter in the reader; `r` reloads.
-- `x x` hides one entry (manga meta `miharchy.historyHiddenAt`), `X X` hides all (global meta `miharchy.historyClearedAt`). Read state stays: Suwayomi cannot delete history.
+- `x x` hides one entry (manga meta `miharchy.historyHiddenAt`), `X X` hides all (global meta `miharchy.historyClearedAt`). Read state stays: Suwayomi cannot delete history. Peek reads the same History (`peek.md`): a hidden entry is never a peek target.
 - `/` searches: the field filters by manga title as it types, ignoring case (Mihon's `HistoryScreen` search). `Enter` keeps the search and closes the field, `Esc` in the field clears it. Outside the field `Esc` clears a kept search, and with none it quits. The search does not persist. `X X` still clears the whole history, not only what the search shows.
 
 ## How to get to it (user POV)

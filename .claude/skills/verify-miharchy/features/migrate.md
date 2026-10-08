@@ -10,17 +10,15 @@
 Library, Enter on a manga, `M`, pick a result with `hjkl`, Enter, then Enter or `c`.
 
 ## Driving it with drive.sh
-The seeded manga have no twin on another source. Use Eleceed: MangaDex and Weeb Central both carry it with chapters (MangaDex's "Solo Leveling" has none, and the pick then stops on "No chapters found"). Install Weeb Central (`seed.sh eu.kanade.tachiyomi.extension.en.weebcentral`), search both with `fetchSourceManga(type: SEARCH, query: "Eleceed")`, `fetchMangaAndChapters` both, put the MangaDex one in the library, mark chapters 1 to 3 read, bookmark 2, add it to a category and set its `miharchy.readingMode`. Then drive with `m.id === <its id>` and the text "Eleceed". Read back: the old manga has `inLibrary: false`; the target has `inLibrary: true`, the category, the reading mode, chapters 1 to 3 read and 2 bookmarked.
+The seeded manga have no twin on another source. Use Eleceed: MangaDex and Weeb Central both carry it with chapters (MangaDex's "Solo Leveling" has none, and the pick then stops on "No chapters found"). Install Weeb Central (`seed.sh eu.kanade.tachiyomi.extension.en.weebcentral`), search both with `fetchSourceManga(type: SEARCH, query: "Eleceed")`, `fetchMangaAndChapters` both, put the MangaDex one in the library, mark chapters 1 to 3 read, bookmark 2, add it to a category and set its `miharchy.readingMode`. Then drive with `m.id === <its id>`. `M` searches the manga's title by itself, and `Enter` picks the first result of the first source. Read back: the old manga has `inLibrary: false`; the target has `inLibrary: true`, the category, the reading mode, chapters 1 to 3 read and 2 bookmarked.
 
 A scratch server has no tracker login, but a restored backup brings track records: build a `.tachibk` with `BackupTracking` entries for a library manga (a throwaway test in a copy of `sync/` under your run dir, as `restore.md` describes), then `miharchy-sync restore` it with `JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json`.
 ```js
 [
-  [5000, function() { root.libraryCursor = root.shown.manga.findIndex(function(m) { return m.id === 1 }); key("Enter") }],
+  [5000, function() { root.libraryCursor = root.shown.manga.findIndex(function(m) { return m.id === <Eleceed's id> }); key("Enter") }],
   [6000, function() { key("M") }],
-  [2000, function() { key("/") }],
-  [500, function() { keyRoot.Window.window.activeFocusItem.text = "Solo Leveling"; key("Enter") }],
-  [15000, function() { key("Enter") }],
-  [12000, function() { log("confirm", [migrateView.step, migrateView.tracks]); grab("confirm") }],
+  [15000, function() { log("search", [migrateView.step, migrateView.search.groups.map(function(g) { return [g.source.name, g.state, g.items.length] })]); key("Enter") }],
+  [12000, function() { log("confirm", [migrateView.step, migrateView.tracks, migrateView.job.target.id]); grab("confirm") }],
   [800, function() { key("Enter") }],
   [12000, function() { log("after", migrateView.step); done() }]
 ]

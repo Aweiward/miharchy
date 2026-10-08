@@ -42,13 +42,13 @@ Give one chapter a page read first, so `u` has a reset to do (the page count exi
 ```
 Read back: `.claude/skills/verify-miharchy/scripts/gql.sh 'query($id:Int!){ manga(id:$id){ unreadCount chapters{ nodes{ id isRead lastPageRead lastReadAt sourceOrder } } } }' '{"id":<manga id>}'`.
 
-Bookmark, filter, sort and resume. The panel rows run unread, downloaded, bookmarked, by source, by number, by upload date, save as default, save as default for every manga. Indexes of `mangaDetail.shown` are what the cursor sees; `mangaDetail.optionRows` shows the choices:
+Bookmark, filter, sort and resume. The panel rows run unread, downloaded, bookmarked, one row per scanlator (the seeded MangaDex manga have at least one), by source, by number, by upload date, save as default, save as default for every manga, so count the `j` presses from `mangaDetail.optionRows`. Indexes of `mangaDetail.shown` are what the cursor sees; `mangaDetail.optionRows` shows the choices:
 ```js
 [
   [5000, function() { key("Enter") }],
   [4000, function() { log("resume", mangaDetail.resume); key("j"); key("b") }],
   [3000, function() { log("bookmarks", mangaDetail.detail.chapters.map(function(c) { return [c.id, c.bookmarked] })); key("F"); key("Enter") }],
-  [1500, function() { log("unread-only", mangaDetail.shown.map(function(c) { return c.id })); grab("filter"); key("Enter"); key("Enter"); key("j"); key("j"); key("j"); key("j"); key("j"); key("Enter") }],
+  [1500, function() { log("unread-only", mangaDetail.shown.map(function(c) { return c.id })); grab("filter"); key("Enter"); key("Enter"); for (var n = mangaDetail.optionRows.map(function(r) { return r.id }).indexOf("uploadDate"); n > 0; n--) key("j"); key("Enter") }],
   [1500, function() { log("by-date-asc", mangaDetail.shown.map(function(c) { return c.id })); key("j"); key("Enter") }],
   [2500, function() { key("Esc"); key(" ") }],
   [5000, function() { log("reader", [reader.reader.chapters[reader.reader.index].id, reader.reader.page]); key("Esc") }],
