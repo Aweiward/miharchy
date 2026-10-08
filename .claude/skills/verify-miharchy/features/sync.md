@@ -18,13 +18,14 @@ The helper is the real path; drive it directly:
 sync/gradlew -p sync installDist
 mkdir -p $RUN/folder $RUN/home
 cp <phone-backup>.tachibk $RUN/folder/
-JAVA_OPTS=-Duser.home=$RUN/home MIHARCHY_SERVER_JSON=$RUN/server.json \
+.claude/skills/verify-miharchy/scripts/qs.sh env \
   sync/build/install/miharchy-sync/bin/miharchy-sync sync --folder $RUN/folder --json | tee $RUN/evidence/sync.json
 ```
+`qs.sh env` gives the helper the run's `HOME`, `user.home` and `MIHARCHY_SERVER_JSON`. Run every helper command in this skill through it: the helper refuses to start when `HOME` and `user.home` disagree.
 Proof: the backup's favorites are in the library (a first sync takes the union of phone and desktop, so on a seeded server the count is higher), a `miharchy-*.tachibk` exists in the folder, both baselines exist (mode 600, dir 700), a rerun answers `"changes":[]` (without `--json` it prints "no changes"). A quick phone backup: copy a `miharchy-backup-*.tachibk` from "Create a backup" (`backup.md`) into the folder under another name; the sync skips `miharchy-*` names. For the window path, install the helper into `$RUN/home` (see `restore.md`; `drive.sh` runs the window with `HOME=$RUN/home`), set global meta `miharchy.syncFolder` to the folder (`setGlobalMeta`; the window runs `sync --json` with no `--folder`, and without the meta the helper answers "No sync folder is set"), drive `key("s")` on Library and log `syncView.sync` and `syncView.report`.
 
 ## Hold and undo
-A sync holds when it would remove at least 5 manga that are also at least 10% of the library, or mark at least 50 chapters unread (`holds` in `Merge.kt`). Fixture, with the helper as above and the sync folder in meta `miharchy.syncFolder`:
+A sync holds when it would remove at least 5 manga that are also at least 10% of the library, or mark at least 50 chapters unread (`holds` in `Merge.kt`). Fixture, with the helper as above (every `miharchy-sync` below runs through `qs.sh env`) and the sync folder in meta `miharchy.syncFolder`:
 1. `seed.sh --library 6`. Write a good phone backup: `miharchy-sync backup $RUN/stage`, then move the file into the sync folder as `phone1.tachibk`, and sync once, so both baselines exist.
 2. `updateMangas(input:{ids:[<5 of the 6>], patch:{inLibrary:false}})`, `miharchy-sync backup $RUN/stage` (rename it `phone2.tachibk`), then put the 5 back with `inLibrary:true`. Copy `phone2.tachibk` into the sync folder last, so it is the newest.
 3. `--dry-run` reports "removed 5 manga from the library"; a plain run prints "Held", and the library, the folder and both baselines stay as they were.

@@ -46,6 +46,9 @@ data class Summary(
 )
 
 fun main(args: Array<String>) {
+    // Java takes user.home from passwd, not $HOME, so a harness that sets only HOME reaches the real baselines
+    // (it overwrote them on 2026-10-08). Trusting HOME instead would break the recipes that set only user.home.
+    homeMismatch(System.getenv("HOME"), System.getProperty("user.home"))?.let { fail(it) }
     when (args.firstOrNull()) {
         "sync" -> {}
         "check" -> return check(args.getOrNull(1) ?: usage())
@@ -171,6 +174,14 @@ private fun backup(folder: String) {
 fun backupRefusal(folder: String, syncFolder: String?): String? {
     val same = syncFolder != null && Path.of(syncFolder).toAbsolutePath().normalize() == Path.of(folder).toAbsolutePath().normalize()
     return if (same) "$folder is the sync folder. Choose another backup folder in Settings." else null
+}
+
+/** Why the helper refuses to run when $HOME and user.home name different folders, or null. */
+fun homeMismatch(home: String?, userHome: String): String? {
+    if (home.isNullOrEmpty()) return null
+    fun real(p: String) = Path.of(p).let { if (it.exists()) it.toRealPath() else it.toAbsolutePath().normalize() }
+    return if (real(home) == real(userHome)) null
+    else "HOME is $home but Java's user.home is $userHome. A verify run sets both (qs.sh env); a normal run sets neither."
 }
 
 // Reachable for the whole run: a collected channel closes its file, which drops the lock.
