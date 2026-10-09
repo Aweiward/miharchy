@@ -935,6 +935,8 @@ ShellRoot {
           editing: root.settingsEditing
           problem: Model.problem(root.settingsState, root.configPath)
           editError: root.settingsError
+          health: syncView.health
+          onHealthWanted: syncView.refreshHealth()
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onPicked: function(index) { root.settingsCursor = index }
           onEditEnded: keyRoot.forceActiveFocus()

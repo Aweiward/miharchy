@@ -31,6 +31,12 @@ Panel {
   property string lastTried: ""
   // The running sync started on a phone backup, so it notifies.
   property bool autoRun: false
+  // Sync health for the popup line, read again when the newest phone backup
+  // (lastPhone, "<mtime> <path>") changes and after each sync. now moves on
+  // each poll, so a phone that went quiet shows without a new file.
+  property var health: ({ state: "idle" })
+  property string lastPhone: ""
+  property double now: Date.now()
 
   readonly property var rows: mark.rows
   readonly property var notice: Mark.notice(mark, configPath)
@@ -77,6 +83,11 @@ Panel {
       root.mark = Mark.reduce(root.mark, { type: "reply", reply: reply, config: cfg, now: Date.now() })
       var n = Mark.notification(root.mark)
       if (n) Quickshell.execDetached(Mark.notifyCommand(n, root.launcher, root.notifyIcon))
+      root.now = Date.now()
+      if (root.mark.syncFolder && !newestPhone.running) {
+        newestPhone.command = Mark.newestPhoneCommand(root.mark.syncFolder)
+        newestPhone.running = true
+      }
       if (root.mark.autoSync && root.mark.syncFolder && root.sync.state !== "running" && !phoneCheck.running) {
         phoneCheck.command = Mark.phoneCheckCommand(root.mark.syncFolder)
         phoneCheck.running = true
@@ -94,6 +105,31 @@ Panel {
         root.autoRun = true
         root.startSync()
       }
+    }
+  }
+
+  Process {
+    id: newestPhone
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var found = text.trim()
+        if (found === root.lastPhone) return
+        root.lastPhone = found
+        root.refreshHealth()
+      }
+    }
+  }
+
+  function refreshHealth() {
+    if (healthJob.running) return
+    healthJob.command = Sync.healthCommand(devHelper)
+    healthJob.running = true
+  }
+
+  Process {
+    id: healthJob
+    stdout: StdioCollector {
+      onStreamFinished: root.health = Sync.parseHealth(text)
     }
   }
 
@@ -136,6 +172,7 @@ Panel {
           if (n) Quickshell.execDetached(Mark.notifyCommand(n, root.launcher, root.notifyIcon))
           root.autoRun = false
         }
+        root.refreshHealth()
         root.poll()
       }
     }
@@ -223,6 +260,16 @@ Panel {
           wrapMode: Text.Wrap
           text: Sync.oneLine(root.sync)
           color: root.sync.state === "failed" ? Color.urgent : Color.muted
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
+
+        Text {
+          width: parent.width
+          visible: text !== ""
+          wrapMode: Text.Wrap
+          text: root.health.state === "ready" ? Sync.healthPopupLine(root.health.health, root.now) : ""
+          color: Color.urgent
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }

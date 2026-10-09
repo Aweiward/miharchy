@@ -55,11 +55,17 @@ Item {
   // Create a backup: the helper job and its outcome, which the action row
   // shows as its value.
   property var backup: Backup.initial()
-  readonly property var notes: ({ createBackup: Backup.note(backup) })
+  // Sync health, which SyncView reads; healthWanted asks it to read again.
+  property var health: ({ state: "idle" })
+  readonly property var notes: ({
+    createBackup: Backup.note(backup),
+    syncHealth: health.state === "ready" ? Sync.healthSummary(health.health, Date.now()) : health.state === "failed" ? health.message : ""
+  })
   readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
 
   signal key(var event)
   signal editEnded()
+  signal healthWanted()
   // A click puts shell.qml's cursor on a row; a double click then sends Enter.
   signal picked(int index)
 
@@ -70,6 +76,7 @@ Item {
   }
 
   onVisibleChanged: if (visible) {
+    healthWanted()
     loadTrackers()
     storageNote = ""
     measure()

@@ -32,23 +32,23 @@ test("health fails with the helper's words, or says to build it", () => {
 const NOW = Date.parse("2026-10-09T15:31:00Z");
 const row = (change, manga, chapter) => ({ change: change, manga: manga, chapter: chapter || null, tracker: null });
 
-test("the Settings row sums up the phone's side in one line", () => {
-  assert.equal(S.healthSummary(healthy, NOW), "Phone backup 6 h ago · restored the newest desktop backup");
+test("the Settings row sums up the phone's side in one short line", () => {
+  assert.equal(S.healthSummary(healthy, NOW), "Phone backup 6 h ago · restored the newest backup");
   assert.equal(S.healthSummary(Object.assign({}, healthy, {
     restored: "miharchy-2026-10-08_09-00-00.tachibk",
     restorable: [row("markedRead", "M", "Ch 1"), row("addedToLibrary", "N")],
     byHand: [row("markedUnread", "M", "Ch 2")]
-  }), NOW), "Phone backup 6 h ago · restored an older desktop backup · 2 to restore, 1 by hand");
+  }), NOW), "Phone backup 6 h ago · restored an older backup · 2 to restore, 1 by hand");
   assert.equal(S.healthSummary(Object.assign({}, healthy, { phoneBackupAt: "2026-10-09T15:20:00Z", restored: null }), NOW),
-    "Phone backup 11 min ago · no desktop backup restored yet");
+    "Phone backup 11 min ago · no restore yet");
 });
 
 test("the row says when the phone is behind, cannot show restores, or has no backup yet", () => {
   assert.equal(S.healthSummary(Object.assign({}, healthy, {
     phoneBackupAt: "2026-10-05T09:31:00Z", restored: "miharchy-2026-10-01_09-00-00.tachibk", behind: true, restorable: [row("markedRead", "M", "Ch 1")]
-  }), NOW), "Phone backup 4 days ago · restored an older desktop backup · behind: 1 to restore");
+  }), NOW), "Phone backup 4 days ago · restored an older backup · behind: 1 to restore");
   assert.equal(S.healthSummary(Object.assign({}, healthy, { restored: null, markerMissing: true }), NOW),
-    "Phone backup 6 h ago · its backups leave out app settings, so restores cannot show");
+    "Phone backup 6 h ago · app settings off");
   assert.equal(S.healthSummary(Object.assign({}, healthy, { phoneBackup: null, phoneBackupAt: null, restored: null }), NOW),
     "No phone backup in the sync folder yet.");
 });
@@ -77,4 +77,8 @@ test("Enter on the row lists what a restore brings and what to repeat by hand, e
     { text: "  M, Ch 2: marked unread", urgent: true }
   ]);
   assert.deepEqual(S.healthLines(healthy), [{ text: "Nothing to do on the phone.", urgent: false }]);
+  assert.deepEqual(S.healthLines(Object.assign({}, healthy, { restored: null, markerMissing: true })), [
+    { text: "Mihon's backups leave out app settings, so Miharchy cannot see restores. Turn on App settings in Mihon's backup options.", urgent: false },
+    { text: "Nothing to do on the phone.", urgent: false }
+  ]);
 });

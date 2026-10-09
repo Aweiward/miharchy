@@ -197,6 +197,8 @@ var ROWS = [
   { key: "syncFolder", label: "Sync folder", type: "folder", default: "", store: "meta", blank: "not set", notSameAs: "backupPath" },
   // The bar mark reads it, and syncs when a new phone backup lands there.
   { key: "autoSync", label: "Sync when a phone backup arrives", type: "bool", default: false, store: "meta" },
+  // Sync health: the phone's side, from the newest phone backup. Enter lists what to do in Mihon.
+  { key: "syncHealth", label: "Phone sync", type: "action", command: "sync.health" },
   // Mihon's backup options. Manual and automatic backups share Suwayomi's
   // automatic backup settings, so one folder holds both. Never the sync
   // folder: the sync would read Suwayomi's backups as phone backups. The

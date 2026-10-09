@@ -53,9 +53,11 @@ Press `SUPER + M` from any workspace. Miharchy opens over it as a peek, on the n
 ## Sync with Mihon
 
 1. In Mihon, turn on automatic backups (More → Settings → Data and storage).
-2. Share the folder that holds those backups with the desktop sync folder, for example with Syncthing.
+2. Mihon writes automatic backups to the `autobackup` folder inside its storage location (shown on the same screen). Share that `autobackup` folder itself with the desktop sync folder, for example with Syncthing.
 3. Press `s` in the window (or in the mark's popup) to sync. Miharchy merges the newest phone backup and writes `miharchy-<time>.tachibk` into the sync folder.
 4. In Mihon, restore the newest `miharchy-*.tachibk`: More → Settings → Data and storage → Restore backup.
+
+Settings → Phone sync shows the age of the last phone backup, whether the phone restored the newest desktop backup, and what is left to do. Enter on it lists the changes a restore brings and the ones to repeat by hand. The mark's popup says when the phone is behind (three phone backups since a desktop change, with no restore) or sent no backup for over 3 days.
 
 A Mihon restore only adds: it cannot remove a manga from the library, take it out of every category, mark a chapter unread, remove a bookmark or lower the last page read. After a sync the window lists those changes. Repeat them on the phone.
 

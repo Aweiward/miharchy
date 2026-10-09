@@ -160,12 +160,13 @@ function ago(ms) {
   return Math.floor(ms / DAY) + " days ago"
 }
 
-// The Settings row's value: the phone's side of the sync in one line.
+// The Settings row's value: the phone's side of the sync in one line, short
+// enough for the row (healthLines explains more).
 function healthSummary(h, now) {
   if (!h.phoneBackup) return "No phone backup in the sync folder yet."
   var parts = ["Phone backup " + ago(now - Date.parse(h.phoneBackupAt))]
-  if (h.restored) parts.push("restored " + (h.desktopBackup && h.restored === basename(h.desktopBackup) ? "the newest" : "an older") + " desktop backup")
-  else parts.push(h.markerMissing ? "its backups leave out app settings, so restores cannot show" : "no desktop backup restored yet")
+  if (h.restored) parts.push("restored " + (h.desktopBackup && h.restored === basename(h.desktopBackup) ? "the newest" : "an older") + " backup")
+  else parts.push(h.markerMissing ? "app settings off" : "no restore yet")
   var counts = []
   if (h.restorable.length) counts.push(h.restorable.length + " to restore")
   if (h.byHand.length) counts.push(h.byHand.length + " by hand")
@@ -192,10 +193,11 @@ function healthLines(h) {
       return { text: "  " + u.manga + (detail ? ", " + detail : "") + ": " + (CHANGE_TEXT[u.change] || u.change), urgent: urgent }
     })
   }
-  var lines = []
+  var lines = h.markerMissing ? [{ text: "Mihon's backups leave out app settings, so Miharchy cannot see restores. Turn on App settings in Mihon's backup options.", urgent: false }] : []
+  var intro = lines.length
   if (h.restorable.length) lines = lines.concat([{ text: "In Mihon, restore " + basename(h.desktopBackup) + ". It brings:", urgent: false }], rows(h.restorable, false))
   if (h.byHand.length) lines = lines.concat([{ text: "A restore cannot apply these. Repeat them in Mihon:", urgent: false }], rows(h.byHand, true))
-  return lines.length ? lines : [{ text: "Nothing to do on the phone.", urgent: false }]
+  return lines.length > intro ? lines : lines.concat([{ text: "Nothing to do on the phone.", urgent: false }])
 }
 
 // The popup's one line.
