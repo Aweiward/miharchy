@@ -49,7 +49,7 @@ Read the doc for the area before you change it.
 
 ## Current work
 
-v1.0.0 shipped on 2026-10-09 at Mihon parity (#134), with token login and the pinned Suwayomi version (ADR 0005). The next milestone is Sync health (ADR 0006); the AUR package (#43) is open too. Logging in to a source in a WebView (#98) waits for an upstream Suwayomi change. Check `gh issue list --milestone "Sync health"` for the current list, and work items through `ready-for-agent` issues.
+v1.0.0 shipped on 2026-10-09 at Mihon parity (#134), with token login and the pinned Suwayomi version (ADR 0005). Sync health shipped the same day (ADR 0006): the restore marker, the `health` command, the Phone sync row and popup line, and the Phone backups Setup step with its Syncthing pairing. The next work is the AUR package (#43). Logging in to a source in a WebView (#98) waits for an upstream Suwayomi change. Work items through `ready-for-agent` issues.
 
 Verified on the user's phone (2026-10-04): stock Mihon restores a `miharchy-*.tachibk` export from a real 216-manga library without issues. The FlareSolverr Setup step ran on the user's machine; `docs/spikes/cloudflare-solvers.md` compares it with Byparr.
 
