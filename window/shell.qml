@@ -18,7 +18,7 @@ import "Prefs.js" as Prefs
 import "Updates.js" as Updates
 import "Restart.js" as Restart
 import "Images.js" as Images
-import "History.js" as History
+import "UpNext.js" as UpNext
 import "Sync.js" as Sync
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
@@ -196,13 +196,12 @@ ShellRoot {
     view = "updates"
   }
 
-  // The launcher's peek: the reader on the next chapter to read
-  // (History.peekTarget), else the Library with its search open.
+  // The launcher's peek: the reader on the head of Up next, else the
+  // Library with its search open.
   function peek() {
     pendingPeek = true
     if (!config) return
     pendingPeek = false
-    var cfg = config
     var library = function(reply) {
       if (reader.open) reader.close()
       mangaDetail.close()
@@ -211,16 +210,11 @@ ShellRoot {
       if (reply && reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
       else libraryView.openSearch()
     }
-    send({ query: History.QUERY }, function(reply) {
+    send(UpNext.payload(), function(reply) {
       if (reply.state !== "ok") return library(reply)
-      var entries = History.reduce(History.initial(), { type: "reply", reply: reply, config: cfg }).entries
-      if (!entries.length) return library()
-      root.send(History.peekPayload(entries), function(data) {
-        if (data.state !== "ok") return library(data)
-        var target = History.peekTarget(entries, data.data, root.downloadedOnly)
-        if (target) root.openChapter(target)
-        else library()
-      })
+      var head = UpNext.list(reply.data, root.downloadedOnly, Date.now())[0]
+      if (head) root.openChapter(head)
+      else library()
     })
   }
 

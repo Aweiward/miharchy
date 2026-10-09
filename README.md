@@ -42,7 +42,15 @@ Setup lists the steps below. Move with `j` and `k`, press Enter on a step. A ste
 
 ## Peek
 
-Press `SUPER + M` from any workspace. Miharchy opens over it as a peek, on the next chapter to read: the first unread chapter of the manga you read last, by that manga's chapter filters. Press `SUPER + M` again to hide it. Switching workspaces hides it too, and the next press brings it back on the same page.
+Press `SUPER + M` from any workspace. Miharchy opens over it as a peek, on the next chapter of the first manga in Up next. Up next lists your library manga in this order:
+
+1. A manga whose next chapter you left half read.
+2. A manga you started that has at most 5 unread chapters.
+3. A manga with an unread update from the last 7 days.
+
+Inside the first two groups, the manga you read last comes first; in the third, the newest update. Up next leaves out a manga whose source is not installed, and a manga you hid on History until it gets a new update. Each manga's chapter filters pick its next chapter.
+
+Press `SUPER + M` again to hide it. Switching workspaces hides it too, and the next press brings it back on the same page.
 
 - The peek lives on its own Hyprland special workspace, `special:miharchy`, like Omarchy's scratchpad.
 - If the window is already open on a normal workspace, the key focuses it there and resumes. It never moves a window you placed.
