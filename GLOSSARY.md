@@ -176,6 +176,14 @@ _Avoid_: viewer
 How the reader lays out pages: paged left-to-right, paged right-to-left, or webtoon (one vertical strip).
 _Avoid_: layout, direction
 
+**Crop borders**:
+A reader setting that hides the plain margins around a page, on all four sides in paged mode and on the left and right in webtoon. The page file stays as it is.
+_Avoid_: trim, whitespace removal
+
+**Auto levels**:
+A reader setting that stretches a washed-out page so its darkest part shows black and its lightest part white. The page file stays as it is.
+_Avoid_: contrast, enhance, filter
+
 **Reader settings panel**:
 The panel `s` opens over the reader: the manga's reading mode, then the reader's settings. It shows the same settings as the Settings view.
 _Avoid_: reader menu, reader options
