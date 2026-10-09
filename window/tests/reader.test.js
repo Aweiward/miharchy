@@ -664,11 +664,75 @@ test("a split page shows the half read first: the left in left to right, the rig
   const at = (mode, half) => Object.assign(loaded(12, 4, {}, mode), { page: 2, half });
   const layout = (r) => ({ dual: false, split: true, sizes: sized(r, [2]) });
   const half = (mode, h) => { const r = at(mode, h); return R.spread(r, layout(r), "screen", view, 1).items[0]; };
-  const w = 800 * (1000 / 1200);
-  assert.deepEqual([half("paged-ltr", 0).imageX, half("paged-ltr", 0).width, half("paged-ltr", 0).imageWidth], [0, w, 2 * w]);
-  assert.equal(half("paged-ltr", 1).imageX, -w);
-  assert.equal(half("paged-rtl", 0).imageX, -w);
-  assert.equal(half("paged-rtl", 1).imageX, 0);
+  const w = Math.round(800 * (1000 / 1200));
+  const left = { x: 0, y: 0, width: w, height: 1000 };
+  const right = { x: w, y: 0, width: w, height: 1000 };
+  assert.deepEqual([half("paged-ltr", 0).width, half("paged-ltr", 0).sourceHeight, half("paged-ltr", 0).clip], [800 * (1000 / 1200), 1000, left], "decoded at the view's height, clipped to one half");
+  assert.deepEqual(half("paged-ltr", 1).clip, right);
+  assert.deepEqual(half("paged-rtl", 0).clip, right);
+  assert.deepEqual(half("paged-rtl", 1).clip, left);
+});
+
+// Crop borders: what ReaderView's analysis found for each page by URL
+// (Scan.analyze), on a 1000 x 1000 view.
+const square = { width: 1000, height: 1000 };
+const scanned = (r, box, halves) => Object.fromEntries(r.pages.map((u) => [u, { page: box, strip: box && { x: box.x, y: 0, width: box.width, height: 1 }, halves: halves || null }]));
+const tenth = { x: 0.1, y: 0.1, width: 0.8, height: 0.8 };
+
+test("crop borders shows a page's box: fitted by the box's own shape, decoded so the box fills the page shown", () => {
+  const r = loaded(12, 4, {}, "paged-ltr");
+  const it = R.spread(r, { sizes: sized(r, []), crops: scanned(r, tenth) }, "screen", square, 1).items[0];
+  assert.deepEqual([Math.round(it.width), Math.round(it.height)], [667, 1000], "640 x 960 of the page fits by its height");
+  assert.deepEqual([it.sourceWidth, it.sourceHeight], [0, 1250], "the whole page decodes 1250 high, so its box is 1000");
+  assert.deepEqual(it.clip, { x: 83, y: 125, width: 667, height: 1000 }, "in the decoded page's pixels, as sourceClipRect takes them");
+  const off = R.spread(r, { sizes: sized(r, []), crops: null }, "screen", square, 1).items[0];
+  assert.deepEqual([off.clip, off.sourceHeight, off.height], [null, 1000, 1000], "the setting off: the page whole");
+  const none = R.spread(r, { sizes: sized(r, []), crops: scanned(r, null) }, "screen", square, 1).items[0];
+  assert.equal(none.clip, null, "no margin, a text page, or a failed analysis: the page whole");
+  const failed = R.spread(r, { sizes: sized(r, []), crops: { [r.pages[0]]: { failed: true } } }, "screen", square, 1).items[0];
+  assert.equal(failed.clip, null);
+});
+
+test("crop borders splits a wide page first, then crops each half by its own box", () => {
+  const r = Object.assign(loaded(12, 4, {}, "paged-ltr"), { page: 2, half: 1 });
+  const halves = [{ x: 0.05, y: 0.1, width: 0.4, height: 0.8 }, { x: 0.55, y: 0.05, width: 0.4, height: 0.9 }];
+  const layout = { split: true, sizes: sized(r, [2]), crops: scanned(r, tenth, halves) };
+  const it = R.spread(r, layout, "screen", square, 1).items[0];
+  assert.deepEqual([Math.round(it.width), Math.round(it.height), it.sourceHeight], [593, 1000, 1111], "640 x 1080 of the 1600 x 1200 page");
+  assert.deepEqual(it.clip, { x: 815, y: 56, width: 593, height: 1000 }, "the right half's box, read second in left to right");
+  const pair = { dual: true, sizes: sized(r, []), crops: scanned(r, tenth) };
+  const spread = R.spread(Object.assign({}, r, { page: 1 }), pair, "screen", square, 1);
+  const box = { x: 63, y: 94, width: 500, height: 750 };
+  assert.deepEqual(spread.items.map((i) => i.clip), [box, box], "then each page of a spread by its own box, in half the view");
+});
+
+test("a page not shown decodes as it would show alone, box and all, so it shows at once", () => {
+  const r = loaded(12, 4, {}, "paged-ltr");
+  const layout = { sizes: sized(r, []), crops: scanned(r, tenth) };
+  const shown = R.spread(Object.assign({}, r, { page: 3 }), layout, "screen", square, 1).items[0];
+  const { width, height, sourceWidth, sourceHeight, clip } = shown;
+  assert.deepEqual(R.alone(r, 3, layout, "screen", square, 1), { width, height, sourceWidth, sourceHeight, clip });
+});
+
+test("the webtoon strip crops the left and right of each page at the strip's width", () => {
+  const p = R.place({ width: 800, height: 1200 }, { x: 0.1, y: 0, width: 0.8, height: 1 }, "width", { width: 640, height: 1000 }, 1);
+  assert.deepEqual([p.width, p.height, p.sourceWidth, p.clip], [640, 1200, 800, { x: 80, y: 0, width: 640, height: 1200 }]);
+  assert.equal(R.place({ width: 0, height: 0 }, null, "width", { width: 640, height: 1000 }, 1).clip, null, "a page not read yet: whole");
+});
+
+test("a page is analyzed until it has a result: a failure, as a file emptied by a fast turn, is tried again as the page shows again", () => {
+  const u = "/api/v1/manga/5/chapter/12/page/0";
+  assert.equal(R.scanDue({}, u), true, "never analyzed");
+  assert.equal(R.scanDue({ [u]: { failed: true, ms: 0 } }, u), true, "failed: due again");
+  assert.equal(R.scanDue({ [u]: { page: null, strip: null, halves: null, ms: 30 } }, u), false, "a result, a whole page too, stays");
+});
+
+test("crop borders is a Settings row per kind of reading mode, on for paged and off for webtoon, in the reader's panel", () => {
+  const S = require("./load")("Settings.js");
+  const row = (k) => S.ROWS.find((r) => r.key === k);
+  assert.deepEqual([row("cropBordersPaged").label, row("cropBordersPaged").default], ["Crop borders (paged)", true]);
+  assert.deepEqual([row("cropBordersWebtoon").label, row("cropBordersWebtoon").default], ["Crop borders (webtoon)", false]);
+  assert.ok(R.PANEL_KEYS.includes("cropBordersPaged") && R.PANEL_KEYS.includes("cropBordersWebtoon"));
 });
 
 // Catch-up (GLOSSARY.md): a peek reads at most this many chapters of one

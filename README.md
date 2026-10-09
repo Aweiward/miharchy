@@ -63,6 +63,10 @@ The mark's popup lists the first 3 manga in Up next above the new chapters. Each
 
 **Catch-up.** A peek reads at most 3 chapters of one manga in a row. After the third, the reader stops on the chapter transition page, says "Caught up on 3 chapters" and names the next manga in Up next. Press `c` to go on with this manga anyway, or `n` to open the next manga, as `SUPER + CTRL + M` would. Every peek that opens a manga, `n`, `SUPER + CTRL + M` and the popup's Up next rows too, starts a new count. Change the number, or turn it off, with the Settings row "Catch-up". A chapter counts when you read on past its end, in Incognito mode too. A chapter you open from the Library, Updates, History or the popup's new chapters is a normal read and never stops.
 
+## Reader
+
+**Crop borders.** The reader hides the plain white or black margin around a page. The page file stays as it is: `S` saves it and `Y` copies it whole. Paged reading crops all four sides. The webtoon strip crops only the left and right, so the gap between panels stays. A page never loses more than a quarter from one side, and a page that would keep less than 60% of its area shows whole, so a mostly white text page stays as it is. A wide page that you split shows each half with its own crop. Turn it on or off with the Settings rows "Crop borders (paged)" (on by default) and "Crop borders (webtoon)" (off by default), or with `s` in the reader.
+
 ## Library check
 
 Press `!` on the Library, or open Settings → Library check, to list the problems in your library. The row shows how many there are. The check reads only what the server knows, so it contacts no source. It groups the problems by kind, then by source:

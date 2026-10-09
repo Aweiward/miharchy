@@ -262,14 +262,56 @@ function turnTo(r, delta, layout) {
   return p >= 0 && p <= last(r) ? { page: p, half: delta > 0 ? 0 : 1 } : null
 }
 
+// The part of a page the pager shows, in fractions of the page, null for
+// all of it. half: 0 the left, 1 the right of a split page. layout.crops:
+// each page's Scan.analyze() by URL while Crop borders is on: a split page
+// splits first, then each half crops by its own box.
+function region(r, page, layout, half) {
+  var scan = layout && layout.crops && layout.crops[r.pages[page]]
+  if (half === undefined) return (scan && scan.page) || null
+  return (scan && scan.halves && scan.halves[half]) || { x: half / 2, y: 0, width: 0.5, height: 1 }
+}
+
+// A page of size shown as fit() fits the region of it (null: all of it).
+// -> { width, height, sourceWidth, sourceHeight: the whole page's decode
+// size, as fit() gives it; clip: the region in the decoded page's pixels,
+// as Image.sourceClipRect takes them, or null }. So only the region
+// decodes, at the size it shows.
+function place(size, part, fitMode, box, zoom) {
+  var known = size.width > 0 && size.height > 0
+  var p = known && part || { x: 0, y: 0, width: 1, height: 1 }
+  var f = fit(fitMode, { width: size.width * p.width, height: size.height * p.height }, box, zoom)
+  var sw = Math.round(f.sourceWidth / p.width)
+  var sh = Math.round(f.sourceHeight / p.height)
+  var whole = sw ? { width: sw, height: sw * size.height / size.width } : sh ? { width: sh * size.width / size.height, height: sh } : size
+  var clip = known && part ? { x: Math.round(p.x * whole.width), y: Math.round(p.y * whole.height), width: Math.round(p.width * whole.width), height: Math.round(p.height * whole.height) } : null
+  return { width: f.width, height: f.height, sourceWidth: sw, sourceHeight: sh, clip: clip }
+}
+
+// Whether url's page needs Crop borders' analysis: none yet, or a failed
+// one. A fast turn can empty a page's file before the Canvas reads it;
+// the page fetches a new file when it shows again, and that one reads.
+function scanDue(scans, url) {
+  return !(url in scans) || scans[url].failed === true
+}
+
+function sizeOf(r, page, layout) {
+  return (layout && layout.sizes && layout.sizes[r.pages[page]]) || { width: 0, height: 0 }
+}
+
+// A page the pager holds but does not show, as it would show alone: it
+// decodes ahead at that size and box.
+function alone(r, page, layout, fitMode, view, zoom) {
+  return place(sizeOf(r, page, layout), region(r, page, layout), fitMode, view, zoom)
+}
+
 // What the pager shows and where. sizes as in layout; fitMode, view and
 // zoom as fit() takes them, each page of a spread fitted into half the
 // view. -> { width, height: the content, at least the view; pagesWidth,
-// pagesHeight: the pages' own; items: [{ page, x, y, width, height,
-// imageX, imageWidth, sourceWidth, sourceHeight }] }. An item clips its
-// image: a split page shows one half of an image twice its width. In
-// right to left the first page sits on the right, and the right half
-// reads first, as in Mihon.
+// pagesHeight: the pages' own; items: [{ page, x, y } and place()'s
+// fields] }. A split page shows one half (a clip). In right to left the
+// first page sits on the right, and the right half reads first, as in
+// Mihon.
 function spread(r, layout, fitMode, view, zoom) {
   var n = spreadAt(r, r.page, layout)
   var split = n === 1 && splits(r, layout)
@@ -277,10 +319,10 @@ function spread(r, layout, fitMode, view, zoom) {
   var rtl = r.mode === "paged-rtl"
   var items = []
   for (var i = 0; i < n; i++) {
-    var s = (layout && layout.sizes && layout.sizes[r.pages[r.page + i]]) || { width: 0, height: 0 }
-    var f = fit(fitMode, split ? { width: s.width / 2, height: s.height } : s, box, zoom)
-    var rightHalf = split && (r.half === 0) === rtl
-    items.push({ page: r.page + i, width: f.width, height: f.height, imageX: rightHalf ? -f.width : 0, imageWidth: split ? f.width * 2 : f.width, sourceWidth: split ? f.sourceWidth * 2 : f.sourceWidth, sourceHeight: f.sourceHeight })
+    var half = split ? ((r.half === 0) === rtl ? 1 : 0) : undefined
+    var it = place(sizeOf(r, r.page + i, layout), region(r, r.page + i, layout, half), fitMode, box, zoom)
+    it.page = r.page + i
+    items.push(it)
   }
   var pagesWidth = items.reduce(function(sum, it) { return sum + it.width }, 0)
   var pagesHeight = Math.max.apply(null, items.map(function(it) { return it.height }))
@@ -560,7 +602,7 @@ function step(options, value, dir) {
 // The settings panel (s), Mihon's reader settings sheet: the manga's own
 // reading mode, then the Settings rows the reader reads, which apply to
 // every manga. A later reader setting is one more key here.
-var PANEL_KEYS = ["pageFit", "dualPageView", "dualPageSplit", "webtoonWidth", "autoScrollSpeed", "readerTheme", "keepScreenOn", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
+var PANEL_KEYS = ["pageFit", "dualPageView", "dualPageSplit", "cropBordersPaged", "webtoonWidth", "cropBordersWebtoon", "autoScrollSpeed", "readerTheme", "keepScreenOn", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
 
 // The readerTheme setting -> the reader's background; themeColor for
 // "theme". Gray is Mihon's ReaderGrayBackgroundColor.
@@ -665,6 +707,9 @@ if (typeof module !== "undefined") {
     transitionLines: transitionLines,
     caughtUp: caughtUp,
     PANEL_KEYS: PANEL_KEYS,
+    place: place,
+    alone: alone,
+    scanDue: scanDue,
     background: background,
     settingRow: settingRow,
     panelRows: panelRows,

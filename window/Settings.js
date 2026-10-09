@@ -64,6 +64,10 @@ var ROWS = [
   // Mihon's split double pages: a wide page reads as two, one half at a
   // time, outside spreads.
   { key: "dualPageSplit", label: "Split wide pages", type: "bool", default: false, store: "meta" },
+  // Mihon's crop borders (GLOSSARY.md), one row for the paged modes (four
+  // sides) and one for the strip (left and right).
+  { key: "cropBordersPaged", label: "Crop borders (paged)", type: "bool", default: true, store: "meta" },
+  { key: "cropBordersWebtoon", label: "Crop borders (webtoon)", type: "bool", default: false, store: "meta" },
   // Mihon's webtoon side padding, the other way round: the strip's share
   // of the window width. + and - in the reader step it.
   {
