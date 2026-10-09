@@ -189,6 +189,21 @@ var SYNCTHING_PROBE = SYNCTHING_API + "\n" + [
   "command -v qrencode >/dev/null && mkdir -p \"$(dirname \"$2\")\" && qrencode -o \"$2\" \"$id\" && echo \"qr $2\""
 ].join("\n")
 
+// $1 the sync folder; $2 and $3 the phone's device id and name, or empty;
+// $4, $5, $6 the offered folder's id, label and device, or empty. Syncthing
+// adds this desktop to a folder on its own.
+var SYNCTHING_ACCEPT = SYNCTHING_API + "\n" + [
+  "post() { curl -fsS -m 5 -H \"X-API-Key: $key\" -H \"Content-Type: application/json\" -X POST -d \"$2\" \"http://$addr/rest/$1\" >/dev/null 2>&1; }",
+  "if [ -n \"$2\" ]; then",
+  "  post config/devices \"$(jq -nc --arg id \"$2\" --arg name \"$3\" '{deviceID: $id, name: $name}')\" || { echo \"Syncthing did not take the device. Accept it at http://$addr.\"; exit 1; }",
+  "  echo \"Syncthing now knows $3.\"",
+  "fi",
+  "if [ -n \"$4\" ]; then",
+  "  post config/folders \"$(jq -nc --arg id \"$4\" --arg label \"$5\" --arg path \"$1\" --arg dev \"$6\" '{id: $id, label: $label, path: $path, type: \"sendreceive\", devices: [{deviceID: $dev}]}')\" || { echo \"Syncthing did not take the folder. Accept it at http://$addr.\"; exit 1; }",
+  "  echo \"Syncthing now receives \\\"$5\\\" in $1.\"",
+  "fi"
+].join("\n")
+
 function syncthingProbeCommand(folder, qrPath) {
   return command(SYNCTHING_PROBE, [folder, qrPath])
 }
@@ -217,13 +232,16 @@ function probeCommand(configPath, syncDir, windowDir) {
 }
 
 // The job a confirmed or committed step runs.
-// ctx: { serverScript, folder, syncDir, windowDir }.
+// ctx: { serverScript, folder, syncDir, windowDir, pair: pairing() }.
 function runCommand(id, ctx) {
   switch (id) {
     case "server": return command("\"$1\"", [ctx.serverScript])
     case "flaresolverr": return command(FLARE_SCRIPT)
     case "syncFolder": return command("test -d \"$1\" || { echo \"$1 is not a folder.\"; exit 1; }", [ctx.folder])
     case "helper": return command(BUILD_SCRIPT, [ctx.syncDir])
+    case "phoneBackups":
+      var d = ctx.pair.device, f = ctx.pair.folder
+      return command(SYNCTHING_ACCEPT, [ctx.folder, d ? d.id : "", d ? d.name : "", f ? f.id : "", f ? f.label : "", f ? f.device : ""])
     case "peekKey": return command(PEEK_SCRIPT, [peekLine(ctx.windowDir)])
     case "launcher": return command("file=$HOME/" + DESKTOP_FILE + "\nmkdir -p \"$(dirname \"$file\")\" && printf '%s' \"$1\" > \"$file\" && echo \"Wrote $file.\"", [desktopEntry(ctx.windowDir)])
   }
@@ -301,8 +319,9 @@ function warning(s) {
 // setup.confirm: the step id waiting for y, or null.
 // setup.results: step id -> parseJob() of its last run.
 // setup.phones: parsePhones() of the sync folder, null before the phone check.
+// setup.syncthing: parseSyncthing(), null before its check.
 function initial() {
-  return { probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {}, phones: null }
+  return { probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {}, phones: null, syncthing: null }
 }
 
 function copy(s, changes) {
@@ -325,6 +344,7 @@ function reduce(s, event) {
     case "finish":
       if (event.id === "probe") return copy(s, { job: null, probe: parseProbe(event.text) })
       if (event.id === "phones") return copy(s, { job: null, phones: parsePhones(parseJob(event.text).output) })
+      if (event.id === "syncthing") return copy(s, { job: null, syncthing: parseSyncthing(parseJob(event.text).output) })
       var results = copy(s.results, {})
       results[event.id] = parseJob(event.text)
       return copy(s, { job: null, results: results })
@@ -390,7 +410,7 @@ function status(s, id) {
       var ph = s.phones
       if (ph.count) return is("done", ph.count + " phone backup" + (ph.count === 1 ? "" : "s") + " in the sync folder, the newest " + ph.newest + ".")
       if (ph.autobackup) return is("todo", folder + " looks like Mihon's storage folder: its phone backups are in the autobackup folder below. Set the sync folder to " + folder + "/autobackup, or share only that folder. Setup checks again on its own.")
-      return is("todo", "No phone backup in " + folder + " yet. In Mihon, turn on automatic backups (More → Settings → Data and storage) and share its autobackup folder with this folder. Then tap Create backup in Mihon, or wait for the automatic one. Setup checks again on its own.")
+      return phoneTodo(s, folder)
     case "helper":
       if (!p.javac) return is("waiting", "Building needs a JDK. Install it with: sudo pacman -S jdk-openjdk. Then press Enter to check again.")
       if (p.helperInstalled && p.helperInstalled === p.helperSource) return is("done", "Installed in ~/" + HELPER_DIR + ".")
@@ -406,6 +426,36 @@ function status(s, id) {
   return is("checking", "")
 }
 
+var AGAIN = " Setup checks again on its own."
+
+// What the phone backups step asks while no phone backup has landed: the
+// Mihon steps, led by where Syncthing stands when it was checked.
+function phoneTodo(s, folder) {
+  var st = s.syncthing
+  var none = "No phone backup in " + folder + " yet. "
+  if (!st) return { state: "todo", detail: none + "In Mihon, turn on automatic backups (More → Settings → Data and storage) and share its autobackup folder with this folder. Then tap Create backup in Mihon, or wait for the automatic one." + AGAIN }
+  if (!st.installed) return { state: "todo", detail: none + "To share it with your phone through Syncthing, install and start it: sudo pacman -S syncthing, then systemctl --user enable --now syncthing." + AGAIN }
+  if (!st.answering) return { state: "todo", detail: none + "Syncthing does not answer: start it with systemctl --user enable --now syncthing." + AGAIN }
+  if (st.shared) return { state: "todo", detail: none + "Syncthing shares this folder with your phone. In Mihon, turn on automatic backups (More → Settings → Data and storage), then tap Create backup, or wait for the automatic one." + AGAIN }
+  var pair = pairing(s)
+  if (pair.device) return { state: "todo", prompt: "Accept " + pair.device.name + " in Syncthing?", detail: "Your phone " + pair.device.name + " wants to connect through Syncthing. Press Enter, then y, to accept it. Then, in Syncthing-Fork, share Mihon's autobackup folder with this desktop." }
+  if (pair.folder) return { state: "todo", prompt: "Accept the folder \"" + pair.folder.label + "\" into " + folder + "?", detail: "Your phone offers the folder \"" + pair.folder.label + "\". Press Enter, then y, to receive it in " + folder + "." }
+  if (st.pendingFolders.length) return { state: "todo", detail: "Your phone offers several folders: " + st.pendingFolders.map(function(f) { return f.label }).join(", ") + ". Accept Mihon's autobackup folder at http://127.0.0.1:8384, with " + folder + " as its folder path." + AGAIN }
+  return { state: "todo", qr: st.qr, detail: "In Syncthing-Fork on your phone, add this desktop: scan the code, or enter " + st.myId + ". Then share Mihon's autobackup folder with it." + AGAIN }
+}
+
+// What y accepts in Syncthing: the phone's pending device, or the folder it
+// offers when it offers one, or one named autobackup among several.
+function pairing(s) {
+  var st = s.syncthing
+  var folders = st ? st.pendingFolders : []
+  var named = folders.filter(function(f) { return /autobackup/i.test(f.label + " " + f.id) })
+  return {
+    device: st && st.pendingDevices.length ? st.pendingDevices[0] : null,
+    folder: folders.length === 1 ? folders[0] : named.length === 1 ? named[0] : null
+  }
+}
+
 // What Enter does on a step: "check" runs the probe again, "confirm" asks
 // before a run, "edit" opens the folder field, null does nothing.
 function action(s, id) {
@@ -413,6 +463,7 @@ function action(s, id) {
   var st = status(s, id).state
   if (st === "checking") return null
   var kind = step(id).kind
+  if (kind === "check" && status(s, id).prompt) return "confirm"
   if (kind === "install" || kind === "check" || st === "waiting" || st === "unavailable") return "check"
   return kind === "run" ? "confirm" : "edit"
 }
@@ -496,6 +547,7 @@ if (typeof module !== "undefined") {
     parsePhones: parsePhones,
     syncthingProbeCommand: syncthingProbeCommand,
     parseSyncthing: parseSyncthing,
+    pairing: pairing,
     desktopEntry: desktopEntry,
     runCommand: runCommand,
     parseJob: parseJob,

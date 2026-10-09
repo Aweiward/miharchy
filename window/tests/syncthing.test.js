@@ -105,3 +105,83 @@ test("no Syncthing config, or a Syncthing that does not answer, says so", async 
   const f = await probe(h2);
   assert.deepEqual([f.installed, f.answering], [true, false]);
 });
+
+// Setup's state: a done machine whose sync folder holds no phone backup yet, then the Syncthing check's facts.
+const M = require("./load")("Model.js");
+const finish = (s, id, text) => S.reduce(S.reduce(s, { type: "start", id }), { type: "finish", id, text });
+const READY = "java openjdk version \"26.0.2.1\" 2026-08-18\nsuwayomi\nwebsockets\nconfig\nunit enabled active\nunitCurrent\ndocker \n";
+const F = "/home/u/Sync/mihon-backups";
+const waiting = finish(S.reduce(finish(S.initial(), "probe", READY), { type: "server", reply: M.reply(200, JSON.stringify({ data: { settings: {}, metas: { nodes: [{ key: "miharchy.syncFolder", value: F }] } } })) }), "phones", "phones 0\nnewest \n\n0\n");
+const facts = (f) => finish(waiting, "syncthing", [
+  f.installed === false ? "" : "installed", f.answering === false ? "" : "answering", "myID " + DESKTOP, f.shared ? "shared" : "",
+  "pendingDevices " + JSON.stringify(f.devices || []), "pendingFolders " + JSON.stringify(f.folders || []), "qr /run/user/1000/miharchy/syncthing-id.png"
+].join("\n") + "\n\n0\n");
+const MIHON = "In Mihon, turn on automatic backups (More → Settings → Data and storage), then tap Create backup, or wait for the automatic one.";
+
+test("the step says how to get Syncthing going, and skips pairing when the folder is already shared", () => {
+  assert.equal(S.status(facts({ installed: false }), "phoneBackups").detail,
+    "No phone backup in " + F + " yet. To share it with your phone through Syncthing, install and start it: sudo pacman -S syncthing, then systemctl --user enable --now syncthing. Setup checks again on its own.");
+  assert.equal(S.status(facts({ answering: false }), "phoneBackups").detail,
+    "No phone backup in " + F + " yet. Syncthing does not answer: start it with systemctl --user enable --now syncthing. Setup checks again on its own.");
+  assert.deepEqual(S.status(facts({ shared: true }), "phoneBackups"), { state: "todo",
+    detail: "No phone backup in " + F + " yet. Syncthing shares this folder with your phone. " + MIHON + " Setup checks again on its own." });
+  assert.equal(S.action(facts({ shared: true }), "phoneBackups"), "check");
+});
+
+test("with nothing pending, the step shows the desktop ID as a QR code to scan on the phone", () => {
+  assert.deepEqual(S.status(facts({}), "phoneBackups"), { state: "todo", qr: "/run/user/1000/miharchy/syncthing-id.png",
+    detail: "In Syncthing-Fork on your phone, add this desktop: scan the code, or enter " + DESKTOP + ". Then share Mihon's autobackup folder with it. Setup checks again on its own." });
+});
+
+test("a phone waiting to connect, or one folder it offers, is accepted with y", () => {
+  const device = facts({ devices: [{ id: PHONE, name: "Pixel" }] });
+  assert.deepEqual(S.status(device, "phoneBackups"), { state: "todo", prompt: "Accept Pixel in Syncthing?",
+    detail: "Your phone Pixel wants to connect through Syncthing. Press Enter, then y, to accept it. Then, in Syncthing-Fork, share Mihon's autobackup folder with this desktop." });
+  assert.equal(S.action(device, "phoneBackups"), "confirm");
+
+  const one = facts({ folders: [{ id: "abcd-1234", label: "Mihon backups", device: PHONE }] });
+  assert.deepEqual(S.status(one, "phoneBackups"), { state: "todo", prompt: "Accept the folder \"Mihon backups\" into " + F + "?",
+    detail: "Your phone offers the folder \"Mihon backups\". Press Enter, then y, to receive it in " + F + "." });
+  assert.equal(S.action(one, "phoneBackups"), "confirm");
+
+  const named = facts({ folders: [{ id: "camera", label: "Camera", device: PHONE }, { id: "x1", label: "autobackup", device: PHONE }] });
+  assert.equal(S.status(named, "phoneBackups").prompt, "Accept the folder \"autobackup\" into " + F + "?", "of several, the one named autobackup");
+});
+
+test("several folders and none named autobackup: the step lists them and points to Syncthing's page", () => {
+  const several = facts({ folders: [{ id: "camera", label: "Camera", device: PHONE }, { id: "docs", label: "Documents", device: PHONE }] });
+  assert.deepEqual(S.status(several, "phoneBackups"), { state: "todo",
+    detail: "Your phone offers several folders: Camera, Documents. Accept Mihon's autobackup folder at http://127.0.0.1:8384, with " + F + " as its folder path. Setup checks again on its own." });
+  assert.equal(S.action(several, "phoneBackups"), "check");
+});
+
+async function accept(h, pair) {
+  const argv = S.runCommand("phoneBackups", { folder: h.folder, pair: pair });
+  const { stdout } = await execFile(argv[0], argv.slice(1), { env: h.env });
+  return S.parseJob(stdout);
+}
+
+test("y adds the phone's device to Syncthing, then the folder it offers at the sync folder, send and receive", async () => {
+  const st = await syncthing(routes());
+  const h = home(st.port);
+  try {
+    assert.deepEqual(await accept(h, { device: { id: PHONE, name: "Pixel" }, folder: null }), { code: 0, output: "Syncthing now knows Pixel." });
+    assert.deepEqual(await accept(h, { device: null, folder: { id: "abcd-1234", label: "Mihon backups", device: PHONE } }),
+      { code: 0, output: "Syncthing now receives \"Mihon backups\" in " + h.folder + "." });
+    assert.deepEqual(st.posts, [
+      { path: "/rest/config/devices", body: { deviceID: PHONE, name: "Pixel" } },
+      { path: "/rest/config/folders", body: { id: "abcd-1234", label: "Mihon backups", path: h.folder, type: "sendreceive", devices: [{ deviceID: PHONE }] } }
+    ]);
+  } finally { st.close(); }
+});
+
+test("a Syncthing that refuses the change fails the step and says so", async () => {
+  const st = await syncthing(routes());
+  const h = home(st.port);
+  fs.writeFileSync(path.join(h.dir, ".local/state/syncthing/config.xml"),
+    fs.readFileSync(path.join(h.dir, ".local/state/syncthing/config.xml"), "utf8").replace("test-key", "wrong-key"));
+  try {
+    assert.deepEqual(await accept(h, { device: { id: PHONE, name: "Pixel" }, folder: null }), { code: 1, output: "Syncthing did not take the device. Accept it at http://127.0.0.1:" + st.port + "." });
+    assert.deepEqual(st.posts, []);
+  } finally { st.close(); }
+});
