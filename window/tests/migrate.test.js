@@ -79,6 +79,20 @@ test("a merge adds the other copy's categories to the kept copy's own: no clear,
   assert.match(Mi.targetPayload(old, 40, { read: [], bookmark: [] }, false).query, /clearCategories: true/, "plain Migrate still sets exactly the old categories");
 });
 
+test("a target already in the library merges whatever the entry path: it keeps its categories, mode and tracks; a new target takes exactly the old ones", () => {
+  const old = { id: 7, categories: { nodes: [{ id: 3 }] }, meta: [{ key: "miharchy.readingMode", value: "webtoon" }], trackRecords: { nodes: [] } };
+  const fetched = (inLibrary) => ok({ fetchMangaAndChapters: { manga: { id: 40, title: "E", inLibrary, meta: [{ key: "miharchy.readingMode", value: "pager" }], trackRecords: { nodes: [] } }, chapters: [] } });
+  assert.match(Mi.TARGET_MUTATION, /manga \{ id title inLibrary meta \{ key value \} trackRecords/);
+  const inLib = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true, Mi.mergeInto(fetched(true).data.fetchMangaAndChapters.manga));
+  assert.doesNotMatch(inLib.query, /clearCategories/, "its own categories stay, the old ones are added");
+  assert.deepEqual(inLib.variables.categories, [3]);
+  assert.doesNotMatch(inLib.query, /setMangaMeta/, "its own reading mode stays");
+  assert.equal(Mi.mergeInto(fetched(false).data.fetchMangaAndChapters.manga), null);
+  const fresh = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true, null);
+  assert.match(fresh.query, /clearCategories: true/);
+  assert.equal(fresh.variables.mode.value, "webtoon");
+});
+
 test("a merge keeps the kept copy's reading mode and tracks; the other's fill only what it lacks", () => {
   const mode = (value) => [{ key: "miharchy.readingMode", value }];
   const track = (id, name) => ({ id, trackerId: id, tracker: { name } });
@@ -151,6 +165,128 @@ test("targets leave out the old source and put a source named like it first", ()
   assert.deepEqual(Mi.targets(sources, "99", "").map((s) => s.id), ["1", "2", "3", "4"]);
 });
 
+test("pinned sources follow the same-named one, in pin order; the old source never shows", () => {
+  assert.deepEqual(Mi.targets(sources, "99", "Asura Scans", ["3", "2"]).map((s) => s.id), ["1", "4", "3", "2"]);
+  assert.deepEqual(Mi.targets(sources, "3", "Weeb Central", ["3", "2", "77"]).map((s) => s.id), ["2", "1", "4"], "the old source stays out though pinned; an unknown pin is ignored");
+});
+
+test("a batch searches each manga's same-named source, then its pinned ones; none of either falls back to one picked source", () => {
+  const manga = [
+    { id: 1, title: "Eleceed", sourceId: "1", sourceName: "Asura Scans" },
+    { id: 2, title: "Berserk", sourceId: "3", sourceName: "Weeb Central" }
+  ];
+  const each = Mi.withTargets(manga, sources, ["2", "3"]);
+  assert.deepEqual(each.map((m) => m.targets.map((s) => s.id)), [["4", "2", "3"], ["2"]]);
+  assert.equal(Mi.withTargets(manga.slice(1), sources, []), null, "nothing pinned, no same-named source");
+  const langs = [{ id: "en", name: "MangaDex (EN)", lang: "en" }, { id: "fr", name: "MangaDex (FR)", lang: "fr" }];
+  assert.equal(Mi.withTargets([{ id: 3, title: "Eleceed", sourceId: "en", sourceName: "MangaDex (EN)" }], langs, []), null, "an installed source's other languages are not the same source");
+  const one = Mi.withTarget(manga, sources[2]);
+  assert.deepEqual(one.map((m) => m.targets.map((s) => s.id)), [["3"], []], "the picked source, never a manga's own");
+});
+
+const reply = (...titles) => ok({ fetchSourceManga: { hasNextPage: false, mangas: titles.map((title, i) => ({ id: 100 + i, title })) } });
+const answer = (b, i, r) => {
+  const sent = Mi.reduceBatch(b, i, { type: "request", now: 0 });
+  return Mi.reduceBatch(sent, i, { type: "reply", attempt: sent.search.groups[i].attempt, reply: r, config });
+};
+
+test("each manga searches its sources one at a time and stops at the first match", () => {
+  let b = Mi.batch([{ id: 1, title: "Eleceed", targets: [sources[1], sources[2], sources[3]] }, { id: 2, title: "Berserk", targets: [sources[2]] }]);
+  assert.deepEqual(Mi.due(b), [0]);
+  b = answer(b, 0, reply("zzzzzzzzzzzz", "qqqqqqqqqqqqq"));
+  assert.equal(Mi.chosen(b, 0), null);
+  assert.deepEqual(Mi.due(b), [0], "no match: the same row searches its next source");
+  assert.equal(G.payload(b.search.groups[0]).variables.source, "3");
+  b = answer(b, 0, reply("Eleceed"));
+  assert.equal(Mi.chosen(b, 0).id, 100);
+  assert.deepEqual(Mi.due(b), [1], "a match stops that manga's search: source 4 is never searched");
+  assert.deepEqual(Mi.jobs(b).map((j) => [j.old.id, j.target.id, j.target.source]), [[1, 100, "Weeb Central (EN)"]]);
+  assert.match(Mi.matchStatus(b, 0, "/c"), /^Eleceed   1 of 1   Weeb Central \(EN\)$/);
+});
+
+test("a failed search moves on to the next source; the last one's failure stays for r", () => {
+  let b = Mi.batch([{ id: 1, title: "Eleceed", targets: [sources[1], sources[2]] }]);
+  b = answer(b, 0, M.reply(500, "boom"));
+  assert.equal(G.payload(b.search.groups[0]).variables.source, "3");
+  b = answer(b, 0, M.reply(500, "boom"));
+  assert.notEqual(b.search.groups[0].state, "ok");
+  assert.deepEqual(Mi.due(b), []);
+});
+
+test("a late reply to a timed-out search never answers the next source's search", () => {
+  let b = Mi.batch([{ id: 1, title: "Eleceed", targets: [sources[1], sources[2]] }]);
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "request", now: 0 }), 0, { type: "timeout" });
+  b = Mi.reduceBatch(b, 0, { type: "request", now: 0 });
+  const after = Mi.reduceBatch(b, 0, { type: "reply", attempt: 1, reply: M.reply(0, ""), config });
+  assert.equal(after, b, "the first search's attempt is dropped");
+  assert.equal(after.search.groups[0].state, "loading");
+});
+
+test("a stalled manga takes a match only when its newest chapter number is higher", () => {
+  let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [sources[1], sources[2]] }, { id: 2, title: "X", targets: [sources[2]] }]);
+  b = answer(b, 0, reply("Eleceed"));
+  assert.equal(Mi.chosen(b, 0), null, "held until its chapters are read");
+  assert.deepEqual(Mi.checks(b), [0]);
+  assert.deepEqual(Mi.checkPayload(b, 0).variables, { id: 100 });
+  b = Mi.reduceBatch(b, 0, { type: "check" });
+  assert.deepEqual(Mi.due(b), [], "one request at a time");
+  assert.deepEqual(Mi.checks(b), []);
+  const chapters = (...n) => ok({ fetchMangaAndChapters: { manga: { id: 100 }, chapters: n.map((c) => ch(c)) } });
+  b = Mi.reduceBatch(b, 0, { type: "checked", reply: chapters(1, 300, -1) });
+  assert.equal(Mi.chosen(b, 0), null);
+  assert.equal(G.payload(b.search.groups[0]).variables.source, "3", "not more chapters: on to the next source");
+  b = answer(b, 0, reply("Eleceed"));
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check" }), 0, { type: "checked", reply: chapters(300, 301.5) });
+  assert.equal(Mi.chosen(b, 0).id, 100);
+  assert.equal(Mi.jobs(b)[0].target.source, "Weeb Central (EN)");
+});
+
+test("a stalled manga's highest chapter number comes from the server; one with no chapters has none", () => {
+  const data = { mangas: { nodes: [{ id: 1, highestNumberedChapter: { chapterNumber: 120.5 } }, { id: 2, highestNumberedChapter: null }] } };
+  assert.deepEqual(Mi.withHighest([{ id: 2 }, { id: 1 }], data).map((m) => m.highest), [-1, 120.5]);
+});
+
+test("a stalled manga no source has more chapters for says so", () => {
+  let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [sources[1]] }]);
+  b = answer(b, 0, reply("Eleceed"));
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check" }), 0, { type: "checked", reply: ok({ fetchMangaAndChapters: { manga: { id: 100 }, chapters: [ch(300)] } }) });
+  assert.equal(Mi.chosen(b, 0), null);
+  assert.equal(Mi.matchStatus(b, 0, "/c"), "No source has more chapters.");
+  assert.deepEqual(Mi.jobs(b), []);
+});
+
+test("a failed chapter check on the last source waits for r, not a verdict", () => {
+  let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [sources[1]] }]);
+  b = answer(b, 0, reply("Eleceed"));
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check" }), 0, { type: "checked", reply: M.reply(500, "boom") });
+  assert.equal(Mi.matchStatus(b, 0, "/c"), "chapter check failed. Press r to retry.   Mangago (EN)");
+  assert.deepEqual(Mi.checks(b), []);
+  assert.deepEqual(Mi.checks(Mi.retry(b)), [0]);
+});
+
+test("a chapter check times out as a search does: on to the next source, or on the last one wait for r", () => {
+  let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [sources[1], sources[2]] }]);
+  b = answer(b, 0, reply("Eleceed"));
+  b = Mi.reduceBatch(b, 0, { type: "check", now: 1000 });
+  assert.deepEqual(Mi.expired(b, 1000 + G.TIMEOUT - 1), []);
+  assert.deepEqual(Mi.expired(b, 1000 + G.TIMEOUT), [0]);
+  b = Mi.reduceBatch(b, 0, { type: "timeout" });
+  assert.equal(G.payload(b.search.groups[0]).variables.source, "3", "on to the next source");
+  assert.deepEqual(Mi.due(b), [0]);
+  b = answer(b, 0, reply("Eleceed"));
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check", now: 0 }), 0, { type: "timeout" });
+  assert.match(Mi.matchStatus(b, 0, "/c"), /^chapter check failed\. Press r to retry\./);
+  assert.equal(Mi.reduceBatch(b, 0, { type: "checked", reply: ok({ fetchMangaAndChapters: { chapters: [ch(400)] } }) }), b, "a late reply drops");
+  assert.deepEqual(Mi.checks(Mi.retry(b)), [0]);
+});
+
+test("a manga with no source to search says so and migrates nothing", () => {
+  const b = Mi.batch([{ id: 1, title: "Eleceed", targets: [] }]);
+  assert.deepEqual(Mi.due(b), []);
+  assert.equal(Mi.matchStatus(b, 0, "/c"), "No source to search");
+  assert.deepEqual(Mi.jobs(b), []);
+});
+
 test("library sources group the library by source, name missing ones from the sync meta, and count their manga", () => {
   const data = {
     mangas: { nodes: [
@@ -172,7 +308,7 @@ test("library sources group the library by source, name missing ones from the sy
 
 test("a batch searches the target source once per manga, one at a time like Mihon, and proposes each match", () => {
   const target = { id: "8", name: "MangaPill (EN)", supportsLatest: true };
-  let b = Mi.batch(target, [{ id: 1, title: "Chainsaw Man" }, { id: 2, title: "Berserk" }]);
+  let b = Mi.batch([{ id: 1, title: "Chainsaw Man", targets: [target] }, { id: 2, title: "Berserk", targets: [target] }]);
   assert.deepEqual(b.search.groups.map((g) => G.payload(g).variables), [
     { source: "8", type: "SEARCH", page: 1, query: "Chainsaw Man", filters: [] },
     { source: "8", type: "SEARCH", page: 1, query: "Berserk", filters: [] }
@@ -189,16 +325,16 @@ test("a batch searches the target source once per manga, one at a time like Miho
 
 test("in a batch, h/l pick another result or skip, and only picked rows migrate", () => {
   const target = { id: "8", name: "S", supportsLatest: true };
-  let b = Mi.batch(target, [{ id: 1, title: "X" }, { id: 2, title: "Y" }]);
+  let b = Mi.batch([{ id: 1, title: "X", targets: [target] }, { id: 2, title: "Y", targets: [target] }]);
   b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "request", now: 0 }), 0, { type: "reply", attempt: 1, reply: ok({ fetchSourceManga: { hasNextPage: false, mangas: [{ id: 11, title: "X" }, { id: 12, title: "X2" }] } }), config });
   b = Mi.pick(b, 0, 1);
   assert.equal(Mi.chosen(b, 0).id, 12);
   assert.equal(Mi.reduceBatch(b, 0, { type: "reply", attempt: 1, reply: ok({ fetchSourceManga: { hasNextPage: false, mangas: [] } }), config }), b, "a dropped reply keeps the pick");
-  assert.equal(Mi.matchStatus(b, 0, "/c"), "X2   2 of 2");
+  assert.equal(Mi.matchStatus(b, 0, "/c"), "X2   2 of 2   S");
   b = Mi.pick(b, 0, 1);
   assert.equal(Mi.chosen(b, 0), null, "past the last result is skip");
-  assert.equal(Mi.matchStatus(b, 0, "/c"), "skip   2 results");
-  assert.equal(Mi.matchStatus(b, 1, "/c"), "waiting");
+  assert.equal(Mi.matchStatus(b, 0, "/c"), "skip   2 results   S");
+  assert.equal(Mi.matchStatus(b, 1, "/c"), "waiting   S");
   b = Mi.pick(b, 0, -1);
   assert.equal(Mi.chosen(b, 0).id, 12);
   assert.deepEqual(Mi.jobs(b).map((j) => [j.old.id, j.target.id]), [[1, 12]], "the row still searching has nothing to migrate");

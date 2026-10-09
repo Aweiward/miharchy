@@ -224,17 +224,13 @@ test("the merge prompt shows each copy's source, chapters read, categories and t
   assert.equal(L.copyText(b), "Weeb Central (not installed)   source missing   0 of 0 chapters read   Categories: Default   Tracks: none");
 });
 
-test("the copy kept is the target; the other migrates into it, and the kept copy's mode and tracks go along for the merge", () => {
-  const meta = [{ key: "miharchy.readingMode", value: "pager" }];
-  const tracks = { nodes: [{ tracker: { name: "AniList" } }] };
-  const copies = L.mergeCopies({ a: copyNode(1), b: copyNode(2, { title: "ELECEED", sourceId: "9", source: { displayName: "Weeb Central" }, meta, trackRecords: tracks }), metas: { nodes: [] } });
+test("the copy kept is the target; the other migrates into it", () => {
+  const copies = L.mergeCopies({ a: copyNode(1), b: copyNode(2, { title: "ELECEED", sourceId: "9", source: { displayName: "Weeb Central" } }), metas: { nodes: [] } });
   assert.deepEqual(L.mergeJob(copies, 1), {
     old: { id: 1, title: "Eleceed", source: "MangaDex (EN)" },
-    kept: { id: 2, title: "ELECEED", sourceName: "Weeb Central" },
-    merge: { meta, trackRecords: tracks }
+    kept: { id: 2, title: "ELECEED", sourceName: "Weeb Central" }
   });
   assert.equal(L.mergeJob(copies, 0).old.id, 2);
-  assert.match(L.MERGE_QUERY, /meta \{ key value \}/);
 });
 
 test("a copy whose source is missing cannot be kept: the cursor starts past it and j/k skip it", () => {
@@ -248,4 +244,15 @@ test("a copy whose source is missing cannot be kept: the cursor starts past it a
   assert.equal(L.mergeMove(both, 0, 1), 1);
   assert.equal(L.mergeMove(both, 1, 1), 1, "past the last copy stays");
   assert.equal(L.mergeStart(L.mergeCopies({ a: gone, b: { ...gone, id: 3 }, metas: { nodes: [] } })), -1, "no copy can be kept");
+});
+
+test("M migrates each manga of the selection once, from its source, stalled when any of its problems is", () => {
+  const old = { latestUploadedChapter: { uploadDate: String(NOW - 300 * DAY) } };
+  const ps = L.problems(data([node(1, { source: null, ...old }), node(2, { title: "Manga 1" })], { metas: { nodes: [{ value: JSON.stringify({ [MANGADEX.id]: "MangaDex" }) }] } }), NOW);
+  const rows = L.rows(ps, false);
+  const sel = Object.fromEntries(rows.filter((r) => r.type === "problem" && r.kind !== "stalled").map((r) => [r.key, true]));
+  assert.deepEqual(L.migrateList(L.targets(rows, sel, 0), ps), [
+    { id: 1, title: "Manga 1", sourceId: MANGADEX.id, sourceName: "MangaDex", stalled: true },
+    { id: 2, title: "Manga 1", sourceId: MANGADEX.id, sourceName: "MangaDex (EN)", stalled: false }
+  ]);
 });

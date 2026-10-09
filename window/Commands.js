@@ -356,6 +356,8 @@ var commands = [
   { id: "check.dismiss", title: "Dismiss the problem, or bring a dismissed one back", keys: ["x"], view: "check", hidden: true },
   { id: "check.dismissed", title: "Show the dismissed problems, or the others", keys: ["X"], view: "check", hidden: true },
   { id: "check.activate", title: "Update the extension, or merge the duplicate", keys: ["Enter"], view: "check", hidden: true },
+  // M as on a manga and a source.
+  { id: "check.migrate", title: "Migrate the selected manga", keys: ["M"], view: "check", hidden: true },
   // M, not m: m is the reader's reading mode, and a migration is a big step.
   { id: "manga.migrate", title: "Migrate to another source", keys: ["M"], view: "manga", hidden: true },
   { id: "migrate.batch", title: "Migrate a source", keys: ["M"], view: "sources", hidden: true },
