@@ -184,6 +184,7 @@ var SYNCTHING_PROBE = SYNCTHING_API + "\n" + [
   "echo \"myID $id\"",
   "want=$(realpath -m \"$1\")",
   "api config/folders | jq -r --arg home \"$HOME\" '.[] | select((.devices | length) > 1) | .path | sub(\"^~\"; $home)' | while IFS= read -r p; do [ \"$(realpath -m \"$p\")\" = \"$want\" ] && echo shared; done | head -n 1",
+  "api config/devices | jq -e --arg me \"$id\" 'any(.[]; .deviceID != $me)' >/dev/null && echo knowsPhone",
   "echo \"pendingDevices $(api cluster/pending/devices | jq -c '[to_entries[] | {id: .key, name: .value.name}]')\"",
   "echo \"pendingFolders $(api cluster/pending/folders | jq -c '[to_entries[] | .key as $id | .value.offeredBy | to_entries[] | {id: $id, label: .value.label, device: .key}]')\"",
   "command -v qrencode >/dev/null && mkdir -p \"$(dirname \"$2\")\" && qrencode -o \"$2\" \"$id\" && echo \"qr $2\""
@@ -191,7 +192,8 @@ var SYNCTHING_PROBE = SYNCTHING_API + "\n" + [
 
 // $1 the sync folder; $2 and $3 the phone's device id and name, or empty;
 // $4, $5, $6 the offered folder's id, label and device, or empty. Syncthing
-// adds this desktop to a folder on its own.
+// adds this desktop to a folder on its own (ensureDevicePresent in its
+// lib/config/folderconfiguration.go).
 var SYNCTHING_ACCEPT = SYNCTHING_API + "\n" + [
   "post() { curl -fsS -m 5 -H \"X-API-Key: $key\" -H \"Content-Type: application/json\" -X POST -d \"$2\" \"http://$addr/rest/$1\" >/dev/null 2>&1; }",
   "if [ -n \"$2\" ]; then",
@@ -210,9 +212,10 @@ function syncthingProbeCommand(folder, qrPath) {
 
 // The Syncthing check's output -> { installed (Syncthing wrote its config,
 // so it was installed and started once), answering, myId, shared,
+// knowsPhone (a device besides this desktop is configured),
 // pendingDevices: [{ id, name }], pendingFolders: [{ id, label, device }], qr }.
 function parseSyncthing(text) {
-  var f = { installed: false, answering: false, myId: "", shared: false, pendingDevices: [], pendingFolders: [], qr: "" }
+  var f = { installed: false, answering: false, myId: "", shared: false, knowsPhone: false, pendingDevices: [], pendingFolders: [], qr: "" }
   String(text).split("\n").forEach(function(line) {
     var sp = line.indexOf(" ")
     var key = sp === -1 ? line : line.slice(0, sp)
@@ -221,6 +224,7 @@ function parseSyncthing(text) {
     if (key === "answering") f.answering = true
     if (key === "myID") f.myId = rest
     if (key === "shared") f.shared = true
+    if (key === "knowsPhone") f.knowsPhone = true
     if (key === "qr") f.qr = rest
     if (key === "pendingDevices" || key === "pendingFolders") try { f[key] = JSON.parse(rest) } catch (e) { f[key] = [] }
   })
@@ -441,6 +445,9 @@ function phoneTodo(s, folder) {
   if (pair.device) return { state: "todo", prompt: "Accept " + pair.device.name + " in Syncthing?", detail: "Your phone " + pair.device.name + " wants to connect through Syncthing. Press Enter, then y, to accept it. Then, in Syncthing-Fork, share Mihon's autobackup folder with this desktop." }
   if (pair.folder) return { state: "todo", prompt: "Accept the folder \"" + pair.folder.label + "\" into " + folder + "?", detail: "Your phone offers the folder \"" + pair.folder.label + "\". Press Enter, then y, to receive it in " + folder + "." }
   if (st.pendingFolders.length) return { state: "todo", detail: "Your phone offers several folders: " + st.pendingFolders.map(function(f) { return f.label }).join(", ") + ". Accept Mihon's autobackup folder at http://127.0.0.1:8384, with " + folder + " as its folder path." + AGAIN }
+  // Accepted, but its folder share has not arrived yet: no new QR code.
+  if (st.knowsPhone) return { state: "todo", detail: "Syncthing knows your phone. In Syncthing-Fork, share Mihon's autobackup folder with this desktop." + AGAIN }
+  if (!st.qr) return { state: "todo", detail: "In Syncthing-Fork on your phone, add this desktop: enter " + st.myId + ". Then share Mihon's autobackup folder with it. To show the ID as a QR code, install qrencode: sudo pacman -S qrencode." + AGAIN }
   return { state: "todo", qr: st.qr, detail: "In Syncthing-Fork on your phone, add this desktop: scan the code, or enter " + st.myId + ". Then share Mihon's autobackup folder with it." + AGAIN }
 }
 

@@ -51,6 +51,7 @@ function home(port) {
 const routes = (extra) => Object.assign({
   "/rest/system/status": { myID: DESKTOP },
   "/rest/config/folders": [],
+  "/rest/config/devices": [{ deviceID: DESKTOP, name: "desktop" }],
   "/rest/cluster/pending/devices": {},
   "/rest/cluster/pending/folders": {}
 }, extra);
@@ -65,7 +66,7 @@ test("the Syncthing check reads nothing pending, writes the desktop ID as a QR c
   const st = await syncthing(routes());
   const h = home(st.port);
   try {
-    assert.deepEqual(await probe(h), { installed: true, answering: true, myId: DESKTOP, shared: false, pendingDevices: [], pendingFolders: [], qr: h.qr });
+    assert.deepEqual(await probe(h), { installed: true, answering: true, myId: DESKTOP, shared: false, knowsPhone: false, pendingDevices: [], pendingFolders: [], qr: h.qr });
     assert.equal(fs.readFileSync(h.qr, "utf8"), DESKTOP);
   } finally { st.close(); }
 });
@@ -80,6 +81,12 @@ test("a sync folder Syncthing already shares with a device counts as paired, und
   const lone = await syncthing(routes({ "/rest/config/folders": [{ id: "mihon", path: "~/Sync/mihon-backups", devices: [{ deviceID: DESKTOP }] }] }));
   const h2 = home(lone.port);
   try { assert.equal((await probe(h2)).shared, false, "a folder shared with no other device is not paired"); } finally { lone.close(); }
+});
+
+test("the check knows whether Syncthing has a device besides this desktop", async () => {
+  const st = await syncthing(routes({ "/rest/config/devices": [{ deviceID: DESKTOP, name: "desktop" }, { deviceID: PHONE, name: "Pixel" }] }));
+  const h = home(st.port);
+  try { assert.equal((await probe(h)).knowsPhone, true); } finally { st.close(); }
 });
 
 test("the check lists the phone's pending device and folders", async () => {
@@ -97,7 +104,7 @@ test("the check lists the phone's pending device and folders", async () => {
 
 test("no Syncthing config, or a Syncthing that does not answer, says so", async () => {
   const h = home(null);
-  assert.deepEqual(await probe(h), { installed: false, answering: false, myId: "", shared: false, pendingDevices: [], pendingFolders: [], qr: "" });
+  assert.deepEqual(await probe(h), { installed: false, answering: false, myId: "", shared: false, knowsPhone: false, pendingDevices: [], pendingFolders: [], qr: "" });
   const st = await syncthing(routes());
   const h2 = home(st.port);
   st.close();
@@ -113,8 +120,8 @@ const READY = "java openjdk version \"26.0.2.1\" 2026-08-18\nsuwayomi\nwebsocket
 const F = "/home/u/Sync/mihon-backups";
 const waiting = finish(S.reduce(finish(S.initial(), "probe", READY), { type: "server", reply: M.reply(200, JSON.stringify({ data: { settings: {}, metas: { nodes: [{ key: "miharchy.syncFolder", value: F }] } } })) }), "phones", "phones 0\nnewest \n\n0\n");
 const facts = (f) => finish(waiting, "syncthing", [
-  f.installed === false ? "" : "installed", f.answering === false ? "" : "answering", "myID " + DESKTOP, f.shared ? "shared" : "",
-  "pendingDevices " + JSON.stringify(f.devices || []), "pendingFolders " + JSON.stringify(f.folders || []), "qr /run/user/1000/miharchy/syncthing-id.png"
+  f.installed === false ? "" : "installed", f.answering === false ? "" : "answering", "myID " + DESKTOP, f.shared ? "shared" : "", f.knows ? "knowsPhone" : "",
+  "pendingDevices " + JSON.stringify(f.devices || []), "pendingFolders " + JSON.stringify(f.folders || []), f.noQr ? "" : "qr /run/user/1000/miharchy/syncthing-id.png"
 ].join("\n") + "\n\n0\n");
 const MIHON = "In Mihon, turn on automatic backups (More → Settings → Data and storage), then tap Create backup, or wait for the automatic one.";
 
@@ -131,6 +138,17 @@ test("the step says how to get Syncthing going, and skips pairing when the folde
 test("with nothing pending, the step shows the desktop ID as a QR code to scan on the phone", () => {
   assert.deepEqual(S.status(facts({}), "phoneBackups"), { state: "todo", qr: "/run/user/1000/miharchy/syncthing-id.png",
     detail: "In Syncthing-Fork on your phone, add this desktop: scan the code, or enter " + DESKTOP + ". Then share Mihon's autobackup folder with it. Setup checks again on its own." });
+});
+
+test("without qrencode the step gives the ID as text and the command that shows it as a code", () => {
+  assert.deepEqual(S.status(facts({ noQr: true }), "phoneBackups"), { state: "todo",
+    detail: "In Syncthing-Fork on your phone, add this desktop: enter " + DESKTOP + ". Then share Mihon's autobackup folder with it. To show the ID as a QR code, install qrencode: sudo pacman -S qrencode. Setup checks again on its own." });
+});
+
+test("once Syncthing knows the phone, the step asks for the folder share, not the QR code again", () => {
+  assert.deepEqual(S.status(facts({ knows: true }), "phoneBackups"), { state: "todo",
+    detail: "Syncthing knows your phone. In Syncthing-Fork, share Mihon's autobackup folder with this desktop. Setup checks again on its own." });
+  assert.equal(S.action(facts({ knows: true }), "phoneBackups"), "check");
 });
 
 test("a phone waiting to connect, or one folder it offers, is accepted with y", () => {
