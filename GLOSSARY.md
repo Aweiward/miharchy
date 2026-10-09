@@ -78,6 +78,14 @@ _Avoid_: export, dump
 A folder that both Mihon and Miharchy can reach, used to exchange backups.
 _Avoid_: shared drive, cloud
 
+**Phone backup**:
+A backup that Mihon wrote into the sync folder.
+_Avoid_: Mihon backup, auto backup
+
+**Desktop backup**:
+A backup that a sync writes into the sync folder for the phone to restore.
+_Avoid_: export, miharchy backup
+
 **Baseline**:
 The last backup seen from one side: for the phone, the last phone backup ingested; for the desktop, the last backup exported. Each side has its own.
 _Avoid_: sync base, snapshot, last backup
@@ -89,6 +97,14 @@ _Avoid_: restore, import (these mean one-way overwrite)
 **Held**:
 A sync that stopped before it changed anything, because the phone backup would remove much. The window applies it on request; the popup never does.
 _Avoid_: paused, blocked
+
+**Behind**:
+The state of the phone when a desktop change that a restore would bring is still missing after three newer phone backups.
+_Avoid_: stale, out of sync
+
+**Sync health**:
+What Miharchy knows about the phone's side of the sync: the age of the last phone backup, the last desktop backup the phone restored, the changes a restore would bring, and the changes the user must repeat by hand.
+_Avoid_: sync status
 
 **Restore**:
 A one-way load of one backup file into the desktop library, as Mihon's restore does. It moves no baseline, so the next sync counts what it changed as desktop changes.
@@ -166,3 +182,5 @@ _Avoid_: interstitial, chapter break
 - "Page" means one image of a chapter. Resolved: a screen of the window is a **view**, never a page.
 - "Default" is a category in Suwayomi (id 0) and in Mihon's UI. Resolved: Default means a manga is in no **category**; it is never a user category, and the Library shows it only once user categories exist.
 - "Base" first meant one backup shared by both sides. Resolved: each side has its own **baseline**, because the phone may never restore what the desktop wrote.
+- "Stale" was proposed for a phone that ignores desktop backups. Resolved: the phone is **behind**; nothing on it is out of date by its own rules.
+- "Export" names the backup a sync writes. Resolved: it is a **desktop backup**, as "export" already means a one-way dump.
