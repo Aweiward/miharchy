@@ -189,7 +189,7 @@ The panel `s` opens over the reader: the manga's reading mode, then the reader's
 _Avoid_: reader menu, reader options
 
 **Original pages**:
-The reader showing each page as its file has it: `O` turns **Crop borders** and **Auto levels** off until `O` again or the reader closes. Nothing saves.
+The reader showing each page as its file has it, with **Crop borders** and **Auto levels** off, until the user turns them back on or the reader closes. Nothing is saved.
 _Avoid_: raw mode, uncropped view
 
 **Transition page**:
