@@ -1,6 +1,8 @@
 package miharchy.sync
 
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupPreference
+import eu.kanade.tachiyomi.data.backup.models.StringPreferenceValue
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.nio.ByteBuffer
@@ -61,17 +63,25 @@ fun writeBackup(folder: Path, name: String, bytes: ByteArray): Path {
 /**
  * Suwayomi's backup lists its built-in Default category (order 0), which means "no category". Mihon's restore
  * would create it on the phone as a user category, so it stays out; no manga refers to it. Suwayomi's backup has no
- * notes either, so each manga gets its [notes] from the desktop's meta.
+ * notes either, so each manga gets its [notes] from the desktop's meta. A desktop backup carries its own file name
+ * as [marker], an app preference a phone keeps once it restores the file (ADR 0006).
  */
-fun forMihon(suwayomiBackup: ByteArray, notes: Map<MangaKey, String> = emptyMap()): ByteArray {
+fun forMihon(suwayomiBackup: ByteArray, notes: Map<MangaKey, String> = emptyMap(), marker: String? = null): ByteArray {
     val backup = decodeBackup(suwayomiBackup)
     return encodeBackup(
         backup.copy(
             backupCategories = backup.backupCategories.filterNot { it.order == 0L && it.name == "Default" },
             backupManga = backup.backupManga.onEach { m -> notes[MangaKey(m.source, m.url)]?.let { m.notes = it } },
-        ),
+        ).apply { if (marker != null) backupPreferences = listOf(BackupPreference(MARKER_KEY, StringPreferenceValue(marker))) },
     )
 }
+
+/** Never `__APP_STATE_` or `__PRIVATE_`: Mihon's backup leaves those out. Phones keep it, so the name stays. */
+const val MARKER_KEY = "miharchy_backup"
+
+/** The desktop backup the phone restored last, from the phone's own backup, or null. */
+fun restoredFrom(phone: Backup): String? =
+    (phone.backupPreferences.firstOrNull { it.key == MARKER_KEY }?.value as? StringPreferenceValue)?.value
 
 /** A desktop state the phone keeps after restoring the export, so the user repeats it in Mihon. */
 @Serializable

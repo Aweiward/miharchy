@@ -4,6 +4,8 @@ import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupPreference
+import eu.kanade.tachiyomi.data.backup.models.IntPreferenceValue
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
 import java.nio.file.Files
 import java.time.Instant
@@ -14,6 +16,7 @@ import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 private const val SOURCE = 2499283573021220255L
 
@@ -95,6 +98,19 @@ class ExportTest {
             ),
             unreachable(phone, export),
         )
+    }
+
+    @Test fun `a phone backup made after restoring a desktop backup names that desktop backup`() {
+        val name = "miharchy-2026-10-09_12-00-00.tachibk"
+        val desktop = decodeBackup(forMihon(encodeBackup(backup(manga("/m"))), marker = name))
+        // Mihon's restore writes the backup's app preferences beside its own, and its next backup carries them all.
+        val phone = Backup(listOf(manga("/m")), backupPreferences = listOf(BackupPreference("pref_x", IntPreferenceValue(1))) + desktop.backupPreferences)
+        assertEquals(name, restoredFrom(decodeBackup(encodeBackup(phone))))
+    }
+
+    @Test fun `a phone backup that never restored a desktop backup names none, and a backup made by hand carries no name`() {
+        assertNull(restoredFrom(Backup(listOf(manga("/m")), backupPreferences = listOf(BackupPreference("pref_x", IntPreferenceValue(1))))))
+        assertNull(restoredFrom(decodeBackup(forMihon(encodeBackup(backup(manga("/m")))))))
     }
 
     @Test fun `export names sort by time, to the second`() {

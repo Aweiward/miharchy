@@ -98,8 +98,9 @@ private fun sync(folderArg: String?, dryRun: Boolean, apply: Boolean): Summary {
     val names = mergeSourceNames(storedNames, listOfNotNull(phoneBaseline, phoneNow).flatMap { it.backupSources })
     if (names != storedNames) desktop.setSourceNames(names)
 
-    val exported = forMihon(desktop.export(), desktop.notes())
-    val exportFile = writeExport(folder, exportName(Instant.now()), exported)
+    val name = exportName(Instant.now())
+    val exported = forMihon(desktop.export(), desktop.notes(), marker = name)
+    val exportFile = writeExport(folder, name, exported)
     // The undo point: a sync overrides a desktop value only while it equals this baseline, and a restore only adds.
     val desktopBaselineFile = stateDir.resolve("desktop-baseline.tachibk")
     if (desktopBaselineFile.exists()) writePrivately(stateDir.resolve("pre-sync.tachibk"), desktopBaselineFile.readBytes())
