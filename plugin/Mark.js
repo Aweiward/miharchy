@@ -2,6 +2,7 @@
 .import "../window/Model.js" as Model
 .import "../window/Session.js" as Session
 .import "../window/Updates.js" as Updates
+.import "../window/UpNext.js" as UpNext
 
 // The mark and its popup: the unread update count, a dot when the updates
 // cannot be reached, and the newest updates. Pure, so tests/mark.test.js pins
@@ -153,6 +154,55 @@ function tooltip(mark) {
   return warning(mark) ? text + "\n" + warning(mark) : text
 }
 
+// The popup's Up next section: this many manga, loaded only when it opens
+// (the reply is large on a big library, and every bar polls).
+var UP_NEXT_LIMIT = 3
+// The Settings row "Downloaded only", which Up next follows.
+var DOWNLOADED_ONLY_KEY = "miharchy.downloadedOnly"
+
+function upNextPayload() {
+  var p = UpNext.payload()
+  p.variables.keys.push(DOWNLOADED_ONLY_KEY)
+  return p
+}
+
+// The reason beside an Up next row, by tier: the page reached, the unread
+// left, or the age of the newest update.
+function reason(e, now) {
+  if (e.tier === 1) return "p. " + (e.page + 1) + (e.pages ? " / " + e.pages : "")
+  if (e.tier === 2) return e.unread + " left"
+  var hours = Math.max(1, Math.floor((now / 1000 - e.update) / 3600))
+  return "new " + (hours < 24 ? hours + "h" : Math.floor(hours / 24) + "d")
+}
+
+// reply: upNextPayload()'s, null while it loads. -> the section's rows;
+// none while loading or after a failure, so the section hides.
+function upNext(reply, now) {
+  if (!reply || reply.state !== "ok") return []
+  var metas = (reply.data.metas && reply.data.metas.nodes) || []
+  var downloadedOnly = metas.some(function(m) { return m.key === DOWNLOADED_ONLY_KEY && m.value === "true" })
+  return UpNext.list(reply.data, downloadedOnly, now).slice(0, UP_NEXT_LIMIT).map(function(e) {
+    return { title: e.title, chapter: e.chapter, side: reason(e, now), open: ["peek-open", String(e.mangaId), String(e.chapterId)] }
+  })
+}
+
+// The popup's rows under one cursor: Up next, then the updates. section
+// heads the first row of each when Up next shows; without it the popup
+// looks as it did before Up next. open: the launcher's arguments.
+function entries(upNext, rows) {
+  var updates = rows.map(function(row) {
+    return { section: "", title: row.title, chapter: row.chapter, side: row.date, open: ["open-chapter", String(row.mangaId), String(row.id)] }
+  })
+  if (!upNext.length) return updates
+  var up = upNext.map(function(e, i) { return Object.assign({ section: i === 0 ? "Up next" : "" }, e) })
+  if (updates.length) updates[0].section = "Updates"
+  return up.concat(updates)
+}
+
+function move(list, cursor, dy) {
+  return Math.max(0, Math.min(list.length - 1, cursor + dy))
+}
+
 // { title, detail } in place of the popup's list, or null.
 function notice(mark, configPath) {
   if (mark.state === "ok" && !mark.rows.length) return { title: "No new chapters", detail: "" }
@@ -176,6 +226,10 @@ if (typeof module !== "undefined") {
     down: down,
     warning: warning,
     tooltip: tooltip,
+    upNextPayload: upNextPayload,
+    upNext: upNext,
+    entries: entries,
+    move: move,
     notice: notice
   }
 }

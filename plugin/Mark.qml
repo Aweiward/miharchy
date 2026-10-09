@@ -41,6 +41,11 @@ Panel {
   readonly property var rows: mark.rows
   readonly property var notice: Mark.notice(mark, configPath)
   readonly property int more: mark.count - rows.length
+  // Up next's reply, null while it loads; asked for only when the popup
+  // opens, never in the poll.
+  property var upNextReply: null
+  property int upNextSeq: 0
+  readonly property var entries: Mark.entries(Mark.upNext(upNextReply, now), rows)
 
   implicitWidth: icon.implicitWidth + (count.visible ? count.implicitWidth : 0)
   implicitHeight: icon.implicitHeight
@@ -48,6 +53,16 @@ Panel {
   onOpenedChanged: if (opened) {
     cursor = 0
     poll()
+    loadUpNext()
+  }
+
+  function loadUpNext() {
+    var seq = ++upNextSeq
+    upNextReply = null
+    if (!config) return
+    Session.send(config, Mark.upNextPayload(), function(reply) {
+      if (seq === root.upNextSeq) root.upNextReply = reply
+    })
   }
 
   FileView {
@@ -148,9 +163,10 @@ Panel {
     close()
   }
 
-  function read(row) {
-    if (!row) return
-    Quickshell.execDetached(["sh", launcher, "open-chapter", String(row.mangaId), String(row.id)])
+  // entry: one of entries, an Up next row (peek-open) or an update (open-chapter).
+  function read(entry) {
+    if (!entry) return
+    Quickshell.execDetached(["sh", launcher].concat(entry.open))
     close()
   }
 
@@ -230,10 +246,8 @@ Panel {
     PanelKeyCatcher {
       id: keys
       anchors.fill: parent
-      onMoveRequested: function(dx, dy) {
-        if (root.rows.length) root.cursor = Math.max(0, Math.min(root.rows.length - 1, root.cursor + dy))
-      }
-      onActivateRequested: root.read(root.rows[root.cursor])
+      onMoveRequested: function(dx, dy) { root.cursor = Mark.move(root.entries, root.cursor, dy) }
+      onActivateRequested: root.read(root.entries[root.cursor])
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
@@ -284,6 +298,87 @@ Panel {
           font.pixelSize: Style.font.bodySmall
         }
 
+        // Up next, then the updates (Mark.entries); the notice stands in for
+        // the updates, below Up next.
+        Repeater {
+          model: root.entries
+
+          Column {
+            id: entry
+            required property var modelData
+            required property int index
+            width: column.width
+            spacing: Style.spacing.sm
+
+            Text {
+              visible: entry.modelData.section !== ""
+              text: entry.modelData.section
+              color: Color.muted
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            Rectangle {
+              width: column.width
+              height: lines.implicitHeight + Style.spacing.md * 2
+              radius: Style.cornerRadius
+              color: entry.index === root.cursor ? Style.selectedAccentFill : "transparent"
+
+              Column {
+                id: lines
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Style.spacing.md
+                anchors.rightMargin: Style.spacing.md
+
+                Text {
+                  width: parent.width
+                  elide: Text.ElideRight
+                  text: entry.modelData.title
+                  color: Color.popups.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                }
+
+                Item {
+                  width: parent.width
+                  height: chapter.implicitHeight
+
+                  Text {
+                    id: chapter
+                    anchors.left: parent.left
+                    anchors.right: date.left
+                    anchors.rightMargin: Style.spacing.md
+                    elide: Text.ElideRight
+                    text: entry.modelData.chapter
+                    color: Color.muted
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.bodySmall
+                  }
+
+                  Text {
+                    id: date
+                    anchors.right: parent.right
+                    text: entry.modelData.side
+                    color: Color.muted
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.bodySmall
+                  }
+                }
+              }
+
+              MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onEntered: root.cursor = entry.index
+                onClicked: root.read(entry.modelData)
+              }
+            }
+          }
+        }
+
         Text {
           width: parent.width
           visible: root.notice !== null
@@ -302,72 +397,6 @@ Panel {
           color: Color.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
-        }
-
-        Repeater {
-          model: root.notice === null ? root.rows : []
-
-          Rectangle {
-            id: entry
-            required property var modelData
-            required property int index
-            width: column.width
-            height: lines.implicitHeight + Style.spacing.md * 2
-            radius: Style.cornerRadius
-            color: index === root.cursor ? Style.selectedAccentFill : "transparent"
-
-            Column {
-              id: lines
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.leftMargin: Style.spacing.md
-              anchors.rightMargin: Style.spacing.md
-
-              Text {
-                width: parent.width
-                elide: Text.ElideRight
-                text: entry.modelData.title
-                color: Color.popups.text
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-              }
-
-              Item {
-                width: parent.width
-                height: chapter.implicitHeight
-
-                Text {
-                  id: chapter
-                  anchors.left: parent.left
-                  anchors.right: date.left
-                  anchors.rightMargin: Style.spacing.md
-                  elide: Text.ElideRight
-                  text: entry.modelData.chapter
-                  color: Color.muted
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.bodySmall
-                }
-
-                Text {
-                  id: date
-                  anchors.right: parent.right
-                  text: entry.modelData.date
-                  color: Color.muted
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.bodySmall
-                }
-              }
-            }
-
-            MouseArea {
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onEntered: root.cursor = entry.index
-              onClicked: root.read(entry.modelData)
-            }
-          }
         }
 
         Text {

@@ -15,7 +15,18 @@ const ch = (id, sourceOrder, o) => Object.assign(
 const read = (at) => ({ isRead: true, lastReadAt: String(at || NOW - 50 * DAY) });
 const manga = (id, chapters, o) => Object.assign({ id, inLibraryAt: String(NOW - 200 * DAY), source: { id: "1" }, meta: [], chapters: { nodes: chapters } }, o);
 const data = (mangas, globalMeta) => ({ metas: { nodes: globalMeta || [] }, mangas: { nodes: mangas } });
-const list = (d, downloadedOnly) => U.list(d, downloadedOnly || false, NOW * 1000);
+const list = (d, downloadedOnly) => U.list(d, downloadedOnly || false, NOW * 1000).map((e) => ({ mangaId: e.mangaId, chapterId: e.chapterId }));
+
+test("each entry carries its tier, title, next chapter and what its reason needs", () => {
+  const partly = manga(1, [ch(11, 1, read(NOW - DAY)), ch(12, 2, { lastPageRead: 3, pageCount: 20, lastReadAt: String(NOW - DAY) })], { title: "Partly" });
+  const close = manga(2, [ch(21, 1, read(NOW - 2 * DAY)), ...unread(22, 3)], { title: "Close" });
+  const fresh = manga(3, [ch(31, 1, { fetchedAt: String(NOW - 2 * DAY) })], { title: "Fresh" });
+  assert.deepEqual(U.list(data([fresh, close, partly]), false, NOW * 1000), [
+    { mangaId: 1, chapterId: 12, tier: 1, title: "Partly", chapter: "Ch. 2", page: 3, pages: 20, unread: 1, update: NOW - 100 * DAY },
+    { mangaId: 2, chapterId: 22, tier: 2, title: "Close", chapter: "Ch. 22", page: 0, pages: 0, unread: 3, update: NOW - 100 * DAY },
+    { mangaId: 3, chapterId: 31, tier: 3, title: "Fresh", chapter: "Ch. 1", page: 0, pages: 0, unread: 1, update: NOW - 2 * DAY }
+  ]);
+});
 
 test("Up next puts a partly read next chapter before a manga close to caught up", () => {
   const close = manga(1, [ch(11, 1, read(NOW - DAY)), ch(12, 2)]);

@@ -238,3 +238,61 @@ test("the health check names the newest phone backup, whatever the sync merged",
   file("notes.txt", 1);
   assert.equal(check(), (t - 5) + ".0000000000 " + newest, "the newest phone backup, never a desktop backup");
 });
+
+const NOWS = Math.floor(now / 1000);
+const DAYS = 86400;
+const upChapter = (id, o) => Object.assign({ id, name: "Ch. " + id, chapterNumber: id, uploadDate: "0", isRead: false, isBookmarked: false, lastPageRead: 0,
+  pageCount: 0, isDownloaded: false, scanlator: "", sourceOrder: id, lastReadAt: "0", fetchedAt: String(NOWS - 100 * DAYS) }, o);
+const readAt = (days) => ({ isRead: true, lastReadAt: String(NOWS - days * DAYS) });
+const upManga = (id, title, chapters) => ({ id, title, inLibraryAt: String(NOWS - 200 * DAYS), source: { id: "1" }, meta: [], chapters: { nodes: chapters } });
+const upReply = (mangas, metas) => M.reply(200, JSON.stringify({ data: { metas: { nodes: metas || [] }, mangas: { nodes: mangas } } }));
+const partly = upManga(1, "Partly", [upChapter(11, readAt(1)), upChapter(12, { lastPageRead: 3, pageCount: 20, lastReadAt: String(NOWS - DAYS) })]);
+const close = upManga(2, "Close", [upChapter(21, readAt(2)), upChapter(22), upChapter(23), upChapter(24)]);
+const fresh = upManga(3, "Fresh", [upChapter(31, { fetchedAt: String(NOWS - 2 * DAYS) })]);
+const older = upManga(4, "Older", [upChapter(41, { fetchedAt: String(NOWS - 3 * DAYS) })]);
+
+test("the popup's Up next shows the first 3 manga, each with its next chapter, a reason and a peek-open", () => {
+  assert.deepEqual(Mark.upNext(upReply([older, fresh, close, partly]), now), [
+    { title: "Partly", chapter: "Ch. 12", side: "p. 4 / 20", open: ["peek-open", "1", "12"] },
+    { title: "Close", chapter: "Ch. 22", side: "3 left", open: ["peek-open", "2", "22"] },
+    { title: "Fresh", chapter: "Ch. 31", side: "new 2d", open: ["peek-open", "3", "31"] }
+  ]);
+});
+
+test("a reason without a page count shows the page alone; an update under a day old shows hours", () => {
+  const noCount = upManga(1, "A", [upChapter(11, readAt(1)), upChapter(12, { lastPageRead: 6, lastReadAt: String(NOWS - DAYS) })]);
+  const hours = upManga(2, "B", [upChapter(21, { fetchedAt: String(NOWS - 5 * 3600) })]);
+  assert.deepEqual(Mark.upNext(upReply([noCount, hours]), now).map((r) => r.side), ["p. 7", "new 5h"]);
+});
+
+test("the popup's Up next follows Downloaded only, which it asks the server for", () => {
+  const disk = upManga(5, "Disk", [upChapter(51, readAt(1)), upChapter(52, { isDownloaded: true })]);
+  assert.ok(Mark.upNextPayload().variables.keys.includes("miharchy.downloadedOnly"));
+  assert.deepEqual(Mark.upNext(upReply([close, disk], [{ key: "miharchy.downloadedOnly", value: "true" }]), now).map((r) => r.title), ["Disk"]);
+});
+
+test("Up next still loading, failed or empty shows no section, and the popup lists its updates as today", () => {
+  const rows = after(reply([chapter(9, 3)])).rows;
+  const today = [{ section: "", title: "Maid to Skate", chapter: "Ch.9", side: "2026-10-04", open: ["open-chapter", "7", "9"] }];
+  assert.deepEqual(Mark.upNext(null, now), [], "loading");
+  assert.deepEqual(Mark.upNext(M.reply(0, ""), now), [], "failed");
+  assert.deepEqual(Mark.upNext(upReply([]), now), [], "empty");
+  assert.deepEqual(Mark.entries(Mark.upNext(null, now), rows), today);
+});
+
+test("one cursor runs over Up next and then the updates, and a manga may show in both", () => {
+  const up = Mark.upNext(upReply([upManga(7, "Maid to Skate", [upChapter(9, { fetchedAt: String(NOWS - 2 * DAYS) })]), partly]), now);
+  const rows = after(reply([chapter(9, 3), chapter(10, 4)])).rows;
+  const list = Mark.entries(up, rows);
+  assert.deepEqual(list.map((e) => [e.section, e.title, e.open[0]]), [
+    ["Up next", "Partly", "peek-open"],
+    ["", "Maid to Skate", "peek-open"],
+    ["Updates", "Maid to Skate", "open-chapter"],
+    ["", "Maid to Skate", "open-chapter"]
+  ]);
+  assert.equal(Mark.move(list, 1, 1), 2, "down from the last Up next row lands on the first update");
+  assert.equal(Mark.move(list, 2, -1), 1);
+  assert.equal(Mark.move(list, 3, 1), 3, "stops at the last row");
+  assert.equal(Mark.move(list, 0, -1), 0);
+  assert.equal(Mark.move([], 0, 1), 0);
+});

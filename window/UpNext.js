@@ -17,13 +17,18 @@ var FRESH_DAYS = 7
 function payload() {
   return {
     query: "query($keys: [String!]) { metas(filter: { key: { in: $keys } }) { nodes { key value } }"
-      + " mangas(condition: { inLibrary: true }) { nodes { id inLibraryAt source { id } meta { key value }"
-      + " chapters { nodes { id name chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder lastReadAt fetchedAt } } } } }",
+      + " mangas(condition: { inLibrary: true }) { nodes { id title inLibraryAt source { id } meta { key value }"
+      + " chapters { nodes { id name chapterNumber uploadDate isRead isBookmarked lastPageRead pageCount isDownloaded scanlator sourceOrder lastReadAt fetchedAt } } } } }",
     variables: { keys: Prefs.keys(Library.CHAPTER_PREFS).concat([History.CLEARED_KEY]) }
   }
 }
 
-// data: payload()'s reply. -> [{ mangaId, chapterId }], the head first.
+// data: payload()'s reply. -> [{ mangaId, chapterId, tier, title, chapter,
+// page, pages, unread, update }], the head first. tier: 1 partly read, 2
+// close to caught up, 3 a fresh update. page: the next chapter's
+// lastPageRead, pages its page count (0 when the server has none yet);
+// unread: what the filters leave; update: the newest shown update's
+// fetchedAt in seconds, 0 for none. The popup's reasons read these.
 function list(data, downloadedOnly, now) {
   var tiers = [[], [], []]
   var freshSince = now / 1000 - FRESH_DAYS * 86400
@@ -47,11 +52,16 @@ function list(data, downloadedOnly, now) {
     var hidden = lastRead > 0 && lastRead <= Math.max(cleared, History.metaValue(m.meta, History.HIDDEN_KEY))
     var started = !hidden && (lastRead > 0 || shown.some(function(c) { return c.read }))
     var tier = started && next.lastPage > 0 ? 0 : started && unread <= CLOSE_UNREAD ? 1 : update > freshSince ? 2 : -1
-    if (tier !== -1) tiers[tier].push({ mangaId: m.id, chapterId: next.id, at: tier === 2 ? update : lastRead })
+    if (tier === -1) return
+    var pages = Number(m.chapters.nodes.filter(function(c) { return c.id === next.id })[0].pageCount) || 0
+    tiers[tier].push({
+      at: tier === 2 ? update : lastRead,
+      entry: { mangaId: m.id, chapterId: next.id, tier: tier + 1, title: String(m.title || ""), chapter: next.name, page: next.lastPage, pages: Math.max(0, pages), unread: unread, update: update }
+    })
   })
   var out = []
   tiers.forEach(function(t) {
-    t.sort(function(a, b) { return b.at - a.at }).forEach(function(e) { out.push({ mangaId: e.mangaId, chapterId: e.chapterId }) })
+    t.sort(function(a, b) { return b.at - a.at }).forEach(function(e) { out.push(e.entry) })
   })
   return out
 }
