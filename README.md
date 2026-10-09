@@ -76,6 +76,8 @@ Press `!` on the Library, or open Settings → Library check, to list the proble
 
 Press `space` to select a problem, or a whole group on its header. Press `x` to dismiss the selected problems, or the one under the cursor. Press `X` to see the dismissed problems, and `x` there to bring one back. A dismissed stalled problem comes back when a new chapter arrives.
 
+Press `M` to migrate the selected manga, or the group or row under the cursor, in one batch. For each manga, Miharchy searches a source with the same name as its own first, then your pinned sources in pin order. It searches one source at a time and takes the first close match. A stalled manga takes a match only when it has a higher chapter number; otherwise its row says "No source has more chapters." With nothing pinned and no same-named source, you pick one source for all of them. Then review the picks and confirm, as when you migrate a source from Browse (`M` on Sources), which searches in the same order.
+
 ## Sync with Mihon
 
 1. In Mihon, turn on automatic backups (More → Settings → Data and storage).

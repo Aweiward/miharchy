@@ -9,10 +9,12 @@ import "GlobalSearch.js" as GlobalSearch
 import "Migrate.js" as Migrate
 
 // Migrate over the view that opened it: one manga from its detail (search
-// every other source for its title, pick the match, confirm), or every
-// library manga of one source (pick that source, the target, then each
-// match). It talks to the server itself; Migrate.js decides. shell.qml
-// forwards every "migrate." command to run().
+// every other source for its title, pick the match, confirm), or a batch:
+// every library manga of one source, or the library check's selection.
+// A batch searches each manga's same-named and pinned sources in order,
+// or with neither the one target picked for all; then each match. It
+// talks to the server itself; Migrate.js decides. shell.qml forwards every
+// "migrate." command to run().
 Rectangle {
   id: view
 
@@ -22,6 +24,8 @@ Rectangle {
   property bool showNsfw: false
   // The library's categories, to name the ones that move.
   property var categories: []
+  // Browse.pinned(): the pinned source ids, in pin order.
+  property var pinned: []
 
   // "" (closed) | "search" | "from" | "to" | "match" | "confirm" | "busy" | "done"
   property string step: ""
@@ -31,10 +35,12 @@ Rectangle {
   property var search: null
   property var searchCursor: ({ row: 0, col: 0 })
   property bool editing: false
-  // A source: Migrate.librarySources(), the one chosen, the targets, the
-  // target chosen and the batch.
+  // A batch: Migrate.librarySources() and the one chosen (null for the
+  // library check's), the manga, the targets and the one chosen when no
+  // manga has a source to search, and the batch.
   property var froms: []
   property var from: null
+  property var manga: []
   property var tos: []
   property var to: null
   property var batch: null
@@ -80,8 +86,8 @@ Rectangle {
   readonly property string heading: {
     if (step === "search" && old) return "Migrate " + old.title + " from " + old.source + ": pick its match"
     if (step === "from") return "Migrate a source: the source to move manga from"
-    if (step === "to" && from) return "Move " + from.manga.length + " manga from " + from.name + " to"
-    if (step === "match" && to) return "Matches on " + to.name
+    if (step === "to") return "Move " + manga.length + " manga" + (from ? " from " + from.name : "") + " to"
+    if (step === "match") return to ? "Matches on " + to.name : "Matches on each manga's same-named source, then the pinned ones"
     if (step === "done") return "Done"
     return ""
   }
@@ -184,6 +190,7 @@ Rectangle {
     seq++
     batchMode = true
     merge = null
+    from = null
     jobs = []
     busyText = "Loading the library"
     step = "busy"
@@ -195,6 +202,47 @@ Rectangle {
       view.cursor = 0
       view.step = "from"
     })
+  }
+
+  // list: LibraryCheck.migrateList(). A stalled manga needs its highest
+  // chapter number first.
+  function startList(list) {
+    if (!config || running || !list.length) return
+    seq++
+    batchMode = true
+    merge = null
+    from = null
+    jobs = []
+    var s = seq
+    var go = function(withHighest) { view.loadSources(function(sources) { view.begin(withHighest, sources) }) }
+    if (!list.some(function(m) { return m.stalled })) return go(list)
+    busyText = "Reading the manga"
+    step = "busy"
+    send({ query: Migrate.HIGHEST_QUERY, variables: { ids: list.map(function(m) { return m.id }) } }, function(reply) {
+      if (s !== view.seq) return
+      if (reply.state !== "ok") return view.fail(reply)
+      go(Migrate.withHighest(list, reply.data))
+    })
+  }
+
+  // list: the batch's manga with sourceId and sourceName. With no
+  // same-named or pinned source for any, the user picks one target.
+  function begin(list, sources) {
+    manga = list
+    to = null
+    var each = Migrate.withTargets(list, sources, pinned)
+    if (each) return match(each)
+    tos = sources.filter(function(s) { return !list.every(function(m) { return String(m.sourceId) === s.id }) })
+    cursor = 0
+    step = "to"
+  }
+
+  function match(each) {
+    seq++
+    batch = Migrate.batch(each)
+    cursor = 0
+    step = "match"
+    pumpBatch()
   }
 
   function pumpSearch() {
@@ -215,6 +263,15 @@ Rectangle {
   function pumpBatch() {
     var s = seq
     var cfg = config
+    Migrate.checks(batch).forEach(function(i) {
+      var payload = Migrate.checkPayload(view.batch, i)
+      view.batch = Migrate.reduceBatch(view.batch, i, { type: "check" })
+      view.batchXhrs[i] = send(payload, function(reply) {
+        if (s !== view.seq) return
+        view.batch = Migrate.reduceBatch(view.batch, i, { type: "checked", reply: reply })
+        view.pumpBatch()
+      })
+    })
     Migrate.due(batch).forEach(function(i) {
       var payload = GlobalSearch.payload(view.batch.search.groups[i])
       view.batch = Migrate.reduceBatch(view.batch, i, { type: "request", now: Date.now() })
@@ -349,12 +406,14 @@ Rectangle {
           step = batchMode ? "match" : "search"
           break
         }
-        if (step === "to") {
-          step = "from"
-        } else if (step === "match") {
+        if (step === "match") {
           seq++
           batch = null
+        }
+        if (step === "match" && to) {
           step = "to"
+        } else if ((step === "to" || step === "match") && from) {
+          step = "from"
         } else {
           close()
         }
@@ -406,21 +465,13 @@ Rectangle {
           if (!from) break
           var chosen = from
           loadSources(function(sources) {
-            view.tos = Migrate.targets(sources, chosen.id, chosen.sourceName)
-            view.cursor = 0
-            view.step = "to"
+            view.begin(chosen.manga.map(function(m) { return { id: m.id, title: m.title, sourceId: chosen.id, sourceName: chosen.sourceName } }), sources)
           })
         } else if (step === "to") {
           to = tos[cursor] || null
-          if (!to) break
-          seq++
-          batch = Migrate.batch(to, from.manga)
-          cursor = 0
-          step = "match"
-          pumpBatch()
+          if (to) match(Migrate.withTarget(manga, to))
         } else if (step === "match") {
-          var target = to
-          jobs = Migrate.jobs(batch).map(function(j) { return { old: j.old, target: { id: j.target.id, title: j.target.title, source: target.name }, result: "" } })
+          jobs = Migrate.jobs(batch).map(function(j) { return { old: j.old, target: j.target, result: "" } })
           if (jobs.length) step = "confirm"
         } else if (step === "confirm") {
           apply(true)
@@ -530,7 +581,7 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         elide: Text.ElideRight
         text: row.modelData.right
-        color: /Failed|^skip|^No manga|needs|error|not running|rejected/.test(row.modelData.right) ? view.theme.urgent : row.current ? view.theme.selectedText : view.theme.muted
+        color: /Failed|^skip|^No manga|^No source|needs|error|not running|rejected/.test(row.modelData.right) ? view.theme.urgent : row.current ? view.theme.selectedText : view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
       }
@@ -550,7 +601,7 @@ Rectangle {
         var j = view.job
         var lines = []
         if (view.batchMode) {
-          lines.push({ text: "Migrate " + view.jobs.length + " of " + view.batch.manga.length + " manga from " + view.from.name + " to " + view.to.name + ".", strong: true })
+          lines.push({ text: "Migrate " + view.jobs.length + " of " + view.batch.manga.length + " manga" + (view.from ? " from " + view.from.name : "") + (view.to ? " to " + view.to.name : " to their matches") + ".", strong: true })
           lines.push({ text: "Each keeps its read chapters, bookmarks and categories, matched by chapter number." })
           lines.push({ text: "d   Delete the old manga's downloads: " + (view.deleteDownloads ? "yes" : "no") })
           lines.push({ text: "t   Take the old manga's tracks along: " + (view.withTracks ? "yes" : "no") })

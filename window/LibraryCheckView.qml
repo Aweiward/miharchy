@@ -43,7 +43,7 @@ Item {
   readonly property var problem: Model.problem(check, configPath)
   readonly property string hint: merging ? (merge.cursor === -1 ? "esc close   " : "j k move   enter keep this one   esc cancel   ") : "j k move   space select   x " + (showDismissed ? "bring back" : "dismiss") + "   X " + (showDismissed ? "problems" : "dismissed") + "   "
     + (current && current.kind === "extension" && current.type === "problem" ? "enter update   " : "")
-    + (current && current.kind === "duplicate" && current.type === "problem" ? "enter merge   " : "")
+    + (current && current.kind === "duplicate" && current.type === "problem" ? "enter merge   " : "") + "M migrate   "
 
   signal key(var event)
   // The copy chosen to stay: LibraryCheck.mergeJob().
@@ -80,6 +80,11 @@ Item {
       if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, view.configPath).title
       view.load()
     })
+  }
+
+  // What M migrates: the selection, else the group or row under the cursor.
+  function migrateList() {
+    return LibraryCheck.migrateList(LibraryCheck.targets(rows, selected, cursor), check.problems)
   }
 
   // A click moves the cursor as j and k do; a double click then sends Enter.

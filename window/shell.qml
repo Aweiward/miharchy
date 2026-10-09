@@ -588,6 +588,10 @@ ShellRoot {
       migrateView.startBatch()
       return
     }
+    if (id === "check.migrate") {
+      migrateView.startList(checkView.migrateList())
+      return
+    }
     if (id.indexOf("migrate.") === 0) {
       migrateView.run(id)
       return
@@ -1143,6 +1147,7 @@ ShellRoot {
           configPath: root.configPath
           showNsfw: root.settingsState.values.showNsfw
           categories: root.connection.categories
+          pinned: Browse.pinned(browseView.prefs)
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           onLibraryChanged: {
