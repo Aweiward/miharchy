@@ -65,7 +65,8 @@ ShellRoot {
   // { mangaId, chapterId } to read once the config loads, or null.
   property var pendingChapter: Model.chapterTarget(Quickshell.env("MIHARCHY_OPEN_CHAPTER"))
   // The launcher's peek starts a window with MIHARCHY_PEEK=1, its
-  // peek-next with MIHARCHY_PEEK=next; "" for none.
+  // peek-next with MIHARCHY_PEEK=next, its peek-open with
+  // MIHARCHY_PEEK="<mangaId> <chapterId>"; "" for none.
   property string pendingPeek: Quickshell.env("MIHARCHY_PEEK") || ""
   // The manga ids of Up next when the run of next presses began
   // (UpNext.after); in memory only.
@@ -175,7 +176,12 @@ ShellRoot {
     fetchLibrary()
     sendSettings(Settings.loadPayload())
     libraryStore.load()
+    var peekTarget = Model.chapterTarget(pendingPeek)
     if (pendingChapter) openChapter(pendingChapter)
+    else if (peekTarget) {
+      pendingPeek = ""
+      peekOpen(peekTarget)
+    }
     else if (pendingPeek) peek(pendingPeek === "next")
   }
 
@@ -227,6 +233,13 @@ ShellRoot {
     })
   }
 
+  // The launcher's peek-open (the popup's Up next rows): that chapter as a
+  // peek opens it, and the next key starts a new run from it.
+  function peekOpen(target) {
+    root.upNextOrder = []
+    root.openChapter(target, true)
+  }
+
   // The next key's pick from list: the manga after current in the run's
   // order, which starts over when current is not in it.
   function nextInOrder(list, current) {
@@ -256,6 +269,10 @@ ShellRoot {
 
     function peekNext(): void {
       root.peek(true)
+    }
+
+    function peekOpen(mangaId: int, chapterId: int): void {
+      root.peekOpen({ mangaId: mangaId, chapterId: chapterId })
     }
 
     function openChapter(mangaId: int, chapterId: int): void {
