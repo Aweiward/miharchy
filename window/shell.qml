@@ -1083,7 +1083,7 @@ ShellRoot {
           config: root.config
           configPath: root.configPath
           onKey: function(event) { event.accepted = root.handleKey(event) }
-          onMergeChosen: function(job) { migrateView.startWith(job.old, job.kept, job.merge) }
+          onMergeChosen: function(job) { migrateView.startWith(job.old, job.kept) }
         }
 
         Text {

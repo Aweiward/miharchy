@@ -6,7 +6,7 @@
 - Scope `check`: `j`/`k` move over group headers and rows; `space` selects a row, or on a header the whole group (again deselects it); `x` dismisses the selection, else the group or row under the cursor; `M` migrates the same manga as a batch (`migrate.md`), and the check loads again after; `X` lists the dismissed problems, where `x` brings them back; Enter on an extension update row updates that extension; Enter on a duplicate row opens the merge prompt; `r` loads again; `Esc` and `q` quit, as on Setup.
 - Kinds, in screen order: Source missing, Update failed, No chapters, Extension update, Duplicate, Stalled (`LibraryCheck.KINDS`).
 - The Settings row loads the check whenever Settings shows (`settingsView.checkWanted`).
-- Merge (scope `check-merge`, `checkView.merge`): both copies of a duplicate pair with source, chapters read, categories and tracks; `j`/`k` move, Enter keeps the copy under the cursor, Esc cancels. A copy whose source is missing shows "source missing" and the cursor never lands on it; with both missing the prompt says no copy can be kept. The other copy then goes through Migrate's confirm (`migrateView.merge` true, heading "Merge … into …"); Enter there writes, the check reloads and the kept copy's detail opens.
+- Merge (scope `check-merge`, `checkView.merge`): both copies of a duplicate pair with source, chapters read, categories and tracks; `j`/`k` move, Enter keeps the copy under the cursor, Esc cancels. A copy whose source is missing shows "source missing" and the cursor never lands on it; with both missing the prompt says no copy can be kept. The other copy then goes through Migrate's confirm (`migrateView.job.merge` set because the kept copy is in the library, heading "Merge … into …"); Enter there writes, the check reloads and the kept copy's detail opens.
 
 ## How to get to it (user POV)
 Library, `!`. Or `5`, the "Library check" row, Enter.
@@ -39,7 +39,7 @@ Keep both extensions installed. Search both for "Eleceed" and `fetchMangaAndChap
   [500, function() { key("Enter") }],
   [3000, function() { log("prompt", checkView.merge.copies.map(function(c) { return JSON.stringify(c) })); grab("prompt") }],
   [500, function() { key("Enter") }],
-  [15000, function() { log("confirm", [migrateView.step, migrateView.merge]); grab("confirm") }],
+  [15000, function() { log("confirm", [migrateView.step, migrateView.job.merge]); grab("confirm") }],
   [800, function() { key("Enter") }],
   [15000, function() { key("Esc") }],
   [4000, function() { log("check after", checkView.rows.map(function(r) { return r.key })); grab("check-after") }],

@@ -12,7 +12,7 @@ var OLD_QUERY = "query($id: Int!) { manga(id: $id) { id title categories { nodes
   + " chapters { nodes { id chapterNumber isRead isBookmarked isDownloaded } }"
   + " trackRecords { nodes { id trackerId tracker { name } } } } }"
 var TARGET_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: true }) {"
-  + " manga { id title } chapters { id chapterNumber isRead isBookmarked } } }"
+  + " manga { id title inLibrary meta { key value } trackRecords { nodes { tracker { name } } } } chapters { id chapterNumber isRead isBookmarked } } }"
 var LIBRARY_QUERY = "{ mangas(condition: { inLibrary: true }, orderBy: TITLE) { nodes { id title sourceId source { displayName } } }"
   + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
 var HIGHEST_QUERY = "query($ids: [Int!]) { mangas(filter: { id: { in: $ids } }) { nodes { id highestNumberedChapter { chapterNumber } } } }"
@@ -63,8 +63,8 @@ function plan(oldChapters, targetChapters) {
 // MigrateMangaUseCase. bindTrackRecord copies each record to the target in
 // the server's database, replacing the target's own track on that tracker;
 // it never calls the tracker, so it needs no login and pushes nothing.
-// merge: the target's own { meta, trackRecords } when it is a library manga
-// that stays (the library check's duplicate merge). Its state wins: no
+// merge: mergeInto(the target), its own { meta, trackRecords } when it is
+// already a library manga, whatever led there. Its state wins: no
 // clear, so it keeps its categories and gains the old ones (it is in the
 // library already, so no default category joins); the old reading mode
 // only when it has none; the old tracks only on trackers it lacks.
@@ -88,6 +88,12 @@ function targetPayload(old, targetId, p, withTracks, merge) {
     query += " track" + i + ": bindTrackRecord(input: { mangaId: $target, trackRecordId: $track" + i + " }) { trackRecord { id } }"
   })
   return { query: "mutation(" + params.join(", ") + ") {" + query + " }", variables: vars }
+}
+
+// A TARGET_MUTATION manga -> targetPayload's merge, or null for a target
+// not in the library, which takes Mihon's plain Migrate.
+function mergeInto(target) {
+  return target.inLibrary ? { meta: target.meta, trackRecords: target.trackRecords } : null
 }
 
 function readingMode(manga) {
@@ -385,6 +391,7 @@ if (typeof module !== "undefined") {
     LIBRARY_QUERY: LIBRARY_QUERY,
     plan: plan,
     targetPayload: targetPayload,
+    mergeInto: mergeInto,
     trackRecords: trackRecords,
     movingTracks: movingTracks,
     oldPayload: oldPayload,

@@ -79,6 +79,20 @@ test("a merge adds the other copy's categories to the kept copy's own: no clear,
   assert.match(Mi.targetPayload(old, 40, { read: [], bookmark: [] }, false).query, /clearCategories: true/, "plain Migrate still sets exactly the old categories");
 });
 
+test("a target already in the library merges whatever the entry path: it keeps its categories, mode and tracks; a new target takes exactly the old ones", () => {
+  const old = { id: 7, categories: { nodes: [{ id: 3 }] }, meta: [{ key: "miharchy.readingMode", value: "webtoon" }], trackRecords: { nodes: [] } };
+  const fetched = (inLibrary) => ok({ fetchMangaAndChapters: { manga: { id: 40, title: "E", inLibrary, meta: [{ key: "miharchy.readingMode", value: "pager" }], trackRecords: { nodes: [] } }, chapters: [] } });
+  assert.match(Mi.TARGET_MUTATION, /manga \{ id title inLibrary meta \{ key value \} trackRecords/);
+  const inLib = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true, Mi.mergeInto(fetched(true).data.fetchMangaAndChapters.manga));
+  assert.doesNotMatch(inLib.query, /clearCategories/, "its own categories stay, the old ones are added");
+  assert.deepEqual(inLib.variables.categories, [3]);
+  assert.doesNotMatch(inLib.query, /setMangaMeta/, "its own reading mode stays");
+  assert.equal(Mi.mergeInto(fetched(false).data.fetchMangaAndChapters.manga), null);
+  const fresh = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true, null);
+  assert.match(fresh.query, /clearCategories: true/);
+  assert.equal(fresh.variables.mode.value, "webtoon");
+});
+
 test("a merge keeps the kept copy's reading mode and tracks; the other's fill only what it lacks", () => {
   const mode = (value) => [{ key: "miharchy.readingMode", value }];
   const track = (id, name) => ({ id, trackerId: id, tracker: { name } });

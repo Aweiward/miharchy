@@ -288,7 +288,7 @@ function dismissPayload(list, now, undo) {
 
 // Enter on a duplicate merges a pair: the row's manga and the first it
 // duplicates. With three copies, a second merge takes the third.
-var MERGE_FIELDS = "{ id title sourceId source { displayName } meta { key value } categories { nodes { id name } } chapters { nodes { isRead } } trackRecords { nodes { tracker { name } } } }"
+var MERGE_FIELDS = "{ id title sourceId source { displayName } categories { nodes { id name } } chapters { nodes { isRead } } trackRecords { nodes { tracker { name } } } }"
 var MERGE_QUERY = "query($a: Int!, $b: Int!) { a: manga(id: $a) " + MERGE_FIELDS + " b: manga(id: $b) " + MERGE_FIELDS
   + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
 
@@ -311,9 +311,7 @@ function mergeCopies(data) {
       read: chapters.filter(function(c) { return c.isRead }).length,
       total: chapters.length,
       categories: n.categories.nodes.map(name),
-      tracks: n.trackRecords.nodes.map(function(t) { return name(t.tracker) }),
-      meta: n.meta || [],
-      trackRecords: n.trackRecords
+      tracks: n.trackRecords.nodes.map(function(t) { return name(t.tracker) })
     }
   })
 }
@@ -336,15 +334,14 @@ function mergeMove(copies, cursor, delta) {
 }
 
 // keep: the index of the copy that stays. The other migrates into it:
-// MigrateView.startWith(old, kept, merge), merge the kept copy's own
-// reading mode and tracks, which win over the other's.
+// MigrateView.startWith(old, kept). The kept copy is in the library, so the
+// migrate merges (Migrate.mergeInto): its own state wins.
 function mergeJob(copies, keep) {
   var kept = copies[keep]
   var old = copies[1 - keep]
   return {
     old: { id: old.id, title: old.title, source: old.source },
-    kept: { id: kept.id, title: kept.title, sourceName: kept.source },
-    merge: { meta: kept.meta, trackRecords: kept.trackRecords }
+    kept: { id: kept.id, title: kept.title, sourceName: kept.source }
   }
 }
 
