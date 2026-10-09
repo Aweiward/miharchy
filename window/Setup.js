@@ -240,7 +240,7 @@ function probeCommand(configPath, syncDir, windowDir, skipAur) {
 
 // The job a confirmed or committed step runs.
 // ctx: { serverScript, folder, syncDir, windowDir, pair: pairing(),
-// install: the packages step's command }.
+// install: the confirmed step's terminal command, if it has one }.
 function runCommand(id, ctx) {
   switch (id) {
     // The user sees this command in the terminal and types the password there;
@@ -251,6 +251,8 @@ function runCommand(id, ctx) {
     case "syncFolder": return command("test -d \"$1\" || { echo \"$1 is not a folder.\"; exit 1; }", [ctx.folder])
     case "helper": return command(BUILD_SCRIPT, [ctx.syncDir])
     case "phoneBackups":
+      // Syncthing to install or start: in the terminal. Otherwise accept the phone.
+      if (ctx.install) return command("omarchy-launch-floating-terminal-with-presentation \"$1\"", [ctx.install])
       var d = ctx.pair.device, f = ctx.pair.folder
       return command(SYNCTHING_ACCEPT, [ctx.folder, d ? d.id : "", d ? d.name : "", f ? f.id : "", f ? f.label : "", f ? f.device : ""])
     case "peekKey": return command(PEEK_SCRIPT, [peekLine(ctx.windowDir)])
@@ -476,14 +478,25 @@ function status(s, id) {
 
 var AGAIN = " Setup checks again on its own."
 
+// The phone step opened the terminal (its launcher returns at once).
+function launchedTerminal(s) {
+  var r = s.results.phoneBackups
+  return !!(r && r.code === 0)
+}
+var START_SYNCTHING = "systemctl --user enable --now syncthing"
+
 // What the phone backups step asks while no phone backup has landed: the
 // Mihon steps, led by where Syncthing stands when it was checked.
 function phoneTodo(s, folder) {
   var st = s.syncthing
   var none = "No phone backup in " + folder + " yet. "
   if (!st) return { state: "todo", detail: none + "In Mihon, turn on automatic backups (More → Settings → Data and storage) and share its autobackup folder with this folder. Then tap Create backup in Mihon, or wait for the automatic one." + AGAIN }
-  if (!st.installed) return { state: "todo", detail: none + "To share it with your phone through Syncthing, install and start it: sudo pacman -S syncthing, then systemctl --user enable --now syncthing." + AGAIN }
-  if (!st.answering) return { state: "todo", detail: none + "Syncthing does not answer: start it with systemctl --user enable --now syncthing." + AGAIN }
+  // Both in Omarchy's terminal, after y, like the packages (ADR 0007).
+  if (!st.installed) return { state: "todo", command: "omarchy-pkg-add syncthing && " + START_SYNCTHING, prompt: "Install and start Syncthing in a terminal?",
+    detail: launchedTerminal(s) ? "Installing Syncthing in the terminal. Setup checks again on its own; Enter opens the terminal again."
+      : none + "To share it with your phone through Syncthing, press Enter to install and start it in a terminal; you type your password there. Any other way to share the folder works too." + AGAIN }
+  if (!st.answering) return { state: "todo", command: START_SYNCTHING, prompt: "Start Syncthing in a terminal?",
+    detail: none + "Syncthing does not answer: press Enter to start it in a terminal." + AGAIN }
   if (st.shared) return { state: "todo", detail: none + "Syncthing shares this folder with your phone. In Mihon, turn on automatic backups (More → Settings → Data and storage), then tap Create backup, or wait for the automatic one." + AGAIN }
   var pair = pairing(s)
   if (pair.device) return { state: "todo", prompt: "Accept " + pair.device.name + " in Syncthing?", detail: "Your phone " + pair.device.name + " wants to connect through Syncthing. Press Enter, then y, to accept it. Then, in Syncthing-Fork, share Mihon's autobackup folder with this desktop." }

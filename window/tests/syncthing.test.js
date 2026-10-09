@@ -126,10 +126,19 @@ const facts = (f) => finish(waiting, "syncthing", [
 const MIHON = "In Mihon, turn on automatic backups (More → Settings → Data and storage), then tap Create backup, or wait for the automatic one.";
 
 test("the step says how to get Syncthing going, and skips pairing when the folder is already shared", () => {
-  assert.equal(S.status(facts({ installed: false }), "phoneBackups").detail,
-    "No phone backup in " + F + " yet. To share it with your phone through Syncthing, install and start it: sudo pacman -S syncthing, then systemctl --user enable --now syncthing. Setup checks again on its own.");
-  assert.equal(S.status(facts({ answering: false }), "phoneBackups").detail,
-    "No phone backup in " + F + " yet. Syncthing does not answer: start it with systemctl --user enable --now syncthing. Setup checks again on its own.");
+  assert.deepEqual(S.status(facts({ installed: false }), "phoneBackups"), { state: "todo",
+    command: "omarchy-pkg-add syncthing && systemctl --user enable --now syncthing",
+    prompt: "Install and start Syncthing in a terminal?",
+    detail: "No phone backup in " + F + " yet. To share it with your phone through Syncthing, press Enter to install and start it in a terminal; you type your password there. Any other way to share the folder works too. Setup checks again on its own." });
+  assert.equal(S.action(facts({ installed: false }), "phoneBackups"), "confirm");
+  assert.deepEqual(S.status(facts({ answering: false }), "phoneBackups"), { state: "todo",
+    command: "systemctl --user enable --now syncthing",
+    prompt: "Start Syncthing in a terminal?",
+    detail: "No phone backup in " + F + " yet. Syncthing does not answer: press Enter to start it in a terminal. Setup checks again on its own." });
+  assert.equal(S.action(facts({ answering: false }), "phoneBackups"), "confirm");
+  const launched = finish(facts({ installed: false }), "phoneBackups", "\n0\n");
+  assert.equal(S.status(launched, "phoneBackups").detail, "Installing Syncthing in the terminal. Setup checks again on its own; Enter opens the terminal again.");
+  assert.equal(S.action(launched, "phoneBackups"), "confirm");
   assert.deepEqual(S.status(facts({ shared: true }), "phoneBackups"), { state: "todo",
     detail: "No phone backup in " + F + " yet. Syncthing shares this folder with your phone. " + MIHON + " Setup checks again on its own." });
   assert.equal(S.action(facts({ shared: true }), "phoneBackups"), "check");
@@ -202,4 +211,14 @@ test("a Syncthing that refuses the change fails the step and says so", async () 
     assert.deepEqual(await accept(h, { device: { id: PHONE, name: "Pixel" }, folder: null }), { code: 1, output: "Syncthing did not take the device. Accept it at http://127.0.0.1:" + st.port + "." });
     assert.deepEqual(st.posts, []);
   } finally { st.close(); }
+});
+
+test("y on a Syncthing to install or start opens Omarchy's terminal on that command", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-st-term-"));
+  fs.writeFileSync(path.join(dir, "omarchy-launch-floating-terminal-with-presentation"), "#!/bin/sh\nprintf '%s' \"$*\" > \"$(dirname \"$0\")/launched\"\n", { mode: 0o755 });
+  const install = S.status(facts({ installed: false }), "phoneBackups").command;
+  const argv = S.runCommand("phoneBackups", { folder: F, pair: S.pairing(facts({ installed: false })), install: install });
+  const out = S.parseJob(require("node:child_process").execFileSync(argv[0], argv.slice(1), { encoding: "utf8", env: { PATH: dir + ":/usr/bin:/bin", HOME: dir } }));
+  assert.equal(out.code, 0);
+  assert.equal(fs.readFileSync(path.join(dir, "launched"), "utf8"), "omarchy-pkg-add syncthing && systemctl --user enable --now syncthing");
 });
