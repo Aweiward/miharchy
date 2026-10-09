@@ -17,9 +17,11 @@ var SERVER_CONF = ".local/share/miharchy/suwayomi/server.conf"
 var DESKTOP_FILE = ".local/share/applications/miharchy.desktop"
 var BINDINGS_FILE = ".config/hypr/bindings.lua"
 var PEEK_KEY = "SUPER + M"
-// A bindings.lua line that runs `miharchy peek` (peekLine quotes the path)
-// and is not a Lua comment.
-var HAS_PEEK_KEY = "grep -qsE \"^[[:space:]]*[^[:space:]-].*miharchy'? peek\""
+var NEXT_KEY = "SUPER + SHIFT + M"
+// A bindings.lua line that runs `miharchy peek` or `miharchy peek-next`
+// (bindLine quotes the path) and is not a Lua comment.
+var HAS_PEEK_KEY = "grep -qsE \"^[[:space:]]*[^[:space:]-].*miharchy'? peek([^-]|$)\""
+var HAS_NEXT_KEY = "grep -qsE \"^[[:space:]]*[^[:space:]-].*miharchy'? peek-next\""
 
 // kind "install": Setup installs packages through Omarchy in a terminal the
 //                 user sees, after y (ADR 0007); done, Enter checks again.
@@ -36,7 +38,7 @@ var STEPS = [
   { id: "phoneBackups", title: "Phone backups", kind: "check" },
   { id: "helper", title: "Sync helper", kind: "run", prompt: "Build the sync helper now? It takes a few minutes." },
   { id: "launcher", title: "App launcher entry", kind: "run", prompt: "Add Miharchy to the app launcher?" },
-  { id: "peekKey", title: "Peek key", kind: "run", prompt: "Add " + PEEK_KEY + ", which shows and hides a peek, to your Hyprland bindings?" }
+  { id: "peekKey", title: "Peek key", kind: "run", prompt: "Add the peek keys missing from your Hyprland bindings: " + PEEK_KEY + " shows and hides a peek, " + NEXT_KEY + " moves it to the next manga?" }
 ]
 
 // sha256 over every file in a sync/ folder except build output, so a
@@ -64,19 +66,28 @@ var PROBE = [
   "echo \"helperSource $(fingerprint \"$2\")\"",
   "echo \"helperInstalled $(test -x \"$HOME/" + HELPER_DIR + "/bin/miharchy-sync\" && cat \"$HOME/" + HELPER_DIR + "/source.sha256\")\"",
   "printf '%s' \"$3\" | cmp -s - \"$HOME/" + DESKTOP_FILE + "\" && echo launcher",
-  HAS_PEEK_KEY + " \"$HOME/" + BINDINGS_FILE + "\" && echo peekKey"
+  HAS_PEEK_KEY + " \"$HOME/" + BINDINGS_FILE + "\" && echo peekKey",
+  HAS_NEXT_KEY + " \"$HOME/" + BINDINGS_FILE + "\" && echo nextKey"
 ].join("\n")
 
-// $1 is peekLine(). A bind the user already has, on any key, stays as it
-// is; a taken key, binds hyprctl cannot list or a missing file leave the
-// line to paste.
+// $1 is bindLine() for the peek key, $2 for the next key. A bind the user
+// already has, on any key, stays as it is; a taken key, binds hyprctl
+// cannot list or a missing file leave that line to paste.
 var PEEK_SCRIPT = [
   "file=$HOME/" + BINDINGS_FILE,
-  HAS_PEEK_KEY + " \"$file\" && { echo \"$file already has a peek key.\"; exit 0; }",
-  "test -f \"$file\" || { echo \"There is no $file. Add this line to your Hyprland bindings: $1\"; exit 1; }",
-  "binds=$(hyprctl binds -j 2>/dev/null) || { echo \"Hyprland did not list its binds. Add this line to $file with a free key: $1\"; exit 1; }",
-  "printf '%s' \"$binds\" | jq -e '.[] | select(.modmask == 64 and (.key | ascii_upcase) == \"M\")' >/dev/null && { echo \"" + PEEK_KEY + " is taken. Add this line to $file with a free key: $1\"; exit 1; }",
-  "printf '\\n%s\\n' \"$1\" >> \"$file\" && echo \"Added " + PEEK_KEY + " to $file.\""
+  "binds=$(hyprctl binds -j 2>/dev/null) || binds=",
+  "code=0",
+  // $1 the bind's key, $2 its modmask, $3 its line.
+  "add() {",
+  "  if ! test -f \"$file\"; then echo \"There is no $file. Add this line to your Hyprland bindings: $3\"; code=1",
+  "  elif [ -z \"$binds\" ]; then echo \"Hyprland did not list its binds. Add this line to $file with a free key: $3\"; code=1",
+  "  elif printf '%s' \"$binds\" | jq -e --argjson m \"$2\" '.[] | select(.modmask == $m and (.key | ascii_upcase) == \"M\")' >/dev/null; then echo \"$1 is taken. Add this line to $file with a free key: $3\"; code=1",
+  "  else printf '\\n%s\\n' \"$3\" >> \"$file\" && echo \"Added $1 to $file.\"",
+  "  fi",
+  "}",
+  HAS_PEEK_KEY + " \"$file\" && echo \"$file already has a peek key.\" || add \"" + PEEK_KEY + "\" 64 \"$1\"",
+  HAS_NEXT_KEY + " \"$file\" && echo \"$file already has a next key.\" || add \"" + NEXT_KEY + "\" 65 \"$2\"",
+  "exit $code"
 ].join("\n")
 
 // $1 is the plugin's sync/. Gradle writes build/, .gradle/ and .kotlin/
@@ -131,11 +142,12 @@ function desktopEntry(windowDir) {
   ].join("\n")
 }
 
-// The bindings.lua line for the plugin's window/: Omarchy's o.bind runs its
-// command through a shell, so the path is single-quoted inside a Lua string.
-function peekLine(windowDir) {
-  var cmd = "'" + String(windowDir + "/miharchy").replace(/'/g, "'\\''") + "' peek"
-  return "o.bind(\"" + PEEK_KEY + "\", \"Miharchy peek\", " + JSON.stringify(cmd) + ")"
+// A bindings.lua line that runs the plugin's window/miharchy with arg:
+// Omarchy's o.bind runs its command through a shell, so the path is
+// single-quoted inside a Lua string.
+function bindLine(windowDir, key, label, arg) {
+  var cmd = "'" + String(windowDir + "/miharchy").replace(/'/g, "'\\''") + "' " + arg
+  return "o.bind(\"" + key + "\", \"" + label + "\", " + JSON.stringify(cmd) + ")"
 }
 
 // $1 is the sync folder. Phone backups count only at its top, where the
@@ -255,7 +267,7 @@ function runCommand(id, ctx) {
       if (ctx.install) return command("omarchy-launch-floating-terminal-with-presentation \"$1\"", [ctx.install])
       var d = ctx.pair.device, f = ctx.pair.folder
       return command(SYNCTHING_ACCEPT, [ctx.folder, d ? d.id : "", d ? d.name : "", f ? f.id : "", f ? f.label : "", f ? f.device : ""])
-    case "peekKey": return command(PEEK_SCRIPT, [peekLine(ctx.windowDir)])
+    case "peekKey": return command(PEEK_SCRIPT, [bindLine(ctx.windowDir, PEEK_KEY, "Miharchy peek", "peek"), bindLine(ctx.windowDir, NEXT_KEY, "Miharchy next manga", "peek-next")])
     case "launcher": return command("file=$HOME/" + DESKTOP_FILE + "\nmkdir -p \"$(dirname \"$file\")\" && printf '%s' \"$1\" > \"$file\" && echo \"Wrote $file.\"", [desktopEntry(ctx.windowDir)])
   }
   return null
@@ -277,7 +289,7 @@ function javaMajor(line) {
 
 // The probe's output -> facts. docker is false when the command is absent.
 function parseProbe(text) {
-  var f = { java: 0, suwayomi: false, websockets: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", aurSuwayomi: "", launcher: false, peekKey: false, unitCurrent: false, basicAuth: false }
+  var f = { java: 0, suwayomi: false, websockets: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", aurSuwayomi: "", launcher: false, peekKey: false, nextKey: false, unitCurrent: false, basicAuth: false }
   String(text).split("\n").forEach(function(line) {
     var sp = line.indexOf(" ")
     var key = sp === -1 ? line : line.slice(0, sp)
@@ -298,6 +310,7 @@ function parseProbe(text) {
     if (key === "javac") f.javac = true
     if (key === "launcher") f.launcher = true
     if (key === "peekKey") f.peekKey = true
+    if (key === "nextKey") f.nextKey = true
     if (key === "unitCurrent") f.unitCurrent = true
     if (key === "basicAuth") f.basicAuth = true
     if (key === "helperSource") f.helperSource = rest.trim()
@@ -470,8 +483,10 @@ function status(s, id) {
       if (p.launcher) return is("done", "Miharchy is in the app launcher.")
       return is("todo", "Press Enter to add Miharchy to the app launcher: ~/" + DESKTOP_FILE + ".")
     case "peekKey":
-      if (p.peekKey) return is("done", "A key in ~/" + BINDINGS_FILE + " shows and hides a peek.")
-      return is("todo", "Press Enter to add " + PEEK_KEY + ", which shows and hides a peek, to ~/" + BINDINGS_FILE + ".")
+      if (p.peekKey && p.nextKey) return is("done", "Keys in ~/" + BINDINGS_FILE + " show and hide a peek and move it to the next manga.")
+      if (p.peekKey) return is("outdated", "Press Enter to add " + NEXT_KEY + ", which moves a peek to the next manga, to ~/" + BINDINGS_FILE + ".")
+      if (p.nextKey) return is("outdated", "Press Enter to add " + PEEK_KEY + ", which shows and hides a peek, to ~/" + BINDINGS_FILE + ".")
+      return is("todo", "Press Enter to add " + PEEK_KEY + ", which shows and hides a peek, and " + NEXT_KEY + ", which moves it to the next manga, to ~/" + BINDINGS_FILE + ".")
   }
   return is("checking", "")
 }
@@ -551,7 +566,8 @@ function offers(s) {
     if (st.required) return
     var state = status(s, st.id).state
     if (state === "todo") keys.push(st.id + ":todo")
-    if (state === "outdated") keys.push(st.id + ":outdated:" + s.probe.helperSource.slice(0, 12))
+    // A helper rebuild is due again on each sync/ change, so its key carries the sources.
+    if (state === "outdated") keys.push(st.id + ":outdated" + (st.id === "helper" ? ":" + s.probe.helperSource.slice(0, 12) : ""))
   })
   return keys
 }

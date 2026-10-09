@@ -8,7 +8,7 @@
 // Up next (GLOSSARY.md): the library manga a peek offers, each with its
 // next chapter, in tiers. Derived from read state each time; nothing is
 // stored. Pure, so tests/upnext.test.js pins it; shell.qml peek() sends
-// payload() and opens the head of list().
+// payload() and opens the head of list(), or for the next key after().
 
 // ponytail: fixed; Settings rows if they turn out wrong.
 var CLOSE_UNREAD = 5
@@ -56,9 +56,19 @@ function list(data, downloadedOnly, now) {
   return out
 }
 
+// The next key's pick: the entry after mangaId (the reader's manga, null
+// with the reader closed, which counts as the head), wrapping from the last
+// to the head. A manga not in the list gives the head; an empty list gives
+// undefined.
+function after(list, mangaId) {
+  var i = mangaId === null ? 0 : list.findIndex(function(e) { return e.mangaId === mangaId })
+  return i === -1 ? list[0] : list[(i + 1) % list.length]
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     payload: payload,
-    list: list
+    list: list,
+    after: after
   }
 }

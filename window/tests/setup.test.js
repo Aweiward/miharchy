@@ -155,7 +155,7 @@ test("the sync folder is stored as miharchy.syncFolder meta and read back", () =
 });
 
 test("running setup twice changes nothing: a done machine stays done after another check", () => {
-  const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\npeekKey\n");
+  const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\npeekKey\nnextKey\n");
   const data = { settings: FLARE_ON, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/s" }] } };
   const phones = "phones 1\nnewest app.mihon_2026-10-09_05-31.tachibk\n\n0\n";
   const once = finish(server(finish(S.initial(), "probe", done), data), "phones", phones);
@@ -165,7 +165,7 @@ test("running setup twice changes nothing: a done machine stays done after anoth
 });
 
 test("a server newer than the checked version shows a warning and changes no step", () => {
-  const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\npeekKey\n");
+  const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\npeekKey\nnextKey\n");
   const data = (version) => ({ settings: FLARE_ON, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/s" }] }, aboutServer: { version } });
   const probed = finish(S.initial(), "probe", done);
   const newer = server(probed, data("v2.5.0"));
@@ -299,6 +299,12 @@ test("nothing is offered before the server answers, and waiting or unavailable s
   assert.deepEqual(S.offers(s), ["launcher:todo", "peekKey:todo"], "no javac means the helper waits; no docker means FlareSolverr is unavailable");
 });
 
+test("a user with only the peek key is offered the step once more, for the next key", () => {
+  const s = serverWith(finish(S.initial(), "probe", READY.replace("docker \n", "peekKey\n")), "launcher:todo,peekKey:todo");
+  assert.equal(S.status(s, "peekKey").state, "outdated");
+  assert.deepEqual(S.unoffered(s), ["peekKey:outdated"]);
+});
+
 test("the probe reports whether the installed server unit matches the plugin's copy", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-unit-"));
   const home = path.join(root, "home");
@@ -359,69 +365,92 @@ test("a running server with an outdated unit is due again, and keeps Setup open"
   assert.equal(S.status(finish(S.initial(), "probe", READY), "server").state, "done");
 });
 
-// The peek key step, against a temporary HOME and a stub hyprctl whose binds are SUPER (64) + the keys given.
-function peekHome(bindings, superKeys, hyprctl) {
+// The peek key step, against a temporary HOME and a stub hyprctl whose binds are the [modmask, key] pairs given (64 SUPER, 65 SUPER + SHIFT).
+function peekHome(bindings, taken, hyprctl) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-peek-"));
   const file = path.join(home, ".config/hypr/bindings.lua");
   if (bindings !== null) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, bindings);
   }
-  const binds = JSON.stringify((superKeys || []).map((key) => ({ modmask: 64, key })).concat([{ modmask: 65, key: "M" }]));
+  const binds = JSON.stringify((taken || []).concat([[8, "M"]]).map(([modmask, key]) => ({ modmask, key })));
   fs.mkdirSync(path.join(home, ".config/hypr"), { recursive: true });
   fs.writeFileSync(path.join(home, ".config/hypr/bindings.conf"), "# old\n");
   const bin = stubs({ hyprctl: hyprctl || "[ \"$*\" = 'binds -j' ] && echo '" + binds + "'" });
   const env = { ...process.env, HOME: home, PATH: bin + ":" + process.env.PATH };
   return {
     file,
+    read: () => fs.readFileSync(file, "utf8"),
     add: () => S.parseJob(run(S.runCommand("peekKey", { windowDir: "/p q/window" }), env)),
     conf: () => fs.readFileSync(path.join(home, ".config/hypr/bindings.conf"), "utf8"),
     state: () => S.status(finish(S.initial(), "probe", run(S.probeCommand("/none", "/s", "/p q/window"), env)), "peekKey").state
   };
 }
 const PEEK_LINE = "o.bind(\"SUPER + M\", \"Miharchy peek\", \"'/p q/window/miharchy' peek\")";
+const NEXT_LINE = "o.bind(\"SUPER + SHIFT + M\", \"Miharchy next manga\", \"'/p q/window/miharchy' peek-next\")";
 
-test("the peek key step adds SUPER + M to bindings.lua once, then counts as done", () => {
+test("the peek key step adds SUPER + M and SUPER + SHIFT + M to bindings.lua once, then counts as done", () => {
   const t = peekHome("-- mine\n");
   assert.equal(t.state(), "todo");
   const r = t.add();
   assert.equal(r.code, 0, r.output);
-  assert.equal(fs.readFileSync(t.file, "utf8"), "-- mine\n\n" + PEEK_LINE + "\n");
+  assert.equal(t.read(), "-- mine\n\n" + PEEK_LINE + "\n\n" + NEXT_LINE + "\n");
   assert.equal(t.state(), "done");
   assert.equal(t.add().code, 0);
-  assert.equal(fs.readFileSync(t.file, "utf8"), "-- mine\n\n" + PEEK_LINE + "\n", "a rerun writes nothing");
+  assert.equal(t.read(), "-- mine\n\n" + PEEK_LINE + "\n\n" + NEXT_LINE + "\n", "a rerun writes nothing");
   assert.equal(t.conf(), "# old\n", "bindings.conf stays as it is");
 });
 
-test("the peek key step shows the line instead when SUPER + M is taken or bindings.lua is missing", () => {
-  const taken = peekHome("-- mine\n", ["M"]);
+test("with one of the two binds present, the step is not done and adds only the other", () => {
+  const peekOnly = peekHome("-- mine\n" + PEEK_LINE + "\n");
+  assert.equal(peekOnly.state(), "outdated");
+  assert.equal(peekOnly.add().code, 0);
+  assert.equal(peekOnly.read(), "-- mine\n" + PEEK_LINE + "\n\n" + NEXT_LINE + "\n");
+  assert.equal(peekOnly.state(), "done");
+  const nextOnly = peekHome(NEXT_LINE + "\n");
+  assert.equal(nextOnly.state(), "outdated", "peek-next does not count as the peek key");
+  assert.equal(nextOnly.add().code, 0);
+  assert.equal(nextOnly.read(), NEXT_LINE + "\n\n" + PEEK_LINE + "\n");
+});
+
+test("a taken SUPER + SHIFT + M leaves its line to paste and still adds SUPER + M", () => {
+  const t = peekHome("-- mine\n", [[65, "m"]]);
+  const r = t.add();
+  assert.notEqual(r.code, 0);
+  assert.ok(r.output.includes("SUPER + SHIFT + M is taken") && r.output.includes(NEXT_LINE), r.output);
+  assert.equal(t.read(), "-- mine\n\n" + PEEK_LINE + "\n");
+  assert.equal(t.state(), "outdated");
+});
+
+test("the peek key step shows the lines instead when SUPER + M is taken or bindings.lua is missing", () => {
+  const taken = peekHome("-- mine\n", [[64, "M"]]);
   const r = taken.add();
   assert.notEqual(r.code, 0);
   assert.ok(r.output.includes(PEEK_LINE), r.output);
-  assert.equal(fs.readFileSync(taken.file, "utf8"), "-- mine\n");
+  assert.equal(taken.read(), "-- mine\n\n" + NEXT_LINE + "\n");
   const missing = peekHome(null);
   const m = missing.add();
   assert.notEqual(m.code, 0);
-  assert.ok(m.output.includes(PEEK_LINE), m.output);
+  assert.ok(m.output.includes(PEEK_LINE) && m.output.includes(NEXT_LINE), m.output);
   assert.equal(fs.existsSync(missing.file), false);
 });
 
-test("a peek bind the user moved to another key counts as done and is left alone", () => {
-  const moved = "o.bind(\"SUPER + ALT + P\", \"Peek\", \"/p/window/miharchy peek\")\n";
+test("binds the user moved to other keys count as done and are left alone", () => {
+  const moved = "o.bind(\"SUPER + ALT + P\", \"Peek\", \"/p/window/miharchy peek\")\no.bind(\"SUPER + ALT + N\", \"Next\", \"/p/window/miharchy peek-next\")\n";
   const t = peekHome(moved);
   assert.equal(t.state(), "done");
   t.add();
-  assert.equal(fs.readFileSync(t.file, "utf8"), moved);
+  assert.equal(t.read(), moved);
 });
 
-test("a commented-out peek bind does not count, and a hyprctl that cannot list the binds leaves the line to paste", () => {
-  const commented = peekHome("-- " + PEEK_LINE + "\n");
+test("commented-out binds do not count, and a hyprctl that cannot list the binds leaves the lines to paste", () => {
+  const commented = peekHome("-- " + PEEK_LINE + "\n-- " + NEXT_LINE + "\n");
   assert.equal(commented.state(), "todo");
   const blind = peekHome("-- mine\n", [], "exit 1");
   const r = blind.add();
   assert.notEqual(r.code, 0);
-  assert.ok(r.output.includes(PEEK_LINE), r.output);
-  assert.equal(fs.readFileSync(blind.file, "utf8"), "-- mine\n");
+  assert.ok(r.output.includes(PEEK_LINE) && r.output.includes(NEXT_LINE), r.output);
+  assert.equal(blind.read(), "-- mine\n");
 });
 
 test("only a window started with no open target makes the one-time offer", () => {
