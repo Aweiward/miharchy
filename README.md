@@ -67,7 +67,9 @@ The mark's popup lists the first 3 manga in Up next above the new chapters. Each
 
 **Crop borders.** The reader hides the plain white or black margin around a page. The page file stays as it is: `S` saves it and `Y` copies it whole. Paged reading crops all four sides. The webtoon strip crops only the left and right, so the gap between panels stays. A page never loses more than a quarter from one side, and a page that would keep less than 60% of its area shows whole, so a mostly white text page stays as it is. A wide page that you split shows each half with its own crop. Turn it on or off with the Settings rows "Crop borders (paged)" (on by default) and "Crop borders (webtoon)" (off by default), or with `s` in the reader.
 
-**Original pages.** `O` in the reader shows the pages as their files have them, without the crop, and the bottom line says "original page". Press `O` again to see the cleaned pages. Nothing saves: the next reader you open shows cleaned pages again.
+**Auto levels.** The reader stretches a washed-out page so its darkest part shows black and its lightest part white. It uses one black point and one white point for all three colors, so colors do not shift. A page that already runs from black to white stays as it is, and so does a blank or nearly flat page. Each page and each half of a split page gets its own stretch, from the part that shows. The page file stays as it is: `S` saves it and `Y` copies it unchanged. Turn it on or off with the Settings row "Auto levels" (on by default), or with `s` in the reader.
+
+**Original pages.** `O` in the reader shows the pages as their files have them, without the crop or the levels, and the bottom line says "original page". Press `O` again to see the cleaned pages. Nothing saves: the next reader you open shows cleaned pages again.
 
 ## Library check
 
