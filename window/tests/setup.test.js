@@ -387,9 +387,9 @@ function peekHome(bindings, taken, hyprctl) {
   };
 }
 const PEEK_LINE = "o.bind(\"SUPER + M\", \"Miharchy peek\", \"'/p q/window/miharchy' peek\")";
-const NEXT_LINE = "o.bind(\"SUPER + SHIFT + M\", \"Miharchy next manga\", \"'/p q/window/miharchy' peek-next\")";
+const NEXT_LINE = "o.bind(\"SUPER + CTRL + M\", \"Miharchy next manga\", \"'/p q/window/miharchy' peek-next\")";
 
-test("the peek key step adds SUPER + M and SUPER + SHIFT + M to bindings.lua once, then counts as done", () => {
+test("the peek key step adds SUPER + M and SUPER + CTRL + M to bindings.lua once, then counts as done", () => {
   const t = peekHome("-- mine\n");
   assert.equal(t.state(), "todo");
   const r = t.add();
@@ -413,11 +413,17 @@ test("with one of the two binds present, the step is not done and adds only the 
   assert.equal(nextOnly.read(), NEXT_LINE + "\n\n" + PEEK_LINE + "\n");
 });
 
-test("a taken SUPER + SHIFT + M leaves its line to paste and still adds SUPER + M", () => {
+test("Omarchy's Music on SUPER + SHIFT + M leaves the next key free", () => {
   const t = peekHome("-- mine\n", [[65, "m"]]);
+  assert.equal(t.add().code, 0);
+  assert.equal(t.state(), "done");
+});
+
+test("a taken SUPER + CTRL + M leaves its line to paste and still adds SUPER + M", () => {
+  const t = peekHome("-- mine\n", [[68, "m"]]);
   const r = t.add();
   assert.notEqual(r.code, 0);
-  assert.ok(r.output.includes("SUPER + SHIFT + M is taken") && r.output.includes(NEXT_LINE), r.output);
+  assert.ok(r.output.includes("SUPER + CTRL + M is taken") && r.output.includes(NEXT_LINE), r.output);
   assert.equal(t.read(), "-- mine\n\n" + PEEK_LINE + "\n");
   assert.equal(t.state(), "outdated");
 });

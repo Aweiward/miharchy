@@ -17,7 +17,7 @@ var SERVER_CONF = ".local/share/miharchy/suwayomi/server.conf"
 var DESKTOP_FILE = ".local/share/applications/miharchy.desktop"
 var BINDINGS_FILE = ".config/hypr/bindings.lua"
 var PEEK_KEY = "SUPER + M"
-var NEXT_KEY = "SUPER + SHIFT + M"
+var NEXT_KEY = "SUPER + CTRL + M"
 // A bindings.lua line that runs `miharchy peek` or `miharchy peek-next`
 // (bindLine quotes the path) and is not a Lua comment.
 var HAS_PEEK_KEY = "grep -qsE \"^[[:space:]]*[^[:space:]-].*miharchy'? peek([^-]|$)\""
@@ -86,7 +86,7 @@ var PEEK_SCRIPT = [
   "  fi",
   "}",
   HAS_PEEK_KEY + " \"$file\" && echo \"$file already has a peek key.\" || add \"" + PEEK_KEY + "\" 64 \"$1\"",
-  HAS_NEXT_KEY + " \"$file\" && echo \"$file already has a next key.\" || add \"" + NEXT_KEY + "\" 65 \"$2\"",
+  HAS_NEXT_KEY + " \"$file\" && echo \"$file already has a next key.\" || add \"" + NEXT_KEY + "\" 68 \"$2\"",
   "exit $code"
 ].join("\n")
 
