@@ -68,6 +68,8 @@ var ROWS = [
   // sides) and one for the strip (left and right).
   { key: "cropBordersPaged", label: "Crop borders (paged)", type: "bool", default: true, store: "meta" },
   { key: "cropBordersWebtoon", label: "Crop borders (webtoon)", type: "bool", default: false, store: "meta" },
+  // GLOSSARY.md: a washed-out page stretched to black and white, every mode.
+  { key: "autoLevels", label: "Auto levels", type: "bool", default: true, store: "meta" },
   // Mihon's webtoon side padding, the other way round: the strip's share
   // of the window width. + and - in the reader step it.
   {

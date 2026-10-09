@@ -735,6 +735,25 @@ test("crop borders is a Settings row per kind of reading mode, on for paged and 
   assert.ok(R.PANEL_KEYS.includes("cropBordersPaged") && R.PANEL_KEYS.includes("cropBordersWebtoon"));
 });
 
+test("auto levels gives each page shown its own levels, a split page its half's, with crop borders on or off", () => {
+  const r = Object.assign(loaded(12, 4, {}, "paged-ltr"), { page: 2, half: 1 });
+  const mud = { black: 60, white: 190 };
+  const scans = Object.fromEntries(r.pages.map((u, i) => [u, { page: null, strip: null, halves: null, levels: { page: i === 3 ? null : mud, strip: null, halves: [null, { black: 30, white: 200 }] } }]));
+  const split = R.spread(r, { split: true, sizes: sized(r, [2]), crops: null, levels: scans }, "screen", square, 1).items[0];
+  assert.deepEqual(split.levels, { black: 30, white: 200 }, "the right half, read second in left to right");
+  const pair = R.spread(Object.assign({}, r, { page: 2 }), { dual: true, sizes: sized(r, []), crops: scans, levels: scans }, "screen", square, 1);
+  assert.deepEqual(pair.items.map((i) => i.levels), [mud, null], "facing pages each by their own scan");
+  assert.equal(R.spread(r, { split: true, sizes: sized(r, [2]), levels: null }, "screen", square, 1).items[0].levels, null, "the setting off");
+  assert.equal(R.spread(r, { sizes: sized(r, []), levels: { [r.pages[2]]: { failed: true } } }, "screen", square, 1).items[0].levels, null, "a failed analysis");
+});
+
+test("auto levels is a Settings row, on by default, in the reader's panel", () => {
+  const S = require("./load")("Settings.js");
+  const row = S.ROWS.find((r) => r.key === "autoLevels");
+  assert.deepEqual([row.label, row.type, row.default, row.store], ["Auto levels", "bool", true, "meta"]);
+  assert.ok(R.PANEL_KEYS.includes("autoLevels"));
+});
+
 // Catch-up (GLOSSARY.md): a peek reads at most this many chapters of one
 // manga in a row. The limit comes with each turn, as the setting is now.
 const peekAt = (id, o) => R.open(5, chapters, id, "paged-ltr", (o || {}).incognito, "", (o || {}).peek !== false);
