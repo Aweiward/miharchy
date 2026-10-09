@@ -136,6 +136,9 @@ test("the step says how to get Syncthing going, and skips pairing when the folde
     prompt: "Start Syncthing in a terminal?",
     detail: "No phone backup in " + F + " yet. Syncthing does not answer: press Enter to start it in a terminal. Setup checks again on its own." });
   assert.equal(S.action(facts({ answering: false }), "phoneBackups"), "confirm");
+  const launched = finish(facts({ installed: false }), "phoneBackups", "\n0\n");
+  assert.equal(S.status(launched, "phoneBackups").detail, "Installing Syncthing in the terminal. Setup checks again on its own; Enter opens the terminal again.");
+  assert.equal(S.action(launched, "phoneBackups"), "confirm");
   assert.deepEqual(S.status(facts({ shared: true }), "phoneBackups"), { state: "todo",
     detail: "No phone backup in " + F + " yet. Syncthing shares this folder with your phone. " + MIHON + " Setup checks again on its own." });
   assert.equal(S.action(facts({ shared: true }), "phoneBackups"), "check");
