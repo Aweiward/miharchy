@@ -688,7 +688,7 @@ Rectangle {
     // Each slot keeps its page while that page stays within the two before
     // and three after the one shown, so a live Image holds it decoded and a
     // turn shows it at once. A slot shows its page where view.shown puts
-    // it, and clips it: a split page is one half of its image.
+    // it, only the part its clip names: a split half, a crop.
     Repeater {
       id: slots
       model: Reader.SLOTS
