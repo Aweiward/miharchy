@@ -34,13 +34,14 @@ function list(data, downloadedOnly, now) {
     var shown = Chapters.apply(Browse.toChapters(m.chapters.nodes), prefs)
     var next = Chapters.nextUnread(shown, prefs)
     if (!next) return
-    var ids = shown.map(function(c) { return c.id })
+    var ids = {}
+    shown.forEach(function(c) { ids[c.id] = true })
     var newest = function(field, keep) {
       return m.chapters.nodes.filter(keep).reduce(function(at, c) { return Math.max(at, Number(c[field]) || 0) }, 0)
     }
     var lastRead = newest("lastReadAt", function() { return true })
     // A shown update, as Updates.recent() has it: fetched after the manga joined the library.
-    var update = newest("fetchedAt", function(c) { return !c.isRead && ids.indexOf(c.id) !== -1 && Number(c.fetchedAt) > Number(m.inLibraryAt) })
+    var update = newest("fetchedAt", function(c) { return !c.isRead && ids[c.id] && Number(c.fetchedAt) > Number(m.inLibraryAt) })
     var unread = shown.filter(function(c) { return !c.read }).length
     // A manga hidden on History counts as never read, as on History.
     var hidden = lastRead > 0 && lastRead <= Math.max(cleared, History.metaValue(m.meta, History.HIDDEN_KEY))
