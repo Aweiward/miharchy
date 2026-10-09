@@ -250,6 +250,8 @@ test("in the reader, h/l and the arrows turn by side, Space goes on, and Esc or 
   assert.equal(C.dispatch(r, text("r")), "reader.retry");
   assert.equal(C.dispatch(r, key(C.KEY.Escape)), "reader.close");
   assert.equal(C.dispatch(r, text("q")), "reader.close", "q leaves the reader, not the window");
+  assert.equal(C.dispatch(r, text("c")), "reader.catchUpContinue", "on the Catch-up stop: this manga anyway");
+  assert.equal(C.dispatch(r, text("n")), "reader.catchUpNext", "on the Catch-up stop: the next manga in Up next");
 });
 
 test("on the library, hjkl move the grid and Enter opens the manga", () => {

@@ -670,3 +670,52 @@ test("a split page shows the half read first: the left in left to right, the rig
   assert.equal(half("paged-rtl", 0).imageX, -w);
   assert.equal(half("paged-rtl", 1).imageX, 0);
 });
+
+// Catch-up (GLOSSARY.md): a peek reads at most this many chapters of one
+// manga in a row. The limit comes with each turn, as the setting is now.
+const peekAt = (id, o) => R.open(5, chapters, id, "paged-ltr", (o || {}).incognito, "", (o || {}).peek !== false);
+const finish = (r, id, o) => readOn(R.reduce(R.reduce(r, { type: "pages", reply: pages(id, 2), config }), { type: "goto", page: 1 }), Object.assign({ always: true, catchUp: "2" }, o));
+
+test("a peek stops on the transition page after Catch-up chapters; a turn on stays, a turn back and on again stops again", () => {
+  const first = finish(peekAt(11), 11);
+  assert.equal(R.caughtUp(first), 0, "one chapter: the transition page as usual");
+  const stop = finish(readOn(first, { catchUp: "2" }), 12);
+  assert.equal(R.caughtUp(stop), 2);
+  assert.equal(R.chapterId(stop), 12);
+  assert.equal(readOn(stop, { catchUp: "2" }), stop, "a turn on stays on the page");
+  const again = readOn(R.reduce(stop, { type: "turn", delta: -1 }), { always: true, catchUp: "2" });
+  assert.equal(R.caughtUp(again), 2, "the chapter finished counts once");
+  assert.deepEqual(R.transitionLines(stop.transition, "Blue Lock"), [
+    { caughtUp: "Caught up on 2 chapters" },
+    { label: "Finished", chapter: stop.chapters[1] },
+    { label: "Next in Up next", manga: "Blue Lock" }
+  ]);
+  assert.deepEqual(R.transitionLines(stop.transition, null)[2], { none: "Nothing else is up next" });
+  assert.deepEqual(R.transitionLines(stop.transition, undefined)[2], { none: "Looking up Up next" });
+});
+
+test("with always show off a peek goes straight on, and still stops at Catch-up", () => {
+  const on = finish(peekAt(11), 11, { always: false });
+  assert.equal(R.chapterId(on), 12, "straight on");
+  const stop = finish(on, 12, { always: false });
+  assert.equal(R.caughtUp(stop), 2);
+  assert.equal(R.chapterId(stop), 12);
+});
+
+test("c continues the manga past the stop and lifts it for the rest of the peek", () => {
+  const stop = finish(readOn(finish(peekAt(11), 11), { catchUp: "2" }), 12);
+  const on = R.reduce(stop, { type: "continue" });
+  assert.equal(R.chapterId(on), 13);
+  assert.equal(R.caughtUp(finish(on, 13)), 0, "no stop after the third chapter");
+  const notCaught = finish(peekAt(11), 11);
+  assert.equal(R.reduce(notCaught, { type: "continue" }), notCaught, "c does nothing before the stop");
+});
+
+test("Catch-up off, a normal window and ] never stop; incognito counts", () => {
+  const read2 = (r, o) => finish(readOn(finish(r, 11, o), o), 12, o);
+  assert.equal(R.caughtUp(read2(peekAt(11), { catchUp: "0" })), 0, "off");
+  assert.equal(R.caughtUp(read2(peekAt(11, { peek: false }))), 0, "a normal window");
+  assert.equal(R.caughtUp(read2(peekAt(11, { incognito: true }))), 2, "incognito: finished in the reader, not by read flags");
+  const skipped = finish(R.reduce(R.reduce(peekAt(11), { type: "pages", reply: pages(11, 2), config }), { type: "chapter", delta: 1 }), 12);
+  assert.equal(R.caughtUp(skipped), 0, "] leaves a chapter unfinished");
+});

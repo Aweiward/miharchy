@@ -52,6 +52,12 @@ Rectangle {
   property var exit: Reader.EXIT
   // What the last o or y did, until the next reader command.
   property string note: ""
+  // On a Catch-up stop: the chapters it counted, and what n opens, which
+  // shell.qml looks up: { target, title }, null for none, undefined until
+  // known.
+  readonly property int caughtUp: reader ? Reader.caughtUp(reader) : 0
+  property var upNext
+  onCaughtUpChanged: if (caughtUp) caughtUpOn(reader.mangaId)
 
   readonly property bool open: reader !== null
   // Webtoon or continuous vertical: the strip shows, not the pager.
@@ -94,6 +100,9 @@ Rectangle {
   signal editEnded()
   // z, + and - change a Settings row; shell.qml saves it.
   signal setting(var row, var value)
+  signal caughtUpOn(int mangaId)
+  // n on a Catch-up stop: shell.qml runs the next key, peek(true).
+  signal nextManga()
 
   visible: open
   color: Reader.background(values.readerTheme, theme.background)
@@ -116,13 +125,15 @@ Rectangle {
   // manga: the manga detail's; chapters: newest first, as it lists them;
   // setting: miharchy.defaultReadingMode. The pages load at once with the
   // default chapter choices; the manga's own sort and filters follow.
-  function start(manga, chapters, chapterId, setting) {
+  // peek: a peek opened it, so Catch-up counts.
+  function start(manga, chapters, chapterId, setting, peek) {
     var table = Chapters.PREFS.concat(Chapters.SCANLATOR_PREFS)
     var defaults = Prefs.defaults(table)
     source = { chapters: chapters, prefs: defaults }
     zoom = 1
     autoSpeed = 0
-    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title)
+    upNext = undefined
+    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title, peek)
     pageSizes = {}
     aheadFor = -1
     loadPages()
@@ -414,6 +425,12 @@ Rectangle {
           note = "Link copied"
         }
         return
+      case "reader.catchUpContinue":
+        go({ type: "continue" })
+        return
+      case "reader.catchUpNext":
+        if (caughtUp && upNext) nextManga()
+        return
       case "reader.retry":
         reader = Reader.reduce(reader, { type: "retry" })
         loadPages()
@@ -473,7 +490,7 @@ Rectangle {
     if (!a) return
     if ("scroll" in a) scroll(a.scroll)
     else if ("pan" in a) scroll(a.pan, true)
-    else go({ type: "turn", delta: a.turn, chapter: a.chapter === true, always: always, offline: offline, layout: layout })
+    else go({ type: "turn", delta: a.turn, chapter: a.chapter === true, always: always, offline: offline, layout: layout, catchUp: values.catchUp })
   }
 
   // Paged, auto-scroll turns as Space does, always onto the transition
@@ -708,7 +725,7 @@ Rectangle {
         spacing: view.theme.fontSize * 1.5
 
         Repeater {
-          model: view.reader && view.reader.transition ? Reader.transitionLines(view.reader.transition) : []
+          model: view.reader && view.reader.transition ? Reader.transitionLines(view.reader.transition, view.upNext ? view.upNext.title : view.upNext) : []
 
           Column {
             id: line
@@ -729,10 +746,10 @@ Rectangle {
               wrapMode: Text.Wrap
               maximumLineCount: 5
               elide: Text.ElideRight
-              text: line.modelData.chapter ? line.modelData.chapter.name : line.modelData.warning || line.modelData.none
-              color: line.modelData.warning ? view.theme.urgent : line.modelData.none ? view.theme.muted : view.theme.foreground
+              text: line.modelData.chapter ? line.modelData.chapter.name : line.modelData.manga || line.modelData.caughtUp || line.modelData.warning || line.modelData.none
+              color: line.modelData.warning ? view.theme.urgent : line.modelData.caughtUp ? view.theme.accent : line.modelData.none ? view.theme.muted : view.theme.foreground
               font.family: view.theme.fontFamily
-              font.pixelSize: line.modelData.chapter ? view.theme.fontSize * 1.3 : view.theme.fontSize
+              font.pixelSize: line.modelData.chapter || line.modelData.manga || line.modelData.caughtUp ? view.theme.fontSize * 1.3 : view.theme.fontSize
             }
 
             Text {
@@ -745,6 +762,13 @@ Rectangle {
               font.pixelSize: view.theme.fontSmall
             }
           }
+        }
+
+        HintBar {
+          visible: view.caughtUp > 0
+          theme: view.theme
+          text: "c continue this manga" + (view.upNext ? "   n next manga" : "")
+          onKey: function(event) { view.key(event) }
         }
       }
     }

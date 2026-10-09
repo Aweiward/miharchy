@@ -6,6 +6,7 @@ A peek (`GLOSSARY.md`) is the window on Hyprland's special workspace `miharchy`,
 - The resume rule (`shell.qml` `peek()`): the head of Up next (`UpNext.list`, rules in `docs/agents/window.md`) opens through `openChapter`, so the reader shows with Updates behind it (`root.view` is `"updates"`). A manga hidden on History counts as not started (`history.md`).
 - The next key (`SUPER + SHIFT + M`, `window/miharchy peek-next`, IPC `peekNext`, cold start `MIHARCHY_PEEK=next`): always shows the peek and opens `UpNext.after`, the manga after the reader's in the order Up next had at the run's first press (`root.upNextOrder`, memory only), wrapping from the last to the head. With the reader closed it opens the second manga. Opening a chapter writes `lastReadAt` and moves that manga to the head of a fresh Up next, which is why the window holds the order.
 - No target: the Library opens with its search field. A failed reply shows as the Library error.
+- Catch-up (`GLOSSARY.md`, Settings row `catchUp`): after that many chapters of one manga read on past, the reader stops on the transition page with "Caught up on N chapters" and the next manga in Up next (`reader.upNext`: the manga the next key would open, `UpNext.after` over `root.upNextOrder`). A turn on stays; `c` reads on and lifts the stop for this reader; `n` runs the next key (`peek(true)`). Every peek open, the next key included, starts the count again. A reader opened any other way (`MIHARCHY_OPEN_CHAPTER`, Updates, History, Library) never stops. Rules in `docs/agents/window.md`.
 - `MIHARCHY_OPEN_CHAPTER` wins over `MIHARCHY_PEEK` when both are set. A peek window makes no one-time Setup offer (`Setup.offersOnStart`), and `Q` comes back as a normal window (`restart.md`).
 
 ## How to get to it (user POV)
@@ -23,6 +24,22 @@ MIHARCHY_PEEK=1 .claude/skills/verify-miharchy/scripts/drive.sh steps.js 40
 ]
 ```
 Proof: `peek` logs `["updates", true, [<the chapter>, 2]]`: the reader opened the head of Up next at its `lastPageRead`. With every chapter read, the same drive logs `root.view` `"library"` and `libraryView.editing` true.
+
+Catch-up: seed `--library 2`, pick a manga with 3 chapters as the head (`lastPageRead: 1` on its first chapter puts it in tier 1 of the rules, partly read), mark the first chapter of the other manga read, and set `miharchy.catchUp` to "2". `End` is not a driver key; `root.run("reader.last")` then `key(" ")` reads a chapter to its end and onto the transition page, and `key(" ")` again reads on. Give each chapter about 7 s to load. Reset the chapters with `updateChapters(input: {ids, patch: {isRead: false, lastPageRead: 0}})` between drives.
+```js
+[
+  [9000, function() { log("start", [reader.reader.mangaId, reader.reader.chapters[reader.reader.index].id, root.settingsState.values.catchUp]); root.run("reader.last") }],
+  [1000, function() { key(" ") }],
+  [800, function() { key(" ") }],
+  [7000, function() { root.run("reader.last") }],
+  [1000, function() { key(" ") }],
+  [4000, function() { log("stop", [reader.reader.chapters[reader.reader.index].id, reader.caughtUp, reader.upNext]); grab("caught-up") }],
+  [300, function() { key(" ") }],
+  [800, function() { log("stays", [reader.reader.chapters[reader.reader.index].id, reader.caughtUp]); key("c") }],
+  [7000, function() { log("after-c", [reader.reader.chapters[reader.reader.index].id, reader.reader.lifted]); root.run("window.quit") }]
+]
+```
+Proof: `stop` logs the second chapter, `2` and `{ target: { mangaId, chapterId }, title }`; `stays` the same chapter and `2`; `after-c` the third chapter and `true`. Send `key("n")` on the stop instead and log `reader.reader.mangaId`, `peek` and `finished`: the manga `stop` named, `true`, `0`; a `root.peek(true)` step at the stop (what IPC `peekNext` runs) opens the same manga, and a `root.peek(true)` after one chapter of a fresh peek logs `finished` 0 in the new reader. With `MIHARCHY_OPEN_CHAPTER="<mangaId> <chapterId>"` in place of `MIHARCHY_PEEK=1`, the same reading logs `reader.caughtUp` 0 and reads on to the third chapter. In RTL (the default reading mode) `l` reads back, so it leaves the stop.
 
 The resume path on a running window: start a drive without the variable and, while it runs, send `.claude/skills/verify-miharchy/scripts/qs.sh ipc call miharchy peek` from the shell (the launcher's call); a later step logs the same target.
 

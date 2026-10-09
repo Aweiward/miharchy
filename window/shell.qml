@@ -180,7 +180,9 @@ ShellRoot {
   }
 
   // The mark's update rows land here, through the launcher's open-chapter.
-  function openChapter(target) {
+  // peek: a peek opens it, so Catch-up counts from 0 in the new reader;
+  // every peek that opens a manga comes through here.
+  function openChapter(target, peek) {
     pendingChapter = target
     if (!config) return
     pendingChapter = null
@@ -188,7 +190,7 @@ ShellRoot {
     mangaDetail.close()
     downloadsView.open = false
     view = "updates"
-    updatesView.openChapter(target.mangaId, target.chapterId)
+    updatesView.openChapter(target.mangaId, target.chapterId, peek === true)
   }
 
   // The mark's new-chapter notification lands here, through the
@@ -218,12 +220,30 @@ ShellRoot {
     send(UpNext.payload(), function(reply) {
       if (reply.state !== "ok") return library(reply)
       var list = UpNext.list(reply.data, root.downloadedOnly, Date.now())
-      var current = reader.open ? reader.reader.mangaId : null
-      if (!next || current === null || root.upNextOrder.indexOf(current) === -1)
-        root.upNextOrder = list.map(function(e) { return e.mangaId })
-      var target = next ? UpNext.after(list, root.upNextOrder, current) : list[0]
-      if (target) root.openChapter(target)
+      if (!next) root.upNextOrder = list.map(function(e) { return e.mangaId })
+      var target = next ? root.nextInOrder(list, reader.open ? reader.reader.mangaId : null) : list[0]
+      if (target) root.openChapter(target, true)
       else library()
+    })
+  }
+
+  // The next key's pick from list: the manga after current in the run's
+  // order, which starts over when current is not in it.
+  function nextInOrder(list, current) {
+    if (current === null || root.upNextOrder.indexOf(current) === -1)
+      root.upNextOrder = list.map(function(e) { return e.mangaId })
+    return UpNext.after(list, root.upNextOrder, current)
+  }
+
+  // A Catch-up stop names the manga the next key would open; n then runs
+  // the next key (peek(true)). Itself again, or none, is nothing to offer.
+  function lookUpNext(mangaId) {
+    send(UpNext.payload(), function(reply) {
+      if (!reader.open || reader.reader.mangaId !== mangaId) return
+      var next = reply.state === "ok" ? root.nextInOrder(UpNext.list(reply.data, root.downloadedOnly, Date.now()), mangaId) : null
+      if (next && next.mangaId === mangaId) next = null
+      var manga = next ? (root.connection.manga || []).filter(function(m) { return m.id === next.mangaId })[0] : null
+      reader.upNext = next ? { target: next, title: manga ? manga.title : "Manga " + next.mangaId } : null
     })
   }
 
@@ -1004,7 +1024,7 @@ ShellRoot {
           active: visible
           queue: downloadsView.queue.items
           categories: root.connection.categories
-          onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+          onRead: function(manga, chapters, chapterId, peek) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, peek) }
           onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
           onDownloads: function(reply) { downloadsView.apply(reply) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
@@ -1155,6 +1175,8 @@ ShellRoot {
           if (root.config) root.fetchLibrary()
         }
         onDeleted: mangaDetail.reload()
+        onCaughtUpOn: function(mangaId) { root.lookUpNext(mangaId) }
+        onNextManga: root.peek(true)
       }
 
       DownloadsView {

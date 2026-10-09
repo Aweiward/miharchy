@@ -97,7 +97,13 @@ function showsTransition(t, always) {
 
 // What the transition page says, top to bottom, as Mihon's: each chapter
 // { label, chapter }, a warning { warning }, or { none } past either end.
-function transitionLines(t) {
+// At a Catch-up stop it names the next manga in Up next instead: next is
+// its title, null for none, undefined while the window looks it up.
+function transitionLines(t, next) {
+  if (t.caughtUp) {
+    var after = next ? { label: "Next in Up next", manga: next } : { none: next === null ? "Nothing else is up next" : "Looking up Up next" }
+    return [{ caughtUp: "Caught up on " + t.caughtUp + (t.caughtUp === 1 ? " chapter" : " chapters") }, { label: "Finished", chapter: t.from }, after]
+  }
   var top = t.dir === "next" ? { label: "Finished", chapter: t.from } : { label: "Previous", chapter: t.to }
   var bottom = t.dir === "next" ? { label: "Next", chapter: t.to } : { label: "Current", chapter: t.from }
   var none = { none: t.dir === "next" ? "There's no next chapter" : "There's no previous chapter" }
@@ -113,14 +119,33 @@ function move(r, delta) {
   return r.index > 0 ? at(r, r.index - 1, true) : copy(r, { edge: "first", transition: null })
 }
 
+// Catch-up (GLOSSARY.md). A peek counts the chapters it reads on past, in
+// finished; ] skips a chapter without finishing it. limit: the catchUp
+// setting, "0" for off. The stop holds until c lifts it.
+function stops(r, limit) {
+  return r.peek && !r.lifted && Number(limit) > 0 && r.finished + 1 >= Number(limit)
+}
+
+// The chapters a Catch-up stop counted, 0 when the reader is not on one.
+function caughtUp(r) {
+  return (r.transition && r.transition.caughtUp) || 0
+}
+
+// Reading on past the chapter open finishes it, once its pages loaded.
+function onward(r, delta) {
+  var next = move(r, delta)
+  return delta > 0 && r.state === "ok" && next.index !== r.index ? copy(next, { finished: r.finished + 1 }) : next
+}
+
 // chapters: newest first, as Chapters.readingOrder() hands them.
 // incognito: Mihon's incognito mode, taken once as the reader opens. The
 // reader then saves no read state, so no history either, pushes nothing
 // to trackers and deletes nothing after reading.
 // mangaTitle names the folder a saved page goes to.
-function open(mangaId, chapters, chapterId, readingMode, incognito, mangaTitle) {
+// peek: a peek opened the chapter, so Catch-up applies (stops()).
+function open(mangaId, chapters, chapterId, readingMode, incognito, mangaTitle, peek) {
   var l = relist(chapters, chapterId)
-  return at({ mangaId: mangaId, chapters: l.chapters, mode: readingMode, incognito: incognito === true, mangaTitle: mangaTitle || "" }, l.index, false)
+  return at({ mangaId: mangaId, chapters: l.chapters, mode: readingMode, incognito: incognito === true, mangaTitle: mangaTitle || "", peek: peek === true, finished: 0, lifted: false }, l.index, false)
 }
 
 // Saving and copying the page shown (Mihon's page actions). The page's
@@ -272,12 +297,15 @@ function spread(r, layout, fitMode, view, zoom) {
 
 // event.type:
 //   "pages"        { reply, config, now } for the chapter open
-//   "turn"         { delta, chapter?, always, offline, layout? } by one
+//   "turn"         { delta, chapter?, always, offline, layout?, catchUp } by one
 //                  page, spread or half page (see turnTo); past
 //                  either end, or at once with chapter, to the transition
 //                  page (see showsTransition) or else the next or previous
 //                  chapter. On the transition page a turn its way leaves
-//                  the chapter, a turn back returns to the page.
+//                  the chapter, a turn back returns to the page. On a
+//                  Catch-up stop (stops()) a turn on stays.
+//   "continue"     c on a Catch-up stop: on to the next chapter, and no
+//                  more stops in this reader
 //   "scroll"       { page, start, end } in webtoon: the page at the middle
 //                  of the view, and whether the strip is at its top or end
 //   "chapter"      { delta } to the next or previous chapter, where it
@@ -305,15 +333,18 @@ function reduce(r, event) {
     case "turn":
       if (r.state === "loading") return r
       var dir = event.delta > 0 ? "next" : "prev"
-      if (r.transition) return r.transition.dir === dir ? move(r, event.delta) : copy(r, { transition: null })
+      if (r.transition) return r.transition.dir !== dir ? copy(r, { transition: null }) : caughtUp(r) ? r : onward(r, event.delta)
       var to = event.chapter || r.state !== "ok" ? null : turnTo(r, event.delta, event.layout)
       if (to) return copy(r, { page: to.page, half: to.half, read: r.read || to.page + spreadAt(r, to.page, event.layout) - 1 === last(r), edge: "" })
       // Reading on past the end saw the last page, even one a spread that
       // opened on the page before showed: the chapter is read.
       if (r.state === "ok" && event.delta > 0 && !event.chapter) r = copy(r, { read: true })
       var t = transition(r, dir, event.offline)
+      if (r.state === "ok" && event.delta > 0 && stops(r, event.catchUp)) return copy(r, { transition: copy(t, { caughtUp: r.finished + 1 }), edge: "" })
       if (r.state === "ok" && showsTransition(t, event.always)) return copy(r, { transition: t, edge: "" })
-      return move(r, event.delta)
+      return onward(r, event.delta)
+    case "continue":
+      return caughtUp(r) ? onward(copy(r, { lifted: true }), 1) : r
     case "scroll":
       if (r.state !== "ok") return r
       // A last page shorter than half the view never reaches the middle.
@@ -632,6 +663,7 @@ if (typeof module !== "undefined") {
     transition: transition,
     showsTransition: showsTransition,
     transitionLines: transitionLines,
+    caughtUp: caughtUp,
     PANEL_KEYS: PANEL_KEYS,
     background: background,
     settingRow: settingRow,

@@ -5,6 +5,7 @@ The Settings view (key `5`) lists the rows of `window/Settings.js` `ROWS`. Each 
 ## Sub-features
 - Sizes come from `du` on the server's folders (`window/Storage.js`), measured each time Settings shows and after a clear.
 - The clear sends `clearCachedImages(cachedPages: true, cachedThumbnails: true)`; library covers (`downloadedThumbnails`) and downloads stay.
+- Catch-up (meta `miharchy.catchUp`, "0" Off, "1" to "10", default "3"): what a peek's reader reads per turn (`peek.md`). A drive sets it before the window starts with `setGlobalMeta(input: {meta: {key: "miharchy.catchUp", value: "2"}})` and logs `root.settingsState.values.catchUp`.
 
 ## How to get to it (user POV)
 Press `5`. The "Clear the cache" row comes after the last setting row ("Create a backup"), at cursor `Settings.ROWS.length`; the trackers follow at `Settings.ROWS.length + 1 + i`.

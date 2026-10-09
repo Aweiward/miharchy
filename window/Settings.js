@@ -98,6 +98,12 @@ var ROWS = [
   { key: "skipRead", label: "Skip read chapters", type: "bool", default: false, store: "meta" },
   { key: "skipFiltered", label: "Skip filtered chapters", type: "bool", default: true, store: "meta" },
   { key: "skipDupe", label: "Skip duplicate chapters", type: "bool", default: false, store: "meta" },
+  // Not in Mihon: a peek stops at the transition page after this many
+  // chapters of one manga in a row (Reader.caughtUp).
+  {
+    key: "catchUp", label: "Catch-up", type: "choice", default: "3", store: "meta",
+    options: [{ value: "0", label: "Off" }].concat(["1", "2", "3", "5", "10"].map(function(v) { return { value: v, label: v === "1" ? "1 chapter" : v + " chapters" } }))
+  },
   // Cloudflare sources fail without the response fallback even when
   // FlareSolverr solves the challenge (docs/spikes/extension-spike.md).
   { key: "flareSolverrEnabled", label: "FlareSolverr", type: "bool", default: false, store: "server", whenOn: { flareSolverrAsResponseFallback: true } },
