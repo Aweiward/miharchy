@@ -84,6 +84,15 @@ Item {
     if (!setup.job && !setup.confirm && !editing && setup.server && setup.server.syncFolder) start("phones", Setup.phoneProbeCommand(setup.server.syncFolder))
   }
 
+  // Where Syncthing stands, while no phone backup has landed: the step's text,
+  // its y and the QR code of this desktop's ID follow from it.
+  readonly property string qrPath: Quickshell.env("XDG_RUNTIME_DIR") + "/miharchy/syncthing-id.png"
+  function checkSyncthing() {
+    var p = setup.phones
+    if (setup.job || setup.confirm || editing || !p || p.count || p.autobackup) return
+    start("syncthing", Setup.syncthingProbeCommand(setup.server.syncFolder, qrPath))
+  }
+
   // A phone backup lands while Setup is open: check again on our own. Also
   // while still checking, in case the first check was skipped over a prompt.
   Timer {
@@ -104,7 +113,11 @@ Item {
 
   function finished(id, text) {
     setup = Setup.reduce(setup, { type: "finish", id: id, text: text })
-    if (id === "phones") return offer()
+    if (id === "phones") {
+      checkSyncthing()
+      return offer()
+    }
+    if (id === "syncthing") return
     if (id === "probe") {
       readServer()
       if (checked) return
@@ -149,7 +162,7 @@ Item {
         }
         break
       case "setup.confirm":
-        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir }))
+        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup) }))
         break
       case "setup.cancel":
         if (editing) endEdit()
@@ -261,6 +274,17 @@ Item {
         font.pixelSize: view.theme.fontSize
       }
 
+      // This desktop's Syncthing ID, for the phone to scan.
+      Image {
+        visible: !!view.currentStatus.qr
+        source: view.currentStatus.qr ? "file://" + view.currentStatus.qr : ""
+        cache: false
+        smooth: false
+        width: view.theme.fontSize * 12
+        height: width
+        fillMode: Image.PreserveAspectFit
+      }
+
       Text {
         visible: view.current.kind === "install" && view.currentStatus.state === "todo"
         text: "$ " + (view.current.command || "")
@@ -271,7 +295,7 @@ Item {
 
       Text {
         visible: view.confirming
-        text: (view.current.prompt || "") + "  y run   n cancel"
+        text: (view.currentStatus.prompt || view.current.prompt || "") + "  y run   n cancel"
         color: view.theme.accent
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSize
