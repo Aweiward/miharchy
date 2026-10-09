@@ -271,6 +271,7 @@ var commands = [
   { id: "reader.zoomReset", title: "Reset the zoom", keys: ["0"], view: "reader", hidden: true },
   { id: "reader.settings", title: "Reader settings", keys: ["s"], view: "reader", hidden: true },
   { id: "reader.autoScroll", title: "Auto-scroll on or off", keys: ["a"], view: "reader", hidden: true },
+  { id: "reader.original", title: "Original pages on or off", keys: ["O"], view: "reader", hidden: true },
   // Only on the Catch-up stop (Reader.caughtUp); elsewhere they do nothing.
   { id: "reader.catchUpContinue", title: "Continue this manga", keys: ["c"], view: "reader", hidden: true },
   { id: "reader.catchUpNext", title: "Next manga in Up next", keys: ["n"], view: "reader", hidden: true },

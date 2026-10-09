@@ -188,6 +188,10 @@ _Avoid_: contrast, enhance, filter
 The panel `s` opens over the reader: the manga's reading mode, then the reader's settings. It shows the same settings as the Settings view.
 _Avoid_: reader menu, reader options
 
+**Original pages**:
+The reader showing each page as its file has it: `O` turns **Crop borders** and **Auto levels** off until `O` again or the reader closes. Nothing saves.
+_Avoid_: raw mode, uncropped view
+
 **Transition page**:
 The page the reader shows between two chapters: the finished chapter and the next one, with a warning when chapters are missing or cannot load.
 _Avoid_: interstitial, chapter break
