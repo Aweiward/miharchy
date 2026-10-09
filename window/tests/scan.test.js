@@ -79,3 +79,63 @@ test("the analysis knows the page's luminance, for Auto levels", () => {
   assert.deepEqual(Array.from(S.luminance(page(2, 1, (x) => x ? 255 : 0))), [0, 255]);
   assert.deepEqual([s.width, s.height], [2, 1]);
 });
+
+// Auto levels: { black, white } in luminance 0..255 for the part a mode
+// shows, null to leave the page as it is.
+const rgba = (w, h, color) => {
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const c = color(x, y), i = (y * w + x) * 4;
+    data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = 255;
+  }
+  return data;
+};
+// Art whose luminance runs evenly from lo to hi.
+const ramp = (lo, hi) => (x, y) => lo + ((x * 37 + y * 11) % 100) * (hi - lo) / 99;
+
+test("a muddy page gets its darkest part as the black point and its lightest as the white", () => {
+  const s = S.analyze(page(100, 140, ramp(60, 190)), 100, 140);
+  assert.deepEqual(s.levels.page, { black: 60, white: 190 });
+  assert.deepEqual(s.levels.strip, { black: 60, white: 190 });
+});
+
+test("a page that already spans the range is left as it is", () => {
+  assert.equal(S.analyze(page(100, 140, ramp(0, 255)), 100, 140).levels.page, null);
+  assert.equal(S.analyze(page(100, 140, ramp(20, 235)), 100, 140).levels.page, null, "a range of 215 is not clearly narrow");
+  assert.deepEqual(S.analyze(page(100, 140, ramp(25, 225)), 100, 140).levels.page, { black: 25, white: 225 }, "200 is");
+});
+
+test("at most 0.5% of the page clips at each end: specks past it move neither point", () => {
+  const specks = (n, v) => (x, y) => y * 100 + x < n ? v : ramp(60, 190)(x, y);
+  assert.deepEqual(S.analyze(page(100, 140, specks(70, 0)), 100, 140).levels.page, { black: 60, white: 190 }, "70 black pixels of 14000 clip");
+  assert.equal(S.analyze(page(100, 140, specks(80, 0)), 100, 140).levels.page.black, 0, "80 are more than 0.5%");
+  assert.deepEqual(S.analyze(page(100, 140, specks(70, 255)), 100, 140).levels.page, { black: 60, white: 190 });
+});
+
+test("a blank or flat page is left as it is: a stretch would only show its grain", () => {
+  assert.equal(S.analyze(page(100, 140, () => 255), 100, 140).levels.page, null);
+  assert.equal(S.analyze(page(100, 140, ramp(120, 170)), 100, 140).levels.page, null);
+});
+
+test("a color page reads its luminance, one pair of points for all three channels", () => {
+  const colors = [[255, 0, 0], [0, 0, 255], [0, 255, 0], [190, 190, 190]];
+  const s = S.analyze(rgba(100, 140, (x, y) => colors[(x + y) % 4]), 100, 140);
+  assert.deepEqual(s.levels.page, { black: 29, white: 190 }, "red, green and blue each span 0 to 255, their luminance does not");
+});
+
+test("levels read the part shown: inside the crop box, and each half on its own", () => {
+  const framedMud = page(100, 140, (x, y) => x >= 10 && x < 90 && y >= 14 && y < 126 ? ramp(60, 190)(x, y) : 255);
+  assert.deepEqual(S.analyze(framedMud, 100, 140).levels.page, { black: 60, white: 190 }, "the white margin is not the white point");
+  const wide = page(200, 140, (x, y) => x < 100 ? ramp(60, 190)(x, y) : ramp(0, 255)(x, y));
+  assert.deepEqual(S.analyze(wide, 200, 140).levels.halves, [{ black: 60, white: 190 }, null]);
+  assert.equal(S.analyze(framedMud, 100, 140).levels.halves, null, "a tall page has no halves");
+});
+
+test("the effect stretches the black point to black and the white point to white, linearly", () => {
+  // MultiEffect's shader: (v - 0.5) * (1 + contrast) + 0.5 + brightness.
+  const shade = (e, v) => ((v / 255 - 0.5) * (1 + e.contrast) + 0.5 + e.brightness) * 255;
+  const e = S.effect({ black: 60, white: 190 });
+  assert.ok(Math.abs(shade(e, 60)) < 1e-9 && Math.abs(shade(e, 190) - 255) < 1e-9);
+  assert.ok(Math.abs(shade(e, 125) - 127.5) < 1e-9, "the middle stays the middle");
+  assert.equal(S.effect(null), null);
+});

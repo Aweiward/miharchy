@@ -1,8 +1,9 @@
 .pragma library
 
 // Crop borders (GLOSSARY.md): the plain margin around a page, found in
-// its pixels. ReaderView draws the page small into a Canvas and hands the
-// RGBA bytes here; Auto levels (#281) reads the same pass.
+// its pixels, and Auto levels: the black and white points of the part a
+// mode shows. ReaderView draws the page small into a Canvas and hands the
+// RGBA bytes here.
 
 // A margin is no deeper than a quarter of the page on any side, and a crop
 // that keeps less than this share of the area leaves the page whole: a
@@ -14,6 +15,13 @@ var MIN_KEPT = 0.6
 var WHITE = 220
 var BLACK = 35
 var NOISE = 0.05
+// Auto levels: at most this share of the pixels turns black, and as much
+// white. A part whose points lie further apart than NARROW is left as it
+// is, and so is a flat one (closer than FLAT): a blank page or plain
+// paper, where a stretch would only show the grain.
+var CLIP = 0.005
+var NARROW = 204
+var FLAT = 64
 
 // RGBA bytes -> one luminance byte per pixel (Rec. 601).
 function luminance(data) {
@@ -63,6 +71,29 @@ function crop(luma, w, r, sidesOnly) {
   return { x0: x0, y0: y0, x1: x1, y1: y1 }
 }
 
+// The black and white points of rect r: a luminance histogram, up to
+// CLIP of it off each end. -> { black, white } in 0..255, or null to leave
+// the part as it is.
+function levels(luma, w, r) {
+  var hist = new Uint32Array(256)
+  for (var y = r.y0; y < r.y1; y++) for (var x = r.x0; x < r.x1; x++) hist[luma[y * w + x]]++
+  var clip = (r.x1 - r.x0) * (r.y1 - r.y0) * CLIP
+  var black = 0, white = 255, s = 0
+  while (s + hist[black] <= clip) s += hist[black++]
+  for (s = 0; s + hist[white] <= clip;) s += hist[white--]
+  return white - black > NARROW || white - black < FLAT ? null : { black: black, white: white }
+}
+
+// Levels -> MultiEffect's contrast and brightness for the linear stretch
+// that maps black to 0 and white to 1, the same for all three channels.
+// Its shader draws (v - 0.5) * (1 + contrast) + 0.5 + brightness, and Qt
+// 6.11 does not clamp contrast to its documented -1..1. null: no effect.
+function effect(l) {
+  if (!l) return null
+  var gain = 255 / (l.white - l.black)
+  return { contrast: gain - 1, brightness: gain * (0.5 - l.black / 255) - 0.5 }
+}
+
 // A rect in pixels -> { x, y, width, height } in fractions of the page.
 function share(c, w, h) {
   return c && { x: c.x0 / w, y: c.y0 / h, width: (c.x1 - c.x0) / w, height: (c.y1 - c.y0) / h }
@@ -70,25 +101,33 @@ function share(c, w, h) {
 
 // data: RGBA bytes of a page drawn width x height. -> { width, height,
 // page: the box paged shows, strip: the box webtoon shows (left and right
-// only), halves: [left, right] each half's box for a wide page, else null }.
-// A box is { x, y, width, height } in fractions of the whole page, null to
-// show it whole.
+// only), halves: [left, right] each half's box for a wide page, else null,
+// levels: { page, strip, halves } the levels() inside each box }. A box is
+// { x, y, width, height } in fractions of the whole page, null to show it
+// whole. Levels read the box with Crop borders off too: a margin is no
+// part of the art.
 function analyze(data, width, height) {
   var luma = luminance(data)
-  var all = { x0: 0, y0: 0, x1: width, y1: height }
   var mid = Math.floor(width / 2)
+  function part(r, sidesOnly) {
+    var c = crop(luma, width, r, sidesOnly)
+    return { box: share(c, width, height), levels: levels(luma, width, c || r) }
+  }
+  var all = { x0: 0, y0: 0, x1: width, y1: height }
+  var page = part(all, false)
+  var strip = part(all, true)
+  var halves = width > height ? [part({ x0: 0, y0: 0, x1: mid, y1: height }, false), part({ x0: mid, y0: 0, x1: width, y1: height }, false)] : null
+  var of = function(key) { return halves && halves.map(function(h) { return h[key] }) }
   return {
     width: width,
     height: height,
-    page: share(crop(luma, width, all, false), width, height),
-    strip: share(crop(luma, width, all, true), width, height),
-    halves: width > height ? [
-      share(crop(luma, width, { x0: 0, y0: 0, x1: mid, y1: height }, false), width, height),
-      share(crop(luma, width, { x0: mid, y0: 0, x1: width, y1: height }, false), width, height)
-    ] : null
+    page: page.box,
+    strip: strip.box,
+    halves: of("box"),
+    levels: { page: page.levels, strip: strip.levels, halves: of("levels") }
   }
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { analyze: analyze, luminance: luminance }
+  module.exports = { analyze: analyze, luminance: luminance, effect: effect }
 }
