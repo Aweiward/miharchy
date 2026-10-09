@@ -249,6 +249,18 @@ function targets(list, selected, cursor) {
   return row.type === "group" ? groupRows(list, cursor) : [row]
 }
 
+// targets() -> the manga M migrates, each once, as Migrate.withTargets
+// takes them; stalled when any of its problems in list is.
+function migrateList(targets, list) {
+  var out = []
+  targets.forEach(function(p) {
+    if (out.some(function(m) { return m.id === p.mangaId })) return
+    var stalled = list.some(function(o) { return o.mangaId === p.mangaId && o.kind === "stalled" })
+    out.push({ id: p.mangaId, title: p.title, sourceId: p.sourceId, sourceName: p.source, stalled: stalled })
+  })
+  return out
+}
+
 // Dismisses the problems (undo: brings them back) in one write, a
 // setMangaMeta per manga that keeps its other kinds. null for none.
 function dismissPayload(list, now, undo) {
@@ -355,6 +367,7 @@ if (typeof module !== "undefined") {
     copyText: copyText,
     mergeStart: mergeStart,
     mergeMove: mergeMove,
-    mergeJob: mergeJob
+    mergeJob: mergeJob,
+    migrateList: migrateList
   }
 }

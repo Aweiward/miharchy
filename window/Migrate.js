@@ -15,6 +15,7 @@ var TARGET_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: 
   + " manga { id title } chapters { id chapterNumber isRead isBookmarked } } }"
 var LIBRARY_QUERY = "{ mangas(condition: { inLibrary: true }, orderBy: TITLE) { nodes { id title sourceId source { displayName } } }"
   + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
+var HIGHEST_QUERY = "query($ids: [Int!]) { mangas(filter: { id: { in: $ids } }) { nodes { id highestNumberedChapter { chapterNumber } } } }"
 var MODE_KEY = "miharchy.readingMode"
 // Mihon's BaseSmartSearchEngine.MIN_ELIGIBLE_THRESHOLD.
 var THRESHOLD = 0.4
@@ -165,14 +166,45 @@ function key(name) {
   return String(name || "").replace(/\s*\([^)]*\)\s*$/, "").replace(/[^a-z0-9]/gi, "").toLowerCase()
 }
 
-// Browse.sources() -> where the manga can go: not its own source, and a
-// source named like the old one first (a new version of a source gets a
-// new id).
-function targets(sources, oldSourceId, oldName) {
+// Browse.sources() -> the sources a batch searches for a manga, in order: a
+// source named like its own first (a new version of a source gets a new
+// id; while its own is installed, only in its language), then the pinned
+// ones (Browse.pinned ids) in pin order; never its own.
+function preferred(sources, oldSourceId, oldName, pinned) {
   var k = key(oldName)
-  var others = sources.filter(function(s) { return s.id !== String(oldSourceId) })
-  var same = function(s) { return k !== "" && key(s.name) === k }
-  return others.filter(same).concat(others.filter(function(s) { return !same(s) }))
+  var own = sources.filter(function(s) { return s.id === String(oldSourceId) })[0]
+  var others = sources.filter(function(s) { return s !== own })
+  var same = others.filter(function(s) { return k !== "" && key(s.name) === k && (!own || s.lang === own.lang) })
+  var pins = (pinned || []).map(function(id) { return others.filter(function(s) { return s.id === id })[0] })
+  return same.concat(pins.filter(function(s) { return s && same.indexOf(s) === -1 }))
+}
+
+// Where the manga can go: preferred(), then every other source.
+function targets(sources, oldSourceId, oldName, pinned) {
+  var first = preferred(sources, oldSourceId, oldName, pinned)
+  return first.concat(sources.filter(function(s) { return s.id !== String(oldSourceId) && first.indexOf(s) === -1 }))
+}
+
+// manga: [{ id, title, sourceId, sourceName, stalled, highest }] -> each
+// with its targets, preferred(). null when none has one: the user then
+// picks one source for all (withTarget).
+function withTargets(manga, sources, pinned) {
+  var out = manga.map(function(m) { return copy(m, { targets: preferred(sources, m.sourceId, m.sourceName, pinned) }) })
+  return out.some(function(m) { return m.targets.length }) ? out : null
+}
+
+// HIGHEST_QUERY data -> the manga with highest, the chapter number a
+// stalled one's target must pass; -1 with no chapters.
+function withHighest(manga, data) {
+  var nodes = (data.mangas && data.mangas.nodes) || []
+  return manga.map(function(m) {
+    var n = nodes.filter(function(o) { return o.id === m.id })[0]
+    return copy(m, { highest: n && n.highestNumberedChapter ? n.highestNumberedChapter.chapterNumber : -1 })
+  })
+}
+
+function withTarget(manga, to) {
+  return manga.map(function(m) { return copy(m, { targets: String(m.sourceId) === to.id ? [] : [to] }) })
 }
 
 // LIBRARY_QUERY data -> each source with library manga, by name:
@@ -193,41 +225,105 @@ function librarySources(data) {
   return list.sort(function(a, b) { return a.name.localeCompare(b.name) })
 }
 
-// A batch: one search of the target source per old manga, each a Browse
-// listing so GlobalSearch drives it. picks[i]: the chosen result's index
-// in group i, -1 for none (skip, no match or still searching).
-function batch(target, manga) {
+// A batch: manga as withTargets() gives them. Group i, a Browse listing so
+// GlobalSearch drives it, searches manga i's target at[i]; a search with
+// no match moves the row on to its next target. picks[i]: the chosen
+// result's index in group i, -1 for none (skip, no match or still
+// searching). held[i]: a stalled manga's match waiting for its chapter
+// check, { pick, state: "idle" | "loading" }, or null.
+function batch(manga) {
   return {
     manga: manga,
-    search: { query: "", groups: manga.map(function(m) { return Browse.listing(target, "search", m.title) }) },
-    picks: manga.map(function() { return -1 })
+    search: { query: "", groups: manga.map(function(m) { return group(m, 0) }) },
+    picks: manga.map(function() { return -1 }),
+    at: manga.map(function() { return 0 }),
+    held: manga.map(function() { return null })
   }
 }
 
-// Mihon searches the library one manga at a time.
-function due(b) {
-  return GlobalSearch.due(b.search, 1)
+// A manga with no target to search is a finished, empty search.
+function group(m, at) {
+  var t = m.targets[at]
+  var g = Browse.listing(t || { id: "", name: "" }, "search", m.title)
+  return t ? g : copy(g, { state: "ok", page: 1, hasNext: false })
 }
 
+function set(b, field, index, value) {
+  var list = b[field].slice()
+  list[index] = value
+  var c = {}
+  c[field] = list
+  return copy(b, c)
+}
+
+function checking(b) {
+  return b.held.some(function(h) { return h && h.state === "loading" })
+}
+
+// Mihon searches the library one manga at a time; a chapter check counts.
+function due(b) {
+  return checking(b) ? [] : GlobalSearch.due(b.search, 1)
+}
+
+// The rows whose chapter check can start: the first held one, while
+// nothing else is in flight. Sent before due().
+function checks(b) {
+  if (checking(b) || b.search.groups.some(function(g) { return g.state === "loading" })) return []
+  var i = b.held.findIndex(function(h) { return h && h.state === "idle" })
+  return i === -1 ? [] : [i]
+}
+
+// Fetches the held match with its chapters; the reply goes back as
+// { type: "checked", reply }.
+// ponytail: prepare() fetches the target again on confirm; keep this reply
+// in the job if the second fetch shows.
+function checkPayload(b, index) {
+  return { query: TARGET_MUTATION, variables: { id: b.search.groups[index].items[b.held[index].pick].id } }
+}
+
+function newest(chapters) {
+  return chapters.filter(recognized).reduce(function(n, c) { return Math.max(n, c.chapterNumber) }, -1)
+}
+
+function advance(b, index) {
+  var at = b.at[index] + 1
+  if (at >= b.manga[index].targets.length) return b
+  var groups = b.search.groups.slice()
+  groups[index] = group(b.manga[index], at)
+  return set(copy(b, { search: { query: b.search.query, groups: groups } }), "at", index, at)
+}
+
+// event: a GlobalSearch.reduce event for group index, or "check" (its
+// chapter check is sent) and "checked" { reply }. A stalled manga takes a
+// match only when it has a higher chapter number than the old manga's
+// highest.
 function reduceBatch(b, index, event) {
+  var h = b.held[index]
+  if (event.type === "check") return set(b, "held", index, copy(h, { state: "loading" }))
+  if (event.type === "checked") {
+    if (!h || h.state !== "loading") return b
+    var r = event.reply
+    var more = r.state === "ok" && newest(r.data.fetchMangaAndChapters.chapters) > b.manga[index].highest
+    var cleared = set(b, "held", index, null)
+    return more ? set(cleared, "picks", index, h.pick) : advance(cleared, index)
+  }
   var search = GlobalSearch.reduce(b.search, index, event)
   if (search === b.search) return b
-  var picks = b.picks
-  if (event.type === "reply") {
-    picks = b.picks.slice()
-    picks[index] = propose(b.manga[index].title, search.groups[index].items)
-  }
-  return copy(b, { search: search, picks: picks })
+  var next = copy(b, { search: search })
+  if (event.type !== "reply" && event.type !== "timeout") return next
+  var g = search.groups[index]
+  var p = g.state === "ok" ? propose(b.manga[index].title, g.items) : -1
+  if (p === -1) return advance(next, index)
+  return b.manga[index].stalled ? set(next, "held", index, { pick: p, state: "idle" }) : set(next, "picks", index, p)
 }
 
-// Steps through the row's results and then "skip", wrapping.
+// Steps through the row's results and then "skip", wrapping. A choice by
+// hand drops the row's chapter check.
 function pick(b, index, delta) {
   var n = b.search.groups[index].items.length
   var at = b.picks[index] === -1 ? n : b.picks[index]
   at = ((at + delta) % (n + 1) + n + 1) % (n + 1)
-  var picks = b.picks.slice()
-  picks[index] = at === n ? -1 : at
-  return copy(b, { picks: picks })
+  return set(set(b, "held", index, null), "picks", index, at === n ? -1 : at)
 }
 
 function chosen(b, index) {
@@ -239,13 +335,18 @@ function retry(b) {
 }
 
 // A batch row's right side: the pick and where it sits among the results,
-// "skip", or the search's own status.
+// "skip", or the search's own status, then the source it searched.
 function matchStatus(b, index, configPath) {
+  var m = b.manga[index]
+  if (!m.targets.length) return "No source to search"
   var g = b.search.groups[index]
+  var where = "   " + g.source.name
   var t = chosen(b, index)
-  if (t) return t.title + "   " + (b.picks[index] + 1) + " of " + g.items.length
-  if (g.state === "ok" && g.items.length) return "skip   " + g.items.length + (g.items.length === 1 ? " result" : " results")
-  return GlobalSearch.status(g, configPath)
+  if (t) return t.title + "   " + (b.picks[index] + 1) + " of " + g.items.length + where
+  if (b.held[index]) return "checking chapters" + where
+  if (m.stalled && g.state === "ok") return "No source has more chapters."
+  if (g.state === "ok" && g.items.length) return "skip   " + g.items.length + (g.items.length === 1 ? " result" : " results") + where
+  return GlobalSearch.status(g, configPath) + where
 }
 
 // plan: the plan for one migration; total: the target's chapter count.
@@ -253,12 +354,12 @@ function planText(p, total) {
   return "Marks " + p.read.length + " of " + total + " chapters read and " + p.bookmark.length + " bookmarked."
 }
 
-// What the batch migrates: { old: { id, title }, target: { id, title } }.
+// What the batch migrates: { old: { id, title }, target: { id, title, source } }.
 function jobs(b) {
   var out = []
   b.manga.forEach(function(m, i) {
     var t = chosen(b, i)
-    if (t) out.push({ old: m, target: t })
+    if (t) out.push({ old: m, target: { id: t.id, title: t.title, source: b.search.groups[i].source.name } })
   })
   return out
 }
@@ -278,9 +379,15 @@ if (typeof module !== "undefined") {
     key: key,
     propose: propose,
     targets: targets,
+    withTargets: withTargets,
+    withTarget: withTarget,
+    withHighest: withHighest,
+    HIGHEST_QUERY: HIGHEST_QUERY,
     librarySources: librarySources,
     batch: batch,
     due: due,
+    checks: checks,
+    checkPayload: checkPayload,
     reduceBatch: reduceBatch,
     pick: pick,
     chosen: chosen,

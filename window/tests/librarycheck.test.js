@@ -249,3 +249,14 @@ test("a copy whose source is missing cannot be kept: the cursor starts past it a
   assert.equal(L.mergeMove(both, 1, 1), 1, "past the last copy stays");
   assert.equal(L.mergeStart(L.mergeCopies({ a: gone, b: { ...gone, id: 3 }, metas: { nodes: [] } })), -1, "no copy can be kept");
 });
+
+test("M migrates each manga of the selection once, from its source, stalled when any of its problems is", () => {
+  const old = { latestUploadedChapter: { uploadDate: String(NOW - 300 * DAY) } };
+  const ps = L.problems(data([node(1, { source: null, ...old }), node(2, { title: "Manga 1" })], { metas: { nodes: [{ value: JSON.stringify({ [MANGADEX.id]: "MangaDex" }) }] } }), NOW);
+  const rows = L.rows(ps, false);
+  const sel = Object.fromEntries(rows.filter((r) => r.type === "problem" && r.kind !== "stalled").map((r) => [r.key, true]));
+  assert.deepEqual(L.migrateList(L.targets(rows, sel, 0), ps), [
+    { id: 1, title: "Manga 1", sourceId: MANGADEX.id, sourceName: "MangaDex", stalled: true },
+    { id: 2, title: "Manga 1", sourceId: MANGADEX.id, sourceName: "MangaDex (EN)", stalled: false }
+  ]);
+});
