@@ -46,7 +46,8 @@ Rectangle {
         proc.running = true
         break
       case "sync.apply":
-        if (sync.state !== "held") return
+        // Never from the health panel: a held sync the user kept stays held there.
+        if (sync.state !== "held" || healthMode) return
         sync = Sync.reduce(sync, { type: "apply" })
         proc.command = Sync.command(devHelper, true)
         proc.running = true
