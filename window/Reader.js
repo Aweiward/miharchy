@@ -288,6 +288,13 @@ function place(size, part, fitMode, box, zoom) {
   return { width: f.width, height: f.height, sourceWidth: sw, sourceHeight: sh, clip: clip }
 }
 
+// Whether url's page needs Crop borders' analysis: none yet, or a failed
+// one. A fast turn can empty a page's file before the Canvas reads it;
+// the page fetches a new file when it shows again, and that one reads.
+function scanDue(scans, url) {
+  return !(url in scans) || scans[url].failed === true
+}
+
 function sizeOf(r, page, layout) {
   return (layout && layout.sizes && layout.sizes[r.pages[page]]) || { width: 0, height: 0 }
 }
@@ -702,6 +709,7 @@ if (typeof module !== "undefined") {
     PANEL_KEYS: PANEL_KEYS,
     place: place,
     alone: alone,
+    scanDue: scanDue,
     background: background,
     settingRow: settingRow,
     panelRows: panelRows,

@@ -720,6 +720,13 @@ test("the webtoon strip crops the left and right of each page at the strip's wid
   assert.equal(R.place({ width: 0, height: 0 }, null, "width", { width: 640, height: 1000 }, 1).clip, null, "a page not read yet: whole");
 });
 
+test("a page is analyzed until it has a result: a failure, as a file emptied by a fast turn, is tried again as the page shows again", () => {
+  const u = "/api/v1/manga/5/chapter/12/page/0";
+  assert.equal(R.scanDue({}, u), true, "never analyzed");
+  assert.equal(R.scanDue({ [u]: { failed: true, ms: 0 } }, u), true, "failed: due again");
+  assert.equal(R.scanDue({ [u]: { page: null, strip: null, halves: null, ms: 30 } }, u), false, "a result, a whole page too, stays");
+});
+
 test("crop borders is a Settings row per kind of reading mode, on for paged and off for webtoon, in the reader's panel", () => {
   const S = require("./load")("Settings.js");
   const row = (k) => S.ROWS.find((r) => r.key === k);

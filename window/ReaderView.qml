@@ -101,8 +101,14 @@ Rectangle {
   // queue; a page the Canvas never answers for fails after 5 s.
   property var scanQueue: []
 
+  // A retry after a failure holds the page again until its result.
   function scan(url, file) {
-    if (!cropping || url in scans || scanQueue.some(function(q) { return q.url === url })) return
+    if (!cropping || !Reader.scanDue(scans, url) || scanQueue.some(function(q) { return q.url === url })) return
+    if (url in scans) {
+      var kept = {}
+      for (var u in scans) if (u !== url) kept[u] = scans[u]
+      scans = kept
+    }
     scanQueue = scanQueue.concat([{ url: url, file: file, at: Date.now() }])
     if (scanner.available) scanner.loadImage(file)
   }
@@ -710,7 +716,7 @@ Rectangle {
 
         ServerImage {
           id: image
-          readonly property bool wants: view.cropping && fileUrl !== "" && !(loadedUrl in view.scans)
+          readonly property bool wants: view.cropping && fileUrl !== "" && Reader.scanDue(view.scans, loadedUrl)
           onWantsChanged: if (wants) view.scan(loadedUrl, fileUrl)
           width: slot.size.width
           height: slot.size.height
@@ -765,7 +771,7 @@ Rectangle {
       required property string modelData
       // Crop borders in the strip: the left and right only.
       readonly property var placed: Reader.place(view.pageSizes[modelData] || { width: 0, height: 0 }, view.cropping && view.scans[modelData] ? view.scans[modelData].strip || null : null, "width", { width: strip.width, height: strip.height }, 1)
-      readonly property bool wants: view.cropping && fileUrl !== "" && !(loadedUrl in view.scans)
+      readonly property bool wants: view.cropping && fileUrl !== "" && Reader.scanDue(view.scans, loadedUrl)
       onWantsChanged: if (wants) view.scan(loadedUrl, fileUrl)
       width: strip.width
       // A page still loading takes room, so the strip never asks for every
