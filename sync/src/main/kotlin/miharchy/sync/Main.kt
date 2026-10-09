@@ -11,6 +11,8 @@ import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.PosixFilePermissions
 import java.time.Instant
+import java.time.ZoneId
+import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.isDirectory
@@ -18,12 +20,14 @@ import kotlin.io.path.isRegularFile
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
 import kotlin.io.path.readBytes
+import kotlin.io.path.readText
 import kotlin.system.exitProcess
 
 private const val USAGE = """usage: miharchy-sync sync [--folder <sync folder>] [--dry-run] [--apply] [--json]
        miharchy-sync check <backup file>
        miharchy-sync restore <backup file>
-       miharchy-sync backup <folder>"""
+       miharchy-sync backup <folder>
+       miharchy-sync health [--folder <sync folder>]"""
 
 /** Backups Miharchy writes to the sync folder start with this, so a sync never mistakes them for phone backups. */
 const val OWN_BACKUP_PREFIX = "miharchy-"
@@ -40,7 +44,7 @@ data class Summary(
     val changes: List<Change>,
     /** The backup written for the phone, or null on a dry run. */
     val export: String?,
-    val unreachable: List<Unreachable>,
+    val unreachable: List<PhoneChange>,
     /** The changes look like a lost phone backup, so the sync stopped before it changed anything; --apply runs it. */
     val held: Boolean = false,
 )
@@ -54,6 +58,7 @@ fun main(args: Array<String>) {
         "check" -> return check(args.getOrNull(1) ?: usage())
         "restore" -> return restore(args.getOrNull(1) ?: usage())
         "backup" -> return backup(args.getOrNull(1) ?: usage())
+        "health" -> return health(args.toList().zipWithNext().firstOrNull { it.first == "--folder" }?.second)
         else -> usage()
     }
     val folderArg = args.toList().zipWithNext().firstOrNull { it.first == "--folder" }?.second
@@ -98,16 +103,35 @@ private fun sync(folderArg: String?, dryRun: Boolean, apply: Boolean): Summary {
     val names = mergeSourceNames(storedNames, listOfNotNull(phoneBaseline, phoneNow).flatMap { it.backupSources })
     if (names != storedNames) desktop.setSourceNames(names)
 
-    val exported = forMihon(desktop.export(), desktop.notes())
-    val exportFile = writeExport(folder, exportName(Instant.now()), exported)
+    val name = exportName(Instant.now())
+    val exported = forMihon(desktop.export(), desktop.notes(), marker = name)
+    val exportFile = writeExport(folder, name, exported)
     // The undo point: a sync overrides a desktop value only while it equals this baseline, and a restore only adds.
     val desktopBaselineFile = stateDir.resolve("desktop-baseline.tachibk")
     if (desktopBaselineFile.exists()) writePrivately(stateDir.resolve("pre-sync.tachibk"), desktopBaselineFile.readBytes())
     writePrivately(desktopBaselineFile, exported)
     phoneBytes?.let { writePrivately(stateDir.resolve("phone-baseline.tachibk"), it) }
 
-    val lost = (phoneNow ?: phoneBaseline)?.let { unreachable(it, decodeBackup(exported)) }.orEmpty()
+    val gap = (phoneNow ?: phoneBaseline)?.let { gap(it, decodeBackup(exported)) }
+    // desktopBaseline is still the last desktop backup here.
+    val caughtUp = phoneNow != null && desktopBaseline != null && gap(phoneNow, desktopBaseline).restorable.isEmpty()
+    val since = pendingSince(readPendingSince(), gap?.restorable.orEmpty().isNotEmpty(), Instant.now(), caughtUp)
+    if (since == null) PENDING_SINCE.deleteIfExists() else writePrivately(PENDING_SINCE, since.toString().toByteArray())
+    val lost = gap?.byHand.orEmpty()
     return Summary(config.url, folder.toString(), phoneFile?.toString(), false, changes, exportFile.toString(), lost)
+}
+
+/** Sync health as one JSON line, the only output. Reads only, so it takes no lock. */
+private fun health(folderArg: String?) {
+    val result = try {
+        val folder = Path.of(folderArg ?: Desktop(ServerConfig.load()).syncFolder() ?: fail("No sync folder is set. Choose one in Setup or Settings."))
+        if (!folder.isDirectory()) fail("$folder is not a folder.")
+        health(folder, stateDir, ZoneId.systemDefault())
+    } catch (e: Exception) {
+        fail(e.message ?: e.toString())
+    }
+    // Every field, nulls too, so the window never guesses at a missing one.
+    println(Json { encodeDefaults = true }.encodeToString(result))
 }
 
 @Serializable
@@ -195,6 +219,12 @@ fun lockState(): FileLock? {
     heldLock = channel.tryLock() ?: return null.also { channel.close() }
     return heldLock
 }
+
+/** When a restore first had something to bring the phone (`pendingSince`); only a sync writes it. */
+val PENDING_SINCE: Path = stateDir.resolve("pending-since")
+
+fun readPendingSince(dir: Path = stateDir): Instant? =
+    dir.resolve(PENDING_SINCE.name).takeIf { it.exists() }?.let { runCatching { Instant.parse(it.readText().trim()) }.getOrNull() }
 
 fun newestPhoneBackup(folder: Path): Path? = folder.listDirectoryEntries("*.tachibk")
     .filter { it.isRegularFile() && !it.name.startsWith(OWN_BACKUP_PREFIX) }

@@ -4,6 +4,8 @@ import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupPreference
+import eu.kanade.tachiyomi.data.backup.models.IntPreferenceValue
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
 import java.nio.file.Files
 import java.time.Instant
@@ -14,6 +16,7 @@ import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 private const val SOURCE = 2499283573021220255L
 
@@ -57,27 +60,27 @@ class ExportTest {
         )
         assertEquals(
             listOf(
-                Unreachable(Unreachable.Kind.MARKED_UNREAD, "Title /m", "Ch /read"),
-                Unreachable(Unreachable.Kind.BOOKMARK_REMOVED, "Title /m", "Ch /marked"),
-                Unreachable(Unreachable.Kind.PAGE_LOWERED, "Title /m", "Ch /paged"),
-                Unreachable(Unreachable.Kind.REMOVED_FROM_LIBRARY, "Title /removed"),
-                Unreachable(Unreachable.Kind.REMOVED_FROM_LIBRARY, "Title /absent"),
-                Unreachable(Unreachable.Kind.CATEGORIES_CLEARED, "Title /uncategorized"),
+                PhoneChange(PhoneChange.Kind.MARKED_UNREAD, "Title /m", "Ch /read"),
+                PhoneChange(PhoneChange.Kind.BOOKMARK_REMOVED, "Title /m", "Ch /marked"),
+                PhoneChange(PhoneChange.Kind.PAGE_LOWERED, "Title /m", "Ch /paged"),
+                PhoneChange(PhoneChange.Kind.REMOVED_FROM_LIBRARY, "Title /removed"),
+                PhoneChange(PhoneChange.Kind.REMOVED_FROM_LIBRARY, "Title /absent"),
+                PhoneChange(PhoneChange.Kind.CATEGORIES_CLEARED, "Title /uncategorized"),
             ),
-            unreachable(phone, export),
+            gap(phone, export).byHand,
         )
     }
 
     @Test fun `an unread mark is one entry, not also a lowered page`() {
         val phone = backup(manga("/m", chapter("/c", read = true, page = 20)))
         val export = backup(manga("/m", chapter("/c", page = 0)))
-        assertEquals(listOf(Unreachable(Unreachable.Kind.MARKED_UNREAD, "Title /m", "Ch /c")), unreachable(phone, export))
+        assertEquals(listOf(PhoneChange(PhoneChange.Kind.MARKED_UNREAD, "Title /m", "Ch /c")), gap(phone, export).byHand)
     }
 
     @Test fun `a page on a chapter read on both sides is no loss`() {
         val phone = backup(manga("/m", chapter("/c", read = true, page = 20)))
         val export = backup(manga("/m", chapter("/c", read = true, page = 2)))
-        assertEquals(emptyList(), unreachable(phone, export))
+        assertEquals(emptyList(), gap(phone, export).byHand)
     }
 
     @Test fun `a track Mihon's restore cannot reach is listed, a new or raised one is not`() {
@@ -89,12 +92,64 @@ class ExportTest {
         )
         assertEquals(
             listOf(
-                Unreachable(Unreachable.Kind.TRACK_REMOVED, "Title /m", tracker = "MyAnimeList"),
-                Unreachable(Unreachable.Kind.TRACK_LOWERED, "Title /m", tracker = "AniList"),
-                Unreachable(Unreachable.Kind.TRACK_CHANGED, "Title /m", tracker = "Kitsu"),
+                PhoneChange(PhoneChange.Kind.TRACK_REMOVED, "Title /m", tracker = "MyAnimeList"),
+                PhoneChange(PhoneChange.Kind.TRACK_LOWERED, "Title /m", tracker = "AniList"),
+                PhoneChange(PhoneChange.Kind.TRACK_CHANGED, "Title /m", tracker = "Kitsu"),
             ),
-            unreachable(phone, export),
+            gap(phone, export).byHand,
         )
+    }
+
+    @Test fun `what a Mihon restore brings to the phone is listed apart from what the user repeats by hand`() {
+        fun track(tracker: Int, read: Float) = BackupTracking(syncId = tracker, libraryId = 0, mediaId = 7, lastChapterRead = read)
+        val categories = listOf(BackupCategory("A", order = 1), BackupCategory("B", order = 2))
+        val phone = Backup(
+            listOf(
+                manga("/m", chapter("/read"), chapter("/marked"), chapter("/paged", page = 2), chapter("/same", read = true), categories = listOf(1))
+                    .apply { tracking = listOf(track(2, 3F)) },
+                manga("/out", favorite = false),
+            ),
+            categories,
+        )
+        val export = Backup(
+            listOf(
+                manga(
+                    "/m", chapter("/read", read = true), chapter("/marked", bookmark = true), chapter("/paged", page = 6),
+                    chapter("/same", read = true), chapter("/new", read = true), categories = listOf(1, 2),
+                ).apply { tracking = listOf(track(2, 5F), track(1, 1F)) },
+                manga("/out", chapter("/c", read = true)),
+                manga("/added"),
+            ),
+            categories,
+        )
+        assertEquals(
+            listOf(
+                PhoneChange(PhoneChange.Kind.CATEGORIES_CHANGED, "Title /m"),
+                PhoneChange(PhoneChange.Kind.TRACK_RAISED, "Title /m", tracker = "AniList"),
+                PhoneChange(PhoneChange.Kind.TRACK_BOUND, "Title /m", tracker = "MyAnimeList"),
+                PhoneChange(PhoneChange.Kind.MARKED_READ, "Title /m", "Ch /read"),
+                PhoneChange(PhoneChange.Kind.BOOKMARKED, "Title /m", "Ch /marked"),
+                PhoneChange(PhoneChange.Kind.PAGE_RAISED, "Title /m", "Ch /paged"),
+                PhoneChange(PhoneChange.Kind.MARKED_READ, "Title /m", "Ch /new"),
+                PhoneChange(PhoneChange.Kind.ADDED_TO_LIBRARY, "Title /out"),
+                PhoneChange(PhoneChange.Kind.ADDED_TO_LIBRARY, "Title /added"),
+            ),
+            gap(phone, export).restorable,
+        )
+        assertEquals(emptyList(), gap(phone, export).byHand)
+    }
+
+    @Test fun `a phone backup made after restoring a desktop backup names that desktop backup`() {
+        val name = "miharchy-2026-10-09_12-00-00.tachibk"
+        val desktop = decodeBackup(forMihon(encodeBackup(backup(manga("/m"))), marker = name))
+        // Mihon's restore writes the backup's app preferences beside its own, and its next backup carries them all.
+        val phone = Backup(listOf(manga("/m")), backupPreferences = listOf(BackupPreference("pref_x", IntPreferenceValue(1))) + desktop.backupPreferences)
+        assertEquals(name, restoredFrom(decodeBackup(encodeBackup(phone))))
+    }
+
+    @Test fun `a phone backup that never restored a desktop backup names none, and a backup made by hand carries no name`() {
+        assertNull(restoredFrom(Backup(listOf(manga("/m")), backupPreferences = listOf(BackupPreference("pref_x", IntPreferenceValue(1))))))
+        assertNull(restoredFrom(decodeBackup(forMihon(encodeBackup(backup(manga("/m")))))))
     }
 
     @Test fun `export names sort by time, to the second`() {
@@ -114,7 +169,7 @@ class ExportTest {
     @Test fun `notes the phone already has are listed, since a Mihon restore keeps them`() {
         val phone = backup(manga("/m").apply { notes = "old" }, manga("/same").apply { notes = "x" })
         val export = backup(manga("/m").apply { notes = "new" }, manga("/same").apply { notes = "x" })
-        assertEquals(listOf(Unreachable(Unreachable.Kind.NOTES_CHANGED, "Title /m")), unreachable(phone, export))
+        assertEquals(listOf(PhoneChange(PhoneChange.Kind.NOTES_CHANGED, "Title /m")), gap(phone, export).byHand)
     }
 
     @Test fun `pruning keeps the newest exports and never touches phone backups`() {
