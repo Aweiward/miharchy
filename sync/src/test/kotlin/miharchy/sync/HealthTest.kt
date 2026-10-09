@@ -37,7 +37,7 @@ class HealthTest {
     @Test fun `a Mihon backup is dated by its name, in the phone's time zone, and any other by its file time`() {
         val fileTime = at("2026-10-09T20:00:00Z")
         assertEquals(at("2026-10-09T12:00:00Z"), phoneBackupTime("app.mihon_2026-10-09_14-00.tachibk", fileTime, BERLIN))
-        assertEquals(at("2026-10-09T12:00:00Z"), phoneBackupTime("app.mihon.dev_2026-10-09_14-00.tachibk", fileTime, BERLIN))
+        assertEquals(at("2026-10-09T12:00:00Z"), phoneBackupTime("app.mihon.debug_2026-10-09_14-00.tachibk", fileTime, BERLIN))
         assertEquals(fileTime, phoneBackupTime("library.tachibk", fileTime, BERLIN))
     }
 
