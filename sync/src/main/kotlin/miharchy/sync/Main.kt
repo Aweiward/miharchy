@@ -40,7 +40,7 @@ data class Summary(
     val changes: List<Change>,
     /** The backup written for the phone, or null on a dry run. */
     val export: String?,
-    val unreachable: List<Unreachable>,
+    val unreachable: List<PhoneChange>,
     /** The changes look like a lost phone backup, so the sync stopped before it changed anything; --apply runs it. */
     val held: Boolean = false,
 )
@@ -107,7 +107,7 @@ private fun sync(folderArg: String?, dryRun: Boolean, apply: Boolean): Summary {
     writePrivately(desktopBaselineFile, exported)
     phoneBytes?.let { writePrivately(stateDir.resolve("phone-baseline.tachibk"), it) }
 
-    val lost = (phoneNow ?: phoneBaseline)?.let { unreachable(it, decodeBackup(exported)) }.orEmpty()
+    val lost = (phoneNow ?: phoneBaseline)?.let { gap(it, decodeBackup(exported)).byHand }.orEmpty()
     return Summary(config.url, folder.toString(), phoneFile?.toString(), false, changes, exportFile.toString(), lost)
 }
 

@@ -83,10 +83,19 @@ const val MARKER_KEY = "miharchy_backup"
 fun restoredFrom(phone: Backup): String? =
     (phone.backupPreferences.firstOrNull { it.key == MARKER_KEY }?.value as? StringPreferenceValue)?.value
 
-/** A desktop state the phone keeps after restoring the export, so the user repeats it in Mihon. */
+/** A desktop state the phone lacks: a restore of the desktop backup brings it, or the user repeats it in Mihon. */
 @Serializable
-data class Unreachable(val change: Kind, val manga: String, val chapter: String? = null, val tracker: String? = null) {
+data class PhoneChange(val change: Kind, val manga: String, val chapter: String? = null, val tracker: String? = null) {
     enum class Kind(val text: String) {
+        // A Mihon restore brings these.
+        @SerialName("addedToLibrary") ADDED_TO_LIBRARY("added to the library"),
+        @SerialName("categoriesChanged") CATEGORIES_CHANGED("categories changed"),
+        @SerialName("markedRead") MARKED_READ("marked read"),
+        @SerialName("bookmarked") BOOKMARKED("bookmarked"),
+        @SerialName("pageRaised") PAGE_RAISED("last page read raised"),
+        @SerialName("trackBound") TRACK_BOUND("track added"),
+        @SerialName("trackRaised") TRACK_RAISED("chapters read raised"),
+        // The user repeats these by hand.
         @SerialName("removedFromLibrary") REMOVED_FROM_LIBRARY("removed from the library"),
         @SerialName("categoriesCleared") CATEGORIES_CLEARED("taken out of every category"),
         @SerialName("markedUnread") MARKED_UNREAD("marked unread"),
@@ -99,21 +108,58 @@ data class Unreachable(val change: Kind, val manga: String, val chapter: String?
     }
 }
 
+/** What the phone lacks of the desktop backup: what a restore brings, and what the user repeats by hand. */
+@Serializable
+data class Gap(val restorable: List<PhoneChange>, val byHand: List<PhoneChange>)
+
 /**
- * What a stock Mihon restore of [export] cannot apply over the state in [phone], the newest phone backup.
- * Mihon's restore (RestoreRepositoryImpl) keeps `favorite || backup`, `read || backup`, `bookmark || backup`
- * and `max(lastPageRead, backup)`, and replaces a manga's categories only with a non-empty list. It never deletes a
- * track, and on a track the phone has it only raises chapters read. It keeps the notes of a manga the phone already
- * has (RestoreRepositoryImpl.mergeManga copies the phone's row). Measured against the phone's own backup, a
- * change stays listed until the phone has it.
+ * The desktop backup [export] measured against [phone], the newest phone backup, so a change stays listed until the
+ * phone has it. Mihon's restore (RestoreRepositoryImpl) keeps `favorite || backup`, `read || backup`,
+ * `bookmark || backup` and `max(lastPageRead, backup)`, and replaces a manga's categories only with a non-empty list.
+ * It never deletes a track, and on a track the phone has it only raises chapters read. It keeps the notes of a manga
+ * the phone already has (RestoreRepositoryImpl.mergeManga copies the phone's row); a manga it adds brings its own.
  */
-fun unreachable(phone: Backup, export: Backup): List<Unreachable> {
+fun gap(phone: Backup, export: Backup): Gap = Gap(restorable(phone, export), byHand(phone, export))
+
+private fun restorable(phone: Backup, export: Backup): List<PhoneChange> {
+    val onPhone = phone.backupManga.associateBy { MangaKey(it.source, it.url) }
+    val phoneCategories = phone.backupCategories.associate { it.order to it.name }
+    val exportCategories = export.backupCategories.associate { it.order to it.name }
+    return export.backupManga.filter { it.favorite }.flatMap { e ->
+        val p = onPhone[MangaKey(e.source, e.url)]
+        if (p == null || !p.favorite) return@flatMap listOf(PhoneChange(PhoneChange.Kind.ADDED_TO_LIBRARY, e.title))
+        val categories = PhoneChange(PhoneChange.Kind.CATEGORIES_CHANGED, e.title).takeIf {
+            e.categories.isNotEmpty() &&
+                e.categories.mapNotNull { exportCategories[it] }.toSet() != p.categories.mapNotNull { phoneCategories[it] }.toSet()
+        }
+        val tracks = p.tracking.associate { it.syncId to it.lastChapterRead }
+        val gained = e.tracking.filter { it.syncId in TRACKER_NAMES }.mapNotNull { et ->
+            val read = tracks[et.syncId]
+            when {
+                read == null -> PhoneChange.Kind.TRACK_BOUND
+                et.lastChapterRead > read -> PhoneChange.Kind.TRACK_RAISED
+                else -> null
+            }?.let { PhoneChange(it, e.title, tracker = TRACKER_NAMES[et.syncId]) }
+        }
+        val chapters = p.chapters.associateBy { it.url }
+        listOfNotNull(categories) + gained + e.chapters.flatMap { ec ->
+            val pc = chapters[ec.url]
+            listOfNotNull(
+                PhoneChange.Kind.MARKED_READ.takeIf { ec.read && pc?.read != true },
+                PhoneChange.Kind.BOOKMARKED.takeIf { ec.bookmark && pc?.bookmark != true },
+                PhoneChange.Kind.PAGE_RAISED.takeIf { !ec.read && pc?.read != true && ec.lastPageRead > (pc?.lastPageRead ?: 0) },
+            ).map { PhoneChange(it, e.title, ec.name) }
+        }
+    }
+}
+
+private fun byHand(phone: Backup, export: Backup): List<PhoneChange> {
     val exported = export.backupManga.associateBy { MangaKey(it.source, it.url) }
     return phone.backupManga.filter { it.favorite }.flatMap { p ->
         val e = exported[MangaKey(p.source, p.url)]
-        if (e == null || !e.favorite) return@flatMap listOf(Unreachable(Unreachable.Kind.REMOVED_FROM_LIBRARY, p.title))
-        val cleared = Unreachable(Unreachable.Kind.CATEGORIES_CLEARED, p.title).takeIf { p.categories.isNotEmpty() && e.categories.isEmpty() }
-        val notes = Unreachable(Unreachable.Kind.NOTES_CHANGED, p.title).takeIf { p.notes != e.notes }
+        if (e == null || !e.favorite) return@flatMap listOf(PhoneChange(PhoneChange.Kind.REMOVED_FROM_LIBRARY, p.title))
+        val cleared = PhoneChange(PhoneChange.Kind.CATEGORIES_CLEARED, p.title).takeIf { p.categories.isNotEmpty() && e.categories.isEmpty() }
+        val notes = PhoneChange(PhoneChange.Kind.NOTES_CHANGED, p.title).takeIf { p.notes != e.notes }
         val chapters = e.chapters.associateBy { it.url }
         // Only what the user sets: the title, url and total come from the tracker, and each app names them its own way.
         fun TrackState.userSet() = listOf(remoteId, status, score, startDate, finishDate, private)
@@ -122,18 +168,18 @@ fun unreachable(phone: Backup, export: Backup): List<Unreachable> {
             val phoneTrack = pt.toTrackState()
             val et = tracks[pt.syncId]
             listOfNotNull(
-                Unreachable.Kind.TRACK_REMOVED.takeIf { et == null },
-                Unreachable.Kind.TRACK_LOWERED.takeIf { et != null && et.lastChapterRead < phoneTrack.lastChapterRead },
-                Unreachable.Kind.TRACK_CHANGED.takeIf { et != null && et.userSet() != phoneTrack.userSet() },
-            ).map { Unreachable(it, p.title, tracker = TRACKER_NAMES[pt.syncId]) }
+                PhoneChange.Kind.TRACK_REMOVED.takeIf { et == null },
+                PhoneChange.Kind.TRACK_LOWERED.takeIf { et != null && et.lastChapterRead < phoneTrack.lastChapterRead },
+                PhoneChange.Kind.TRACK_CHANGED.takeIf { et != null && et.userSet() != phoneTrack.userSet() },
+            ).map { PhoneChange(it, p.title, tracker = TRACKER_NAMES[pt.syncId]) }
         }
         listOfNotNull(cleared, notes) + lostTracks + p.chapters.flatMap { pc ->
             val ec = chapters[pc.url] ?: return@flatMap emptyList()
             listOfNotNull(
-                Unreachable.Kind.MARKED_UNREAD.takeIf { pc.read && !ec.read },
-                Unreachable.Kind.BOOKMARK_REMOVED.takeIf { pc.bookmark && !ec.bookmark },
-                Unreachable.Kind.PAGE_LOWERED.takeIf { !pc.read && !ec.read && pc.lastPageRead > ec.lastPageRead },
-            ).map { Unreachable(it, p.title, pc.name) }
+                PhoneChange.Kind.MARKED_UNREAD.takeIf { pc.read && !ec.read },
+                PhoneChange.Kind.BOOKMARK_REMOVED.takeIf { pc.bookmark && !ec.bookmark },
+                PhoneChange.Kind.PAGE_LOWERED.takeIf { !pc.read && !ec.read && pc.lastPageRead > ec.lastPageRead },
+            ).map { PhoneChange(it, p.title, pc.name) }
         }
     }
 }
