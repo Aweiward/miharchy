@@ -35,7 +35,7 @@ var KEY = {
 // manga-download, manga-duplicates, manga-select, manga-track,
 // manga-track-pick, track-ask, downloads, reader, reader-settings, sync,
 // sync-held,
-// the library check: check,
+// the library check: check, check-merge,
 // or a restore step: restore-confirm, -checking, -running, -done, -failed,
 // or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
 // -done) shows;
@@ -68,6 +68,11 @@ var commands = [
   // Every step answers Esc, so it never falls through to quit, even while
   // a migration runs.
   { id: "migrate.back", title: "Back", keys: ["Esc", "Backspace"], view: ["migrate-search", "migrate-from", "migrate-to", "migrate-match", "migrate-confirm", "migrate-busy", "migrate-done"], hidden: true },
+  // The library check's merge prompt, as the duplicates prompt on a manga.
+  { id: "check.mergeClose", title: "Cancel the merge", keys: ["Esc", "Backspace"], view: "check-merge", hidden: true },
+  { id: "check.mergeUp", title: "Previous copy", keys: ["k", "Up"], view: "check-merge", hidden: true },
+  { id: "check.mergeDown", title: "Next copy", keys: ["j", "Down"], view: "check-merge", hidden: true },
+  { id: "check.mergeKeep", title: "Keep this copy and merge the other into it", keys: ["Enter"], view: "check-merge", hidden: true },
   // Asked after a mark read, as Mihon's snackbar; only y, n and Esc answer.
   { id: "trackAsk.yes", title: "Update the trackers", keys: ["y"], view: "track-ask", hidden: true },
   { id: "trackAsk.no", title: "Keep the trackers as they are", keys: ["n", "Esc"], view: "track-ask", hidden: true },
@@ -350,7 +355,7 @@ var commands = [
   { id: "check.select", title: "Select the problem or its group", keys: ["Space"], view: "check", hidden: true },
   { id: "check.dismiss", title: "Dismiss the problem, or bring a dismissed one back", keys: ["x"], view: "check", hidden: true },
   { id: "check.dismissed", title: "Show the dismissed problems, or the others", keys: ["X"], view: "check", hidden: true },
-  { id: "check.activate", title: "Update the extension", keys: ["Enter"], view: "check", hidden: true },
+  { id: "check.activate", title: "Update the extension, or merge the duplicate", keys: ["Enter"], view: "check", hidden: true },
   // M, not m: m is the reader's reading mode, and a migration is a big step.
   { id: "manga.migrate", title: "Migrate to another source", keys: ["M"], view: "manga", hidden: true },
   { id: "migrate.batch", title: "Migrate a source", keys: ["M"], view: "sources", hidden: true },

@@ -60,6 +60,41 @@ test("the target write puts it in the library, replaces its categories with the 
   assert.doesNotMatch(plain.query, /setMangaMeta/);
 });
 
+test("a merge keeps the higher read state on both sides: the kept copy's own read chapters never go down", () => {
+  const other = [ch(1, { isRead: true }), ch(2, { isRead: true }), ch(3, { isRead: true }), ch(4), ch(5)];
+  const ahead = [ch(1), ch(2), ch(3), ch(4), ch(5, { isRead: true })];
+  const p = Mi.plan(other, ahead);
+  assert.deepEqual(p.read, ids(ahead.slice(0, 3)), "the other copy's 1 to 3 are added; the kept copy's 5 is not touched");
+  assert.doesNotMatch(Mi.targetPayload({ id: 7, categories: { nodes: [] }, meta: [] }, 40, p, false, { meta: [] }).query, /isRead: false/, "nothing is ever marked unread");
+  const behind = [ch(1, { isRead: true }), ch(2), ch(3), ch(4), ch(5)];
+  assert.deepEqual(Mi.plan(other, behind).read, ids(behind.slice(1, 3)), "a kept copy behind the other catches up to 3");
+});
+
+test("a merge adds the other copy's categories to the kept copy's own: no clear, so the result is the union", () => {
+  const old = { id: 7, categories: { nodes: [{ id: 2 }] }, meta: [] };
+  const merge = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, false, { meta: [], trackRecords: { nodes: [] } });
+  assert.doesNotMatch(merge.query, /clearCategories/);
+  assert.match(merge.query, /addToCategories: \$categories/);
+  assert.deepEqual(merge.variables.categories, [2]);
+  assert.match(Mi.targetPayload(old, 40, { read: [], bookmark: [] }, false).query, /clearCategories: true/, "plain Migrate still sets exactly the old categories");
+});
+
+test("a merge keeps the kept copy's reading mode and tracks; the other's fill only what it lacks", () => {
+  const mode = (value) => [{ key: "miharchy.readingMode", value }];
+  const track = (id, name) => ({ id, trackerId: id, tracker: { name } });
+  const old = { id: 7, categories: { nodes: [] }, meta: mode("webtoon"), trackRecords: { nodes: [track(11, "AniList"), track(12, "MyAnimeList")] } };
+  const kept = { meta: mode("pager"), trackRecords: { nodes: [{ tracker: { name: "AniList" } }] } };
+  assert.deepEqual(Mi.movingTracks(old, kept), [{ id: 12, tracker: "MyAnimeList" }]);
+  const p = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true, kept);
+  assert.doesNotMatch(p.query, /setMangaMeta/, "the kept copy's own mode stays");
+  assert.equal(p.variables.track0, 12);
+  assert.equal(p.variables.track1, undefined, "AniList is already tracked on the kept copy");
+  const bare = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true, { meta: [], trackRecords: { nodes: [] } });
+  assert.equal(bare.variables.mode.value, "webtoon", "a kept copy with no mode takes the other's");
+  assert.deepEqual([bare.variables.track0, bare.variables.track1], [11, 12]);
+  assert.deepEqual(Mi.movingTracks(old, null).map((t) => t.id), [11, 12], "plain Migrate takes every track");
+});
+
 test("the old manga's tracks go to the target in the same write, unless left out", () => {
   const old = { id: 7, categories: { nodes: [] }, meta: [], trackRecords: { nodes: [{ id: 11, trackerId: 2, tracker: { name: "AniList" } }, { id: 12, trackerId: 1, tracker: { name: "MyAnimeList" } }] } };
   assert.deepEqual(Mi.trackRecords(old), [{ id: 11, tracker: "AniList" }, { id: 12, tracker: "MyAnimeList" }]);

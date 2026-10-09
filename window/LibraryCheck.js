@@ -274,6 +274,68 @@ function dismissPayload(list, now, undo) {
   return { query: "mutation(" + params.join(", ") + ") { " + fields.join(" ") + " }", variables: vars }
 }
 
+// Enter on a duplicate merges a pair: the row's manga and the first it
+// duplicates. With three copies, a second merge takes the third.
+var MERGE_FIELDS = "{ id title sourceId source { displayName } meta { key value } categories { nodes { id name } } chapters { nodes { isRead } } trackRecords { nodes { tracker { name } } } }"
+var MERGE_QUERY = "query($a: Int!, $b: Int!) { a: manga(id: $a) " + MERGE_FIELDS + " b: manga(id: $b) " + MERGE_FIELDS
+  + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
+
+function mergeVariables(problem) {
+  return { a: problem.mangaId, b: problem.others[0] }
+}
+
+// MERGE_QUERY data -> both copies as the prompt shows them.
+function mergeCopies(data) {
+  var names = Model.parseNames(data)
+  var name = function(n) { return String(n.name) }
+  return [data.a, data.b].map(function(n) {
+    var chapters = n.chapters.nodes
+    return {
+      id: n.id,
+      title: String(n.title || ""),
+      source: Model.sourceLabel(n, names),
+      // Migrate fetches the copy that stays from its source.
+      missing: !n.source,
+      read: chapters.filter(function(c) { return c.isRead }).length,
+      total: chapters.length,
+      categories: n.categories.nodes.map(name),
+      tracks: n.trackRecords.nodes.map(function(t) { return name(t.tracker) }),
+      meta: n.meta || [],
+      trackRecords: n.trackRecords
+    }
+  })
+}
+
+function copyText(c) {
+  return c.source + (c.missing ? "   source missing" : "") + "   " + c.read + " of " + c.total + " chapters read   Categories: " + (c.categories.join(", ") || "Default")
+    + "   Tracks: " + (c.tracks.join(", ") || "none")
+}
+
+// The first copy that can be kept, or -1 when none can.
+function mergeStart(copies) {
+  for (var i = 0; i < copies.length; i++) if (!copies[i].missing) return i
+  return -1
+}
+
+// j/k in the prompt: onto the next copy only when it can be kept.
+function mergeMove(copies, cursor, delta) {
+  var c = copies[cursor + delta]
+  return c && !c.missing ? cursor + delta : cursor
+}
+
+// keep: the index of the copy that stays. The other migrates into it:
+// MigrateView.startWith(old, kept, merge), merge the kept copy's own
+// reading mode and tracks, which win over the other's.
+function mergeJob(copies, keep) {
+  var kept = copies[keep]
+  var old = copies[1 - keep]
+  return {
+    old: { id: old.id, title: old.title, source: old.source },
+    kept: { id: kept.id, title: kept.title, sourceName: kept.source },
+    merge: { meta: kept.meta, trackRecords: kept.trackRecords }
+  }
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     DISMISSED_META: DISMISSED_META,
@@ -286,6 +348,13 @@ if (typeof module !== "undefined") {
     select: select,
     selectedIds: selectedIds,
     targets: targets,
-    dismissPayload: dismissPayload
+    dismissPayload: dismissPayload,
+    MERGE_QUERY: MERGE_QUERY,
+    mergeVariables: mergeVariables,
+    mergeCopies: mergeCopies,
+    copyText: copyText,
+    mergeStart: mergeStart,
+    mergeMove: mergeMove,
+    mergeJob: mergeJob
   }
 }

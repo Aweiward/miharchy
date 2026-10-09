@@ -5,6 +5,7 @@
 ## Sub-features
 - Confirm (scope `migrate-confirm`): the plan (chapters marked read and bookmarked), the categories, `d` deletes the old downloads (default yes, shown when the old manga has downloads; it applies to `c` too, `Migrate.oldPayload`), `t` takes the old manga's tracks along (default yes; shown when it has tracks, and always for a batch).
 - One write to the target (`Migrate.targetPayload`): library, categories, read and bookmarked chapters, reading mode, and one `bindTrackRecord` per track. Only after it succeeds does the old manga leave the library and lose its downloads (`Migrate.oldPayload`).
+- Merge (`targetPayload`'s `merge`, from the library check's duplicate merge, `library-check.md`): the same write, but the target's own state wins: no `clearCategories`, so it keeps its categories and gains the old ones; the old reading mode only when it has none; the old tracks only on trackers it has no track on (`Migrate.movingTracks`).
 
 ## How to get to it (user POV)
 Library, Enter on a manga, `M`, pick a result with `hjkl`, Enter, then Enter or `c`.
