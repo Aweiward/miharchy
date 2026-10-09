@@ -27,10 +27,19 @@ Image {
   property var held: null
   property bool keepIdle: true
   property bool writeFailed: false
+  // What the Image shows, and whether the reader holds it back until it
+  // knows how to show it (Crop borders): the file loads, nothing shows.
+  // fileUrl is loadedUrl's: url changes a moment before the load.
+  property string fileUrl: ""
+  property string loadedUrl: ""
+  property bool hold: false
   readonly property string dir: Quickshell.env("XDG_RUNTIME_DIR") + "/miharchy/images/"
 
   onUrlChanged: Qt.callLater(load)
   onConfigChanged: Qt.callLater(load)
+  // Later, so the reader's sourceSize and sourceClipRect for the page are
+  // in place before it loads.
+  onHoldChanged: Qt.callLater(apply)
   // At once, so a held copy shows in the delegate's first frame.
   Component.onCompleted: load()
   Component.onDestruction: release(held)
@@ -46,7 +55,12 @@ Image {
   function show(path, type) {
     filePath = path
     contentType = type
-    source = "file://" + path
+    fileUrl = "file://" + path
+    apply()
+  }
+
+  function apply() {
+    source = hold ? "" : fileUrl
   }
 
   function fail() {
@@ -80,13 +94,17 @@ Image {
   function load() {
     var old = held
     held = null
+    fileUrl = ""
+    loadedUrl = url
     source = ""
     filePath = ""
     contentType = ""
     fetchFailed = false
     var server = Model.serverImageUrl(config, url)
-    if (!server) source = url
-    else {
+    if (!server) {
+      fileUrl = url
+      apply()
+    } else {
       var c = config
       held = Images.hold(Images.shared(dir, Quickshell.processId), server, image, function(u, done) { Session.image(c, u, done) })
     }

@@ -11,6 +11,7 @@ import "Model.js" as Model
 import "Session.js" as Session
 import "Prefs.js" as Prefs
 import "Reader.js" as Reader
+import "Scan.js" as Scan
 import "Settings.js" as Settings
 
 // The reader over the whole window. It fetches pages and saves the read
@@ -71,8 +72,13 @@ Rectangle {
   // Each page's image size by URL, once its slot decodes it: what spreads
   // and split pages need to know (Reader.spreadAt).
   property var pageSizes: ({})
-  // Spreads and split pages, as the turn and the pager take them.
-  readonly property var layout: ({ dual: open && Reader.dual(reader.mode, values.dualPageView, { width: width, height: height }), split: values.dualPageSplit === true, sizes: pageSizes })
+  // Crop borders: whether the mode shown crops, and each page's analysis by
+  // URL (Scan.analyze() with the page's size, ms: how long it took; or
+  // { failed, ms }). A page waits for its analysis while the mode crops.
+  readonly property bool cropping: open && values[inStrip ? "cropBordersWebtoon" : "cropBordersPaged"] === true
+  property var scans: ({})
+  // Spreads, split pages and crops, as the turn and the pager take them.
+  readonly property var layout: ({ dual: open && Reader.dual(reader.mode, values.dualPageView, { width: width, height: height }), split: values.dualPageSplit === true, sizes: pageSizes, crops: cropping ? scans : null })
   // What the pager shows: Reader.spread(), null in the strip or while the
   // pages load.
   readonly property var shown: open && reader.state === "ok" && !inStrip ? Reader.spread(reader, layout, pageFit, { width: width, height: height }, zoom) : null
@@ -90,6 +96,69 @@ Rectangle {
     next[url] = { width: w, height: h }
     pageSizes = next
   }
+  // Crop borders: the scanner Canvas loads each page's file apart from its
+  // Image. imageLoaded names no URL, so each load or error sweeps the
+  // queue; a page the Canvas never answers for fails after 5 s.
+  property var scanQueue: []
+
+  function scan(url, file) {
+    if (!cropping || url in scans || scanQueue.some(function(q) { return q.url === url })) return
+    scanQueue = scanQueue.concat([{ url: url, file: file, at: Date.now() }])
+    if (scanner.available) scanner.loadImage(file)
+  }
+
+  function scanned() {
+    scanQueue = scanQueue.filter(function(q) {
+      if (!scanner.isImageLoaded(q.file) && !scanner.isImageError(q.file) && Date.now() - q.at < 5000) return true
+      view.read(q)
+      return false
+    })
+  }
+
+  // The page drawn at 256 px on its long side, for Scan.analyze. A page
+  // the Canvas cannot read shows whole.
+  function read(q) {
+    var result = { failed: true }
+    try {
+      if (scanner.isImageLoaded(q.file)) {
+        var ctx = scanner.getContext("2d")
+        var whole = ctx.createImageData(q.file)
+        var k = scanner.width / Math.max(whole.width, whole.height)
+        var w = Math.max(1, Math.round(whole.width * k))
+        var h = Math.max(1, Math.round(whole.height * k))
+        ctx.clearRect(0, 0, scanner.width, scanner.height)
+        ctx.drawImage(q.file, 0, 0, w, h)
+        result = Scan.analyze(ctx.getImageData(0, 0, w, h).data, w, h)
+        sized(q.url, whole.width, whole.height)
+      }
+    } catch (e) {
+      result = { failed: true }
+    }
+    scanner.unloadImage(q.file)
+    result.ms = Date.now() - q.at
+    var next = {}
+    for (var u in scans) next[u] = scans[u]
+    next[q.url] = result
+    scans = next
+  }
+
+  Canvas {
+    id: scanner
+    // Drawn, or it never becomes available; never seen.
+    opacity: 0
+    width: 256
+    height: 256
+    onAvailableChanged: if (available) view.scanQueue.forEach(function(q) { scanner.loadImage(q.file) })
+    onImageLoaded: view.scanned()
+  }
+
+  Timer {
+    running: view.scanQueue.length > 0
+    interval: 1000
+    repeat: true
+    onTriggered: view.scanned()
+  }
+
   readonly property var problem: reader ? Model.again(Model.problem(reader, configPath), reader) : null
 
   // The chapter the reader showed last, when it closed.
@@ -135,6 +204,7 @@ Rectangle {
     upNext = undefined
     reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title, peek)
     pageSizes = {}
+    scans = {}
     aheadFor = -1
     loadPages()
     var seq = ++startSeq
@@ -630,7 +700,7 @@ Rectangle {
         readonly property var held: view.shown ? Reader.slots(view.reader)[index] : null
         readonly property var item: held && view.shown ? view.shown.items.filter(function(it) { return it.page === slot.held.page })[0] || null : null
         // A page out of view decodes at the size it would show alone.
-        readonly property var size: item || Reader.fit(view.pageFit, { width: image.implicitWidth, height: image.implicitHeight }, { width: pager.width, height: pager.height }, view.zoom)
+        readonly property var size: item || (held ? Reader.alone(view.reader, held.page, view.layout, view.pageFit, { width: pager.width, height: pager.height }, view.zoom) : { width: 0, height: 0, sourceWidth: 0, sourceHeight: 0, clip: null })
         x: item ? item.x : 0
         y: item ? item.y : 0
         width: size.width
@@ -640,18 +710,25 @@ Rectangle {
 
         ServerImage {
           id: image
-          x: slot.item ? slot.item.imageX : 0
-          width: slot.item ? slot.item.imageWidth : slot.size.width
+          readonly property bool wants: view.cropping && fileUrl !== "" && !(loadedUrl in view.scans)
+          onWantsChanged: if (wants) view.scan(loadedUrl, fileUrl)
+          width: slot.size.width
           height: slot.size.height
-          onImplicitWidthChanged: view.sized(url, implicitWidth, implicitHeight)
-          onImplicitHeightChanged: view.sized(url, implicitWidth, implicitHeight)
+          // A clipped image's implicit size is its clip's.
+          onImplicitWidthChanged: if (!slot.size.clip) view.sized(url, implicitWidth, implicitHeight)
+          onImplicitHeightChanged: if (!slot.size.clip) view.sized(url, implicitWidth, implicitHeight)
           config: view.config
           url: slot.held ? slot.held.url : ""
           keepIdle: false
+          hold: view.cropping && !(url in view.scans)
           // Decoded at the size shown, not the scan's: six full-size scans
           // would hold hundreds of megabytes. Stretch, as the size already
-          // keeps the aspect.
+          // keeps the aspect. A crop or a split half decodes only its part.
           sourceSize: Qt.size(slot.size.sourceWidth, slot.size.sourceHeight)
+          sourceClipRect: slot.size.clip ? Qt.rect(slot.size.clip.x, slot.size.clip.y, slot.size.clip.width, slot.size.clip.height) : Qt.rect(0, 0, 0, 0)
+          // A new clip, as a split page turns its half, decodes again: the
+          // old picture stays until then.
+          retainWhileLoading: true
           asynchronous: true
           cache: true
           smooth: true
@@ -686,6 +763,10 @@ Rectangle {
 
     delegate: ServerImage {
       required property string modelData
+      // Crop borders in the strip: the left and right only.
+      readonly property var placed: Reader.place(view.pageSizes[modelData] || { width: 0, height: 0 }, view.cropping && view.scans[modelData] ? view.scans[modelData].strip || null : null, "width", { width: strip.width, height: strip.height }, 1)
+      readonly property bool wants: view.cropping && fileUrl !== "" && !(loadedUrl in view.scans)
+      onWantsChanged: if (wants) view.scan(loadedUrl, fileUrl)
       width: strip.width
       // A page still loading takes room, so the strip never asks for every
       // page at once.
@@ -693,7 +774,9 @@ Rectangle {
       config: view.config
       url: modelData
       keepIdle: false
-      sourceSize.width: width
+      hold: view.cropping && !(modelData in view.scans)
+      sourceSize.width: placed.sourceWidth
+      sourceClipRect: placed.clip ? Qt.rect(placed.clip.x, placed.clip.y, placed.clip.width, placed.clip.height) : Qt.rect(0, 0, 0, 0)
       fillMode: Image.PreserveAspectFit
       asynchronous: true
       smooth: true
