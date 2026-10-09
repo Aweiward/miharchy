@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import "Chapters.js" as Chapters
@@ -80,9 +81,13 @@ Rectangle {
   // { failed, ms }). A page waits for its analysis while the mode crops.
   // The analyses stay while the original shows, so O again crops at once.
   readonly property bool cropping: open && !original && values[inStrip ? "cropBordersWebtoon" : "cropBordersPaged"] === true
+  // Auto levels reads the same analysis, in every mode.
+  readonly property bool leveling: open && !original && values.autoLevels === true
+  readonly property bool scanning: cropping || leveling
   property var scans: ({})
-  // Spreads, split pages and crops, as the turn and the pager take them.
-  readonly property var layout: ({ dual: open && Reader.dual(reader.mode, values.dualPageView, { width: width, height: height }), split: values.dualPageSplit === true, sizes: pageSizes, crops: cropping ? scans : null })
+  // Spreads, split pages, crops and levels, as the turn and the pager take
+  // them.
+  readonly property var layout: ({ dual: open && Reader.dual(reader.mode, values.dualPageView, { width: width, height: height }), split: values.dualPageSplit === true, sizes: pageSizes, crops: cropping ? scans : null, levels: leveling ? scans : null })
   // What the pager shows: Reader.spread(), null in the strip or while the
   // pages load.
   readonly property var shown: open && reader.state === "ok" && !inStrip ? Reader.spread(reader, layout, pageFit, { width: width, height: height }, zoom) : null
@@ -107,7 +112,7 @@ Rectangle {
 
   // A retry after a failure holds the page again until its result.
   function scan(url, file) {
-    if (!cropping || !Reader.scanDue(scans, url) || scanQueue.some(function(q) { return q.url === url })) return
+    if (!scanning || !Reader.scanDue(scans, url) || scanQueue.some(function(q) { return q.url === url })) return
     if (url in scans) {
       var kept = {}
       for (var u in scans) if (u !== url) kept[u] = scans[u]
@@ -724,8 +729,16 @@ Rectangle {
 
         ServerImage {
           id: image
-          readonly property bool wants: view.cropping && fileUrl !== "" && Reader.scanDue(view.scans, loadedUrl)
+          readonly property bool wants: view.scanning && fileUrl !== "" && Reader.scanDue(view.scans, loadedUrl)
           onWantsChanged: if (wants) view.scan(loadedUrl, fileUrl)
+          // Auto levels: the page drawn once more through the stretch, only
+          // while it has one. A page out of view has none until it shows.
+          readonly property var stretch: Scan.effect(slot.item ? slot.item.levels : null)
+          layer.enabled: stretch !== null
+          layer.effect: MultiEffect {
+            contrast: image.stretch ? image.stretch.contrast : 0
+            brightness: image.stretch ? image.stretch.brightness : 0
+          }
           width: slot.size.width
           height: slot.size.height
           // A clipped image's implicit size is its clip's.
@@ -734,7 +747,7 @@ Rectangle {
           config: view.config
           url: slot.held ? slot.held.url : ""
           keepIdle: false
-          hold: view.cropping && !(url in view.scans)
+          hold: view.scanning && !(url in view.scans)
           // Decoded at the size shown, not the scan's: six full-size scans
           // would hold hundreds of megabytes. Stretch, as the size already
           // keeps the aspect. A crop or a split half decodes only its part.
@@ -776,11 +789,18 @@ Rectangle {
     onMovementStarted: pinToEnd = false
 
     delegate: ServerImage {
+      id: stripPage
       required property string modelData
       // Crop borders in the strip: the left and right only.
       readonly property var placed: Reader.place(view.pageSizes[modelData] || { width: 0, height: 0 }, view.cropping && view.scans[modelData] ? view.scans[modelData].strip || null : null, "width", { width: strip.width, height: strip.height }, 1)
-      readonly property bool wants: view.cropping && fileUrl !== "" && Reader.scanDue(view.scans, loadedUrl)
+      readonly property bool wants: view.scanning && fileUrl !== "" && Reader.scanDue(view.scans, loadedUrl)
       onWantsChanged: if (wants) view.scan(loadedUrl, fileUrl)
+      readonly property var stretch: Scan.effect(view.leveling && view.scans[modelData] && view.scans[modelData].levels ? view.scans[modelData].levels.strip : null)
+      layer.enabled: stretch !== null
+      layer.effect: MultiEffect {
+        contrast: stripPage.stretch ? stripPage.stretch.contrast : 0
+        brightness: stripPage.stretch ? stripPage.stretch.brightness : 0
+      }
       width: strip.width
       // A page still loading takes room, so the strip never asks for every
       // page at once.
@@ -788,7 +808,7 @@ Rectangle {
       config: view.config
       url: modelData
       keepIdle: false
-      hold: view.cropping && !(modelData in view.scans)
+      hold: view.scanning && !(modelData in view.scans)
       sourceSize.width: placed.sourceWidth
       sourceClipRect: placed.clip ? Qt.rect(placed.clip.x, placed.clip.y, placed.clip.width, placed.clip.height) : Qt.rect(0, 0, 0, 0)
       fillMode: Image.PreserveAspectFit

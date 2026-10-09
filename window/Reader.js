@@ -272,6 +272,14 @@ function region(r, page, layout, half) {
   return (scan && scan.halves && scan.halves[half]) || { x: half / 2, y: 0, width: 0.5, height: 1 }
 }
 
+// Auto levels for the part region() shows: { black, white } or null.
+// layout.levels: each page's Scan.analyze() by URL while Auto levels is on.
+function levelsAt(r, page, layout, half) {
+  var scan = layout && layout.levels && layout.levels[r.pages[page]]
+  var l = scan && scan.levels
+  return (l && (half === undefined ? l.page : l.halves && l.halves[half])) || null
+}
+
 // A page of size shown as fit() fits the region of it (null: all of it).
 // -> { width, height, sourceWidth, sourceHeight: the whole page's decode
 // size, as fit() gives it; clip: the region in the decoded page's pixels,
@@ -308,8 +316,8 @@ function alone(r, page, layout, fitMode, view, zoom) {
 // What the pager shows and where. sizes as in layout; fitMode, view and
 // zoom as fit() takes them, each page of a spread fitted into half the
 // view. -> { width, height: the content, at least the view; pagesWidth,
-// pagesHeight: the pages' own; items: [{ page, x, y } and place()'s
-// fields] }. A split page shows one half (a clip). In right to left the
+// pagesHeight: the pages' own; items: [{ page, x, y, levels: levelsAt() }
+// and place()'s fields] }. A split page shows one half (a clip). In right to left the
 // first page sits on the right, and the right half reads first, as in
 // Mihon.
 function spread(r, layout, fitMode, view, zoom) {
@@ -322,6 +330,7 @@ function spread(r, layout, fitMode, view, zoom) {
     var half = split ? ((r.half === 0) === rtl ? 1 : 0) : undefined
     var it = place(sizeOf(r, r.page + i, layout), region(r, r.page + i, layout, half), fitMode, box, zoom)
     it.page = r.page + i
+    it.levels = levelsAt(r, r.page + i, layout, half)
     items.push(it)
   }
   var pagesWidth = items.reduce(function(sum, it) { return sum + it.width }, 0)
@@ -602,7 +611,7 @@ function step(options, value, dir) {
 // The settings panel (s), Mihon's reader settings sheet: the manga's own
 // reading mode, then the Settings rows the reader reads, which apply to
 // every manga. A later reader setting is one more key here.
-var PANEL_KEYS = ["pageFit", "dualPageView", "dualPageSplit", "cropBordersPaged", "webtoonWidth", "cropBordersWebtoon", "autoScrollSpeed", "readerTheme", "keepScreenOn", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
+var PANEL_KEYS = ["pageFit", "dualPageView", "dualPageSplit", "cropBordersPaged", "webtoonWidth", "cropBordersWebtoon", "autoLevels", "autoScrollSpeed", "readerTheme", "keepScreenOn", "alwaysShowChapterTransition", "skipRead", "skipFiltered", "skipDupe"]
 
 // The readerTheme setting -> the reader's background; themeColor for
 // "theme". Gray is Mihon's ReaderGrayBackgroundColor.
