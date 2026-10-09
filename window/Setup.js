@@ -53,7 +53,7 @@ var PROBE = [
   // While Suwayomi-Server is missing: the AUR's version, so the install can
   // warn about one newer than Miharchy checked (ADR 0007). "?" when yay
   // cannot tell; skipped on rechecks ($5 = 1).
-  "command -v suwayomi-server >/dev/null || [ \"$5\" = 1 ] || { v=$(yay -Si suwayomi-server-bin 2>/dev/null | while IFS=: read -r k val; do case $k in Version*) echo $val;; esac; done); v=${v%-*}; echo \"aurSuwayomi ${v:-?}\"; }",
+  "command -v suwayomi-server >/dev/null || [ \"$5\" = 1 ] || { v=$(timeout 20 yay -Si suwayomi-server-bin 2>/dev/null | while IFS=: read -r k val; do case $k in Version*) echo $val;; esac; done); v=${v%-*}; echo \"aurSuwayomi ${v:-?}\"; }",
   "test -e /usr/lib/qt6/qml/QtWebSockets/qmldir && echo websockets",
   "test -s \"$1\" && echo config",
   "echo \"unit $(systemctl --user is-enabled miharchy-server 2>/dev/null) $(systemctl --user is-active miharchy-server 2>/dev/null)\"",
@@ -354,7 +354,12 @@ function reduce(s, event) {
     case "start":
       return copy(s, { job: event.id, confirm: null })
     case "finish":
-      if (event.id === "probe") return copy(s, { job: null, probe: parseProbe(event.text) })
+      if (event.id === "probe") {
+        var f = parseProbe(event.text)
+        // A recheck skips the AUR query; keep what the first check found.
+        if (!f.aurSuwayomi && s.probe) f.aurSuwayomi = s.probe.aurSuwayomi
+        return copy(s, { job: null, probe: f })
+      }
       if (event.id === "phones") return copy(s, { job: null, phones: parsePhones(parseJob(event.text).output) })
       if (event.id === "syncthing") return copy(s, { job: null, syncthing: parseSyncthing(parseJob(event.text).output) })
       var results = copy(s.results, {})

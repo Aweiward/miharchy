@@ -486,6 +486,7 @@ test("the probe asks the AUR for Suwayomi-Server's version only while it is miss
   const hasServer = (b) => { fs.writeFileSync(path.join(b, "suwayomi-server"), "#!/bin/sh\n", { mode: 0o755 }); };
   // /usr/bin/suwayomi-server may exist on the test machine, so PATH alone decides here.
   const noServer = stubs({ yay: "printf 'Version         : 2.5.0-1\\n'" });
+  fs.symlinkSync("/usr/bin/timeout", path.join(noServer, "timeout"));
   const bare = (skip) => S.parseProbe(S.parseJob(run(S.probeCommand(path.join(noServer, "none.json"), noServer, noServer, skip), { PATH: noServer + ":/usr/lib/miharchy-none", HOME: noServer })).output);
   assert.equal(bare(false).aurSuwayomi, "2.5.0", "the release suffix goes");
   assert.equal(bare(true).aurSuwayomi, "", "a recheck skips the AUR");
@@ -536,4 +537,12 @@ test("y on the packages step opens Omarchy's terminal on exactly the missing pac
   assert.deepEqual(record(all), [0, "omarchy-pkg-add jdk-openjdk qt6-websockets && omarchy-pkg-aur-add suwayomi-server-bin"]);
   const aurOnly = S.status(finish(S.initial(), "probe", READY.replace("suwayomi\n", "aurSuwayomi 2.3.2243\n")), "packages").command;
   assert.deepEqual(record(aurOnly), [0, "omarchy-pkg-aur-add suwayomi-server-bin"]);
+});
+
+test("a recheck that skips the AUR keeps the version the first check found, so the warning stays", () => {
+  const first = finish(S.initial(), "probe", READY.replace("suwayomi\n", "aurSuwayomi 2.5.0\n"));
+  const again = finish(first, "probe", READY.replace("suwayomi\n", ""));
+  assert.match(S.status(again, "packages").prompt, /login may fail/);
+  const unknown = finish(finish(S.initial(), "probe", READY.replace("suwayomi\n", "aurSuwayomi ?\n")), "probe", READY.replace("suwayomi\n", ""));
+  assert.match(S.status(unknown, "packages").prompt, /^yay could not tell/);
 });
