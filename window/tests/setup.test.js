@@ -81,10 +81,10 @@ test("nothing is decided before the first check", () => {
 
 test("a set-up machine shows steps 1-4 done and is complete", () => {
   const s = finish(S.initial(), "probe", READY);
-  assert.deepEqual(states(s), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "waiting", syncFolder: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
+  assert.deepEqual(states(s), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "waiting", syncFolder: "waiting", phoneBackups: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
   assert.equal(S.incomplete(s), false);
   const loaded = server(s, { settings: FLARE_OFF, metas: { nodes: [] } });
-  assert.deepEqual(states(loaded), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "todo", syncFolder: "todo", helper: "waiting", launcher: "todo", peekKey: "todo" });
+  assert.deepEqual(states(loaded), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "todo", syncFolder: "todo", phoneBackups: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
   assert.equal(S.next(loaded), 4);
 });
 
@@ -100,7 +100,7 @@ test("live updates need qt6-websockets, a step to install like Java", () => {
 
 test("missing pieces: each step says what to do, later steps wait", () => {
   const s = finish(S.initial(), "probe", "java sh: java: not found\nunit  \n");
-  assert.deepEqual(states(s), { java: "todo", suwayomi: "todo", websockets: "todo", server: "waiting", flaresolverr: "unavailable", syncFolder: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
+  assert.deepEqual(states(s), { java: "todo", suwayomi: "todo", websockets: "todo", server: "waiting", flaresolverr: "unavailable", syncFolder: "waiting", phoneBackups: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
   assert.match(S.status(s, "flaresolverr").detail, /needs FlareSolverr/);
   assert.equal(S.incomplete(s), true);
   assert.equal(S.next(s), 0);
@@ -162,9 +162,10 @@ test("the sync folder is stored as miharchy.syncFolder meta and read back", () =
 test("running setup twice changes nothing: a done machine stays done after another check", () => {
   const done = READY.replace("docker \n", "docker true\njavac\nhelperSource abc\nhelperInstalled abc\nlauncher\npeekKey\n");
   const data = { settings: FLARE_ON, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/s" }] } };
-  const once = server(finish(S.initial(), "probe", done), data);
-  const twice = server(finish(once, "probe", done), data);
-  assert.deepEqual(states(twice), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "done", syncFolder: "done", helper: "done", launcher: "done", peekKey: "done" });
+  const phones = "phones 1\nnewest app.mihon_2026-10-09_05-31.tachibk\n\n0\n";
+  const once = finish(server(finish(S.initial(), "probe", done), data), "phones", phones);
+  const twice = finish(server(finish(once, "probe", done), data), "phones", phones);
+  assert.deepEqual(states(twice), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "done", syncFolder: "done", phoneBackups: "done", helper: "done", launcher: "done", peekKey: "done" });
   assert.deepEqual(states(twice), states(once));
 });
 
@@ -278,7 +279,8 @@ test("the launcher Exec line survives spaces, quotes, $ and backslashes", () => 
 });
 
 const MACHINE = READY.replace("docker \n", "docker \njavac\nhelperSource new1234567890abcdef\nhelperInstalled old1234567890abcdef\n");
-const serverWith = (s, offered) => server(s, { settings: FLARE_OFF, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/sync" }].concat(offered === undefined ? [] : [{ key: "miharchy.setupOffered", value: offered }]) } });
+// A server that names a sync folder, where the phone check found a phone backup.
+const serverWith = (s, offered) => finish(server(s, { settings: FLARE_OFF, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/sync" }].concat(offered === undefined ? [] : [{ key: "miharchy.setupOffered", value: offered }]) } }), "phones", "phones 1\nnewest app.mihon_2026-10-09_05-31.tachibk\n\n0\n");
 
 test("optional steps that are due get offered once, keyed by state", () => {
   const s = serverWith(finish(S.initial(), "probe", MACHINE));
@@ -433,4 +435,51 @@ test("only a window started with no open target makes the one-time offer", () =>
   assert.equal(S.offersOnStart({ MIHARCHY_OPEN_CHAPTER: "5 9" }), false, "an update row opens the reader");
   assert.equal(S.offersOnStart({ MIHARCHY_OPEN_VIEW: "updates" }), false, "a notification opens Updates");
   assert.equal(S.offersOnStart({ MIHARCHY_OPEN_CHAPTER: "", MIHARCHY_OPEN_VIEW: "" }), true, "empty values are no target");
+});
+
+test("the phone check counts phone backups at the top of the sync folder and spots Mihon's storage folder", () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-phones-"));
+  const t = Math.floor(Date.now() / 1000);
+  const put = (name, age) => { const p = path.join(folder, name); fs.writeFileSync(p, ""); fs.utimesSync(p, t - age, t - age); };
+  const phones = () => S.parsePhones(S.parseJob(run(S.phoneProbeCommand(folder))).output);
+
+  assert.deepEqual(phones(), { count: 0, newest: "", autobackup: false }, "an empty folder");
+  put("miharchy-2026-10-09_09-28-12.tachibk", 10);
+  put("notes.txt", 10);
+  assert.deepEqual(phones(), { count: 0, newest: "", autobackup: false }, "desktop backups are no phone backups");
+  fs.mkdirSync(path.join(folder, "autobackup"));
+  fs.writeFileSync(path.join(folder, "autobackup", "app.mihon_2026-10-09_05-31.tachibk"), "");
+  assert.deepEqual(phones(), { count: 0, newest: "", autobackup: true }, "phone backups one folder down do not count");
+  put("app.mihon_2026-10-08_20-30.tachibk", 3600);
+  put("app.mihon_2026-10-09_05-31.tachibk", 60);
+  assert.deepEqual(phones(), { count: 2, newest: "app.mihon_2026-10-09_05-31.tachibk", autobackup: true });
+});
+
+test("the phone backups step waits for the sync folder, then is done once a phone backup has landed", () => {
+  const folder = { metas: { nodes: [{ key: "miharchy.syncFolder", value: "/home/u/Sync/mihon-backups" }] } };
+  const ready = server(finish(S.initial(), "probe", READY), { settings: FLARE_OFF, metas: { nodes: [] } });
+  assert.deepEqual(S.status(ready, "phoneBackups"), { state: "waiting", detail: "Needs the sync folder first." });
+  const named = server(finish(S.initial(), "probe", READY), Object.assign({ settings: FLARE_OFF }, folder));
+  assert.equal(S.status(named, "phoneBackups").state, "checking");
+
+  const landed = finish(named, "phones", "phones 2\nnewest app.mihon_2026-10-09_05-31.tachibk\n\n0\n");
+  assert.deepEqual(S.status(landed, "phoneBackups"), { state: "done", detail: "2 phone backups in the sync folder, the newest app.mihon_2026-10-09_05-31.tachibk." });
+
+  const none = finish(named, "phones", "phones 0\nnewest \n\n0\n");
+  assert.deepEqual(S.status(none, "phoneBackups"), { state: "todo", detail: "No phone backup in /home/u/Sync/mihon-backups yet. In Mihon, turn on automatic backups (More → Settings → Data and storage) and share its autobackup folder with this folder. Then tap Create backup in Mihon, or wait for the automatic one. Setup checks again on its own." });
+
+  const storage = finish(named, "phones", "phones 0\nnewest \nautobackup\n\n0\n");
+  assert.deepEqual(S.status(storage, "phoneBackups"), { state: "todo", detail: "/home/u/Sync/mihon-backups looks like Mihon's storage folder: its phone backups are in the autobackup folder below. Set the sync folder to /home/u/Sync/mihon-backups/autobackup, or share only that folder. Setup checks again on its own." });
+});
+
+test("Enter on the phone backups step checks again, and a phone with no backup yet is offered once", () => {
+  const data = { settings: FLARE_OFF, metas: { nodes: [{ key: "miharchy.syncFolder", value: "/s" }] } };
+  const named = server(finish(S.initial(), "probe", READY), data);
+  const none = finish(named, "phones", "phones 0\nnewest \n\n0\n");
+  const landed = finish(named, "phones", "phones 1\nnewest app.mihon_2026-10-09_05-31.tachibk\n\n0\n");
+  assert.equal(S.action(none, "phoneBackups"), "check");
+  assert.equal(S.action(landed, "phoneBackups"), "check");
+  assert.ok(S.offers(none).includes("phoneBackups:todo"));
+  assert.ok(!S.offers(landed).some((k) => k.startsWith("phoneBackups")));
+  assert.deepEqual(S.offers(named), [], "nothing is offered before the phone check answers, so the one offer can include it");
 });
