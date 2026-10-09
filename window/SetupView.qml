@@ -72,8 +72,23 @@ Item {
   function readServer() {
     if (config) post({ query: Setup.SERVER_QUERY }, function(reply) {
       view.setup = Setup.reduce(view.setup, { type: "server", reply: reply })
+      view.checkPhones()
       view.offer()
     })
+  }
+
+  // The sync folder lives in server meta, so the phone check follows the
+  // server reply; the offer waits for it (Setup.offers).
+  function checkPhones() {
+    if (!setup.job && setup.server && setup.server.syncFolder) start("phones", Setup.phoneProbeCommand(setup.server.syncFolder))
+  }
+
+  // A phone backup lands while Setup is open: check again on our own.
+  Timer {
+    interval: 15000
+    repeat: true
+    running: view.visible && Setup.status(view.setup, "phoneBackups").state === "todo"
+    onTriggered: view.checkPhones()
   }
 
   // Once a session: open on optional steps the user has not been shown, then
@@ -87,6 +102,7 @@ Item {
 
   function finished(id, text) {
     setup = Setup.reduce(setup, { type: "finish", id: id, text: text })
+    if (id === "phones") return offer()
     if (id === "probe") {
       readServer()
       if (checked) return
