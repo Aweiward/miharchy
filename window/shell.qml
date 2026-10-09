@@ -492,6 +492,7 @@ ShellRoot {
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.dupesOpen ? "manga-duplicates" : mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.downloadsOpen ? "manga-download" : mangaDetail.selecting ? "manga-select" : "manga")
       : view === "browse" ? (browseView.scope === "extensions" && extensionsView.details ? "extension" : browseView.scope) : view === "library" && libraryScreen === "categories" ? "categories"
+      : view === "check" && checkView.merging ? "check-merge"
       : view === "library" && libraryArmed === "remove" ? "library-remove"
       : view === "library" && libraryPickIds.length ? "library-categories"
       : view === "library" && libraryOptions ? "library-options"
@@ -1078,6 +1079,7 @@ ShellRoot {
           config: root.config
           configPath: root.configPath
           onKey: function(event) { event.accepted = root.handleKey(event) }
+          onMergeChosen: function(old, kept) { migrateView.startWith(old, kept, true) }
         }
 
         Text {
@@ -1143,7 +1145,10 @@ ShellRoot {
           categories: root.connection.categories
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          onLibraryChanged: if (root.config) root.fetchLibrary()
+          onLibraryChanged: {
+            if (root.config) root.fetchLibrary()
+            if (checkView.active) checkView.load()
+          }
           onMigrated: function(mangaId) { mangaDetail.openManga(mangaId, false) }
         }
       }

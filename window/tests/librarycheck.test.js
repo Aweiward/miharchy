@@ -195,3 +195,37 @@ test("space selects a row, or a whole group on its header; the selection names i
   assert.deepEqual(L.targets(rows, {}, 0).map((p) => p.key), ["missing:1", "missing:2"], "or on the group under the cursor");
   assert.deepEqual(L.targets(rows, {}, 4).map((p) => p.key), ["empty:3"], "or on the row");
 });
+
+// A MERGE_QUERY copy: the manga with its categories, chapters and tracks.
+function copyNode(id, over) {
+  return {
+    id, title: "Eleceed", sourceId: MANGADEX.id, source: { displayName: "MangaDex (EN)" },
+    categories: { nodes: [] }, chapters: { nodes: [{ isRead: true }, { isRead: false }, { isRead: false }] }, trackRecords: { nodes: [] },
+    ...over
+  };
+}
+
+test("Enter on a duplicate asks about the row's manga and the first manga it duplicates", () => {
+  const d = data([node(1, { title: "Eleceed" }), node(2, { title: "Eleceed", sourceId: "9", source: { id: "9", displayName: "Weeb Central", extension: null } })]);
+  const p = L.problems(d, NOW)[0];
+  assert.deepEqual(L.mergeVariables(p), { a: 1, b: 2 });
+  assert.match(L.MERGE_QUERY, /a: manga\(id: \$a\)/);
+  assert.match(L.MERGE_QUERY, /b: manga\(id: \$b\)/);
+});
+
+test("the merge prompt shows each copy's source, chapters read, categories and tracks", () => {
+  const reply = {
+    a: copyNode(1, { categories: { nodes: [{ id: 2, name: "Reading" }, { id: 5, name: "Action" }] }, trackRecords: { nodes: [{ tracker: { name: "AniList" } }] } }),
+    b: copyNode(2, { sourceId: "9", source: null, chapters: { nodes: [] } }),
+    metas: { nodes: [{ value: JSON.stringify({ 9: "Weeb Central" }) }] }
+  };
+  const [a, b] = L.mergeCopies(reply);
+  assert.equal(L.copyText(a), "MangaDex (EN)   1 of 3 chapters read   Categories: Reading, Action   Tracks: AniList");
+  assert.equal(L.copyText(b), "Weeb Central (not installed)   0 of 0 chapters read   Categories: Default   Tracks: none");
+});
+
+test("the copy kept is the target; the other migrates into it", () => {
+  const copies = L.mergeCopies({ a: copyNode(1), b: copyNode(2, { title: "ELECEED", sourceId: "9", source: { displayName: "Weeb Central" } }), metas: { nodes: [] } });
+  assert.deepEqual(L.mergeJob(copies, 1), { old: { id: 1, title: "Eleceed", source: "MangaDex (EN)" }, kept: { id: 2, title: "ELECEED", sourceName: "Weeb Central" } });
+  assert.equal(L.mergeJob(copies, 0).old.id, 2);
+});

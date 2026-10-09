@@ -44,6 +44,9 @@ Rectangle {
   property var jobs: []
   property bool deleteDownloads: true
   property bool withTracks: true
+  // The library check's merge: the target is a library manga that keeps
+  // its own categories (Migrate.targetPayload).
+  property bool merge: false
   property bool running: false
   property string busyText: ""
   // Bumped on close and on going back, so stale replies drop.
@@ -110,6 +113,7 @@ Rectangle {
     if (editing) endEdit()
     seq++
     step = ""
+    merge = false
     search = null
     batch = null
     jobs = []
@@ -139,6 +143,7 @@ Rectangle {
     if (!config || !manga || !manga.inLibrary || running) return
     seq++
     batchMode = false
+    merge = false
     old = manga
     jobs = []
     loadSources(function(sources) {
@@ -150,11 +155,13 @@ Rectangle {
   }
 
   // A migration whose target is already chosen: old, a library manga, to
-  // manga, the open detail's (Mihon's migrate from the duplicate dialog).
-  function startWith(old, manga) {
+  // manga, the open detail's (Mihon's migrate from the duplicate dialog), or
+  // with merge the library check's copy that stays.
+  function startWith(old, manga, merge) {
     if (!config || !old || !manga || running) return
     seq++
     batchMode = false
+    view.merge = merge === true
     search = null
     view.old = old
     pick({ id: manga.id, title: manga.title, source: manga.sourceName })
@@ -176,6 +183,7 @@ Rectangle {
     if (!config || running) return
     seq++
     batchMode = true
+    merge = false
     jobs = []
     busyText = "Loading the library"
     step = "busy"
@@ -279,7 +287,7 @@ Rectangle {
     var write = function() {
       var p = view.jobs[i]
       var tracks = view.withTracks ? Migrate.trackRecords(p.oldNode).length : 0
-      view.send(Migrate.targetPayload(p.oldNode, p.target.id, p.plan, view.withTracks), function(reply) {
+      view.send(Migrate.targetPayload(p.oldNode, p.target.id, p.plan, view.withTracks, view.merge), function(reply) {
         if (reply.state !== "ok") return next("Failed: " + view.errorText(reply))
         var done = (replace ? "Migrated. " : "Copied. ") + Migrate.planText(p.plan, p.chapters.length) + (tracks ? " " + tracks + (tracks === 1 ? " track" : " tracks") + " along." : "")
         var after = Migrate.oldPayload(p.oldNode, replace, view.deleteDownloads)
@@ -548,9 +556,9 @@ Rectangle {
           lines.push({ text: "t   Take the old manga's tracks along: " + (view.withTracks ? "yes" : "no") })
         } else {
           var names = view.categories.filter(function(c) { return j.oldNode.categories.nodes.some(function(n) { return n.id === c.id }) }).map(function(c) { return c.name })
-          lines.push({ text: "Migrate " + view.old.title + " from " + view.old.source + " to " + j.target.title + " on " + j.target.source + ".", strong: true })
+          lines.push({ text: (view.merge ? "Merge " : "Migrate ") + view.old.title + " from " + view.old.source + (view.merge ? " into " : " to ") + j.target.title + " on " + j.target.source + ".", strong: true })
           lines.push({ text: Migrate.planText(j.plan, j.chapters.length) })
-          lines.push({ text: "Categories: " + (names.join(", ") || "Default") })
+          lines.push({ text: view.merge ? "Keeps its own categories and adds: " + (names.join(", ") || "none") : "Categories: " + (names.join(", ") || "Default") })
           if (view.downloads) lines.push({ text: "d   Delete its " + view.downloads + " downloaded chapters: " + (view.deleteDownloads ? "yes" : "no") })
           if (view.tracks.length) lines.push({ text: "t   Take its tracks along (" + view.tracks.map(function(t) { return t.tracker }).join(", ") + "): " + (view.withTracks ? "yes" : "no") })
         }

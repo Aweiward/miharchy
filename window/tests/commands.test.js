@@ -142,6 +142,12 @@ test("the library check opens from the palette and with ! on the Library; its ke
   assert.equal(C.dispatch(check, key(C.KEY.Return)), "check.activate");
   assert.equal(C.dispatch(check, text("r")), "library.reload");
   assert.equal(C.dispatch(check, key(C.KEY.Escape)), "window.quit");
+  const merge = { palette: false, view: "check-merge" };
+  assert.equal(C.dispatch(merge, text("j")), "check.mergeDown");
+  assert.equal(C.dispatch(merge, key(C.KEY.Up)), "check.mergeUp");
+  assert.equal(C.dispatch(merge, key(C.KEY.Return)), "check.mergeKeep");
+  assert.equal(C.dispatch(merge, key(C.KEY.Escape)), "check.mergeClose", "Esc closes the merge prompt, never the window");
+  assert.equal(C.dispatch(merge, text("x")), null, "no dismiss under the prompt");
   assert.equal(C.dispatch(settings, text("x")), null, "check keys stay out of Settings");
 });
 

@@ -28,6 +28,10 @@ Item {
   property var selected: ({})
   property string error: ""
   property int seq: 0
+  // Enter on a duplicate: { copies: LibraryCheck.mergeCopies(), cursor },
+  // the prompt that asks which copy stays.
+  property var merge: null
+  readonly property bool merging: merge !== null
 
   readonly property var rows: LibraryCheck.rows(check.problems, showDismissed)
   readonly property var selectedIds: LibraryCheck.selectedIds(selected, rows)
@@ -37,12 +41,18 @@ Item {
   readonly property var current: rows[cursor] || null
   // A failed load, worded; null while it loads or after it answers.
   readonly property var problem: Model.problem(check, configPath)
-  readonly property string hint: "j k move   space select   x " + (showDismissed ? "bring back" : "dismiss") + "   X " + (showDismissed ? "problems" : "dismissed") + "   "
+  readonly property string hint: merging ? "j k move   enter keep this one   esc cancel   " : "j k move   space select   x " + (showDismissed ? "bring back" : "dismiss") + "   X " + (showDismissed ? "problems" : "dismissed") + "   "
     + (current && current.kind === "extension" && current.type === "problem" ? "enter update   " : "")
+    + (current && current.kind === "duplicate" && current.type === "problem" ? "enter merge   " : "")
 
   signal key(var event)
+  // The copy chosen to stay: kept, and old, the copy that migrates into it.
+  signal mergeChosen(var old, var kept)
 
-  onActiveChanged: if (active) load()
+  onActiveChanged: {
+    merge = null
+    if (active) load()
+  }
   onConfigChanged: if (active) load()
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
 
@@ -98,8 +108,31 @@ Item {
         break
       case "check.activate":
         if (current && current.type === "problem" && current.kind === "extension") mutate(Extensions.actionPayload(current.pkgName, "update"))
+        if (current && current.type === "problem" && current.kind === "duplicate") openMerge(current)
+        break
+      case "check.mergeUp":
+      case "check.mergeDown":
+        merge = { copies: merge.copies, cursor: id === "check.mergeUp" ? 0 : 1 }
+        break
+      case "check.mergeKeep":
+        var job = LibraryCheck.mergeJob(merge.copies, merge.cursor)
+        merge = null
+        mergeChosen(job.old, job.kept)
+        break
+      case "check.mergeClose":
+        merge = null
         break
     }
+  }
+
+  function openMerge(problem) {
+    error = ""
+    var s = seq
+    send({ query: LibraryCheck.MERGE_QUERY, variables: LibraryCheck.mergeVariables(problem) }, function(reply) {
+      if (s !== view.seq || !view.active) return
+      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, view.configPath).title
+      else view.merge = { copies: LibraryCheck.mergeCopies(reply.data), cursor: 0 }
+    })
   }
 
   Text {
@@ -195,6 +228,89 @@ Item {
           color: view.theme.muted
           font.family: view.theme.fontFamily
           font.pixelSize: view.theme.fontSmall
+        }
+      }
+    }
+  }
+
+  // Under the merge prompt: a click outside it never reaches a row.
+  MouseArea {
+    anchors.fill: parent
+    visible: view.merging
+  }
+
+  Rectangle {
+    anchors.centerIn: parent
+    width: Math.min(parent.width - view.theme.fontSize * 4, view.theme.fontSize * 50)
+    height: mergeColumn.height + view.theme.fontSize * 2
+    visible: view.merging
+    color: Qt.alpha(view.theme.panel, 1)
+    border.width: 1
+    border.color: view.theme.panelBorder
+
+    Column {
+      id: mergeColumn
+      x: view.theme.fontSize
+      y: view.theme.fontSize
+      width: parent.width - view.theme.fontSize * 2
+      spacing: view.theme.fontSize * 0.5
+
+      Text {
+        width: parent.width
+        wrapMode: Text.Wrap
+        bottomPadding: view.theme.fontSize * 0.5
+        text: "Merge the duplicates. Pick the copy that stays; the other migrates into it and leaves the library."
+        color: view.theme.accent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+
+      Repeater {
+        model: view.merge ? view.merge.copies : []
+
+        Rectangle {
+          id: copyRow
+          required property var modelData
+          required property int index
+          readonly property bool current: view.merge !== null && index === view.merge.cursor
+          width: mergeColumn.width
+          height: copyText.implicitHeight + view.theme.fontSize * 0.6
+          color: current ? view.theme.selected : "transparent"
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: view.merge = { copies: view.merge.copies, cursor: copyRow.index }
+            onDoubleClicked: {
+              view.merge = { copies: view.merge.copies, cursor: copyRow.index }
+              view.key(Commands.enter())
+            }
+          }
+
+          Column {
+            id: copyText
+            anchors.left: parent.left
+            anchors.leftMargin: view.theme.fontSize * 0.5
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+
+            Text {
+              width: parent.width
+              elide: Text.ElideRight
+              text: copyRow.modelData.title
+              color: copyRow.current ? view.theme.selectedText : view.theme.foreground
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSize
+            }
+
+            Text {
+              width: parent.width
+              wrapMode: Text.Wrap
+              text: LibraryCheck.copyText(copyRow.modelData)
+              color: copyRow.current ? view.theme.selectedText : view.theme.muted
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.theme.fontSmall
+            }
+          }
         }
       }
     }

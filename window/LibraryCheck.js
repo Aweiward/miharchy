@@ -274,6 +274,47 @@ function dismissPayload(list, now, undo) {
   return { query: "mutation(" + params.join(", ") + ") { " + fields.join(" ") + " }", variables: vars }
 }
 
+// Enter on a duplicate merges a pair: the row's manga and the first it
+// duplicates. With three copies, a second merge takes the third.
+var MERGE_FIELDS = "{ id title sourceId source { displayName } categories { nodes { id name } } chapters { nodes { isRead } } trackRecords { nodes { tracker { name } } } }"
+var MERGE_QUERY = "query($a: Int!, $b: Int!) { a: manga(id: $a) " + MERGE_FIELDS + " b: manga(id: $b) " + MERGE_FIELDS
+  + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
+
+function mergeVariables(problem) {
+  return { a: problem.mangaId, b: problem.others[0] }
+}
+
+// MERGE_QUERY data -> both copies as the prompt shows them.
+function mergeCopies(data) {
+  var names = Model.parseNames(data)
+  var name = function(n) { return String(n.name) }
+  return [data.a, data.b].map(function(n) {
+    var chapters = n.chapters.nodes
+    return {
+      id: n.id,
+      title: String(n.title || ""),
+      source: Model.sourceLabel(n, names),
+      read: chapters.filter(function(c) { return c.isRead }).length,
+      total: chapters.length,
+      categories: n.categories.nodes.map(name),
+      tracks: n.trackRecords.nodes.map(function(t) { return name(t.tracker) })
+    }
+  })
+}
+
+function copyText(c) {
+  return c.source + "   " + c.read + " of " + c.total + " chapters read   Categories: " + (c.categories.join(", ") || "Default")
+    + "   Tracks: " + (c.tracks.join(", ") || "none")
+}
+
+// keep: the index of the copy that stays. The other migrates into it, so
+// MigrateView.startWith(old, kept, true) takes these.
+function mergeJob(copies, keep) {
+  var kept = copies[keep]
+  var old = copies[1 - keep]
+  return { old: { id: old.id, title: old.title, source: old.source }, kept: { id: kept.id, title: kept.title, sourceName: kept.source } }
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     DISMISSED_META: DISMISSED_META,
@@ -286,6 +327,11 @@ if (typeof module !== "undefined") {
     select: select,
     selectedIds: selectedIds,
     targets: targets,
-    dismissPayload: dismissPayload
+    dismissPayload: dismissPayload,
+    MERGE_QUERY: MERGE_QUERY,
+    mergeVariables: mergeVariables,
+    mergeCopies: mergeCopies,
+    copyText: copyText,
+    mergeJob: mergeJob
   }
 }

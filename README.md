@@ -71,7 +71,7 @@ Press `!` on the Library, or open Settings → Library check, to list the proble
 2. Update failed: library updates ran, but the manga got no chapter fetch for 14 days. A manga that the update skips on purpose (the skip settings, or fetch once) never counts.
 3. No chapters.
 4. Extension update: the extension that serves the manga has an update. Press Enter on the row to update it.
-5. Duplicate: two library manga with the same title, or nearly the same, from any sources.
+5. Duplicate: two library manga with the same title, or nearly the same, from any sources. Press Enter on the row to merge the pair. A prompt shows both copies with their source, chapters read, categories and tracks. Move with `j` and `k`, and press Enter on the copy that stays. The other copy migrates into it through the usual Migrate confirm (`d` downloads, `t` tracks). The kept copy keeps its own read chapters and categories, and gains the other copy's read chapters, bookmarks and categories.
 6. Stalled: an ongoing manga with no new chapter for 6 months.
 
 Press `space` to select a problem, or a whole group on its header. Press `x` to dismiss the selected problems, or the one under the cursor. Press `X` to see the dismissed problems, and `x` there to bring one back. A dismissed stalled problem comes back when a new chapter arrives.
