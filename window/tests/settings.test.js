@@ -272,3 +272,11 @@ test("downloaded only is a meta toggle too, named first in the status bar", () =
   const both = S.reduce(S.initial(), ok({ settings: {}, metas: { nodes: [{ key: "miharchy.downloadedOnly", value: "true" }, { key: "miharchy.incognito", value: "true" }] } }));
   assert.deepEqual(S.modes(both.values), ["downloaded only", "incognito"]);
 });
+
+test("Catch-up is a meta choice, 3 by default, with Off; a stored 2 comes back", () => {
+  assert.equal(S.initial().values.catchUp, "3");
+  assert.equal(S.display(row("catchUp"), "0"), "Off");
+  const s = S.reduce(S.initial(), ok({ settings: {}, metas: { nodes: [{ key: "miharchy.catchUp", value: "2" }] } }));
+  assert.equal(s.values.catchUp, "2");
+  assert.deepEqual(S.savePayload(row("catchUp"), "5").variables, { key: "miharchy.catchUp", value: "5" });
+});

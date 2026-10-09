@@ -53,7 +53,7 @@ Item {
     : (selected.length ? selected.length + " selected   space select   A all   I invert   " : "j k move   enter read   space select   A all   ")
       + "R read   U unread   b bookmark   d download   x delete download   " + (selected.length ? "esc clear   " : "F filter   " + (updates.running || updates.checking ? "C stop   " : "u check   ") + "s sync   ")
 
-  signal read(var manga, var chapters, int chapterId)
+  signal read(var manga, var chapters, int chapterId, bool peek)
   // action: "read", "unread" or "bookmark".
   signal mark(var chapters, string action, var mangaIds)
   // A download mutation's reply, which carries the queue.
@@ -130,8 +130,8 @@ Item {
   }
 
   // Also the mark's way in: shell.qml calls it for the launcher's
-  // open-chapter.
-  function openChapter(mangaId, chapterId) {
+  // open-chapter, and for a peek, which Catch-up counts.
+  function openChapter(mangaId, chapterId, peek) {
     if (!config) return
     var seq = ++openSeq
     var cfg = config
@@ -140,7 +140,7 @@ Item {
     send(Browse.detailPayload(d), function(reply) {
       if (seq !== view.openSeq) return
       d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
-      if (d.manga) view.read(d.manga, d.chapters, chapterId)
+      if (d.manga) view.read(d.manga, d.chapters, chapterId, peek === true)
       else view.error = Browse.notice(d, view.configPath).title
     })
   }
