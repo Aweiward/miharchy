@@ -167,6 +167,34 @@ test("peek-next with no window running starts a peek on the next manga and shows
   assert.deepEqual(dispatches(calls), [LUA_MOVE, LUA_TOGGLE]);
 });
 
+const IPC_OPEN = "quickshell ipc -p " + dir + " call miharchy peekOpen 5 9 | MIHARCHY_OPEN_CHAPTER=";
+
+test("peek-open on a hidden peek opens that chapter and shows it", () => {
+  const calls = run(["peek-open", "5", "9"], { STUB_LIST: RUNNING, STUB_CLIENTS: PEEKED, STUB_IPC_RC: "0", STUB_MONITORS: '[{"specialWorkspace":{"name":""}}]' });
+  assert.ok(calls.includes(IPC_OPEN), calls.join("\n"));
+  assert.deepEqual(dispatches(calls), [LUA_TOGGLE]);
+  assert.deepEqual(launches(calls), []);
+});
+
+test("peek-open on a peek already shown opens that chapter and leaves it shown", () => {
+  const calls = run(["peek-open", "5", "9"], { STUB_LIST: RUNNING, STUB_CLIENTS: PEEKED, STUB_IPC_RC: "0", STUB_MONITORS: '[{"specialWorkspace":{"name":"special:miharchy"}}]' });
+  assert.ok(calls.includes(IPC_OPEN), calls.join("\n"));
+  assert.deepEqual(dispatches(calls), []);
+});
+
+test("peek-open on a window in a normal workspace opens that chapter and focuses it there", () => {
+  const calls = run(["peek-open", "5", "9"], { STUB_LIST: RUNNING, STUB_IPC_RC: "0" });
+  assert.ok(calls.includes(IPC_OPEN), calls.join("\n"));
+  assert.deepEqual(dispatches(calls), [LUA_FOCUS]);
+  assert.deepEqual(launches(calls), []);
+});
+
+test("peek-open with no window running starts a peek on that chapter and shows it", () => {
+  const calls = run(["peek-open", "5", "9"], { STUB_LIST_AFTER: RUNNING, STUB_VIEW: "1" });
+  assert.deepEqual(launches(calls), ["quickshell -n -p " + dir + " | MIHARCHY_OPEN_CHAPTER= view= peek=5 9"]);
+  assert.deepEqual(dispatches(calls), [LUA_MOVE, LUA_TOGGLE]);
+});
+
 test("a peek that started its window, or gave up, leaves no start marker behind", () => {
   const calls = run(["peek"], { STUB_LIST_AFTER: RUNNING });
   assert.equal(launches(calls).length, 1);
