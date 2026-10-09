@@ -171,7 +171,7 @@ Item {
         }
         break
       case "setup.confirm":
-        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup), install: Setup.status(setup, "packages").command || "" }))
+        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup), install: Setup.status(setup, setup.confirm).command || "" }))
         break
       case "setup.cancel":
         if (editing) endEdit()
@@ -295,7 +295,7 @@ Item {
       }
 
       Text {
-        visible: view.current.kind === "install" && view.currentStatus.state === "todo"
+        visible: !!view.currentStatus.command && view.currentStatus.state === "todo"
         text: "$ " + (view.currentStatus.command || "")
         color: view.theme.accent
         font.family: view.theme.fontFamily
