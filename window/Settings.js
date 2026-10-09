@@ -135,6 +135,8 @@ var ROWS = [
   // Mihon's "Automatically refresh metadata": the library update also
   // fetches each manga's title, cover and description.
   { key: "updateMangas", label: "Refresh metadata during library updates", type: "bool", default: false, store: "server" },
+  // The library check, with the count of its problems as the value.
+  { key: "libraryCheck", label: "Library check", type: "action", command: "view.check" },
   // Mihon's default category for manga added to the library: "ask", "0"
   // (Default: no category) or a category id. The server's own default flag
   // applies only to its REST add, so the window applies this one.

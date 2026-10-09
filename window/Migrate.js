@@ -258,6 +258,7 @@ if (typeof module !== "undefined") {
     oldPayload: oldPayload,
     downloaded: downloaded,
     similarity: similarity,
+    key: key,
     propose: propose,
     targets: targets,
     librarySources: librarySources,

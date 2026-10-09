@@ -42,7 +42,7 @@ test("the palette lists every view and quit, not itself, and filters by title", 
   for (const v of M.VIEWS) assert.ok(all.includes("view." + v.id), v.id);
   assert.ok(all.includes("window.quit"));
   assert.ok(!all.includes("palette.open"));
-  assert.deepEqual(C.paletteRows("LIB").map((c) => c.id), ["view.library", "library.reload"]);
+  assert.deepEqual(C.paletteRows("LIB").map((c) => c.id), ["view.library", "view.check", "library.reload"]);
   assert.deepEqual(C.paletteRows("zzz"), []);
 });
 
@@ -128,6 +128,21 @@ test("the palette opens Setup; in it j/k move and Enter acts on a step", () => {
   assert.equal(C.dispatch(setup, key(C.KEY.Return)), "setup.activate");
   assert.equal(C.dispatch(setup, text("y")), null, "y runs nothing without a question");
   assert.equal(C.dispatch(settings, text("j")), "settings.down", "setup keys stay out of Settings");
+});
+
+test("the library check opens from the palette and with ! on the Library; its keys stay on it", () => {
+  assert.ok(C.paletteRows("library check").some((c) => c.id === "view.check"));
+  assert.equal(C.dispatch({ palette: false, view: "library" }, text("!")), "view.check");
+  const check = { palette: false, view: "check" };
+  assert.equal(C.dispatch(check, text("j")), "check.down");
+  assert.equal(C.dispatch(check, key(C.KEY.Up)), "check.up");
+  assert.equal(C.dispatch(check, C.keyEvent(C.KEY.Space, " ", 0)), "check.select");
+  assert.equal(C.dispatch(check, text("x")), "check.dismiss");
+  assert.equal(C.dispatch(check, text("X")), "check.dismissed");
+  assert.equal(C.dispatch(check, key(C.KEY.Return)), "check.activate");
+  assert.equal(C.dispatch(check, text("r")), "library.reload");
+  assert.equal(C.dispatch(check, key(C.KEY.Escape)), "window.quit");
+  assert.equal(C.dispatch(settings, text("x")), null, "check keys stay out of Settings");
 });
 
 test("a setup question takes only y, n or Esc", () => {
