@@ -221,11 +221,31 @@ test("the merge prompt shows each copy's source, chapters read, categories and t
   };
   const [a, b] = L.mergeCopies(reply);
   assert.equal(L.copyText(a), "MangaDex (EN)   1 of 3 chapters read   Categories: Reading, Action   Tracks: AniList");
-  assert.equal(L.copyText(b), "Weeb Central (not installed)   0 of 0 chapters read   Categories: Default   Tracks: none");
+  assert.equal(L.copyText(b), "Weeb Central (not installed)   source missing   0 of 0 chapters read   Categories: Default   Tracks: none");
 });
 
-test("the copy kept is the target; the other migrates into it", () => {
-  const copies = L.mergeCopies({ a: copyNode(1), b: copyNode(2, { title: "ELECEED", sourceId: "9", source: { displayName: "Weeb Central" } }), metas: { nodes: [] } });
-  assert.deepEqual(L.mergeJob(copies, 1), { old: { id: 1, title: "Eleceed", source: "MangaDex (EN)" }, kept: { id: 2, title: "ELECEED", sourceName: "Weeb Central" } });
+test("the copy kept is the target; the other migrates into it, and the kept copy's mode and tracks go along for the merge", () => {
+  const meta = [{ key: "miharchy.readingMode", value: "pager" }];
+  const tracks = { nodes: [{ tracker: { name: "AniList" } }] };
+  const copies = L.mergeCopies({ a: copyNode(1), b: copyNode(2, { title: "ELECEED", sourceId: "9", source: { displayName: "Weeb Central" }, meta, trackRecords: tracks }), metas: { nodes: [] } });
+  assert.deepEqual(L.mergeJob(copies, 1), {
+    old: { id: 1, title: "Eleceed", source: "MangaDex (EN)" },
+    kept: { id: 2, title: "ELECEED", sourceName: "Weeb Central" },
+    merge: { meta, trackRecords: tracks }
+  });
   assert.equal(L.mergeJob(copies, 0).old.id, 2);
+  assert.match(L.MERGE_QUERY, /meta \{ key value \}/);
+});
+
+test("a copy whose source is missing cannot be kept: the cursor starts past it and j/k skip it", () => {
+  const ok = copyNode(1);
+  const gone = copyNode(2, { sourceId: "9", source: null });
+  const missingFirst = L.mergeCopies({ a: gone, b: ok, metas: { nodes: [] } });
+  assert.equal(L.mergeStart(missingFirst), 1);
+  assert.equal(L.mergeMove(missingFirst, 1, -1), 1, "k stays off the missing copy");
+  const both = L.mergeCopies({ a: copyNode(1), b: copyNode(2), metas: { nodes: [] } });
+  assert.equal(L.mergeStart(both), 0);
+  assert.equal(L.mergeMove(both, 0, 1), 1);
+  assert.equal(L.mergeMove(both, 1, 1), 1, "past the last copy stays");
+  assert.equal(L.mergeStart(L.mergeCopies({ a: gone, b: { ...gone, id: 3 }, metas: { nodes: [] } })), -1, "no copy can be kept");
 });

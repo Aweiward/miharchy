@@ -6,7 +6,7 @@
 - Scope `check`: `j`/`k` move over group headers and rows; `space` selects a row, or on a header the whole group (again deselects it); `x` dismisses the selection, else the group or row under the cursor; `X` lists the dismissed problems, where `x` brings them back; Enter on an extension update row updates that extension; Enter on a duplicate row opens the merge prompt; `r` loads again; `Esc` and `q` quit, as on Setup.
 - Kinds, in screen order: Source missing, Update failed, No chapters, Extension update, Duplicate, Stalled (`LibraryCheck.KINDS`).
 - The Settings row loads the check whenever Settings shows (`settingsView.checkWanted`).
-- Merge (scope `check-merge`, `checkView.merge`): both copies of a duplicate pair with source, chapters read, categories and tracks; `j`/`k` move, Enter keeps the copy under the cursor, Esc cancels. The other copy then goes through Migrate's confirm (`migrateView.merge` true, heading "Merge … into …"); Enter there writes, the check reloads and the kept copy's detail opens.
+- Merge (scope `check-merge`, `checkView.merge`): both copies of a duplicate pair with source, chapters read, categories and tracks; `j`/`k` move, Enter keeps the copy under the cursor, Esc cancels. A copy whose source is missing shows "source missing" and the cursor never lands on it; with both missing the prompt says no copy can be kept. The other copy then goes through Migrate's confirm (`migrateView.merge` true, heading "Merge … into …"); Enter there writes, the check reloads and the kept copy's detail opens.
 
 ## How to get to it (user POV)
 Library, `!`. Or `5`, the "Library check" row, Enter.
@@ -31,7 +31,7 @@ Build the library with `seed.sh --library 2 eu.kanade.tachiyomi.extension.all.ma
 Read back: `manga(id: <the Weeb Central Eleceed>) { meta { key value } }` holds `miharchy.checkDismissed` `{"missing":<ms>}`; after `X` then `x` on it, `{}`.
 
 ### Merge
-Keep both extensions installed. Search both for "Eleceed" and `fetchMangaAndChapters` both (MangaDex is manga 1, Weeb Central manga 2 on a fresh server), `createCategory` "Alpha" and "Beta", put both in the library. Give the MangaDex copy Alpha and chapter 5 read; give the Weeb Central copy Alpha and Beta, chapters 1 to 3 read, 2 bookmarked, and `miharchy.readingMode` `webtoon`.
+Keep both extensions installed. Search both for "Eleceed" and `fetchMangaAndChapters` both (MangaDex is manga 1, Weeb Central manga 2 on a fresh server), `createCategory` "Alpha" and "Beta", put both in the library. Give the MangaDex copy Alpha and chapter 5 read; give it `miharchy.readingMode` `pager`. Give the Weeb Central copy Alpha and Beta, chapters 1 to 3 read, 2 bookmarked, and `miharchy.readingMode` `webtoon`. For the missing-source case, uninstall Weeb Central first, Enter on `duplicate:2`: `checkView.merge.cursor` is 1 (MangaDex) and stays there on `k`; reinstall it (`seed.sh`) before the merge.
 ```js
 [
   [5000, function() { root.run("view.check") }],
@@ -46,7 +46,7 @@ Keep both extensions installed. Search both for "Eleceed" and `fetchMangaAndChap
   [500, function() { done() }]
 ]
 ```
-Read back: manga 1 `inLibrary: true`, categories Alpha and Beta, `miharchy.readingMode` `webtoon`, chapters 1, 2, 3 and 5 read (`chapters(condition: { isRead: true })` at the root; `manga.chapters` takes no condition), 2 bookmarked; manga 2 `inLibrary: false`. The check lists no problem afterwards.
+Read back: manga 1 `inLibrary: true`, categories Alpha and Beta, `miharchy.readingMode` still `pager`, chapters 1, 2, 3 and 5 read (`chapters(condition: { isRead: true })` at the root; `manga.chapters` takes no condition), 2 bookmarked; manga 2 `inLibrary: false`. The check lists no problem afterwards.
 
 ## Gotchas
 - A scratch server never ran a library update (`lastUpdateTimestamp` 0) and keeps no `mangaUpdates`, so Update failed cannot show there; `window/tests/librarycheck.test.js` pins it. Stalled needs an ongoing manga with no upload for 6 months; it depends on what the sources list today.

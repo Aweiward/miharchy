@@ -41,13 +41,13 @@ Item {
   readonly property var current: rows[cursor] || null
   // A failed load, worded; null while it loads or after it answers.
   readonly property var problem: Model.problem(check, configPath)
-  readonly property string hint: merging ? "j k move   enter keep this one   esc cancel   " : "j k move   space select   x " + (showDismissed ? "bring back" : "dismiss") + "   X " + (showDismissed ? "problems" : "dismissed") + "   "
+  readonly property string hint: merging ? (merge.cursor === -1 ? "esc close   " : "j k move   enter keep this one   esc cancel   ") : "j k move   space select   x " + (showDismissed ? "bring back" : "dismiss") + "   X " + (showDismissed ? "problems" : "dismissed") + "   "
     + (current && current.kind === "extension" && current.type === "problem" ? "enter update   " : "")
     + (current && current.kind === "duplicate" && current.type === "problem" ? "enter merge   " : "")
 
   signal key(var event)
-  // The copy chosen to stay: kept, and old, the copy that migrates into it.
-  signal mergeChosen(var old, var kept)
+  // The copy chosen to stay: LibraryCheck.mergeJob().
+  signal mergeChosen(var job)
 
   onActiveChanged: {
     merge = null
@@ -112,12 +112,13 @@ Item {
         break
       case "check.mergeUp":
       case "check.mergeDown":
-        merge = { copies: merge.copies, cursor: id === "check.mergeUp" ? 0 : 1 }
+        if (merge.cursor !== -1) merge = { copies: merge.copies, cursor: LibraryCheck.mergeMove(merge.copies, merge.cursor, id === "check.mergeUp" ? -1 : 1) }
         break
       case "check.mergeKeep":
+        if (merge.cursor === -1) break
         var job = LibraryCheck.mergeJob(merge.copies, merge.cursor)
         merge = null
-        mergeChosen(job.old, job.kept)
+        mergeChosen(job)
         break
       case "check.mergeClose":
         merge = null
@@ -131,7 +132,10 @@ Item {
     send({ query: LibraryCheck.MERGE_QUERY, variables: LibraryCheck.mergeVariables(problem) }, function(reply) {
       if (s !== view.seq || !view.active) return
       if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, view.configPath).title
-      else view.merge = { copies: LibraryCheck.mergeCopies(reply.data), cursor: 0 }
+      else {
+        var copies = LibraryCheck.mergeCopies(reply.data)
+        view.merge = { copies: copies, cursor: LibraryCheck.mergeStart(copies) }
+      }
     })
   }
 
@@ -259,8 +263,9 @@ Item {
         width: parent.width
         wrapMode: Text.Wrap
         bottomPadding: view.theme.fontSize * 0.5
-        text: "Merge the duplicates. Pick the copy that stays; the other migrates into it and leaves the library."
-        color: view.theme.accent
+        text: view.merge && view.merge.cursor === -1 ? "No copy can be kept: both sources are missing. Install one, then merge."
+          : "Merge the duplicates. Pick the copy that stays; the other migrates into it and leaves the library. A copy whose source is missing cannot stay."
+        color: view.merge && view.merge.cursor === -1 ? view.theme.urgent : view.theme.accent
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
       }
@@ -279,6 +284,7 @@ Item {
 
           MouseArea {
             anchors.fill: parent
+            enabled: !copyRow.modelData.missing
             onClicked: view.merge = { copies: view.merge.copies, cursor: copyRow.index }
             onDoubleClicked: {
               view.merge = { copies: view.merge.copies, cursor: copyRow.index }

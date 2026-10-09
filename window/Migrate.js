@@ -62,12 +62,14 @@ function plan(oldChapters, targetChapters) {
 // MigrateMangaUseCase. bindTrackRecord copies each record to the target in
 // the server's database, replacing the target's own track on that tracker;
 // it never calls the tracker, so it needs no login and pushes nothing.
-// merge: the target is a library manga that stays (the library check's
-// duplicate merge). No clear, so it keeps its own categories and gains the
-// old ones; it is in the library already, so no default category joins.
+// merge: the target's own { meta, trackRecords } when it is a library manga
+// that stays (the library check's duplicate merge). Its state wins: no
+// clear, so it keeps its categories and gains the old ones (it is in the
+// library already, so no default category joins); the old reading mode
+// only when it has none; the old tracks only on trackers it lacks.
 function targetPayload(old, targetId, p, withTracks, merge) {
-  var mode = (old.meta || []).filter(function(m) { return m.key === MODE_KEY })[0]
-  var tracks = withTracks ? trackRecords(old) : []
+  var mode = merge && readingMode(merge) ? null : readingMode(old)
+  var tracks = withTracks ? movingTracks(old, merge) : []
   var vars = { target: targetId, categories: old.categories.nodes.map(function(c) { return c.id }), read: p.read, bookmark: p.bookmark }
   var params = ["$target: Int!", "$categories: [Int!]!", "$read: [Int!]!", "$bookmark: [Int!]!"]
   var query = " library: updateManga(input: { id: $target, patch: { inLibrary: true } }) { manga { id } }"
@@ -87,9 +89,20 @@ function targetPayload(old, targetId, p, withTracks, merge) {
   return { query: "mutation(" + params.join(", ") + ") {" + query + " }", variables: vars }
 }
 
+function readingMode(manga) {
+  return (manga.meta || []).filter(function(m) { return m.key === MODE_KEY })[0]
+}
+
 // An OLD_QUERY manga node -> its tracks: [{ id, tracker }].
 function trackRecords(old) {
   return ((old.trackRecords && old.trackRecords.nodes) || []).map(function(n) { return { id: n.id, tracker: String(n.tracker.name) } })
+}
+
+// The old manga's tracks that go along: all of them, or in a merge (merge:
+// the kept copy) those on trackers the kept copy has no track on.
+function movingTracks(old, merge) {
+  var has = merge ? trackRecords(merge).map(function(t) { return t.tracker }) : []
+  return trackRecords(old).filter(function(t) { return has.indexOf(t.tracker) === -1 })
 }
 
 function downloaded(old) {
@@ -258,6 +271,7 @@ if (typeof module !== "undefined") {
     plan: plan,
     targetPayload: targetPayload,
     trackRecords: trackRecords,
+    movingTracks: movingTracks,
     oldPayload: oldPayload,
     downloaded: downloaded,
     similarity: similarity,
