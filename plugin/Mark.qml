@@ -252,7 +252,10 @@ Panel {
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
         if (t === "w") root.openWindow()
-        else if (t === "r") root.poll()
+        else if (t === "r") {
+          root.poll()
+          root.loadUpNext()
+        }
         else if (t === "s") root.startSync()
       }
 
