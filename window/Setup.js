@@ -163,6 +163,55 @@ function parsePhones(text) {
   return f
 }
 
+// Syncthing's own config names its API address and key. Read by the
+// phone check's Syncthing part and by the accept, never shown.
+var SYNCTHING_API = [
+  "cfg=$HOME/.local/state/syncthing/config.xml",
+  "[ -f \"$cfg\" ] || cfg=$HOME/.config/syncthing/config.xml",
+  "addr=$(awk '/<gui[ >]/{g=1} g&&/<address>/{gsub(/.*<address>|<\\/address>.*/,\"\"); print; exit}' \"$cfg\" 2>/dev/null)",
+  "key=$(sed -n 's:.*<apikey>\\(.*\\)</apikey>.*:\\1:p' \"$cfg\" 2>/dev/null | head -n 1)",
+  "api() { curl -fsS -m 3 -H \"X-API-Key: $key\" \"http://$addr/rest/$1\"; }"
+].join("\n")
+
+// $1 is the sync folder, $2 where to write the desktop ID as a QR code.
+// Each line prints one fact; parseSyncthing reads them.
+var SYNCTHING_PROBE = SYNCTHING_API + "\n" + [
+  "[ -f \"$cfg\" ] || exit 0",
+  "echo installed",
+  "status=$(api system/status 2>/dev/null) || exit 0",
+  "echo answering",
+  "id=$(printf '%s' \"$status\" | jq -r .myID)",
+  "echo \"myID $id\"",
+  "want=$(realpath -m \"$1\")",
+  "api config/folders | jq -r --arg home \"$HOME\" '.[] | select((.devices | length) > 1) | .path | sub(\"^~\"; $home)' | while IFS= read -r p; do [ \"$(realpath -m \"$p\")\" = \"$want\" ] && echo shared; done | head -n 1",
+  "echo \"pendingDevices $(api cluster/pending/devices | jq -c '[to_entries[] | {id: .key, name: .value.name}]')\"",
+  "echo \"pendingFolders $(api cluster/pending/folders | jq -c '[to_entries[] | .key as $id | .value.offeredBy | to_entries[] | {id: $id, label: .value.label, device: .key}]')\"",
+  "command -v qrencode >/dev/null && mkdir -p \"$(dirname \"$2\")\" && qrencode -o \"$2\" \"$id\" && echo \"qr $2\""
+].join("\n")
+
+function syncthingProbeCommand(folder, qrPath) {
+  return command(SYNCTHING_PROBE, [folder, qrPath])
+}
+
+// The Syncthing check's output -> { installed (Syncthing wrote its config,
+// so it was installed and started once), answering, myId, shared,
+// pendingDevices: [{ id, name }], pendingFolders: [{ id, label, device }], qr }.
+function parseSyncthing(text) {
+  var f = { installed: false, answering: false, myId: "", shared: false, pendingDevices: [], pendingFolders: [], qr: "" }
+  String(text).split("\n").forEach(function(line) {
+    var sp = line.indexOf(" ")
+    var key = sp === -1 ? line : line.slice(0, sp)
+    var rest = sp === -1 ? "" : line.slice(sp + 1).trim()
+    if (key === "installed") f.installed = true
+    if (key === "answering") f.answering = true
+    if (key === "myID") f.myId = rest
+    if (key === "shared") f.shared = true
+    if (key === "qr") f.qr = rest
+    if (key === "pendingDevices" || key === "pendingFolders") try { f[key] = JSON.parse(rest) } catch (e) { f[key] = [] }
+  })
+  return f
+}
+
 function probeCommand(configPath, syncDir, windowDir) {
   return command(PROBE, [configPath, syncDir, desktopEntry(windowDir), windowDir.replace(/\/window$/, "") + "/server/miharchy-server.service"])
 }
@@ -445,6 +494,8 @@ if (typeof module !== "undefined") {
     probeCommand: probeCommand,
     phoneProbeCommand: phoneProbeCommand,
     parsePhones: parsePhones,
+    syncthingProbeCommand: syncthingProbeCommand,
+    parseSyncthing: parseSyncthing,
     desktopEntry: desktopEntry,
     runCommand: runCommand,
     parseJob: parseJob,
