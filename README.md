@@ -38,7 +38,7 @@ Setup lists the steps below. Move with `j` and `k`, press Enter on a step. A ste
 5. Phone backups: done once a phone backup has landed in the sync folder. Until then it says what to do in Mihon, and checks again on its own while Setup is open. Without Syncthing, `y` installs and starts it in Omarchy's terminal. With Syncthing running, it pairs the phone: it shows this desktop's Syncthing ID as a QR code to scan in Syncthing-Fork, then `y` accepts the phone and the folder it shares, into the sync folder. Several offered folders, none named `autobackup`: accept the right one in Syncthing's page (http://127.0.0.1:8384). A sync folder that holds only a folder named `autobackup` is Mihon's storage folder: set the sync folder to that `autobackup` folder instead.
 6. Sync helper: builds the sync helper into `~/.local/share/miharchy/helper`. The first build downloads Gradle and libraries and takes a few minutes. After `omarchy plugin update` the step shows "out of date" when the helper changed; build it again.
 7. App launcher entry: writes `~/.local/share/applications/miharchy.desktop`, so Miharchy shows in the app launcher (Super + Space).
-8. Peek key: adds `SUPER + M` to `~/.config/hypr/bindings.lua`, once. If `SUPER + M` is taken, or the file is missing, Setup shows the line to add yourself with another key. A bind you moved to another key stays as it is.
+8. Peek key: adds `SUPER + M` (the peek key) and `SUPER + SHIFT + M` (the next key) to `~/.config/hypr/bindings.lua`, once each. It adds only the one that is missing. If a key is taken, or the file is missing, Setup shows the line to add yourself with another key. A bind you moved to another key stays as it is.
 
 ## Peek
 
@@ -52,10 +52,12 @@ Inside the first two groups, the manga you read last comes first; in the third, 
 
 Press `SUPER + M` again to hide it. Switching workspaces hides it too, and the next press brings it back on the same page.
 
+Press `SUPER + SHIFT + M` to show the peek on the next manga in Up next, at its next chapter. Each press moves one manga on, and after the last manga it starts again at the first. With the reader closed, the first press opens the second manga. The keys walk Up next in the order it had at your first press, so the manga you just read does not jump back to the front. If the reader shows a manga that is not in Up next, the key opens the first manga.
+
 - The peek lives on its own Hyprland special workspace, `special:miharchy`, like Omarchy's scratchpad.
 - If the window is already open on a normal workspace, the key focuses it there and resumes. It never moves a window you placed.
 - With nothing left to read, the peek opens the Library with its search.
-- From a terminal: `~/.config/omarchy/plugins/miharchy/window/miharchy peek`.
+- From a terminal: `~/.config/omarchy/plugins/miharchy/window/miharchy peek`, or `peek-next` for the next manga.
 
 ## Sync with Mihon
 
