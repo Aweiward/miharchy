@@ -67,6 +67,9 @@ ShellRoot {
   // The launcher's peek starts a window with MIHARCHY_PEEK=1, its
   // peek-next with MIHARCHY_PEEK=next; "" for none.
   property string pendingPeek: Quickshell.env("MIHARCHY_PEEK") || ""
+  // The manga ids of Up next when the run of next presses began
+  // (UpNext.after); in memory only.
+  property var upNextOrder: []
 
   // Manga ids picked with v. The actions take these, or the cursor's
   // manga with none, as on Updates.
@@ -215,7 +218,10 @@ ShellRoot {
     send(UpNext.payload(), function(reply) {
       if (reply.state !== "ok") return library(reply)
       var list = UpNext.list(reply.data, root.downloadedOnly, Date.now())
-      var target = next ? UpNext.after(list, reader.open ? reader.reader.mangaId : null) : list[0]
+      var current = reader.open ? reader.reader.mangaId : null
+      if (!next || current === null || root.upNextOrder.indexOf(current) === -1)
+        root.upNextOrder = list.map(function(e) { return e.mangaId })
+      var target = next ? UpNext.after(list, root.upNextOrder, current) : list[0]
       if (target) root.openChapter(target)
       else library()
     })

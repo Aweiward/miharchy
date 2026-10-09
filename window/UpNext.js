@@ -56,13 +56,22 @@ function list(data, downloadedOnly, now) {
   return out
 }
 
-// The next key's pick: the entry after mangaId (the reader's manga, null
-// with the reader closed, which counts as the head), wrapping from the last
-// to the head. A manga not in the list gives the head; an empty list gives
-// undefined.
-function after(list, mangaId) {
-  var i = mangaId === null ? 0 : list.findIndex(function(e) { return e.mangaId === mangaId })
-  return i === -1 ? list[0] : list[(i + 1) % list.length]
+// The next key's pick from list(): the manga after mangaId (the reader's,
+// null with the reader closed, which counts as the head) in order, the
+// manga ids of Up next when the run of next presses began, wrapping from
+// the last to the head. Opening a chapter moves its manga to the head of
+// list(), so a fresh list would only ever offer the previous one. A manga
+// that left Up next since is skipped. A manga not in order gives the head
+// of list; an empty list gives undefined.
+function after(list, order, mangaId) {
+  var i = mangaId === null ? 0 : order.indexOf(mangaId)
+  if (i === -1) return list[0]
+  for (var k = 1; k <= order.length; k++) {
+    var id = order[(i + k) % order.length]
+    var e = list.filter(function(x) { return x.mangaId === id })[0]
+    if (e) return e
+  }
+  return list[0]
 }
 
 if (typeof module !== "undefined") {
