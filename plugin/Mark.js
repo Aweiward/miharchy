@@ -108,6 +108,12 @@ function phoneCheckCommand(folder) {
   return ["sh", "-c", PHONE_CHECK_SCRIPT, "sh", folder]
 }
 
+// The newest phone backup in the folder ("<mtime> <path>"), merged or not:
+// when the answer changes, the mark asks the helper for sync health again.
+function newestPhoneCommand(folder) {
+  return ["sh", "-c", "find \"$1\" -maxdepth 1 -type f -name '*.tachibk' ! -name 'miharchy-*' -printf '%T@ %p\\n' 2>/dev/null | sort -n | tail -n 1", "sh", folder]
+}
+
 // The desktop notification for a sync the mark started on a new phone
 // backup (Sync.reduce's state once the job ended), or null. key names the
 // marker, as notification's does.
@@ -164,6 +170,7 @@ if (typeof module !== "undefined") {
     notification: notification,
     notifyCommand: notifyCommand,
     phoneCheckCommand: phoneCheckCommand,
+    newestPhoneCommand: newestPhoneCommand,
     syncNotification: syncNotification,
     label: label,
     down: down,

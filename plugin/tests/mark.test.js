@@ -213,3 +213,28 @@ test("a sync on a phone backup notifies its result, and stays quiet when it chan
   assert.deepEqual(Mark.syncNotification({ state: "failed", message: "The sync folder is not set." }, "sync-1"),
     { key: "sync-1", title: "Sync failed", body: "The sync folder is not set." });
 });
+
+test("the health check names the newest phone backup, whatever the sync merged", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { execFileSync } = require("node:child_process");
+  const folder = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mark-sync-")), "Phone sync");
+  fs.mkdirSync(folder);
+  const t = Math.floor(Date.now() / 1000);
+  const file = (name, age) => {
+    const p = path.join(folder, name);
+    fs.writeFileSync(p, "");
+    fs.utimesSync(p, t - age, t - age);
+    return p;
+  };
+  const [cmd, ...args] = Mark.newestPhoneCommand(folder);
+  const check = () => execFileSync(cmd, args, { encoding: "utf8" }).trim();
+
+  assert.equal(check(), "", "an empty folder");
+  file("app.mihon_2026-10-08_20-30.tachibk", 3600);
+  const newest = file("app.mihon_2026-10-09_05-31.tachibk", 5);
+  file("miharchy-2026-10-09_09-28-12.tachibk", 1);
+  file("notes.txt", 1);
+  assert.equal(check(), (t - 5) + ".0000000000 " + newest, "the newest phone backup, never a desktop backup");
+});
