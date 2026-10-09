@@ -11,6 +11,7 @@ import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.PosixFilePermissions
 import java.time.Instant
+import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.isDirectory
@@ -18,6 +19,7 @@ import kotlin.io.path.isRegularFile
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
 import kotlin.io.path.readBytes
+import kotlin.io.path.readText
 import kotlin.system.exitProcess
 
 private const val USAGE = """usage: miharchy-sync sync [--folder <sync folder>] [--dry-run] [--apply] [--json]
@@ -107,7 +109,10 @@ private fun sync(folderArg: String?, dryRun: Boolean, apply: Boolean): Summary {
     writePrivately(desktopBaselineFile, exported)
     phoneBytes?.let { writePrivately(stateDir.resolve("phone-baseline.tachibk"), it) }
 
-    val lost = (phoneNow ?: phoneBaseline)?.let { gap(it, decodeBackup(exported)).byHand }.orEmpty()
+    val gap = (phoneNow ?: phoneBaseline)?.let { gap(it, decodeBackup(exported)) }
+    val since = pendingSince(readPendingSince(), gap?.restorable.orEmpty().isNotEmpty(), Instant.now())
+    if (since == null) PENDING_SINCE.deleteIfExists() else writePrivately(PENDING_SINCE, since.toString().toByteArray())
+    val lost = gap?.byHand.orEmpty()
     return Summary(config.url, folder.toString(), phoneFile?.toString(), false, changes, exportFile.toString(), lost)
 }
 
@@ -196,6 +201,12 @@ fun lockState(): FileLock? {
     heldLock = channel.tryLock() ?: return null.also { channel.close() }
     return heldLock
 }
+
+/** When a restore first had something to bring the phone (`pendingSince`); only a sync writes it. */
+val PENDING_SINCE: Path = stateDir.resolve("pending-since")
+
+fun readPendingSince(dir: Path = stateDir): Instant? =
+    dir.resolve(PENDING_SINCE.name).takeIf { it.exists() }?.let { runCatching { Instant.parse(it.readText().trim()) }.getOrNull() }
 
 fun newestPhoneBackup(folder: Path): Path? = folder.listDirectoryEntries("*.tachibk")
     .filter { it.isRegularFile() && !it.name.startsWith(OWN_BACKUP_PREFIX) }
