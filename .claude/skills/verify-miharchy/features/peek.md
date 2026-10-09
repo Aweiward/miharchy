@@ -4,11 +4,12 @@ A peek (`GLOSSARY.md`) is the window on Hyprland's special workspace `miharchy`,
 
 ## Sub-features
 - The resume rule (`shell.qml` `peek()`): the head of Up next (`UpNext.list`, rules in `docs/agents/window.md`) opens through `openChapter`, so the reader shows with Updates behind it (`root.view` is `"updates"`). A manga hidden on History counts as not started (`history.md`).
+- The next key (`SUPER + SHIFT + M`, `window/miharchy peek-next`, IPC `peekNext`, cold start `MIHARCHY_PEEK=next`): always shows the peek and opens `UpNext.after`, the manga after the reader's in the order Up next had at the run's first press (`root.upNextOrder`, memory only), wrapping from the last to the head. With the reader closed it opens the second manga. Opening a chapter writes `lastReadAt` and moves that manga to the head of a fresh Up next, which is why the window holds the order.
 - No target: the Library opens with its search field. A failed reply shows as the Library error.
 - `MIHARCHY_OPEN_CHAPTER` wins over `MIHARCHY_PEEK` when both are set. A peek window makes no one-time Setup offer (`Setup.offersOnStart`), and `Q` comes back as a normal window (`restart.md`).
 
 ## How to get to it (user POV)
-Press `SUPER + M` on any workspace; press it again, or switch workspaces, to hide it.
+Press `SUPER + M` on any workspace; press it again, or switch workspaces, to hide it. Press `SUPER + SHIFT + M` to show it on the next manga in Up next.
 
 ## Driving it with drive.sh
 `drive.sh` never runs the launcher. Start the window as the launcher's cold start does, with `MIHARCHY_PEEK=1` in front of `drive.sh`. `updateChapter(input: {id, patch: {lastPageRead: 2}})` (after `fetchChapterPages`) on the first unread chapter in reading order (lowest `sourceOrder` by the default sort) of a library manga puts it in tier 1 with that chapter next. To prove the tiers beat History order, then mark the first chapter of a second manga read with `{lastPageRead: 3, isRead: true}`: that manga is the newest History entry but in tier 2, and the peek still opens the first one.
@@ -25,4 +26,6 @@ Proof: `peek` logs `["updates", true, [<the chapter>, 2]]`: the reader opened th
 
 The resume path on a running window: start a drive without the variable and, while it runs, send `.claude/skills/verify-miharchy/scripts/qs.sh ipc call miharchy peek` from the shell (the launcher's call); a later step logs the same target.
 
-The launcher's Hyprland side (toggle, move, focus, the 3 s wait, the `peek-starting` marker) needs a compositor. Never run `window/miharchy peek` from a verify run; `node --test window/tests/launcher.test.js` covers it with stub `quickshell` and `hyprctl`.
+The next key: seed three library manga, fetch their chapters, and give the first chapter of each `lastPageRead: 2` (after `fetchChapterPages`), a few seconds apart, so all three sit in tier 1 by `lastReadAt`. Start a drive without the variable, with steps that log `[root.view, reader.open, [reader.reader.mangaId, <chapter id>]]` and `grab` at 11 s and every 6 s after. From the shell, while it runs, send `qs.sh ipc call miharchy peek` at about 8 s and `qs.sh ipc call miharchy peekNext` at 14, 20 and 26 s (a small `sleep` script started right after the backgrounded `drive.sh`). Proof: the logs walk head, second, last, head, e.g. `[2,4]`, `[1,1]`, `[3,7]`, `[2,4]`, while a `lastReadAt` read-back shows each open moved its manga to the newest. A cold start with `MIHARCHY_PEEK=next` in front of `drive.sh` logs the second manga of Up next.
+
+The launcher's Hyprland side (toggle, move, focus, the 3 s wait, the `peek-starting` marker, `peek-next`'s show-only toggle) needs a compositor. Never run `window/miharchy peek` or `peek-next` from a verify run; `node --test window/tests/launcher.test.js` covers it with stub `quickshell` and `hyprctl`.

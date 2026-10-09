@@ -64,8 +64,12 @@ ShellRoot {
   property int requestSeq: 0
   // { mangaId, chapterId } to read once the config loads, or null.
   property var pendingChapter: Model.chapterTarget(Quickshell.env("MIHARCHY_OPEN_CHAPTER"))
-  // The launcher's peek starts a window with MIHARCHY_PEEK=1.
-  property bool pendingPeek: Quickshell.env("MIHARCHY_PEEK") === "1"
+  // The launcher's peek starts a window with MIHARCHY_PEEK=1, its
+  // peek-next with MIHARCHY_PEEK=next; "" for none.
+  property string pendingPeek: Quickshell.env("MIHARCHY_PEEK") || ""
+  // The manga ids of Up next when the run of next presses began
+  // (UpNext.after); in memory only.
+  property var upNextOrder: []
 
   // Manga ids picked with v. The actions take these, or the cursor's
   // manga with none, as on Updates.
@@ -172,7 +176,7 @@ ShellRoot {
     sendSettings(Settings.loadPayload())
     libraryStore.load()
     if (pendingChapter) openChapter(pendingChapter)
-    else if (pendingPeek) peek()
+    else if (pendingPeek) peek(pendingPeek === "next")
   }
 
   // The mark's update rows land here, through the launcher's open-chapter.
@@ -197,11 +201,12 @@ ShellRoot {
   }
 
   // The launcher's peek: the reader on the head of Up next, else the
-  // Library with its search open.
-  function peek() {
-    pendingPeek = true
+  // Library with its search open. next (the launcher's peek-next): the
+  // manga after the reader's in Up next (UpNext.after).
+  function peek(next) {
+    pendingPeek = next ? "next" : "1"
     if (!config) return
-    pendingPeek = false
+    pendingPeek = ""
     var library = function(reply) {
       if (reader.open) reader.close()
       mangaDetail.close()
@@ -212,8 +217,12 @@ ShellRoot {
     }
     send(UpNext.payload(), function(reply) {
       if (reply.state !== "ok") return library(reply)
-      var head = UpNext.list(reply.data, root.downloadedOnly, Date.now())[0]
-      if (head) root.openChapter(head)
+      var list = UpNext.list(reply.data, root.downloadedOnly, Date.now())
+      var current = reader.open ? reader.reader.mangaId : null
+      if (!next || current === null || root.upNextOrder.indexOf(current) === -1)
+        root.upNextOrder = list.map(function(e) { return e.mangaId })
+      var target = next ? UpNext.after(list, root.upNextOrder, current) : list[0]
+      if (target) root.openChapter(target)
       else library()
     })
   }
@@ -222,7 +231,11 @@ ShellRoot {
     target: "miharchy"
 
     function peek(): void {
-      root.peek()
+      root.peek(false)
+    }
+
+    function peekNext(): void {
+      root.peek(true)
     }
 
     function openChapter(mangaId: int, chapterId: int): void {

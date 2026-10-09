@@ -4,6 +4,8 @@
 # chapter, in the running window or else in a new one.
 # miharchy open-updates: opens Updates, the same way.
 # miharchy peek: shows or hides the peek (GLOSSARY.md), the peek key's job.
+# miharchy peek-next: shows the peek on the next manga in Up next, the next
+# key's job.
 dir="$(dirname "$(readlink -f "$0")")"
 
 # Every Quickshell window has class org.quickshell, so the pid of this config's
@@ -33,9 +35,16 @@ toggle() {
 # A peek is the window on the special workspace miharchy, so Hyprland holds
 # the peek state. A window the user placed is resumed where it is, never
 # moved; a new one starts as a peek. It shows in about 3 s or the peek fails.
-if [ "$1" = peek ]; then
+# peek-next (the next key) always shows the peek, on the next manga in Up next.
+if [ "$1" = peek ] || [ "$1" = peek-next ]; then
   if address; then
     ws=$(hyprctl clients -j 2>/dev/null | jq -r --arg a "$addr" 'first(.[] | select(.address == $a)).workspace.name // empty' 2>/dev/null)
+    if [ "$1" = peek-next ]; then
+      quickshell ipc -p "$dir" call miharchy peekNext >/dev/null 2>&1
+      [ "$ws" = special:miharchy ] || { focus; exit 0; }
+      hyprctl monitors -j 2>/dev/null | jq -e 'any(.[]; .specialWorkspace.name == "special:miharchy")' >/dev/null 2>&1 || toggle
+      exit 0
+    fi
     if [ "$ws" = special:miharchy ]; then toggle; exit; fi
     quickshell ipc -p "$dir" call miharchy peek >/dev/null 2>&1
     focus
@@ -47,7 +56,9 @@ if [ "$1" = peek ]; then
   marker=${XDG_RUNTIME_DIR:-/tmp}/miharchy/peek-starting
   mkdir -p "${marker%/*}" && mkdir "$marker" 2>/dev/null || exit 0
   trap 'rmdir "$marker"' EXIT
-  MIHARCHY_PEEK=1 setsid -f quickshell -n -p "$dir" >/dev/null 2>&1
+  peek=1
+  [ "$1" = peek-next ] && peek=next
+  MIHARCHY_PEEK=$peek setsid -f quickshell -n -p "$dir" >/dev/null 2>&1
   i=0
   until address; do
     i=$((i + 1))

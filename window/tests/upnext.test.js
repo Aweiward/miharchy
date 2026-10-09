@@ -92,3 +92,26 @@ test("Up next counts only the unread chapters its filters leave", () => {
 test("Up next is empty for an empty library", () => {
   assert.deepEqual(list(data([])), []);
 });
+
+const UP = [{ mangaId: 1, chapterId: 11 }, { mangaId: 2, chapterId: 21 }, { mangaId: 3, chapterId: 31 }];
+
+const ORDER = [1, 2, 3];
+
+test("the next key moves to the manga after the one in the reader, and wraps from the last to the head", () => {
+  assert.deepEqual(U.after(UP, ORDER, 1), UP[1]);
+  assert.deepEqual(U.after(UP, ORDER, 2), UP[2]);
+  assert.deepEqual(U.after(UP, ORDER, 3), UP[0], "the last wraps to the head");
+});
+
+test("with the reader closed the head counts as current, and a manga not in Up next gives the head", () => {
+  assert.deepEqual(U.after(UP, ORDER, null), UP[1], "reader closed");
+  assert.deepEqual(U.after(UP, ORDER, 9), UP[0], "not in Up next");
+  assert.deepEqual(U.after([UP[0]], [1], 1), UP[0], "alone in Up next");
+  assert.equal(U.after([], [], null), undefined, "empty: the caller opens the Library");
+});
+
+test("the next key walks the order the run started with, though reading moves the read manga to the head", () => {
+  const reread = [UP[1], UP[0], UP[2]];
+  assert.deepEqual(U.after(reread, ORDER, 2), UP[2], "manga 2 was just opened, so it leads Up next now");
+  assert.deepEqual(U.after([UP[0], UP[1]], ORDER, 2), UP[0], "manga 3 left Up next since the run began: skipped");
+});

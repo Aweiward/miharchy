@@ -21,6 +21,7 @@ esac`,
 echo "hyprctl $*" >> "$STUB_LOG"
 case "$1 $2" in
   "clients -j") printf '%s\\n' "$STUB_CLIENTS" ;;
+  "monitors -j") printf '%s\\n' "$STUB_MONITORS" ;;
   "dispatch hl.dsp"*) exit "$STUB_LUA_RC" ;;
 esac`,
 };
@@ -136,6 +137,34 @@ test("a second peek while the first window is still starting starts no other win
   const calls = run(["peek"], { STUB_LIST_AFTER: RUNNING }, true);
   assert.deepEqual(launches(calls), []);
   assert.deepEqual(dispatches(calls), []);
+});
+
+const IPC_NEXT = "quickshell ipc -p " + dir + " call miharchy peekNext | MIHARCHY_OPEN_CHAPTER=";
+
+test("peek-next on a hidden peek moves it to the next manga and shows it", () => {
+  const calls = run(["peek-next"], { STUB_LIST: RUNNING, STUB_CLIENTS: PEEKED, STUB_IPC_RC: "0", STUB_MONITORS: '[{"specialWorkspace":{"name":""}}]' });
+  assert.ok(calls.includes(IPC_NEXT), calls.join("\n"));
+  assert.deepEqual(dispatches(calls), [LUA_TOGGLE]);
+  assert.deepEqual(launches(calls), []);
+});
+
+test("peek-next on a peek already shown moves it and leaves it shown", () => {
+  const calls = run(["peek-next"], { STUB_LIST: RUNNING, STUB_CLIENTS: PEEKED, STUB_IPC_RC: "0", STUB_MONITORS: '[{"specialWorkspace":{"name":"special:miharchy"}}]' });
+  assert.ok(calls.includes(IPC_NEXT), calls.join("\n"));
+  assert.deepEqual(dispatches(calls), []);
+});
+
+test("peek-next on a window in a normal workspace moves it and focuses it there", () => {
+  const calls = run(["peek-next"], { STUB_LIST: RUNNING, STUB_IPC_RC: "0" });
+  assert.ok(calls.includes(IPC_NEXT), calls.join("\n"));
+  assert.deepEqual(dispatches(calls), [LUA_FOCUS]);
+  assert.deepEqual(launches(calls), []);
+});
+
+test("peek-next with no window running starts a peek on the next manga and shows it", () => {
+  const calls = run(["peek-next"], { STUB_LIST_AFTER: RUNNING, STUB_VIEW: "1" });
+  assert.deepEqual(launches(calls), ["quickshell -n -p " + dir + " | MIHARCHY_OPEN_CHAPTER= view= peek=next"]);
+  assert.deepEqual(dispatches(calls), [LUA_MOVE, LUA_TOGGLE]);
 });
 
 test("a peek that started its window, or gave up, leaves no start marker behind", () => {
