@@ -216,5 +216,6 @@ _Avoid_: interstitial, chapter break
 - "Base" first meant one backup shared by both sides. Resolved: each side has its own **baseline**, because the phone may never restore what the desktop wrote.
 - "Stale" was proposed for a phone that ignores desktop backups. Resolved: the phone is **behind**; nothing on it is out of date by its own rules.
 - "Health" was proposed for the library check. Resolved: **sync health** keeps "health"; the screen is the **library check**, and what it finds are **problems**.
+- "Trip pack" was proposed for downloading the next chapters of many manga at once. Resolved: it is a **download** of the next chapters of a set of manga; no new term.
 - "Queue" was proposed for the manga a peek offers. Resolved: it is **Up next**; "queue" stays with downloads.
 - "Export" names the backup a sync writes. Resolved: it is a **desktop backup**, as "export" already means a one-way dump.
