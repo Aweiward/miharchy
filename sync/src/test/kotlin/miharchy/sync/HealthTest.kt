@@ -49,6 +49,13 @@ class HealthTest {
         assertNull(pendingSince(previous = first, pending = false, now = later))
     }
 
+    @Test fun `a phone that caught up with the last desktop backup between syncs starts the clock again`() {
+        val old = at("2026-10-01T10:00:00Z")
+        val now = at("2026-10-05T10:00:00Z")
+        assertEquals(now, pendingSince(previous = old, pending = true, now = now, caughtUp = true))
+        assertEquals(old, pendingSince(previous = old, pending = true, now = now, caughtUp = false))
+    }
+
     @Test fun `the phone is behind once three phone backups came after the change and none restored it`() {
         val since = at("2026-10-06T10:00:00Z")
         val before = at("2026-10-06T09:00:00Z")

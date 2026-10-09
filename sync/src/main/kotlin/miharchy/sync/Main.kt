@@ -27,7 +27,7 @@ private const val USAGE = """usage: miharchy-sync sync [--folder <sync folder>] 
        miharchy-sync check <backup file>
        miharchy-sync restore <backup file>
        miharchy-sync backup <folder>
-       miharchy-sync health [--folder <sync folder>] [--json]"""
+       miharchy-sync health [--folder <sync folder>]"""
 
 /** Backups Miharchy writes to the sync folder start with this, so a sync never mistakes them for phone backups. */
 const val OWN_BACKUP_PREFIX = "miharchy-"
@@ -113,13 +113,15 @@ private fun sync(folderArg: String?, dryRun: Boolean, apply: Boolean): Summary {
     phoneBytes?.let { writePrivately(stateDir.resolve("phone-baseline.tachibk"), it) }
 
     val gap = (phoneNow ?: phoneBaseline)?.let { gap(it, decodeBackup(exported)) }
-    val since = pendingSince(readPendingSince(), gap?.restorable.orEmpty().isNotEmpty(), Instant.now())
+    // desktopBaseline is still the last desktop backup here.
+    val caughtUp = phoneNow != null && desktopBaseline != null && gap(phoneNow, desktopBaseline).restorable.isEmpty()
+    val since = pendingSince(readPendingSince(), gap?.restorable.orEmpty().isNotEmpty(), Instant.now(), caughtUp)
     if (since == null) PENDING_SINCE.deleteIfExists() else writePrivately(PENDING_SINCE, since.toString().toByteArray())
     val lost = gap?.byHand.orEmpty()
     return Summary(config.url, folder.toString(), phoneFile?.toString(), false, changes, exportFile.toString(), lost)
 }
 
-/** Sync health as one JSON line (`--json` is the only output). Reads only, so it takes no lock. */
+/** Sync health as one JSON line, the only output. Reads only, so it takes no lock. */
 private fun health(folderArg: String?) {
     val result = try {
         val folder = Path.of(folderArg ?: Desktop(ServerConfig.load()).syncFolder() ?: fail("No sync folder is set. Choose one in Setup or Settings."))

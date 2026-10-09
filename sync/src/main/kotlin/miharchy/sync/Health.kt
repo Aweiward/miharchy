@@ -22,8 +22,13 @@ private val MIHON_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm")
 fun phoneBackupTime(name: String, fileTime: Instant, zone: ZoneId): Instant =
     MIHON_NAME.find(name)?.let { LocalDateTime.parse(it.groupValues[1], MIHON_TIME).atZone(zone).toInstant() } ?: fileTime
 
-/** When a restore first had something to bring: kept while it still has, cleared once it has nothing. */
-fun pendingSince(previous: Instant?, pending: Boolean, now: Instant): Instant? = if (pending) previous ?: now else null
+/**
+ * When a restore first had something to bring: kept while it still has, cleared once it has nothing. A phone that
+ * [caughtUp] (its newest backup lacks nothing of the last desktop backup) ended the old wait between two syncs, so a
+ * new change starts the clock again instead of counting the phone backups that came while nothing was pending.
+ */
+fun pendingSince(previous: Instant?, pending: Boolean, now: Instant, caughtUp: Boolean = false): Instant? =
+    if (pending) previous.takeUnless { caughtUp } ?: now else null
 
 fun behind(pending: Boolean, since: Instant?, phoneBackups: List<Instant>): Boolean =
     pending && since != null && phoneBackups.count { it > since } >= BEHIND_AFTER
