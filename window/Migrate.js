@@ -62,13 +62,16 @@ function plan(oldChapters, targetChapters) {
 // MigrateMangaUseCase. bindTrackRecord copies each record to the target in
 // the server's database, replacing the target's own track on that tracker;
 // it never calls the tracker, so it needs no login and pushes nothing.
-function targetPayload(old, targetId, p, withTracks) {
+// merge: the target is a library manga that stays (the library check's
+// duplicate merge). No clear, so it keeps its own categories and gains the
+// old ones; it is in the library already, so no default category joins.
+function targetPayload(old, targetId, p, withTracks, merge) {
   var mode = (old.meta || []).filter(function(m) { return m.key === MODE_KEY })[0]
   var tracks = withTracks ? trackRecords(old) : []
   var vars = { target: targetId, categories: old.categories.nodes.map(function(c) { return c.id }), read: p.read, bookmark: p.bookmark }
   var params = ["$target: Int!", "$categories: [Int!]!", "$read: [Int!]!", "$bookmark: [Int!]!"]
   var query = " library: updateManga(input: { id: $target, patch: { inLibrary: true } }) { manga { id } }"
-    + " categories: updateMangaCategories(input: { id: $target, patch: { clearCategories: true, addToCategories: $categories } }) { manga { id } }"
+    + " categories: updateMangaCategories(input: { id: $target, patch: { " + (merge ? "" : "clearCategories: true, ") + "addToCategories: $categories } }) { manga { id } }"
     + " read: updateChapters(input: { ids: $read, patch: { isRead: true } }) { chapters { id } }"
     + " bookmark: updateChapters(input: { ids: $bookmark, patch: { isBookmarked: true } }) { chapters { id } }"
   if (mode) {
