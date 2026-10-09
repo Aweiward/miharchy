@@ -25,6 +25,7 @@ var HAS_PEEK_KEY = "grep -qsE \"^[[:space:]]*[^[:space:]-].*miharchy'? peek\""
 // kind "run":     Miharchy runs the step after the user confirms with y;
 //                 prompt is the question it asks.
 // kind "folder":  the user types a path.
+// kind "check":   the user acts elsewhere (on the phone); Enter checks again.
 // required: the window opens on setup while one of these is not done.
 var STEPS = [
   { id: "java", title: "Java 21 or newer", kind: "install", required: true, command: "sudo pacman -S jdk-openjdk" },
@@ -33,6 +34,7 @@ var STEPS = [
   { id: "server", title: "Server service and credentials", kind: "run", required: true, prompt: "Run server/miharchy-server now?" },
   { id: "flaresolverr", title: "FlareSolverr (optional)", kind: "run", prompt: "Start the FlareSolverr container and turn it on in Suwayomi?" },
   { id: "syncFolder", title: "Sync folder", kind: "folder" },
+  { id: "phoneBackups", title: "Phone backups", kind: "check" },
   { id: "helper", title: "Sync helper", kind: "run", prompt: "Build the sync helper now? It takes a few minutes." },
   { id: "launcher", title: "App launcher entry", kind: "run", prompt: "Add Miharchy to the app launcher?" },
   { id: "peekKey", title: "Peek key", kind: "run", prompt: "Add " + PEEK_KEY + ", which shows and hides a peek, to your Hyprland bindings?" }
@@ -133,6 +135,34 @@ function peekLine(windowDir) {
   return "o.bind(\"" + PEEK_KEY + "\", \"Miharchy peek\", " + JSON.stringify(cmd) + ")"
 }
 
+// $1 is the sync folder. Phone backups count only at its top, where the
+// sync reads them; an autobackup folder below means Mihon's storage folder
+// was shared instead of its autobackup folder.
+var PHONE_PROBE = [
+  "list=$(find \"$1\" -maxdepth 1 -type f -name '*.tachibk' ! -name 'miharchy-*' -printf '%T@ %f\\n' 2>/dev/null | sort -n)",
+  "echo \"phones $(printf '%s' \"$list\" | grep -c .)\"",
+  "echo \"newest $(printf '%s\\n' \"$list\" | tail -n 1 | cut -d' ' -f2-)\"",
+  "test -d \"$1/autobackup\" && echo autobackup"
+].join("\n")
+
+function phoneProbeCommand(folder) {
+  return command(PHONE_PROBE, [folder])
+}
+
+// The phone check's output -> { count, newest, autobackup }.
+function parsePhones(text) {
+  var f = { count: 0, newest: "", autobackup: false }
+  String(text).split("\n").forEach(function(line) {
+    var sp = line.indexOf(" ")
+    var key = sp === -1 ? line : line.slice(0, sp)
+    var rest = sp === -1 ? "" : line.slice(sp + 1).trim()
+    if (key === "phones") f.count = parseInt(rest, 10) || 0
+    if (key === "newest") f.newest = rest
+    if (key === "autobackup") f.autobackup = true
+  })
+  return f
+}
+
 function probeCommand(configPath, syncDir, windowDir) {
   return command(PROBE, [configPath, syncDir, desktopEntry(windowDir), windowDir.replace(/\/window$/, "") + "/server/miharchy-server.service"])
 }
@@ -221,8 +251,9 @@ function warning(s) {
 // setup.job: the id of the running job ("probe" or a step id), or null.
 // setup.confirm: the step id waiting for y, or null.
 // setup.results: step id -> parseJob() of its last run.
+// setup.phones: parsePhones() of the sync folder, null before the phone check.
 function initial() {
-  return { probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {} }
+  return { probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {}, phones: null }
 }
 
 function copy(s, changes) {
@@ -244,6 +275,7 @@ function reduce(s, event) {
       return copy(s, { job: event.id, confirm: null })
     case "finish":
       if (event.id === "probe") return copy(s, { job: null, probe: parseProbe(event.text) })
+      if (event.id === "phones") return copy(s, { job: null, phones: parsePhones(parseJob(event.text).output) })
       var results = copy(s.results, {})
       results[event.id] = parseJob(event.text)
       return copy(s, { job: null, results: results })
@@ -302,6 +334,14 @@ function status(s, id) {
       if (status(s, "server").state !== "done" || !s.server) return is("waiting", "Needs the server running first.")
       if (s.server.syncFolder) return is("done", s.server.syncFolder)
       return is("todo", "Press Enter to choose the folder Mihon and Miharchy exchange backups through.")
+    case "phoneBackups":
+      if (status(s, "syncFolder").state !== "done") return is("waiting", "Needs the sync folder first.")
+      if (!s.phones) return is("checking", "")
+      var folder = s.server.syncFolder
+      var ph = s.phones
+      if (ph.count) return is("done", ph.count + " phone backup" + (ph.count === 1 ? "" : "s") + " in the sync folder, the newest " + ph.newest + ".")
+      if (ph.autobackup) return is("todo", folder + " looks like Mihon's storage folder: its phone backups are in the autobackup folder below. Set the sync folder to " + folder + "/autobackup, or share only that folder. Setup checks again on its own.")
+      return is("todo", "No phone backup in " + folder + " yet. In Mihon, turn on automatic backups (More → Settings → Data and storage) and share its autobackup folder with this folder. Then tap Create backup in Mihon, or wait for the automatic one. Setup checks again on its own.")
     case "helper":
       if (!p.javac) return is("waiting", "Building needs a JDK. Install it with: sudo pacman -S jdk-openjdk. Then press Enter to check again.")
       if (p.helperInstalled && p.helperInstalled === p.helperSource) return is("done", "Installed in ~/" + HELPER_DIR + ".")
@@ -324,7 +364,7 @@ function action(s, id) {
   var st = status(s, id).state
   if (st === "checking") return null
   var kind = step(id).kind
-  if (kind === "install" || st === "waiting" || st === "unavailable") return "check"
+  if (kind === "install" || kind === "check" || st === "waiting" || st === "unavailable") return "check"
   return kind === "run" ? "confirm" : "edit"
 }
 
@@ -337,9 +377,10 @@ function incomplete(s) {
 // The optional steps that are due, one key each: "launcher:todo", or for
 // an out-of-date helper its source fingerprint, so each plugin update that
 // changes sync/ is offered once. Empty until the probe and the server reply
-// are both in, since some steps depend on the server.
+// are both in, since some steps depend on the server, and until the phone
+// check is in once a sync folder is set.
 function offers(s) {
-  if (!s.probe || !s.server) return []
+  if (!s.probe || !s.server || (s.server.syncFolder && !s.phones)) return []
   var keys = []
   STEPS.forEach(function(st) {
     if (st.required) return
@@ -402,6 +443,8 @@ if (typeof module !== "undefined") {
     SERVER_QUERY: SERVER_QUERY,
     command: command,
     probeCommand: probeCommand,
+    phoneProbeCommand: phoneProbeCommand,
+    parsePhones: parsePhones,
     desktopEntry: desktopEntry,
     runCommand: runCommand,
     parseJob: parseJob,
