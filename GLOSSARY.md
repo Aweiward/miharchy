@@ -137,8 +137,16 @@ The full Miharchy window, with the views and the reader.
 _Avoid_: panel, client, app
 
 **Peek**:
-The window while it sits on Miharchy's own Hyprland special workspace, shown over the current workspace. The peek key shows and hides it. A new peek opens on the next chapter to read.
+The window while it sits on Miharchy's own Hyprland special workspace, shown over the current workspace. The peek key shows and hides it. A new peek opens on the next chapter of the first manga in Up next; the next key moves it to the next manga there.
 _Avoid_: scratchpad, overlay, quick read
+
+**Up next**:
+The ordered list of library manga that a peek offers, each with its next chapter. Miharchy works it out from read state, History and updates each time; the user never edits it.
+_Avoid_: queue, reading list, series
+
+**Catch-up**:
+A limit on how many chapters of one manga a peek reads in a row. After that many, the reader stops at the transition page and offers the next manga in Up next.
+_Avoid_: binge limit, session limit
 
 **View**:
 One screen of the window: Library, Updates, History, Browse or Settings. Exactly one view shows at a time.
@@ -183,4 +191,5 @@ _Avoid_: interstitial, chapter break
 - "Default" is a category in Suwayomi (id 0) and in Mihon's UI. Resolved: Default means a manga is in no **category**; it is never a user category, and the Library shows it only once user categories exist.
 - "Base" first meant one backup shared by both sides. Resolved: each side has its own **baseline**, because the phone may never restore what the desktop wrote.
 - "Stale" was proposed for a phone that ignores desktop backups. Resolved: the phone is **behind**; nothing on it is out of date by its own rules.
+- "Queue" was proposed for the manga a peek offers. Resolved: it is **Up next**; "queue" stays with downloads.
 - "Export" names the backup a sync writes. Resolved: it is a **desktop backup**, as "export" already means a one-way dump.
