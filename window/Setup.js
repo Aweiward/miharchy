@@ -239,9 +239,13 @@ function probeCommand(configPath, syncDir, windowDir, skipAur) {
 }
 
 // The job a confirmed or committed step runs.
-// ctx: { serverScript, folder, syncDir, windowDir, pair: pairing() }.
+// ctx: { serverScript, folder, syncDir, windowDir, pair: pairing(),
+// install: the packages step's command }.
 function runCommand(id, ctx) {
   switch (id) {
+    // The user sees this command in the terminal and types the password there;
+    // the launcher returns at once (ADR 0007).
+    case "packages": return command("omarchy-launch-floating-terminal-with-presentation \"$1\"", [ctx.install])
     case "server": return command("\"$1\"", [ctx.serverScript])
     case "flaresolverr": return command(FLARE_SCRIPT)
     case "syncFolder": return command("test -d \"$1\" || { echo \"$1 is not a folder.\"; exit 1; }", [ctx.folder])
@@ -425,7 +429,7 @@ function status(s, id) {
       else if (!p.suwayomi && p.aurSuwayomi === "?") prompt = "yay could not tell the AUR's Suwayomi-Server version. " + prompt
       return { state: "todo", command: installCommand(missing), prompt: prompt,
         detail: installing(s) ? "Installing in the terminal. Setup checks again every 5 s; Enter opens the terminal again."
-          : "Missing: " + missing.map(function(m) { return m.label }).join(", ") + ". Press Enter to install them through Omarchy in a terminal; you type your password there." }
+          : "Missing: " + missing.map(function(m) { return m.label }).join(", ") + ". Press Enter to install " + (missing.length === 1 ? "it" : "them") + " through Omarchy in a terminal; you type your password there." }
     case "server":
       if (status(s, "packages").state !== "done") return is("waiting", "Needs the packages first.")
       // Miharchy logs in with tokens (ADR 0005); servers set up before that run basic_auth.

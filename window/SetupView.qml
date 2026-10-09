@@ -62,7 +62,8 @@ Item {
   }
 
   function check() {
-    if (!setup.job) start("probe", Setup.probeCommand(configPath, syncDir, Quickshell.shellDir))
+    // The AUR is asked once; a recheck while installing skips it.
+    if (!setup.job) start("probe", Setup.probeCommand(configPath, syncDir, Quickshell.shellDir, !!(setup.probe && setup.probe.aurSuwayomi)))
   }
 
   function post(payload, done) {
@@ -91,6 +92,14 @@ Item {
     var p = setup.phones
     if (setup.job || setup.confirm || editing || !p || p.count || p.autobackup) return
     start("syncthing", Setup.syncthingProbeCommand(setup.server.syncFolder, qrPath))
+  }
+
+  // The install terminal returns at once: check again until the packages are in.
+  Timer {
+    interval: 5000
+    repeat: true
+    running: view.visible && Setup.installing(view.setup)
+    onTriggered: if (!view.setup.confirm && !view.editing) view.check()
   }
 
   // A phone backup lands while Setup is open: check again on our own. Also
@@ -162,7 +171,7 @@ Item {
         }
         break
       case "setup.confirm":
-        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup) }))
+        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup), install: Setup.status(setup, "packages").command || "" }))
         break
       case "setup.cancel":
         if (editing) endEdit()
@@ -287,7 +296,7 @@ Item {
 
       Text {
         visible: view.current.kind === "install" && view.currentStatus.state === "todo"
-        text: "$ " + (view.current.command || "")
+        text: "$ " + (view.currentStatus.command || "")
         color: view.theme.accent
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSize

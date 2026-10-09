@@ -506,6 +506,7 @@ test("the packages step is done once Java 21+, Suwayomi-Server and Qt WebSockets
   assert.equal(S.incomplete(none), true);
   const onlyJava = finish(S.initial(), "probe", READY.replace("26.0.2.1", "17.0.9"));
   assert.equal(S.status(onlyJava, "packages").prompt, "Install jdk-openjdk in a terminal?");
+  assert.equal(S.status(onlyJava, "packages").detail, "Missing: jdk-openjdk (Java 21 or newer). Press Enter to install it through Omarchy in a terminal; you type your password there.");
 });
 
 test("an AUR Suwayomi-Server newer than the checked one is named in the prompt; equal, older or unknown is not a warning", () => {
@@ -523,4 +524,16 @@ test("after the terminal opens, the step says it is installing and offers the te
   assert.equal(S.installing(launched), true);
   assert.equal(S.installing(finish(launched, "probe", READY)), false, "done ends it");
   assert.equal(S.action(launched, "packages"), "confirm");
+});
+
+test("y on the packages step opens Omarchy's terminal on exactly the missing packages, and returns at once", () => {
+  const record = (cmd) => {
+    const bin = stubs({ "omarchy-launch-floating-terminal-with-presentation": "printf '%s' \"$*\" > \"$(dirname \"$0\")/launched\"" });
+    const out = S.parseJob(run(S.runCommand("packages", { install: cmd }), { PATH: bin + ":/usr/bin:/bin", HOME: bin }));
+    return [out.code, fs.readFileSync(path.join(bin, "launched"), "utf8")];
+  };
+  const all = S.status(finish(S.initial(), "probe", "java java version \"1.8.0\"\naurSuwayomi 2.3.2243\n"), "packages").command;
+  assert.deepEqual(record(all), [0, "omarchy-pkg-add jdk-openjdk qt6-websockets && omarchy-pkg-aur-add suwayomi-server-bin"]);
+  const aurOnly = S.status(finish(S.initial(), "probe", READY.replace("suwayomi\n", "aurSuwayomi 2.3.2243\n")), "packages").command;
+  assert.deepEqual(record(aurOnly), [0, "omarchy-pkg-aur-add suwayomi-server-bin"]);
 });

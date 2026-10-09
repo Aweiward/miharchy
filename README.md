@@ -29,18 +29,16 @@ Run `omarchy-restart-shell` after every update. The shell reloads the plugin whe
 
 ## Setup
 
-Setup lists the steps below. Move with `j` and `k`, press Enter on a step. A step that changes your system asks first: press `y` to run it, `n` to cancel. Setup never runs `sudo` or installs packages; for those it shows the command to run in a terminal. Every step checks its own state, so you can run Setup again at any time (`:` then Setup).
+Setup lists the steps below. Move with `j` and `k`, press Enter on a step. A step that changes your system asks first: press `y` to run it, `n` to cancel. Setup never runs `sudo` out of sight: the one step that installs packages opens Omarchy's terminal on the exact command, and you type your password there. Every step checks its own state, so you can run Setup again at any time (`:` then Setup).
 
-1. Java: `sudo pacman -S jdk-openjdk`.
-2. Suwayomi-Server: `yay -S suwayomi-server-bin`.
-3. Qt WebSockets: `sudo pacman -S qt6-websockets`. The download queue and Updates use it to show changes as they happen.
-4. Server: runs `server/miharchy-server`. It creates `~/.config/miharchy/server.json` with a random password and enables the `miharchy-server` user service on `127.0.0.1:4590`.
-5. FlareSolverr (optional, needs Docker): starts the `miharchy-flaresolverr` container on `127.0.0.1:8191` for Cloudflare sources.
-6. Sync folder: the folder Mihon and Miharchy exchange backups through.
-7. Phone backups: done once a phone backup has landed in the sync folder. Until then it says what to do in Mihon, and checks again on its own while Setup is open. With Syncthing running, it pairs the phone: it shows this desktop's Syncthing ID as a QR code to scan in Syncthing-Fork, then `y` accepts the phone and the folder it shares, into the sync folder. Several offered folders, none named `autobackup`: accept the right one in Syncthing's page (http://127.0.0.1:8384). A sync folder that holds only a folder named `autobackup` is Mihon's storage folder: set the sync folder to that `autobackup` folder instead.
-8. Sync helper: builds the sync helper into `~/.local/share/miharchy/helper`. The first build downloads Gradle and libraries and takes a few minutes. After `omarchy plugin update` the step shows "out of date" when the helper changed; build it again.
-9. App launcher entry: writes `~/.local/share/applications/miharchy.desktop`, so Miharchy shows in the app launcher (Super + Space).
-10. Peek key: adds `SUPER + M` to `~/.config/hypr/bindings.lua`, once. If `SUPER + M` is taken, or the file is missing, Setup shows the line to add yourself with another key. A bind you moved to another key stays as it is.
+1. Packages: installs what a stock Omarchy lacks (a JDK 21+, `qt6-websockets`, `suwayomi-server-bin`) through `omarchy-pkg-add` and `omarchy-pkg-aur-add`, after `y`, in Omarchy's floating terminal. If the AUR's Suwayomi-Server is newer than the version Miharchy is checked with, it says so first.
+2. Server: runs `server/miharchy-server`. It creates `~/.config/miharchy/server.json` with a random password and enables the `miharchy-server` user service on `127.0.0.1:4590`.
+3. FlareSolverr (optional, needs Docker): starts the `miharchy-flaresolverr` container on `127.0.0.1:8191` for Cloudflare sources.
+4. Sync folder: the folder Mihon and Miharchy exchange backups through.
+5. Phone backups: done once a phone backup has landed in the sync folder. Until then it says what to do in Mihon, and checks again on its own while Setup is open. With Syncthing running, it pairs the phone: it shows this desktop's Syncthing ID as a QR code to scan in Syncthing-Fork, then `y` accepts the phone and the folder it shares, into the sync folder. Several offered folders, none named `autobackup`: accept the right one in Syncthing's page (http://127.0.0.1:8384). A sync folder that holds only a folder named `autobackup` is Mihon's storage folder: set the sync folder to that `autobackup` folder instead.
+6. Sync helper: builds the sync helper into `~/.local/share/miharchy/helper`. The first build downloads Gradle and libraries and takes a few minutes. After `omarchy plugin update` the step shows "out of date" when the helper changed; build it again.
+7. App launcher entry: writes `~/.local/share/applications/miharchy.desktop`, so Miharchy shows in the app launcher (Super + Space).
+8. Peek key: adds `SUPER + M` to `~/.config/hypr/bindings.lua`, once. If `SUPER + M` is taken, or the file is missing, Setup shows the line to add yourself with another key. A bind you moved to another key stays as it is.
 
 ## Peek
 
