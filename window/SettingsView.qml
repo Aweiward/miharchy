@@ -57,15 +57,19 @@ Item {
   property var backup: Backup.initial()
   // Sync health, which SyncView reads; healthWanted asks it to read again.
   property var health: ({ state: "idle" })
+  // The library check's count, LibraryCheckView.countText; checkWanted asks it to load.
+  property string checkCount: ""
   readonly property var notes: ({
     createBackup: Backup.note(backup),
-    syncHealth: health.state === "ready" ? Sync.healthSummary(health.health, Date.now()) : health.state === "failed" ? health.message : ""
+    syncHealth: health.state === "ready" ? Sync.healthSummary(health.health, Date.now()) : health.state === "failed" ? health.message : "",
+    libraryCheck: checkCount
   })
   readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
 
   signal key(var event)
   signal editEnded()
   signal healthWanted()
+  signal checkWanted()
   // A click puts shell.qml's cursor on a row; a double click then sends Enter.
   signal picked(int index)
 
@@ -77,6 +81,7 @@ Item {
 
   onVisibleChanged: if (visible) {
     healthWanted()
+    checkWanted()
     loadTrackers()
     storageNote = ""
     measure()

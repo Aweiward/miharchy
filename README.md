@@ -63,6 +63,19 @@ The mark's popup lists the first 3 manga in Up next above the new chapters. Each
 
 **Catch-up.** A peek reads at most 3 chapters of one manga in a row. After the third, the reader stops on the chapter transition page, says "Caught up on 3 chapters" and names the next manga in Up next. Press `c` to go on with this manga anyway, or `n` to open the next manga, as `SUPER + CTRL + M` would. Every peek that opens a manga, `n`, `SUPER + CTRL + M` and the popup's Up next rows too, starts a new count. Change the number, or turn it off, with the Settings row "Catch-up". A chapter counts when you read on past its end, in Incognito mode too. A chapter you open from the Library, Updates, History or the popup's new chapters is a normal read and never stops.
 
+## Library check
+
+Press `!` on the Library, or open Settings → Library check, to list the problems in your library. The row shows how many there are. The check reads only what the server knows, so it contacts no source. It groups the problems by kind, then by source:
+
+1. Source missing: the manga's extension is not installed.
+2. Update failed: library updates ran, but the manga got no chapter fetch for 14 days. A manga that the update skips on purpose (the skip settings, or fetch once) never counts.
+3. No chapters.
+4. Extension update: the extension that serves the manga has an update. Press Enter on the row to update it.
+5. Duplicate: two library manga with the same title, or nearly the same, from any sources.
+6. Stalled: an ongoing manga with no new chapter for 6 months.
+
+Press `space` to select a problem, or a whole group on its header. Press `x` to dismiss the selected problems, or the one under the cursor. Press `X` to see the dismissed problems, and `x` there to bring one back. A dismissed stalled problem comes back when a new chapter arrives.
+
 ## Sync with Mihon
 
 1. In Mihon, turn on automatic backups (More → Settings → Data and storage).

@@ -615,6 +615,10 @@ ShellRoot {
       setupView.run(id)
       return
     }
+    if (id.indexOf("check.") === 0) {
+      checkView.run(id)
+      return
+    }
     if (id === "updates.clearSelection" && !updatesView.selected.length) {
       run("window.quit")
       return
@@ -817,6 +821,7 @@ ShellRoot {
           libraryStore.load()
           settingsView.loadTrackers()
           updatesView.load()
+          if (view === "check") checkView.load()
         }
         configFile.reload()
         break
@@ -981,6 +986,8 @@ ShellRoot {
           editError: root.settingsError
           health: syncView.health
           onHealthWanted: syncView.refreshHealth()
+          checkCount: checkView.countText
+          onCheckWanted: checkView.load()
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onPicked: function(index) { root.settingsCursor = index }
           onEditEnded: keyRoot.forceActiveFocus()
@@ -1060,6 +1067,17 @@ ShellRoot {
           onNeeded: if (root.view === "library") root.view = "setup"
           onWrote: configFile.reload()
           onEditEnded: keyRoot.forceActiveFocus()
+        }
+
+        LibraryCheckView {
+          id: checkView
+          anchors.fill: parent
+          visible: root.view === "check"
+          active: visible
+          theme: theme
+          config: root.config
+          configPath: root.configPath
+          onKey: function(event) { event.accepted = root.handleKey(event) }
         }
 
         Text {
@@ -1157,7 +1175,7 @@ ShellRoot {
           id: hintBar
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.trackAsk ? "y update   n keep" : syncView.open || restoreView.open ? "" : libraryView.editing || historyView.editing ? "enter keep   esc clear" : mangaDetail.writing ? "enter save   shift+enter new line   esc cancel" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || mangaDetail.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryHint, updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: browseView.panel || browseView.screen !== "extensions" ? browseView.hint : extensionsView.hint + (extensionsView.details ? "" : browseView.hint), setup: "j k move   enter act   " })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: root.trackAsk ? "y update   n keep" : syncView.open || restoreView.open ? "" : libraryView.editing || historyView.editing ? "enter keep   esc clear" : mangaDetail.writing ? "enter save   shift+enter new line   esc cancel" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || mangaDetail.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryHint, updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: browseView.panel || browseView.screen !== "extensions" ? browseView.hint : extensionsView.hint + (extensionsView.details ? "" : browseView.hint), setup: "j k move   enter act   ", check: checkView.hint })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           maxWidth: parent.width - connectionText.width - theme.fontSize * 2 - (codeHint.visible ? codeHint.width + theme.fontSize * 2 : 0)
           theme: theme
           onKey: function(event) { root.handleKey(event) }

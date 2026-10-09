@@ -40,7 +40,7 @@ Read the doc for the area before you change it.
 
 - **Bar mark, popup, launcher, notifications** (`plugin/`, `window/miharchy`): `docs/agents/plugin.md`.
 - **Window views, mouse, Settings, modes, preferences, reader chapter list, restart** (`window/`): `docs/agents/window.md`.
-- **Library updates, categories, downloads, Migrate, History**: `docs/agents/library.md`.
+- **Library updates, categories, downloads, Migrate, History, the library check**: `docs/agents/library.md`.
 - **Browse, local manga, extensions, source filters, FlareSolverr**: `docs/agents/sources.md`.
 - **Trackers** (`Trackers.js`, `TrackPanel.qml`, progress pushes): `docs/agents/trackers.md`.
 - **Sync, backups, restore** (`sync/`, `Sync.js`, `Backup.js`, `Restore.js`): `docs/agents/sync.md`.

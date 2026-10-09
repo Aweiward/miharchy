@@ -35,6 +35,7 @@ var KEY = {
 // manga-download, manga-duplicates, manga-select, manga-track,
 // manga-track-pick, track-ask, downloads, reader, reader-settings, sync,
 // sync-held,
+// the library check: check,
 // or a restore step: restore-confirm, -checking, -running, -done, -failed,
 // or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
 // -done) shows;
@@ -46,6 +47,7 @@ var commands = [
   { id: "view.browse", title: "Browse", keys: ["4"] },
   { id: "view.settings", title: "Settings", keys: ["5"] },
   { id: "view.setup", title: "Setup", keys: [] },
+  { id: "view.check", title: "Library check", keys: [] },
   { id: "downloads.open", title: "Download queue", keys: [] },
   { id: "sync.now", title: "Sync now", keys: [] },
   { id: "sync.undo", title: "Undo the last sync", keys: [] },
@@ -340,6 +342,15 @@ var commands = [
   { id: "categories.keepDownloads", title: "Keep or delete read downloads", keys: ["p"], view: "categories", hidden: true },
   { id: "setup.up", title: "Previous step", keys: ["k", "Up"], view: "setup", hidden: true },
   { id: "setup.down", title: "Next step", keys: ["j", "Down"], view: "setup", hidden: true },
+  // !, as in "what is wrong": every letter near it means something on the Library.
+  { id: "view.check", title: "Library check", keys: ["!"], view: "library", hidden: true },
+  { id: "check.up", title: "Previous row", keys: ["k", "Up"], view: "check", hidden: true },
+  { id: "check.down", title: "Next row", keys: ["j", "Down"], view: "check", hidden: true },
+  // Space and x as on Updates: select, then act on the selection or the row.
+  { id: "check.select", title: "Select the problem or its group", keys: ["Space"], view: "check", hidden: true },
+  { id: "check.dismiss", title: "Dismiss the problem, or bring a dismissed one back", keys: ["x"], view: "check", hidden: true },
+  { id: "check.dismissed", title: "Show the dismissed problems, or the others", keys: ["X"], view: "check", hidden: true },
+  { id: "check.activate", title: "Update the extension", keys: ["Enter"], view: "check", hidden: true },
   // M, not m: m is the reader's reading mode, and a migration is a big step.
   { id: "manga.migrate", title: "Migrate to another source", keys: ["M"], view: "manga", hidden: true },
   { id: "migrate.batch", title: "Migrate a source", keys: ["M"], view: "sources", hidden: true },

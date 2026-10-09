@@ -249,6 +249,13 @@ test("Create a backup is an action: Enter runs its command and the row shows the
   assert.doesNotMatch(S.loadPayload().query, /createBackup/);
 });
 
+test("Library check is an action row: Enter opens the check, the row shows the count", () => {
+  const r = row("libraryCheck");
+  assert.equal(r.label, "Library check");
+  assert.deepEqual(S.activate(r, undefined), { run: "view.check" });
+  assert.equal(S.display(r, "7 problems"), "7 problems");
+});
+
 test("the sync folder is the meta Setup writes, shown as not set until then", () => {
   const folder = row("syncFolder");
   assert.deepEqual(S.savePayload(folder, "/home/u/Sync").variables, { key: "miharchy.syncFolder", value: "/home/u/Sync" });
