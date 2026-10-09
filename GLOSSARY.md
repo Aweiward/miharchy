@@ -64,6 +64,18 @@ _Avoid_: service, site, list
 The link between a manga and its entry on one tracker, with that entry's status, chapters read and score.
 _Avoid_: sync (Suwayomi's API names, bind and track record, stay in code)
 
+**Library check**:
+The screen that lists the problems in the library and leads to their fix. It is not one of the views.
+_Avoid_: doctor, health, audit
+
+**Problem**:
+One thing the library check found about a library manga: its source is missing, its update failed, it has no chapters, its extension has an update, it duplicates another library manga, or it stalled. A dismissed problem stays hidden until it changes.
+_Avoid_: issue, error, warning
+
+**Stalled**:
+A manga whose publication status is ongoing that got no new chapter for months.
+_Avoid_: dead, abandoned, hiatus
+
 **Download**:
 A chapter stored on disk for offline reading.
 _Avoid_: cache, offline copy
@@ -191,5 +203,6 @@ _Avoid_: interstitial, chapter break
 - "Default" is a category in Suwayomi (id 0) and in Mihon's UI. Resolved: Default means a manga is in no **category**; it is never a user category, and the Library shows it only once user categories exist.
 - "Base" first meant one backup shared by both sides. Resolved: each side has its own **baseline**, because the phone may never restore what the desktop wrote.
 - "Stale" was proposed for a phone that ignores desktop backups. Resolved: the phone is **behind**; nothing on it is out of date by its own rules.
+- "Health" was proposed for the library check. Resolved: **sync health** keeps "health"; the screen is the **library check**, and what it finds are **problems**.
 - "Queue" was proposed for the manga a peek offers. Resolved: it is **Up next**; "queue" stays with downloads.
 - "Export" names the backup a sync writes. Resolved: it is a **desktop backup**, as "export" already means a one-way dump.
