@@ -265,7 +265,7 @@ Rectangle {
     var cfg = config
     Migrate.checks(batch).forEach(function(i) {
       var payload = Migrate.checkPayload(view.batch, i)
-      view.batch = Migrate.reduceBatch(view.batch, i, { type: "check" })
+      view.batch = Migrate.reduceBatch(view.batch, i, { type: "check", now: Date.now() })
       view.batchXhrs[i] = send(payload, function(reply) {
         if (s !== view.seq) return
         view.batch = Migrate.reduceBatch(view.batch, i, { type: "checked", reply: reply })
@@ -292,7 +292,7 @@ Rectangle {
       view.search = GlobalSearch.reduce(view.search, i, { type: "timeout" })
       view.searchXhrs[i].abort()
     })
-    if (batch) GlobalSearch.expired(batch.search, now).forEach(function(i) {
+    if (batch) Migrate.expired(batch, now).forEach(function(i) {
       view.batch = Migrate.reduceBatch(view.batch, i, { type: "timeout" })
       view.batchXhrs[i].abort()
     })
@@ -495,6 +495,7 @@ Rectangle {
     interval: 1000
     repeat: true
     running: [view.search, view.batch && view.batch.search].some(function(s) { return s && s.groups.some(function(g) { return g.state === "loading" }) })
+      || !!(view.batch && view.batch.held.some(function(h) { return h && h.state === "loading" }))
     onTriggered: view.expire()
   }
 

@@ -286,6 +286,14 @@ function newest(chapters) {
   return chapters.filter(recognized).reduce(function(n, c) { return Math.max(n, c.chapterNumber) }, -1)
 }
 
+// The searches and chapter checks waiting past their deadline at now (ms);
+// each gets a "timeout".
+function expired(b, now) {
+  var out = GlobalSearch.expired(b.search, now)
+  b.held.forEach(function(h, i) { if (h && h.state === "loading" && h.deadline <= now) out.push(i) })
+  return out
+}
+
 function advance(b, index) {
   var at = b.at[index] + 1
   if (at >= b.manga[index].targets.length) return b
@@ -296,12 +304,14 @@ function advance(b, index) {
 }
 
 // event: a GlobalSearch.reduce event for group index, or "check" (its
-// chapter check is sent) and "checked" { reply }. A stalled manga takes a
+// chapter check is sent, with now) and "checked" { reply }; a "timeout"
+// fails a waiting check as it does a search. A stalled manga takes a
 // match only when it has a higher chapter number than the old manga's
 // highest.
 function reduceBatch(b, index, event) {
   var h = b.held[index]
-  if (event.type === "check") return set(b, "held", index, copy(h, { state: "loading" }))
+  if (event.type === "check") return set(b, "held", index, copy(h, { state: "loading", deadline: event.now + GlobalSearch.TIMEOUT }))
+  if (event.type === "timeout" && h && h.state === "loading") event = { type: "checked", reply: { state: "timeout" } }
   if (event.type === "checked") {
     if (!h || h.state !== "loading") return b
     var r = event.reply
@@ -392,6 +402,7 @@ if (typeof module !== "undefined") {
     due: due,
     checks: checks,
     checkPayload: checkPayload,
+    expired: expired,
     reduceBatch: reduceBatch,
     pick: pick,
     chosen: chosen,

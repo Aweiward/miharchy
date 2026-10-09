@@ -250,6 +250,22 @@ test("a failed chapter check on the last source waits for r, not a verdict", () 
   assert.deepEqual(Mi.checks(Mi.retry(b)), [0]);
 });
 
+test("a chapter check times out as a search does: on to the next source, or on the last one wait for r", () => {
+  let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [sources[1], sources[2]] }]);
+  b = answer(b, 0, reply("Eleceed"));
+  b = Mi.reduceBatch(b, 0, { type: "check", now: 1000 });
+  assert.deepEqual(Mi.expired(b, 1000 + G.TIMEOUT - 1), []);
+  assert.deepEqual(Mi.expired(b, 1000 + G.TIMEOUT), [0]);
+  b = Mi.reduceBatch(b, 0, { type: "timeout" });
+  assert.equal(G.payload(b.search.groups[0]).variables.source, "3", "on to the next source");
+  assert.deepEqual(Mi.due(b), [0]);
+  b = answer(b, 0, reply("Eleceed"));
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check", now: 0 }), 0, { type: "timeout" });
+  assert.match(Mi.matchStatus(b, 0, "/c"), /^chapter check failed\. Press r to retry\./);
+  assert.equal(Mi.reduceBatch(b, 0, { type: "checked", reply: ok({ fetchMangaAndChapters: { chapters: [ch(400)] } }) }), b, "a late reply drops");
+  assert.deepEqual(Mi.checks(Mi.retry(b)), [0]);
+});
+
 test("a manga with no source to search says so and migrates nothing", () => {
   const b = Mi.batch([{ id: 1, title: "Eleceed", targets: [] }]);
   assert.deepEqual(Mi.due(b), []);
