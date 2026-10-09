@@ -59,6 +59,8 @@ Press `SUPER + SHIFT + M` to show the peek on the next manga in Up next, at its 
 - With nothing left to read, the peek opens the Library with its search.
 - From a terminal: `~/.config/omarchy/plugins/miharchy/window/miharchy peek`, or `peek-next` for the next manga.
 
+**Catch-up.** A peek reads at most 3 chapters of one manga in a row. After the third, the reader stops on the chapter transition page, says "Caught up on 3 chapters" and names the next manga in Up next. Press `c` to go on with this manga anyway, or `n` to open the next manga, as `SUPER + SHIFT + M` would. Every peek that opens a manga, `n` and `SUPER + SHIFT + M` too, starts a new count. Change the number, or turn it off, with the Settings row "Catch-up". A chapter counts when you read on past its end, in Incognito mode too. A chapter you open from the Library, Updates, History or the mark is a normal read and never stops.
+
 ## Sync with Mihon
 
 1. In Mihon, turn on automatic backups (More → Settings → Data and storage).
