@@ -72,10 +72,14 @@ Rectangle {
   // Each page's image size by URL, once its slot decodes it: what spreads
   // and split pages need to know (Reader.spreadAt).
   property var pageSizes: ({})
+  // O shows the original pages: no crop, no levels, until O again or the
+  // reader opens anew. Every page cleanup checks this one property.
+  property bool original: false
   // Crop borders: whether the mode shown crops, and each page's analysis by
   // URL (Scan.analyze() with the page's size, ms: how long it took; or
   // { failed, ms }). A page waits for its analysis while the mode crops.
-  readonly property bool cropping: open && values[inStrip ? "cropBordersWebtoon" : "cropBordersPaged"] === true
+  // The analyses stay while the original shows, so O again crops at once.
+  readonly property bool cropping: open && !original && values[inStrip ? "cropBordersWebtoon" : "cropBordersPaged"] === true
   property var scans: ({})
   // Spreads, split pages and crops, as the turn and the pager take them.
   readonly property var layout: ({ dual: open && Reader.dual(reader.mode, values.dualPageView, { width: width, height: height }), split: values.dualPageSplit === true, sizes: pageSizes, crops: cropping ? scans : null })
@@ -207,6 +211,7 @@ Rectangle {
     source = { chapters: chapters, prefs: defaults }
     zoom = 1
     autoSpeed = 0
+    original = false
     upNext = undefined
     reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title, peek)
     pageSizes = {}
@@ -474,6 +479,9 @@ Rectangle {
         return
       case "reader.settingsChoose":
         choose()
+        return
+      case "reader.original":
+        original = !original
         return
       case "reader.savePage":
       case "reader.copyPage":
@@ -1050,7 +1058,7 @@ Rectangle {
     anchors.left: incognitoMark.visible ? incognitoMark.right : parent.left
     anchors.bottom: parent.bottom
     anchors.margins: view.theme.fontSize
-    text: view.reader ? Reader.chapterName(view.reader) + (view.reader.chapters[view.reader.index].bookmarked ? "   bookmarked" : "") + ({ first: "   no previous chapter", last: "   no next chapter" }[view.reader.edge] || "") + (view.note ? "   " + view.note : "") : ""
+    text: view.reader ? Reader.chapterName(view.reader) + (view.reader.chapters[view.reader.index].bookmarked ? "   bookmarked" : "") + ({ first: "   no previous chapter", last: "   no next chapter" }[view.reader.edge] || "") + (view.original ? "   original page" : "") + (view.note ? "   " + view.note : "") : ""
     color: view.theme.muted
     font.family: view.theme.fontFamily
     font.pixelSize: view.theme.fontSmall

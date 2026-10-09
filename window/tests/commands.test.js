@@ -363,6 +363,9 @@ test("in the reader, ] and [ change chapter, Home and End go to the first and la
   assert.equal(C.dispatch(r, text("S")), "reader.savePage");
   assert.equal(C.dispatch(r, text("Y")), "reader.copyPage");
   assert.equal(C.dispatch(r, text("a")), "reader.autoScroll");
+  assert.equal(C.dispatch(r, text("O")), "reader.original");
+  assert.equal(C.dispatch(screen("reader-settings"), text("O")), null, "the original pages key only in the reader");
+  assert.equal(C.dispatch(screen("library"), text("O")), null);
   assert.equal(C.dispatch(screen("library"), key(C.KEY.Home)), null);
   const field = { palette: false, view: "reader", editing: "reader" };
   assert.equal(C.dispatch(field, key(C.KEY.Return)), "reader.commit");
