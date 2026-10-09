@@ -14,8 +14,8 @@ var REFRESH = "mutation($refreshToken: String!) { refreshToken(input: { refreshT
 
 // The newest Suwayomi-Server version this login has been checked against
 // (ADR 0005). Setup and the mark warn about a newer server; nothing refuses
-// it. The AUR package (#43) reads this line for its suwayomi-server-bin<=
-// dependency, so it stays one quoted literal.
+// it. Setup's packages step compares the AUR's version with it before an
+// install (ADR 0007).
 var APPROVED_SUWAYOMI = "v2.4.2366"
 
 // "v2.4.2366" -> [2, 4, 2366]; anything else -> null.

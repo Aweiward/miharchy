@@ -55,14 +55,10 @@ test("java versions parse, old and missing ones are not enough", () => {
   assert.equal(java("openjdk version \"21.0.2\" 2024-01-16"), 21);
   assert.equal(java("java version \"1.8.0_201\""), 8);
   assert.equal(java("sh: line 1: java: command not found"), 0);
-  assert.equal(S.status(finish(S.initial(), "probe", "java java version \"1.8.0\""), "java").state, "todo");
+  assert.equal(S.status(finish(S.initial(), "probe", "java java version \"1.8.0\""), "packages").state, "todo");
 });
 
-test("install commands are shown, never run, and no step uses sudo", () => {
-  assert.equal(S.STEPS.find((st) => st.id === "java").command, "sudo pacman -S jdk-openjdk");
-  assert.equal(S.STEPS.find((st) => st.id === "suwayomi").command, "yay -S suwayomi-server-bin");
-  assert.equal(S.runCommand("java", {}), null);
-  assert.equal(S.runCommand("suwayomi", {}), null);
+test("no step but packages installs anything, and none runs sudo itself", () => {
   for (const id of ["server", "flaresolverr", "syncFolder", "helper", "launcher", "peekKey"]) assert.doesNotMatch(S.runCommand(id, { serverScript: "x", folder: "/", syncDir: "/s", windowDir: "/w" }).join(" "), /sudo|pacman|yay/, id);
 });
 
@@ -79,32 +75,31 @@ test("nothing is decided before the first check", () => {
   assert.ok(S.STEPS.every((st) => S.action(s, st.id) === null));
 });
 
-test("a set-up machine shows steps 1-4 done and is complete", () => {
+test("a set-up machine shows steps 1-2 done and is complete", () => {
   const s = finish(S.initial(), "probe", READY);
-  assert.deepEqual(states(s), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "waiting", syncFolder: "waiting", phoneBackups: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
+  assert.deepEqual(states(s), { packages: "done", server: "done", flaresolverr: "waiting", syncFolder: "waiting", phoneBackups: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
   assert.equal(S.incomplete(s), false);
   const loaded = server(s, { settings: FLARE_OFF, metas: { nodes: [] } });
-  assert.deepEqual(states(loaded), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "todo", syncFolder: "todo", phoneBackups: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
-  assert.equal(S.next(loaded), 4);
+  assert.deepEqual(states(loaded), { packages: "done", server: "done", flaresolverr: "todo", syncFolder: "todo", phoneBackups: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
+  assert.equal(S.next(loaded), 2);
 });
 
-test("live updates need qt6-websockets, a step to install like Java", () => {
+test("live updates need qt6-websockets, one of the packages", () => {
   const s = finish(S.initial(), "probe", READY.replace("websockets\n", ""));
-  assert.equal(S.status(s, "websockets").state, "todo");
+  assert.equal(S.status(s, "packages").state, "todo");
+  assert.equal(S.status(s, "packages").command, "omarchy-pkg-add qt6-websockets");
   assert.equal(S.incomplete(s), true, "Downloads and Updates stop changing without it");
-  assert.equal(S.action(s, "websockets"), "check");
-  assert.equal(S.STEPS.find((st) => st.id === "websockets").command, "sudo pacman -S qt6-websockets");
   const probed = S.parseProbe(S.parseJob(run(S.probeCommand("/none", "/none", "/none"), { PATH: "/none", HOME: "/none" })).output);
   assert.equal(probed.websockets, fs.existsSync("/usr/lib/qt6/qml/QtWebSockets/qmldir"), "the probe looks where pacman installs the module");
 });
 
 test("missing pieces: each step says what to do, later steps wait", () => {
   const s = finish(S.initial(), "probe", "java sh: java: not found\nunit  \n");
-  assert.deepEqual(states(s), { java: "todo", suwayomi: "todo", websockets: "todo", server: "waiting", flaresolverr: "unavailable", syncFolder: "waiting", phoneBackups: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
+  assert.deepEqual(states(s), { packages: "todo", server: "waiting", flaresolverr: "unavailable", syncFolder: "waiting", phoneBackups: "waiting", helper: "waiting", launcher: "todo", peekKey: "todo" });
   assert.match(S.status(s, "flaresolverr").detail, /needs FlareSolverr/);
   assert.equal(S.incomplete(s), true);
   assert.equal(S.next(s), 0);
-  assert.equal(S.action(s, "java"), "check");
+  assert.equal(S.action(s, "packages"), "confirm");
   assert.equal(S.action(s, "server"), "check", "a waiting step only checks again");
 });
 
@@ -165,7 +160,7 @@ test("running setup twice changes nothing: a done machine stays done after anoth
   const phones = "phones 1\nnewest app.mihon_2026-10-09_05-31.tachibk\n\n0\n";
   const once = finish(server(finish(S.initial(), "probe", done), data), "phones", phones);
   const twice = finish(server(finish(once, "probe", done), data), "phones", phones);
-  assert.deepEqual(states(twice), { java: "done", suwayomi: "done", websockets: "done", server: "done", flaresolverr: "done", syncFolder: "done", phoneBackups: "done", helper: "done", launcher: "done", peekKey: "done" });
+  assert.deepEqual(states(twice), { packages: "done", server: "done", flaresolverr: "done", syncFolder: "done", phoneBackups: "done", helper: "done", launcher: "done", peekKey: "done" });
   assert.deepEqual(states(twice), states(once));
 });
 
@@ -482,4 +477,72 @@ test("Enter on the phone backups step checks again, and a phone with no backup y
   assert.ok(S.offers(none).includes("phoneBackups:todo"));
   assert.ok(!S.offers(landed).some((k) => k.startsWith("phoneBackups")));
   assert.deepEqual(S.offers(named), [], "nothing is offered before the phone check answers, so the one offer can include it");
+});
+
+test("the probe asks the AUR for Suwayomi-Server's version only while it is missing, and not on a recheck", () => {
+  const bin = stubs({ yay: "[ \"$1 $2\" = \"-Si suwayomi-server-bin\" ] && printf 'Name            : suwayomi-server-bin\\nVersion         : 2.5.0-1\\n'" });
+  const env = { PATH: bin + ":/usr/bin:/bin", HOME: bin };
+  const probe = (skip) => S.parseProbe(S.parseJob(run(S.probeCommand(path.join(bin, "none.json"), bin, bin, skip), env)).output);
+  const hasServer = (b) => { fs.writeFileSync(path.join(b, "suwayomi-server"), "#!/bin/sh\n", { mode: 0o755 }); };
+  // /usr/bin/suwayomi-server may exist on the test machine, so PATH alone decides here.
+  const noServer = stubs({ yay: "printf 'Version         : 2.5.0-1\\n'" });
+  fs.symlinkSync("/usr/bin/timeout", path.join(noServer, "timeout"));
+  const bare = (skip) => S.parseProbe(S.parseJob(run(S.probeCommand(path.join(noServer, "none.json"), noServer, noServer, skip), { PATH: noServer + ":/usr/lib/miharchy-none", HOME: noServer })).output);
+  assert.equal(bare(false).aurSuwayomi, "2.5.0", "the release suffix goes");
+  assert.equal(bare(true).aurSuwayomi, "", "a recheck skips the AUR");
+  hasServer(bin);
+  assert.equal(probe(false).aurSuwayomi, "", "installed: no AUR query");
+  const failing = stubs({ yay: "exit 1" });
+  assert.equal(S.parseProbe(S.parseJob(run(S.probeCommand(path.join(failing, "none.json"), failing, failing, false), { PATH: failing, HOME: failing })).output).aurSuwayomi, "?", "yay could not tell");
+});
+
+test("the packages step is done once Java 21+, Suwayomi-Server and Qt WebSockets are in, and keeps Setup open until then", () => {
+  assert.deepEqual(S.status(finish(S.initial(), "probe", READY), "packages"), { state: "done", detail: "Java 26, Suwayomi-Server and Qt WebSockets are installed." });
+  const none = finish(S.initial(), "probe", "java java version \"1.8.0\"\naurSuwayomi 2.3.2243\n");
+  assert.deepEqual(S.status(none, "packages"), { state: "todo",
+    command: "omarchy-pkg-add jdk-openjdk qt6-websockets && omarchy-pkg-aur-add suwayomi-server-bin",
+    prompt: "Install jdk-openjdk, qt6-websockets and suwayomi-server-bin in a terminal?",
+    detail: "Missing: jdk-openjdk (Java 21 or newer), qt6-websockets, suwayomi-server-bin. Press Enter to install them through Omarchy in a terminal; you type your password there." });
+  assert.equal(S.action(none, "packages"), "confirm");
+  assert.equal(S.incomplete(none), true);
+  const onlyJava = finish(S.initial(), "probe", READY.replace("26.0.2.1", "17.0.9"));
+  assert.equal(S.status(onlyJava, "packages").prompt, "Install jdk-openjdk in a terminal?");
+  assert.equal(S.status(onlyJava, "packages").detail, "Missing: jdk-openjdk (Java 21 or newer). Press Enter to install it through Omarchy in a terminal; you type your password there.");
+});
+
+test("an AUR Suwayomi-Server newer than the checked one is named in the prompt; equal, older or unknown is not a warning", () => {
+  const aur = (v) => S.status(finish(S.initial(), "probe", READY.replace("suwayomi\n", "aurSuwayomi " + v + "\n")), "packages").prompt;
+  assert.equal(aur("2.5.0"), "The AUR has Suwayomi-Server 2.5.0; Miharchy is checked with v2.4.2366, and login may fail. Install suwayomi-server-bin anyway?");
+  assert.equal(aur("2.4.2366"), "Install suwayomi-server-bin in a terminal?");
+  assert.equal(aur("2.3.2243"), "Install suwayomi-server-bin in a terminal?");
+  assert.equal(aur("?"), "yay could not tell the AUR's Suwayomi-Server version. Install suwayomi-server-bin in a terminal?");
+});
+
+test("after the terminal opens, the step says it is installing and offers the terminal again", () => {
+  const none = finish(S.initial(), "probe", "java java version \"1.8.0\"\naurSuwayomi 2.3.2243\n");
+  const launched = finish(none, "packages", "\n0\n");
+  assert.equal(S.status(launched, "packages").detail, "Installing in the terminal. Setup checks again every 5 s; Enter opens the terminal again.");
+  assert.equal(S.installing(launched), true);
+  assert.equal(S.installing(finish(launched, "probe", READY)), false, "done ends it");
+  assert.equal(S.action(launched, "packages"), "confirm");
+});
+
+test("y on the packages step opens Omarchy's terminal on exactly the missing packages, and returns at once", () => {
+  const record = (cmd) => {
+    const bin = stubs({ "omarchy-launch-floating-terminal-with-presentation": "printf '%s' \"$*\" > \"$(dirname \"$0\")/launched\"" });
+    const out = S.parseJob(run(S.runCommand("packages", { install: cmd }), { PATH: bin + ":/usr/bin:/bin", HOME: bin }));
+    return [out.code, fs.readFileSync(path.join(bin, "launched"), "utf8")];
+  };
+  const all = S.status(finish(S.initial(), "probe", "java java version \"1.8.0\"\naurSuwayomi 2.3.2243\n"), "packages").command;
+  assert.deepEqual(record(all), [0, "omarchy-pkg-add jdk-openjdk qt6-websockets && omarchy-pkg-aur-add suwayomi-server-bin"]);
+  const aurOnly = S.status(finish(S.initial(), "probe", READY.replace("suwayomi\n", "aurSuwayomi 2.3.2243\n")), "packages").command;
+  assert.deepEqual(record(aurOnly), [0, "omarchy-pkg-aur-add suwayomi-server-bin"]);
+});
+
+test("a recheck that skips the AUR keeps the version the first check found, so the warning stays", () => {
+  const first = finish(S.initial(), "probe", READY.replace("suwayomi\n", "aurSuwayomi 2.5.0\n"));
+  const again = finish(first, "probe", READY.replace("suwayomi\n", ""));
+  assert.match(S.status(again, "packages").prompt, /login may fail/);
+  const unknown = finish(finish(S.initial(), "probe", READY.replace("suwayomi\n", "aurSuwayomi ?\n")), "probe", READY.replace("suwayomi\n", ""));
+  assert.match(S.status(unknown, "packages").prompt, /^yay could not tell/);
 });

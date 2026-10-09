@@ -21,16 +21,15 @@ var PEEK_KEY = "SUPER + M"
 // and is not a Lua comment.
 var HAS_PEEK_KEY = "grep -qsE \"^[[:space:]]*[^[:space:]-].*miharchy'? peek\""
 
-// kind "install": the user runs command in a terminal; Enter checks again.
+// kind "install": Setup installs packages through Omarchy in a terminal the
+//                 user sees, after y (ADR 0007); done, Enter checks again.
 // kind "run":     Miharchy runs the step after the user confirms with y;
 //                 prompt is the question it asks.
 // kind "folder":  the user types a path.
 // kind "check":   the user acts elsewhere (on the phone); Enter checks again.
 // required: the window opens on setup while one of these is not done.
 var STEPS = [
-  { id: "java", title: "Java 21 or newer", kind: "install", required: true, command: "sudo pacman -S jdk-openjdk" },
-  { id: "suwayomi", title: "Suwayomi-Server", kind: "install", required: true, command: "yay -S suwayomi-server-bin" },
-  { id: "websockets", title: "Qt WebSockets", kind: "install", required: true, command: "sudo pacman -S qt6-websockets" },
+  { id: "packages", title: "Packages", kind: "install", required: true },
   { id: "server", title: "Server service and credentials", kind: "run", required: true, prompt: "Run server/miharchy-server now?" },
   { id: "flaresolverr", title: "FlareSolverr (optional)", kind: "run", prompt: "Start the FlareSolverr container and turn it on in Suwayomi?" },
   { id: "syncFolder", title: "Sync folder", kind: "folder" },
@@ -45,12 +44,16 @@ var STEPS = [
 var FINGERPRINT = "fingerprint() { (cd \"$1\" && find . -path ./build -prune -o -path ./.gradle -prune -o -path ./.kotlin -prune -o -type f -print | LC_ALL=C sort | xargs -d '\\n' sha256sum | sha256sum | cut -c1-64); }"
 
 // $1 is the server.json path, $2 the plugin's sync/, $3 desktopEntry(),
-// $4 the plugin's server unit.
+// $4 the plugin's server unit, $5 "1" to skip the AUR query.
 // Each line prints one fact; parseProbe reads them.
 var PROBE = [
   FINGERPRINT,
   "echo \"java $(java -version 2>&1 | head -n 1)\"",
   "test -x /usr/bin/suwayomi-server && echo suwayomi",
+  // While Suwayomi-Server is missing: the AUR's version, so the install can
+  // warn about one newer than Miharchy checked (ADR 0007). "?" when yay
+  // cannot tell; skipped on rechecks ($5 = 1).
+  "command -v suwayomi-server >/dev/null || [ \"$5\" = 1 ] || { v=$(timeout 20 yay -Si suwayomi-server-bin 2>/dev/null | while IFS=: read -r k val; do case $k in Version*) echo $val;; esac; done); v=${v%-*}; echo \"aurSuwayomi ${v:-?}\"; }",
   "test -e /usr/lib/qt6/qml/QtWebSockets/qmldir && echo websockets",
   "test -s \"$1\" && echo config",
   "echo \"unit $(systemctl --user is-enabled miharchy-server 2>/dev/null) $(systemctl --user is-active miharchy-server 2>/dev/null)\"",
@@ -231,14 +234,18 @@ function parseSyncthing(text) {
   return f
 }
 
-function probeCommand(configPath, syncDir, windowDir) {
-  return command(PROBE, [configPath, syncDir, desktopEntry(windowDir), windowDir.replace(/\/window$/, "") + "/server/miharchy-server.service"])
+function probeCommand(configPath, syncDir, windowDir, skipAur) {
+  return command(PROBE, [configPath, syncDir, desktopEntry(windowDir), windowDir.replace(/\/window$/, "") + "/server/miharchy-server.service", skipAur ? "1" : ""])
 }
 
 // The job a confirmed or committed step runs.
-// ctx: { serverScript, folder, syncDir, windowDir, pair: pairing() }.
+// ctx: { serverScript, folder, syncDir, windowDir, pair: pairing(),
+// install: the packages step's command }.
 function runCommand(id, ctx) {
   switch (id) {
+    // The user sees this command in the terminal and types the password there;
+    // the launcher returns at once (ADR 0007).
+    case "packages": return command("omarchy-launch-floating-terminal-with-presentation \"$1\"", [ctx.install])
     case "server": return command("\"$1\"", [ctx.serverScript])
     case "flaresolverr": return command(FLARE_SCRIPT)
     case "syncFolder": return command("test -d \"$1\" || { echo \"$1 is not a folder.\"; exit 1; }", [ctx.folder])
@@ -268,7 +275,7 @@ function javaMajor(line) {
 
 // The probe's output -> facts. docker is false when the command is absent.
 function parseProbe(text) {
-  var f = { java: 0, suwayomi: false, websockets: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", launcher: false, peekKey: false, unitCurrent: false, basicAuth: false }
+  var f = { java: 0, suwayomi: false, websockets: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", aurSuwayomi: "", launcher: false, peekKey: false, unitCurrent: false, basicAuth: false }
   String(text).split("\n").forEach(function(line) {
     var sp = line.indexOf(" ")
     var key = sp === -1 ? line : line.slice(0, sp)
@@ -293,6 +300,7 @@ function parseProbe(text) {
     if (key === "basicAuth") f.basicAuth = true
     if (key === "helperSource") f.helperSource = rest.trim()
     if (key === "helperInstalled") f.helperInstalled = rest.trim()
+    if (key === "aurSuwayomi") f.aurSuwayomi = rest.trim()
   })
   return f
 }
@@ -346,7 +354,12 @@ function reduce(s, event) {
     case "start":
       return copy(s, { job: event.id, confirm: null })
     case "finish":
-      if (event.id === "probe") return copy(s, { job: null, probe: parseProbe(event.text) })
+      if (event.id === "probe") {
+        var f = parseProbe(event.text)
+        // A recheck skips the AUR query; keep what the first check found.
+        if (!f.aurSuwayomi && s.probe) f.aurSuwayomi = s.probe.aurSuwayomi
+        return copy(s, { job: null, probe: f })
+      }
       if (event.id === "phones") return copy(s, { job: null, phones: parsePhones(parseJob(event.text).output) })
       if (event.id === "syncthing") return copy(s, { job: null, syncthing: parseSyncthing(parseJob(event.text).output) })
       var results = copy(s.results, {})
@@ -374,25 +387,56 @@ function flareDone(s) {
   return s.probe.container && f.flareSolverrEnabled === true && f.flareSolverrUrl === FLARE_URL && f.flareSolverrAsResponseFallback === true
 }
 
+// The packages a stock Omarchy lacks, as the probe found them.
+function missingPackages(p) {
+  var m = []
+  if (p.java < 21) m.push({ pkg: "jdk-openjdk", label: "jdk-openjdk (Java 21 or newer)" })
+  if (!p.websockets) m.push({ pkg: "qt6-websockets", label: "qt6-websockets" })
+  if (!p.suwayomi) m.push({ pkg: "suwayomi-server-bin", label: "suwayomi-server-bin", aur: true })
+  return m
+}
+
+// The command the terminal runs: Omarchy's installers, Arch then the AUR.
+function installCommand(missing) {
+  var arch = missing.filter(function(m) { return !m.aur }).map(function(m) { return m.pkg })
+  var parts = []
+  if (arch.length) parts.push("omarchy-pkg-add " + arch.join(" "))
+  if (missing.some(function(m) { return m.aur })) parts.push("omarchy-pkg-aur-add suwayomi-server-bin")
+  return parts.join(" && ")
+}
+
+function andList(xs) {
+  return xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + " and " + xs[xs.length - 1]
+}
+
+// The terminal opened (its launcher returns at once) and packages are still
+// missing: Setup rechecks until they are in.
+function installing(s) {
+  var r = s.results.packages
+  return !!(r && r.code === 0 && s.probe && missingPackages(s.probe).length)
+}
+
 // A step's status: { state, detail } with state
 // "checking" | "running" | "done" | "todo" | "outdated" | "waiting" | "unavailable".
+// A step may add prompt (its y/n question), command (shown to the user) or qr.
 function status(s, id) {
   var is = function(state, detail) { return { state: state, detail: detail } }
   if (s.job === id) return is("running", "")
   if (!s.probe) return is("checking", "")
   var p = s.probe
   switch (id) {
-    case "java":
-      if (p.java >= 21) return is("done", "Java " + p.java + " is installed.")
-      return is("todo", (p.java ? "Java " + p.java + " is too old." : "Java is not installed.") + " Install it in a terminal, then press Enter to check again.")
-    case "suwayomi":
-      if (p.suwayomi) return is("done", "/usr/bin/suwayomi-server is installed.")
-      return is("todo", "Suwayomi-Server is not installed. Install it in a terminal, then press Enter to check again.")
-    case "websockets":
-      if (p.websockets) return is("done", "Qt WebSockets is installed.")
-      return is("todo", "Downloads and Updates need it to show changes as they happen. Install it in a terminal, then press Enter to check again.")
+    case "packages":
+      var missing = missingPackages(p)
+      if (!missing.length) return is("done", "Java " + p.java + ", Suwayomi-Server and Qt WebSockets are installed.")
+      var names = andList(missing.map(function(m) { return m.pkg }))
+      var prompt = "Install " + names + " in a terminal?"
+      if (!p.suwayomi && Session.newerThanApproved(p.aurSuwayomi)) prompt = "The AUR has Suwayomi-Server " + p.aurSuwayomi + "; Miharchy is checked with " + Session.APPROVED_SUWAYOMI + ", and login may fail. Install " + names + " anyway?"
+      else if (!p.suwayomi && p.aurSuwayomi === "?") prompt = "yay could not tell the AUR's Suwayomi-Server version. " + prompt
+      return { state: "todo", command: installCommand(missing), prompt: prompt,
+        detail: installing(s) ? "Installing in the terminal. Setup checks again every 5 s; Enter opens the terminal again."
+          : "Missing: " + missing.map(function(m) { return m.label }).join(", ") + ". Press Enter to install " + (missing.length === 1 ? "it" : "them") + " through Omarchy in a terminal; you type your password there." }
     case "server":
-      if (status(s, "java").state !== "done" || !p.suwayomi) return is("waiting", "Needs Java and Suwayomi-Server first.")
+      if (status(s, "packages").state !== "done") return is("waiting", "Needs the packages first.")
       // Miharchy logs in with tokens (ADR 0005); servers set up before that run basic_auth.
       if (p.config && p.unitEnabled && p.unitActive && p.basicAuth) return is("outdated", "The server still uses basic_auth. Press Enter to run server/miharchy-server again; it moves the server to token login and keeps your credentials.")
       if (p.config && p.unitEnabled && p.unitActive && !p.unitCurrent) return is("outdated", "The plugin's server unit changed. Press Enter to run server/miharchy-server again; it keeps your credentials.")
@@ -471,6 +515,7 @@ function action(s, id) {
   if (st === "checking") return null
   var kind = step(id).kind
   if (kind === "check" && status(s, id).prompt) return "confirm"
+  if (kind === "install") return st === "todo" ? "confirm" : "check"
   if (kind === "install" || kind === "check" || st === "waiting" || st === "unavailable") return "check"
   return kind === "run" ? "confirm" : "edit"
 }
@@ -555,6 +600,7 @@ if (typeof module !== "undefined") {
     syncthingProbeCommand: syncthingProbeCommand,
     parseSyncthing: parseSyncthing,
     pairing: pairing,
+    installing: installing,
     desktopEntry: desktopEntry,
     runCommand: runCommand,
     parseJob: parseJob,
