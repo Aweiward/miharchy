@@ -296,3 +296,14 @@ test("one cursor runs over Up next and then the updates, and a manga may show in
   assert.equal(Mark.move(list, 0, -1), 0);
   assert.equal(Mark.move([], 0, 1), 0);
 });
+
+test("when Up next lands after the popup opened, the cursor stays on the update it was on", () => {
+  const rows = after(reply([chapter(9, 3), chapter(10, 4), chapter(11, 5)])).rows;
+  const before = Mark.entries([], rows);
+  const later = Mark.entries(Mark.upNext(upReply([close, partly]), now), rows);
+  assert.equal(before[2].open[2], "9");
+  assert.equal(later[Mark.follow(before, later, 2)].open.join(" "), before[2].open.join(" "), "the same update, two rows down");
+  assert.equal(Mark.follow(before, later, 0), 0, "a cursor on the top row stays on the top row: the head of Up next");
+  assert.equal(Mark.follow(later, Mark.entries([], rows.slice(0, 1)), 4), 0, "its row gone: clamped");
+  assert.equal(Mark.follow(before, [], 2), 0);
+});

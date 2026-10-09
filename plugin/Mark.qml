@@ -46,6 +46,11 @@ Panel {
   property var upNextReply: null
   property int upNextSeq: 0
   readonly property var entries: Mark.entries(Mark.upNext(upNextReply, now), rows)
+  property var lastEntries: []
+  onEntriesChanged: {
+    cursor = Mark.follow(lastEntries, entries, cursor)
+    lastEntries = entries
+  }
 
   implicitWidth: icon.implicitWidth + (count.visible ? count.implicitWidth : 0)
   implicitHeight: icon.implicitHeight

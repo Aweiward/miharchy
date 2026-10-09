@@ -203,6 +203,16 @@ function move(list, cursor, dy) {
   return Math.max(0, Math.min(list.length - 1, cursor + dy))
 }
 
+// The cursor after the popup's rows change (Up next landing, a poll): on
+// the same row in after, so Enter opens what the user chose. The top row
+// stays the top row, the head of Up next once it shows. A row that left
+// gives the nearest one.
+function follow(before, after, cursor) {
+  var was = cursor > 0 && before[cursor] ? before[cursor].open.join(" ") : null
+  for (var i = 0; was !== null && i < after.length; i++) if (after[i].open.join(" ") === was) return i
+  return move(after, cursor, 0)
+}
+
 // { title, detail } in place of the popup's list, or null.
 function notice(mark, configPath) {
   if (mark.state === "ok" && !mark.rows.length) return { title: "No new chapters", detail: "" }
@@ -230,6 +240,7 @@ if (typeof module !== "undefined") {
     upNext: upNext,
     entries: entries,
     move: move,
+    follow: follow,
     notice: notice
   }
 }
