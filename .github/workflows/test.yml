@@ -23,8 +23,10 @@ jobs:
 
   qml:
     runs-on: ubuntu-latest
-    # qmllint resolves Quickshell's imports, which Arch packages.
-    container: archlinux:latest
+    # qmllint resolves Quickshell's imports, which Arch packages. Arch's own
+    # registry, not Docker Hub, whose anonymous pull limit failed the job.
+    # The first step runs pacman -Syu, so the branch tag's age does not matter.
+    container: registry.archlinux.org/archlinux/archlinux-docker:base-master
     defaults:
       run:
         working-directory: window
