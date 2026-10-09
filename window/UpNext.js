@@ -1,0 +1,64 @@
+.pragma library
+.import "Prefs.js" as Prefs
+.import "Library.js" as Library
+.import "Browse.js" as Browse
+.import "Chapters.js" as Chapters
+.import "History.js" as History
+
+// Up next (GLOSSARY.md): the library manga a peek offers, each with its
+// next chapter, in tiers. Derived from read state each time; nothing is
+// stored. Pure, so tests/upnext.test.js pins it; shell.qml peek() sends
+// payload() and opens the head of list().
+
+// ponytail: fixed; Settings rows if they turn out wrong.
+var CLOSE_UNREAD = 5
+var FRESH_DAYS = 7
+
+function payload() {
+  return {
+    query: "query($keys: [String!]) { metas(filter: { key: { in: $keys } }) { nodes { key value } }"
+      + " mangas(condition: { inLibrary: true }) { nodes { id inLibraryAt source { id } meta { key value }"
+      + " chapters { nodes { id name chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder lastReadAt fetchedAt } } } } }",
+    variables: { keys: Prefs.keys(Library.CHAPTER_PREFS).concat([History.CLEARED_KEY]) }
+  }
+}
+
+// data: payload()'s reply. -> [{ mangaId, chapterId }], the head first.
+function list(data, downloadedOnly, now) {
+  var tiers = [[], [], []]
+  var freshSince = now / 1000 - FRESH_DAYS * 86400
+  var cleared = History.metaValue(data.metas && data.metas.nodes, History.CLEARED_KEY)
+  ;((data.mangas && data.mangas.nodes) || []).forEach(function(m) {
+    if (!m.source) return
+    var prefs = Library.chapterPrefs({ metas: data.metas, manga: m }, downloadedOnly)
+    var shown = Chapters.apply(Browse.toChapters(m.chapters.nodes), prefs)
+    var next = Chapters.nextUnread(shown, prefs)
+    if (!next) return
+    var ids = {}
+    shown.forEach(function(c) { ids[c.id] = true })
+    var newest = function(field, keep) {
+      return m.chapters.nodes.filter(keep).reduce(function(at, c) { return Math.max(at, Number(c[field]) || 0) }, 0)
+    }
+    var lastRead = newest("lastReadAt", function() { return true })
+    // A shown update, as Updates.recent() has it: fetched after the manga joined the library.
+    var update = newest("fetchedAt", function(c) { return !c.isRead && ids[c.id] && Number(c.fetchedAt) > Number(m.inLibraryAt) })
+    var unread = shown.filter(function(c) { return !c.read }).length
+    // A manga hidden on History counts as never read, as on History.
+    var hidden = lastRead > 0 && lastRead <= Math.max(cleared, History.metaValue(m.meta, History.HIDDEN_KEY))
+    var started = !hidden && (lastRead > 0 || shown.some(function(c) { return c.read }))
+    var tier = started && next.lastPage > 0 ? 0 : started && unread <= CLOSE_UNREAD ? 1 : update > freshSince ? 2 : -1
+    if (tier !== -1) tiers[tier].push({ mangaId: m.id, chapterId: next.id, at: tier === 2 ? update : lastRead })
+  })
+  var out = []
+  tiers.forEach(function(t) {
+    t.sort(function(a, b) { return b.at - a.at }).forEach(function(e) { out.push({ mangaId: e.mangaId, chapterId: e.chapterId }) })
+  })
+  return out
+}
+
+if (typeof module !== "undefined") {
+  module.exports = {
+    payload: payload,
+    list: list
+  }
+}
