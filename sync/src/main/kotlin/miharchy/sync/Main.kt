@@ -11,6 +11,7 @@ import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.PosixFilePermissions
 import java.time.Instant
+import java.time.ZoneId
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.getLastModifiedTime
@@ -25,7 +26,8 @@ import kotlin.system.exitProcess
 private const val USAGE = """usage: miharchy-sync sync [--folder <sync folder>] [--dry-run] [--apply] [--json]
        miharchy-sync check <backup file>
        miharchy-sync restore <backup file>
-       miharchy-sync backup <folder>"""
+       miharchy-sync backup <folder>
+       miharchy-sync health [--folder <sync folder>] [--json]"""
 
 /** Backups Miharchy writes to the sync folder start with this, so a sync never mistakes them for phone backups. */
 const val OWN_BACKUP_PREFIX = "miharchy-"
@@ -56,6 +58,7 @@ fun main(args: Array<String>) {
         "check" -> return check(args.getOrNull(1) ?: usage())
         "restore" -> return restore(args.getOrNull(1) ?: usage())
         "backup" -> return backup(args.getOrNull(1) ?: usage())
+        "health" -> return health(args.toList().zipWithNext().firstOrNull { it.first == "--folder" }?.second)
         else -> usage()
     }
     val folderArg = args.toList().zipWithNext().firstOrNull { it.first == "--folder" }?.second
@@ -114,6 +117,19 @@ private fun sync(folderArg: String?, dryRun: Boolean, apply: Boolean): Summary {
     if (since == null) PENDING_SINCE.deleteIfExists() else writePrivately(PENDING_SINCE, since.toString().toByteArray())
     val lost = gap?.byHand.orEmpty()
     return Summary(config.url, folder.toString(), phoneFile?.toString(), false, changes, exportFile.toString(), lost)
+}
+
+/** Sync health as one JSON line (`--json` is the only output). Reads only, so it takes no lock. */
+private fun health(folderArg: String?) {
+    val result = try {
+        val folder = Path.of(folderArg ?: Desktop(ServerConfig.load()).syncFolder() ?: fail("No sync folder is set. Choose one in Setup or Settings."))
+        if (!folder.isDirectory()) fail("$folder is not a folder.")
+        health(folder, stateDir, ZoneId.systemDefault())
+    } catch (e: Exception) {
+        fail(e.message ?: e.toString())
+    }
+    // Every field, nulls too, so the window never guesses at a missing one.
+    println(Json { encodeDefaults = true }.encodeToString(result))
 }
 
 @Serializable

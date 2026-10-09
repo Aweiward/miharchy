@@ -34,6 +34,10 @@ fun backupName(now: Instant) = "${OWN_BACKUP_PREFIX}backup-${EXPORT_TIME.format(
 
 private val EXPORT_NAME = Regex("^$OWN_BACKUP_PREFIX\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}\\.tachibk$")
 
+/** The newest desktop backup in the sync folder: names sort by time. */
+fun newestExport(folder: Path): Path? =
+    folder.listDirectoryEntries().map { it.name }.filter { EXPORT_NAME.matches(it) }.maxOrNull()?.let(folder::resolve)
+
 fun exportsToPrune(names: List<String>, keep: Int = KEEP_EXPORTS): List<String> =
     names.filter { EXPORT_NAME.matches(it) }.sorted().dropLast(keep)
 

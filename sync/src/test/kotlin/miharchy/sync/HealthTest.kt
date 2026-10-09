@@ -1,6 +1,21 @@
 package miharchy.sync
 
+import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupPreference
+import eu.kanade.tachiyomi.data.backup.models.IntPreferenceValue
+import eu.kanade.tachiyomi.data.backup.models.StringPreferenceValue
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 import java.time.Instant
+import java.time.ZoneOffset
+import kotlin.io.path.listDirectoryEntries
+import kotlin.io.path.name
+import kotlin.io.path.readBytes
+import kotlin.io.path.setLastModifiedTime
+import kotlin.io.path.writeBytes
+import kotlin.io.path.writeText
 import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -10,6 +25,13 @@ import kotlin.test.assertTrue
 
 private val BERLIN = ZoneId.of("Europe/Berlin")
 private fun at(s: String) = Instant.parse(s)
+
+private fun manga(url: String) = BackupManga(source = 1L, url = url, title = "Title $url", favorite = true)
+
+private fun Path.put(name: String, backup: Backup, time: String) =
+    resolve(name).also { it.writeBytes(encodeBackup(backup)); it.setLastModifiedTime(FileTime.from(at(time))) }
+
+private fun Path.contents() = listDirectoryEntries().associate { it.name to it.readBytes().toList() }
 
 class HealthTest {
     @Test fun `a Mihon backup is dated by its name, in the phone's time zone, and any other by its file time`() {
@@ -36,5 +58,53 @@ class HealthTest {
         assertTrue(behind(pending = true, since = since, phoneBackups = three))
         assertFalse(behind(pending = false, since = since, phoneBackups = three))
         assertFalse(behind(pending = true, since = null, phoneBackups = three))
+    }
+
+    @Test fun `health reads the folder and the state dir, says the phone is behind, and changes nothing`() {
+        val folder = Files.createTempDirectory("folder")
+        val state = Files.createTempDirectory("state")
+        val older = "miharchy-2026-10-05_10-00-00.tachibk"
+        val newest = "miharchy-2026-10-06_10-00-00.tachibk"
+        folder.put(older, decodeBackup(forMihon(encodeBackup(Backup(listOf(manga("/a")))), marker = older)), "2026-10-05T10:00:00Z")
+        folder.put(newest, decodeBackup(forMihon(encodeBackup(Backup(listOf(manga("/a"), manga("/b")))), marker = newest)), "2026-10-06T10:00:00Z")
+        // The phone restored the older desktop backup, then backed up three times without restoring the newest.
+        val phone = Backup(listOf(manga("/a")), backupPreferences = listOf(BackupPreference(MARKER_KEY, StringPreferenceValue(older))))
+        listOf("06", "07", "08", "09").forEach { day ->
+            folder.put("app.mihon_2026-10-${day}_09-00.tachibk", phone, "2026-10-${day}T09:00:00Z")
+        }
+        state.resolve("pending-since").writeText("2026-10-06T10:00:00Z")
+        val before = state.contents()
+
+        assertEquals(
+            Health(
+                phoneBackup = folder.resolve("app.mihon_2026-10-09_09-00.tachibk").toString(),
+                phoneBackupAt = "2026-10-09T09:00:00Z",
+                desktopBackup = folder.resolve(newest).toString(),
+                restored = older,
+                markerMissing = false,
+                restorable = listOf(PhoneChange(PhoneChange.Kind.ADDED_TO_LIBRARY, "Title /b")),
+                byHand = emptyList(),
+                pendingSince = "2026-10-06T10:00:00Z",
+                behind = true,
+            ),
+            health(folder, state, ZoneOffset.UTC),
+        )
+        assertEquals(before, state.contents())
+    }
+
+    @Test fun `an empty folder is a valid answer, and a phone backup without app settings says so`() {
+        val folder = Files.createTempDirectory("folder")
+        val state = Files.createTempDirectory("state")
+        assertEquals(Health(), health(folder, state, ZoneOffset.UTC))
+
+        folder.put("library.tachibk", Backup(listOf(manga("/a"))), "2026-10-09T09:00:00Z")
+        val h = health(folder, state, ZoneOffset.UTC)
+        assertTrue(h.markerMissing)
+        assertNull(h.restored)
+        assertNull(h.desktopBackup)
+        assertEquals("2026-10-09T09:00:00Z", h.phoneBackupAt)
+
+        folder.put("app.mihon_2026-10-09_10-00.tachibk", Backup(listOf(manga("/a")), backupPreferences = listOf(BackupPreference("pref_x", IntPreferenceValue(1)))), "2026-10-09T10:00:00Z")
+        assertFalse(health(folder, state, ZoneOffset.UTC).markerMissing)
     }
 }
