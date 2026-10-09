@@ -230,7 +230,8 @@ function librarySources(data) {
 // no match moves the row on to its next target. picks[i]: the chosen
 // result's index in group i, -1 for none (skip, no match or still
 // searching). held[i]: a stalled manga's match waiting for its chapter
-// check, { pick, state: "idle" | "loading" }, or null.
+// check, { pick, state: "idle" | "loading" | "failed" }, or null. A
+// failed check moves on, or on the last target waits for r.
 function batch(manga) {
   return {
     manga: manga,
@@ -289,7 +290,8 @@ function advance(b, index) {
   var at = b.at[index] + 1
   if (at >= b.manga[index].targets.length) return b
   var groups = b.search.groups.slice()
-  groups[index] = group(b.manga[index], at)
+  // The attempt count goes on, so a late reply to the last search drops.
+  groups[index] = copy(group(b.manga[index], at), { attempt: groups[index].attempt })
   return set(copy(b, { search: { query: b.search.query, groups: groups } }), "at", index, at)
 }
 
@@ -303,6 +305,7 @@ function reduceBatch(b, index, event) {
   if (event.type === "checked") {
     if (!h || h.state !== "loading") return b
     var r = event.reply
+    if (r.state !== "ok" && b.at[index] + 1 >= b.manga[index].targets.length) return set(b, "held", index, copy(h, { state: "failed" }))
     var more = r.state === "ok" && newest(r.data.fetchMangaAndChapters.chapters) > b.manga[index].highest
     var cleared = set(b, "held", index, null)
     return more ? set(cleared, "picks", index, h.pick) : advance(cleared, index)
@@ -331,7 +334,8 @@ function chosen(b, index) {
 }
 
 function retry(b) {
-  return copy(b, { search: GlobalSearch.retry(b.search) })
+  var held = b.held.map(function(h) { return h && h.state === "failed" ? copy(h, { state: "idle" }) : h })
+  return copy(b, { search: GlobalSearch.retry(b.search), held: held })
 }
 
 // A batch row's right side: the pick and where it sits among the results,
@@ -343,7 +347,7 @@ function matchStatus(b, index, configPath) {
   var where = "   " + g.source.name
   var t = chosen(b, index)
   if (t) return t.title + "   " + (b.picks[index] + 1) + " of " + g.items.length + where
-  if (b.held[index]) return "checking chapters" + where
+  if (b.held[index]) return (b.held[index].state === "failed" ? "chapter check failed. Press r to retry." : "checking chapters") + where
   if (m.stalled && g.state === "ok") return "No source has more chapters."
   if (g.state === "ok" && g.items.length) return "skip   " + g.items.length + (g.items.length === 1 ? " result" : " results") + where
   return GlobalSearch.status(g, configPath) + where

@@ -199,6 +199,15 @@ test("a failed search moves on to the next source; the last one's failure stays 
   assert.deepEqual(Mi.due(b), []);
 });
 
+test("a late reply to a timed-out search never answers the next source's search", () => {
+  let b = Mi.batch([{ id: 1, title: "Eleceed", targets: [sources[1], sources[2]] }]);
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "request", now: 0 }), 0, { type: "timeout" });
+  b = Mi.reduceBatch(b, 0, { type: "request", now: 0 });
+  const after = Mi.reduceBatch(b, 0, { type: "reply", attempt: 1, reply: M.reply(0, ""), config });
+  assert.equal(after, b, "the first search's attempt is dropped");
+  assert.equal(after.search.groups[0].state, "loading");
+});
+
 test("a stalled manga takes a match only when its newest chapter number is higher", () => {
   let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [sources[1], sources[2]] }, { id: 2, title: "X", targets: [sources[2]] }]);
   b = answer(b, 0, reply("Eleceed"));
@@ -230,6 +239,15 @@ test("a stalled manga no source has more chapters for says so", () => {
   assert.equal(Mi.chosen(b, 0), null);
   assert.equal(Mi.matchStatus(b, 0, "/c"), "No source has more chapters.");
   assert.deepEqual(Mi.jobs(b), []);
+});
+
+test("a failed chapter check on the last source waits for r, not a verdict", () => {
+  let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [sources[1]] }]);
+  b = answer(b, 0, reply("Eleceed"));
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check" }), 0, { type: "checked", reply: M.reply(500, "boom") });
+  assert.equal(Mi.matchStatus(b, 0, "/c"), "chapter check failed. Press r to retry.   Mangago (EN)");
+  assert.deepEqual(Mi.checks(b), []);
+  assert.deepEqual(Mi.checks(Mi.retry(b)), [0]);
 });
 
 test("a manga with no source to search says so and migrates nothing", () => {
