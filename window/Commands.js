@@ -49,6 +49,7 @@ var commands = [
   { id: "downloads.open", title: "Download queue", keys: [] },
   { id: "sync.now", title: "Sync now", keys: [] },
   { id: "sync.undo", title: "Undo the last sync", keys: [] },
+  { id: "sync.health", title: "Show what the phone lacks", keys: [] },
   { id: "restore.open", title: "Restore a backup", keys: [] },
   { id: "backup.create", title: "Create a backup", keys: [] },
   { id: "mode.incognito", title: "Incognito mode on or off", keys: [] },

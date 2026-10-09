@@ -14,8 +14,13 @@ Rectangle {
   required property Theme theme
   property bool open: false
   property var sync: Sync.initial()
+  // "sync" shows the last sync; "health" shows sync health (Enter on its Settings row).
+  property string mode: "sync"
+  property var health: ({ state: "idle" })
+  readonly property bool healthMode: mode === "health"
   readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
-  readonly property var report: sync.state === "done" || sync.state === "held" ? Sync.report(sync) : []
+  readonly property var report: healthMode ? (health.state === "ready" ? [Sync.healthSummary(health.health, Date.now())] : [])
+    : sync.state === "done" || sync.state === "held" ? Sync.report(sync) : []
 
   // A sync finished and changed the desktop library.
   signal synced()
@@ -27,7 +32,13 @@ Rectangle {
 
   function run(id) {
     switch (id) {
+      case "sync.health":
+        mode = "health"
+        open = true
+        refreshHealth()
+        break
       case "sync.now":
+        mode = "sync"
         open = true
         if (sync.state === "running") return
         sync = Sync.reduce(sync, { type: "start" })
@@ -35,7 +46,8 @@ Rectangle {
         proc.running = true
         break
       case "sync.apply":
-        if (sync.state !== "held") return
+        // Never from the health panel: a held sync the user kept stays held there.
+        if (sync.state !== "held" || healthMode) return
         sync = Sync.reduce(sync, { type: "apply" })
         proc.command = Sync.command(devHelper, true)
         proc.running = true
@@ -52,7 +64,22 @@ Rectangle {
       onStreamFinished: {
         view.sync = Sync.reduce(view.sync, { type: "finish", text: text })
         if (view.sync.state === "done") view.synced()
+        view.refreshHealth()
       }
+    }
+  }
+
+  // Reads only, so it may run beside a sync; the Settings row shows the result too.
+  function refreshHealth() {
+    if (healthProc.running) return
+    healthProc.command = Sync.healthCommand(devHelper)
+    healthProc.running = true
+  }
+
+  Process {
+    id: healthProc
+    stdout: StdioCollector {
+      onStreamFinished: view.health = Sync.parseHealth(text)
     }
   }
 
@@ -76,7 +103,7 @@ Rectangle {
       spacing: view.theme.fontSize * 0.75
 
       Text {
-        text: "Sync"
+        text: view.healthMode ? "Phone sync" : "Sync"
         color: view.theme.accent
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontHeading
@@ -86,8 +113,9 @@ Rectangle {
         width: parent.width
         visible: !view.report.length
         wrapMode: Text.Wrap
-        text: view.sync.state === "running" ? "Syncing with the sync folder. This takes a few seconds." : view.sync.message || ""
-        color: view.sync.state === "failed" ? view.theme.urgent : view.theme.muted
+        text: view.healthMode ? (view.health.state === "failed" ? view.health.message : "Reading the newest phone backup.")
+          : view.sync.state === "running" ? "Syncing with the sync folder. This takes a few seconds." : view.sync.message || ""
+        color: (view.healthMode ? view.health.state : view.sync.state) === "failed" ? view.theme.urgent : view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSize
       }
@@ -110,16 +138,19 @@ Rectangle {
         id: list
         width: parent.width
         height: Math.min(contentHeight, view.height * 0.76 - y - hint.height - view.theme.fontSize * 4)
-        visible: view.sync.state === "done" && view.sync.unreachable.length > 0
+        visible: model.length > 0
         clip: true
-        model: view.sync.state === "done" ? view.sync.unreachable : []
+        model: view.healthMode ? (view.health.state === "ready" ? Sync.healthLines(view.health.health) : [])
+          : view.sync.state === "done" ? view.sync.unreachable.map(function(u) {
+            return { text: "  " + u.manga + (u.chapter ? ", " + u.chapter : "") + ": " + u.change, urgent: true }
+          }) : []
 
         delegate: Text {
           required property var modelData
           width: list.width
-          elide: Text.ElideRight
-          text: "  " + modelData.manga + (modelData.chapter ? ", " + modelData.chapter : "") + ": " + modelData.change
-          color: view.theme.urgent
+          wrapMode: Text.Wrap
+          text: modelData.text
+          color: modelData.urgent ? view.theme.urgent : view.theme.foreground
           font.family: view.theme.fontFamily
           font.pixelSize: view.theme.fontSize
         }
@@ -128,7 +159,7 @@ Rectangle {
       HintBar {
         id: hint
         theme: view.theme
-        text: view.sync.state === "running" ? "esc hide (the sync goes on)" : view.sync.state === "held" ? "y apply   esc keep" : "esc close"
+        text: view.healthMode ? "esc close" : view.sync.state === "running" ? "esc hide (the sync goes on)" : view.sync.state === "held" ? "y apply   esc keep" : "esc close"
         onKey: function(event) { view.key(event) }
       }
     }

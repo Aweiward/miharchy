@@ -47,6 +47,13 @@ var COUNTS = [
 ]
 
 var CHANGE_TEXT = {
+  addedToLibrary: "added to the library",
+  categoriesChanged: "categories changed",
+  markedRead: "marked read",
+  bookmarked: "bookmarked",
+  pageRaised: "last page read raised",
+  trackBound: "track added",
+  trackRaised: "chapters read raised",
   removedFromLibrary: "removed from the library",
   categoriesCleared: "taken out of every category",
   markedUnread: "marked unread",
@@ -90,13 +97,20 @@ function reduce(s, event) {
   return s
 }
 
-function result(job) {
-  if (job.code === NOT_BUILT) return { state: "failed", message: "The sync helper is not built. Build it in the window: press : and choose Setup." }
+// The helper's one JSON line, or the failure to show instead.
+function reply(job) {
+  if (job.code === NOT_BUILT) return { message: "The sync helper is not built. Build it in the window: press : and choose Setup." }
   var lines = job.output.split("\n")
-  var summary = null
+  var value = null
   // JVM warnings may come before the one JSON line.
-  if (job.code === 0) try { summary = JSON.parse(lines[lines.length - 1]) } catch (e) { summary = null }
-  if (!summary) return { state: "failed", message: job.output || "The sync helper stopped with status " + job.code + "." }
+  if (job.code === 0) try { value = JSON.parse(lines[lines.length - 1]) } catch (e) { value = null }
+  return value ? { value: value } : { message: job.output || "The sync helper stopped with status " + job.code + "." }
+}
+
+function result(job) {
+  var r = reply(job)
+  if (!r.value) return { state: "failed", message: r.message }
+  var summary = r.value
   var changes = COUNTS.map(function(c) {
     var n = summary.changes.filter(function(ch) { return ch.type === c[0] }).length
     return n ? c[1].replace("%d", n) : ""
@@ -125,6 +139,67 @@ function report(s) {
   return lines
 }
 
+// Sync health (`miharchy-sync health`): { state: "idle" | "ready" | "failed" },
+// with health, the helper's object, when ready, and message when failed.
+function healthCommand(devHelper) {
+  return helperCommand(devHelper, ["health"])
+}
+
+function parseHealth(text) {
+  var r = reply(Setup.parseJob(text))
+  return r.value ? { state: "ready", health: r.value } : { state: "failed", message: r.message }
+}
+
+var MINUTE = 60000
+var HOUR = 60 * MINUTE
+var DAY = 24 * HOUR
+
+function ago(ms) {
+  if (ms < HOUR) return Math.max(0, Math.round(ms / MINUTE)) + " min ago"
+  if (ms < 2 * DAY) return Math.round(ms / HOUR) + " h ago"
+  return Math.floor(ms / DAY) + " days ago"
+}
+
+// The Settings row's value: the phone's side of the sync in one line, short
+// enough for the row (healthLines explains more).
+function healthSummary(h, now) {
+  if (!h.phoneBackup) return "No phone backup in the sync folder yet."
+  var parts = ["Phone backup " + ago(now - Date.parse(h.phoneBackupAt))]
+  if (h.restored) parts.push("restored " + (h.desktopBackup && h.restored === basename(h.desktopBackup) ? "the newest" : "an older") + " backup")
+  else parts.push(h.markerMissing ? "app settings off" : "no restore yet")
+  var counts = []
+  if (h.restorable.length) counts.push(h.restorable.length + " to restore")
+  if (h.byHand.length) counts.push(h.byHand.length + " by hand")
+  if (counts.length) parts.push((h.behind ? "behind: " : "") + counts.join(", "))
+  return parts.join(" · ")
+}
+
+// A phone that wrote no backup for this long has stopped backing up, or the share stopped.
+var QUIET_DAYS = 3
+
+// The popup's sync health line: empty while all is well.
+function healthPopupLine(h, now) {
+  if (!h.phoneBackup) return ""
+  var quiet = now - Date.parse(h.phoneBackupAt)
+  if (quiet > QUIET_DAYS * DAY) return "No phone backup for " + Math.floor(quiet / DAY) + " days. Check Mihon's automatic backups and the folder share."
+  return h.behind ? "Phone is behind: restore the newest miharchy backup in Mihon." : ""
+}
+
+// What Enter on the sync health row shows: each list under what to do about it.
+function healthLines(h) {
+  function rows(list, urgent) {
+    return list.map(function(u) {
+      var detail = u.chapter || u.tracker
+      return { text: "  " + u.manga + (detail ? ", " + detail : "") + ": " + (CHANGE_TEXT[u.change] || u.change), urgent: urgent }
+    })
+  }
+  var lines = h.markerMissing ? [{ text: "Mihon's backups leave out app settings, so Miharchy cannot see restores. Turn on App settings in Mihon's backup options.", urgent: false }] : []
+  var intro = lines.length
+  if (h.restorable.length) lines = lines.concat([{ text: "In Mihon, restore " + basename(h.desktopBackup) + ". It brings:", urgent: false }], rows(h.restorable, false))
+  if (h.byHand.length) lines = lines.concat([{ text: "A restore cannot apply these. Repeat them in Mihon:", urgent: false }], rows(h.byHand, true))
+  return lines.length > intro ? lines : lines.concat([{ text: "Nothing to do on the phone.", urgent: false }])
+}
+
 // The popup's one line.
 function oneLine(s) {
   switch (s.state) {
@@ -145,6 +220,11 @@ if (typeof module !== "undefined") {
     NOT_BUILT: NOT_BUILT,
     PRE_SYNC: PRE_SYNC,
     command: command,
+    healthCommand: healthCommand,
+    parseHealth: parseHealth,
+    healthSummary: healthSummary,
+    healthPopupLine: healthPopupLine,
+    healthLines: healthLines,
     helperCommand: helperCommand,
     initial: initial,
     reduce: reduce,
