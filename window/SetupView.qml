@@ -78,16 +78,18 @@ Item {
   }
 
   // The sync folder lives in server meta, so the phone check follows the
-  // server reply; the offer waits for it (Setup.offers).
+  // server reply; the offer waits for it (Setup.offers). Never over a y/n
+  // prompt or the folder field: a job start would clear them.
   function checkPhones() {
-    if (!setup.job && setup.server && setup.server.syncFolder) start("phones", Setup.phoneProbeCommand(setup.server.syncFolder))
+    if (!setup.job && !setup.confirm && !editing && setup.server && setup.server.syncFolder) start("phones", Setup.phoneProbeCommand(setup.server.syncFolder))
   }
 
-  // A phone backup lands while Setup is open: check again on our own.
+  // A phone backup lands while Setup is open: check again on our own. Also
+  // while still checking, in case the first check was skipped over a prompt.
   Timer {
     interval: 15000
     repeat: true
-    running: view.visible && Setup.status(view.setup, "phoneBackups").state === "todo"
+    running: view.visible && ["todo", "checking"].indexOf(Setup.status(view.setup, "phoneBackups").state) !== -1
     onTriggered: view.checkPhones()
   }
 
