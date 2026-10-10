@@ -61,12 +61,12 @@ Answer: yes for four of the five, with no login. A track gives the tracker's id 
 | MyAnimeList | API v2 needs a client id (403); Jikan timed out 3 times | `Media(idMal:)` answered for id 13 | ✓ through AniList |
 | Kitsu | none: no recommendation relation on a manga | `/manga/{id}/mappings` gives the MAL and AniList ids | ✓ through AniList |
 | MangaUpdates | `/v1/series/{id}`: `recommendations` (5) and `category_recommendations` (5) | none in the reply | ✓ its own list |
-| Shikimori | `/api/mangas/{id}/similar` (86 for One Piece); the host moved to `shikimori.io` | its ids are MAL ids, so `Media(idMal:)` | ✓ either way |
+| Shikimori | `/api/mangas/{id}/similar` (86 for One Piece); the host moved to `shikimori.io` | its ids are MAL ids (`myanimelist_id` 13 for One Piece), so `Media(idMal:)` | ✓ either way; the API needs a `User-Agent` |
 | Bangumi | none: `/v0/subjects/{id}/subjects` lists only relations (games, anime) | none | ✗ falls back to a title search on AniList |
 
 ### Findings
 
-- **The login matters only for tracks.** Suwayomi's `searchTracker` refuses a tracker that is not logged in (`Tracker needs to be logged-in to search`). So the window cannot ask the server for a tracker's id without a login. A track already carries the id, and binding a track needs the login anyway.
+- **The login matters only for tracks.** Suwayomi's `searchTracker` refuses a tracker that is not logged in (`Tracker needs to be logged-in to search`). So the window cannot ask the server for a tracker's id without a login. With a login, the server finds the tracker's id for a manga that has no track yet, on localhost, and only the recommendations call leaves the machine. Without one, the window searches AniList by title itself. A track already carries the id, and binding a track needs the login anyway.
 - **AniList can be the one engine.** MAL, Kitsu and Shikimori ids all lead to an AniList id. Asking AniList alone keeps the new trust boundary to one host and one rate limit. Kitsu's mapping costs one extra request.
 - **MangaUpdates is the only real second opinion.** Its user recommendations overlap AniList's for One Piece (Naruto, Bleach). Its category recommendations are noisier: 2 of 5 were novels.
 - **Order of seeds.** For one manga: an AniList track, then a MAL or Shikimori track, then a Kitsu track, then a MangaUpdates track, then a title search on AniList. Bangumi and untracked manga take the title search.
