@@ -67,18 +67,11 @@ function pick(data, row, count, items) {
   var out = []
   data.mangas.nodes.forEach(function(m) {
     var chapters = Browse.toChapters(m.chapters.nodes)
-    var list = row.id === "next" ? next(chapters, Library.chapterPrefs({ metas: data.metas, manga: m }, false), count)
+    var list = row.id === "next" ? Chapters.toDownload(chapters, Library.chapterPrefs({ metas: data.metas, manga: m }, false), true, row, count)
       : chapters.filter(function(c) { return row.id === "unread" ? !c.read : c.bookmarked })
     list.forEach(function(c) { if (!c.downloaded && !items.some(function(i) { return i.chapterId === c.id })) out.push(c) })
   })
   return out
-}
-
-function next(chapters, prefs, count) {
-  var p = Prefs.force(prefs, "chapterFilterDownloaded", "off", true)
-  var unread = Chapters.apply(chapters, p).filter(function(c) { return !c.read })
-  if (p.chapterSortDirection !== "asc") unread.reverse()
-  return unread.slice(0, count)
 }
 
 // The run: state "refreshing" until queued() ends it. failures: [{

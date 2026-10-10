@@ -82,7 +82,7 @@ A menu opens with the rows of a manga's download menu (`U`): the next chapter, t
 3. It queues only the chapters that are not on disk yet. A manga whose next chapters are on disk already gets nothing.
 4. The download queue opens.
 
-"Next 2" means the next 2 unread chapters, so a chapter already on disk counts toward the 2. Downloaded only has no effect on the choice. If a source fails to give its chapter list, Miharchy uses the chapters the server already has.
+"Next 2" means the next 2 unread chapters, so a chapter already on disk counts toward the 2. A manga's `U` menu uses the same rule. Downloaded only has no effect on the choice. If a source fails to give its chapter list, Miharchy uses the chapters the server already has.
 
 ## Library check
 

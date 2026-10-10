@@ -252,8 +252,7 @@ Rectangle {
   // Queues what the menu row picks, and closes the menu, as Mihon's does.
   // A queued chapter counts as on its way, as Mihon's download state does.
   function downloadRow(row, n) {
-    var waiting = detail.chapters.filter(function(c) { return !Downloads.find(view.queue, c.id) })
-    var list = Chapters.toDownload(waiting, prefs, skipFiltered, row, n)
+    var list = Chapters.toDownload(detail.chapters, prefs, skipFiltered, row, n).filter(function(c) { return !Downloads.find(view.queue, c.id) })
     if (!list.length) {
       downloadsNote = "Nothing to download"
       return
