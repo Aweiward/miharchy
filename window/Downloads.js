@@ -1,11 +1,12 @@
 .pragma library
+.import "Failure.js" as Failure
 
 // Downloads: the server's download queue and the chapters a manga detail
 // marks for download or removal. Pure, so tests/downloads.test.js pins it;
 // DownloadsView.qml keeps the queue live, and it and MangaDetail.qml send
 // the payloads built here.
 
-var DOWNLOAD = "state progress tries chapter { id name mangaId chapterNumber uploadDate } manga { id title }"
+var DOWNLOAD = "state progress tries chapter { id name mangaId chapterNumber uploadDate } manga { id title source { id } }"
 var STATUS = "downloadStatus { state queue { " + DOWNLOAD + " } }"
 var STATUS_QUERY = "{ " + STATUS + " }"
 // Its first result holds the whole queue (initial), each later one only
@@ -28,7 +29,7 @@ var CLEAR_PAYLOAD = { query: "mutation { clearDownloader(input: {}) { " + STATUS
 // queue.state: "loading" | "ok" | a failed connection state.
 // running: the downloader is started. items: in queue order, each
 // { chapterId, mangaId, manga, chapter, chapterNumber, uploadDate (ms),
-// state, progress, tries } with state "QUEUED" | "DOWNLOADING" | "FINISHED" | "ERROR" and progress 0..1.
+// state, progress, tries, sourceMissing } with state "QUEUED" | "DOWNLOADING" | "FINISHED" | "ERROR" and progress 0..1.
 function initial() {
   return { state: "loading", message: "", running: false, items: [] }
 }
@@ -50,7 +51,8 @@ function item(d) {
     uploadDate: Number(d.chapter.uploadDate),
     state: d.state,
     progress: Number(d.progress) || 0,
-    tries: d.tries
+    tries: d.tries,
+    sourceMissing: d.manga.source === null
   }
 }
 
@@ -246,6 +248,59 @@ function progressText(item) {
   return "queued"
 }
 
+// Suwayomi keeps no reason for a failed download, so the queue asks for
+// the chapter's pages once and labels what goes wrong (Failure.js).
+// reasons: { chapterId: Failure.reason, or null while its probe is out },
+// for failed items only: an item that is retried (no longer ERROR) or
+// leaves the queue loses its reason, so a new failure is probed again.
+// A manga with no source needs no probe. -> { reasons, probe: the chapter
+// ids to probe now }.
+function failed(items, reasons) {
+  var next = {}
+  var probe = []
+  items.forEach(function(i) {
+    if (i.state !== "ERROR") return
+    var id = i.chapterId
+    if (reasons[id] !== undefined) next[id] = reasons[id]
+    else if (i.sourceMissing) next[id] = Failure.reason("Source not installed")
+    else {
+      next[id] = null
+      probe.push(id)
+    }
+  })
+  return { reasons: next, probe: probe }
+}
+
+var PROBE_MUTATION = "mutation($id: Int!) { fetchChapterPages(input: { chapterId: $id }) { pages } }"
+
+function probePayload(chapterId) {
+  return { query: PROBE_MUTATION, variables: { id: chapterId } }
+}
+
+// The reasons once the probe of chapterId answers (reply as Model.reply
+// gives). Only a probe still waited on lands. One the server never
+// answered drops out, so the next queue change probes again. Pages that
+// load leave no error to read; no pages is what the downloader logs.
+function probed(reasons, chapterId, reply) {
+  if (reasons[chapterId] !== null) return reasons
+  var next = Object.assign({}, reasons)
+  if (reply.state === "ok") {
+    var pages = reply.data.fetchChapterPages ? reply.data.fetchChapterPages.pages : []
+    next[chapterId] = Failure.reason(pages.length ? "Its pages load now" : "Chapter does not have any pages to download")
+  } else if (reply.state === "error") next[chapterId] = Failure.reason(reply.message)
+  else delete next[chapterId]
+  return next
+}
+
+// A queue row's status: progressText, and on a failed row its reason and
+// hint once known.
+function statusText(item, reason, flareOn) {
+  var text = progressText(item)
+  if (item.state !== "ERROR" || !reason) return text
+  var hint = Failure.hint(reason, flareOn)
+  return text + "   " + reason.text + (hint ? "   " + hint : "")
+}
+
 // What the chapter list shows beside a chapter: "" when it is neither
 // queued nor on disk.
 function marker(chapter, items) {
@@ -279,6 +334,10 @@ if (typeof module !== "undefined") {
     orderPayload: orderPayload,
     togglePayload: togglePayload,
     progressText: progressText,
+    failed: failed,
+    probePayload: probePayload,
+    probed: probed,
+    statusText: statusText,
     marker: marker
   }
 }

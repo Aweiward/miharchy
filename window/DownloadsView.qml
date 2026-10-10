@@ -20,6 +20,11 @@ Rectangle {
   property int cursor: 0
   // Only the latest request may update the queue.
   property int seq: 0
+  // Why each failed download failed (Downloads.failed).
+  property var reasons: ({})
+  // The server's flareSolverrEnabled: a Cloudflare row hints at Setup
+  // while it is off.
+  property bool flareOn: false
 
   readonly property var problem: Model.problem(queue, configPath)
   // The first X arms "cancel all"; shell.qml disarms it on any other key.
@@ -40,6 +45,7 @@ Rectangle {
   onConfigChanged: {
     seq++
     queue = Downloads.initial()
+    reasons = {}
     send({ query: Downloads.STATUS_QUERY })
   }
 
@@ -48,7 +54,17 @@ Rectangle {
     var gone = Downloads.left(queue.items, next.items)
     queue = next
     cursor = Math.max(0, Math.min(cursor, queue.items.length - 1))
+    var f = Downloads.failed(queue.items, reasons)
+    reasons = f.reasons
+    f.probe.forEach(probe)
     if (gone.length) leftQueue(gone)
+  }
+
+  // Outside seq: a probe never touches the queue.
+  function probe(chapterId) {
+    Session.send(config, Downloads.probePayload(chapterId), function(reply) {
+      view.reasons = Downloads.probed(view.reasons, chapterId, reply)
+    })
   }
 
   // Any reply that carries the download status: the first look's, or a
@@ -195,7 +211,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.5
         anchors.verticalCenter: parent.verticalCenter
-        text: Downloads.progressText(row.modelData)
+        text: Downloads.statusText(row.modelData, view.reasons[row.modelData.chapterId], view.flareOn)
         color: row.modelData.state === "ERROR" ? view.theme.urgent : row.current ? view.theme.selectedText : view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall

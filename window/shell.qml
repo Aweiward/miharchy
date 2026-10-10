@@ -1230,6 +1230,7 @@ ShellRoot {
         theme: theme
         config: root.config
         configPath: root.configPath
+        flareOn: root.settingsState.values.flareSolverrEnabled === true
         onLeftQueue: function(items) {
           mangaDetail.downloadsLeft(items)
           updatesView.load()
