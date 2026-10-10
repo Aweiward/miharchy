@@ -19,6 +19,7 @@ import "Updates.js" as Updates
 import "Restart.js" as Restart
 import "Images.js" as Images
 import "UpNext.js" as UpNext
+import "NextChapters.js" as NextChapters
 import "Sync.js" as Sync
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
@@ -404,7 +405,7 @@ ShellRoot {
   }
 
   // Mihon's library selection actions, on the targets: "read" and "unread"
-  // mark every chapter, "download" queues the unread ones, "delete" takes
+  // mark every chapter, "delete" takes
   // the downloads off the disk, "remove" takes the manga out of the
   // library, and "removeDeleting" does both, as Mihon's remove dialog with
   // both boxes ticked. The selection ends, as in Mihon.
@@ -426,7 +427,7 @@ ShellRoot {
       if (reply.state !== "ok") return failed(reply)
       var chapters = Browse.toChapters(reply.data.chapters.nodes)
       if (action === "read" || action === "unread") return root.markChapters(chapters, action, ids)
-      var payload = action === "download" ? Downloads.enqueuePayload(chapters.filter(function(c) { return !c.read && !c.downloaded })) : Downloads.removePayload(chapters, downloadsView.queue.items)
+      var payload = Downloads.removePayload(chapters, downloadsView.queue.items)
       if (action === "removeDeleting") {
         if (!payload) return remove()
         // The manga leave only once their downloads are gone.
@@ -437,7 +438,7 @@ ShellRoot {
         })
       }
       if (!payload) {
-        root.libraryNote = action === "download" ? "Every unread chapter is downloaded already." : "No chapter is downloaded."
+        root.libraryNote = "No chapter is downloaded."
         return
       }
       root.send(payload, function(done) {
@@ -483,11 +484,11 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var editing = restoreView.editing ? "restore" : reader.editing ? "reader" : settingsEditing ? "settings" : libraryView.editing ? "library" : historyView.editing ? "history" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : mangaDetail.editing ? "manga" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
+    var editing = nextChapters.editing ? "nextChapters" : restoreView.editing ? "restore" : reader.editing ? "reader" : settingsEditing ? "settings" : libraryView.editing ? "library" : historyView.editing ? "history" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : mangaDetail.editing ? "manga" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
     // An open restore, sync result, download queue, reader, migration or manga
     // detail decides which keys apply, in that order; on Browse, the screen
     // or the panel over it does.
-    var scope = trackAsk ? "track-ask" : restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? (syncView.sync.state === "held" && !syncView.healthMode ? "sync-held" : "sync") : downloadsView.open ? "downloads" : reader.open ? (reader.panelOpen ? "reader-settings" : "reader")
+    var scope = trackAsk ? "track-ask" : nextChapters.open ? "next-chapters" : restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? (syncView.sync.state === "held" && !syncView.healthMode ? "sync-held" : "sync") : downloadsView.open ? "downloads" : reader.open ? (reader.panelOpen ? "reader-settings" : "reader")
       : migrateView.open ? "migrate-" + migrateView.step
       : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
       : mangaDetail.open ? (mangaDetail.dupesOpen ? "manga-duplicates" : mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.downloadsOpen ? "manga-download" : mangaDetail.selecting ? "manga-select" : "manga")
@@ -582,6 +583,14 @@ ShellRoot {
       var dupe = mangaDetail.dupes[mangaDetail.dupesCursor]
       mangaDetail.dupes = []
       migrateView.startWith(dupe, mangaDetail.manga)
+      return
+    }
+    if (id === "nextChapters.upNext") {
+      nextChapters.openUpNext()
+      return
+    }
+    if (id.indexOf("nextChapters.") === 0) {
+      nextChapters.run(id)
       return
     }
     if (id === "migrate.batch") {
@@ -791,7 +800,8 @@ ShellRoot {
         actOnLibrary(id === "library.markRead" ? "read" : "unread")
         break
       case "library.download":
-        actOnLibrary("download")
+        if (shown.manga.length && config) nextChapters.openFor(NextChapters.librarySet(shown, librarySelected))
+        librarySelected = []
         break
       case "library.setCategories":
         if (!connection.categories.length) libraryNote = "No categories yet. Press c to make one."
@@ -1185,7 +1195,7 @@ ShellRoot {
           id: hintBar
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.trackAsk ? "y update   n keep" : syncView.open || restoreView.open ? "" : libraryView.editing || historyView.editing ? "enter keep   esc clear" : mangaDetail.writing ? "enter save   shift+enter new line   esc cancel" : root.settingsEditing || settingsView.loginEditing || trackPanel.editing || mangaDetail.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryHint, updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: browseView.panel || browseView.screen !== "extensions" ? browseView.hint : extensionsView.hint + (extensionsView.details ? "" : browseView.hint), setup: "j k move   enter act   ", check: checkView.hint })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: root.trackAsk ? "y update   n keep" : syncView.open || restoreView.open ? "" : libraryView.editing || historyView.editing ? "enter keep   esc clear" : mangaDetail.writing ? "enter save   shift+enter new line   esc cancel" : root.settingsEditing || nextChapters.editing || settingsView.loginEditing || trackPanel.editing || mangaDetail.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : nextChapters.open ? nextChapters.hint + ": commands   q quit" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryHint, updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: browseView.panel || browseView.screen !== "extensions" ? browseView.hint : extensionsView.hint + (extensionsView.details ? "" : browseView.hint), setup: "j k move   enter act   ", check: checkView.hint })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
           maxWidth: parent.width - connectionText.width - theme.fontSize * 2 - (codeHint.visible ? codeHint.width + theme.fontSize * 2 : 0)
           theme: theme
           onKey: function(event) { root.handleKey(event) }
@@ -1236,6 +1246,18 @@ ShellRoot {
           updatesView.load()
         }
         onKey: function(event) { root.handleKey(event) }
+      }
+
+      NextChaptersMenu {
+        id: nextChapters
+        anchors.fill: parent
+        theme: theme
+        config: root.config
+        queueItems: downloadsView.queue.items
+        onDownloads: function(reply) { downloadsView.apply(reply) }
+        onQueued: downloadsView.run("downloads.open")
+        onKey: function(event) { event.accepted = root.handleKey(event) }
+        onEditEnded: keyRoot.forceActiveFocus()
       }
 
       SyncView {

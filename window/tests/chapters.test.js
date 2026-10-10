@@ -237,8 +237,8 @@ const shelf = [
 ];
 const row = (id, count) => Ch.DOWNLOADS.find((r) => r.id === id && (count === undefined || r.count === count));
 
-test("the download menu offers Mihon's rows: next 1, 5, 10, 25, a typed number, unread, bookmarked", () => {
-  assert.deepEqual(Ch.DOWNLOADS.map((r) => [r.id, r.count]), [["next", 1], ["next", 5], ["next", 10], ["next", 25], ["next", 0], ["unread", undefined], ["bookmarked", undefined]]);
+test("the download menu offers Mihon's rows and next 2: next 1, 2, 5, 10, 25, a typed number, unread, bookmarked", () => {
+  assert.deepEqual(Ch.DOWNLOADS.map((r) => [r.id, r.count]), [["next", 1], ["next", 2], ["next", 5], ["next", 10], ["next", 25], ["next", 0], ["unread", undefined], ["bookmarked", undefined]]);
 });
 
 test("next N takes the first unread chapters not on disk, in reading order, whatever the list's direction", () => {

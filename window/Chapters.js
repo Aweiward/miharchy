@@ -241,10 +241,12 @@ function nextUnread(shown, prefs) {
   return prefs.chapterSortDirection === "asc" ? unread[0] : unread[unread.length - 1]
 }
 
-// Mihon's download menu (DownloadDropdownMenu). count: how many unread
+// Mihon's download menu (DownloadDropdownMenu), plus Next 2 for the
+// Library's next chapters (NextChapters.js). count: how many unread
 // chapters a "next" row takes; the custom row asks for it.
 var DOWNLOADS = [
   { id: "next", count: 1, label: "Next chapter" },
+  { id: "next", count: 2, label: "Next 2 chapters" },
   { id: "next", count: 5, label: "Next 5 chapters" },
   { id: "next", count: 10, label: "Next 10 chapters" },
   { id: "next", count: 25, label: "Next 25 chapters" },

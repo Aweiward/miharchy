@@ -32,7 +32,7 @@ var KEY = {
 // global, or its panel: source-filters,
 // source-settings, sources-languages; Library screen: categories; or
 // overlay: library-options, updates-filter, library-categories, library-remove, manga, manga-categories, manga-options,
-// manga-download, manga-duplicates, manga-select, manga-track,
+// manga-download, next-chapters, manga-duplicates, manga-select, manga-track,
 // manga-track-pick, track-ask, downloads, reader, reader-settings, sync,
 // sync-held,
 // the library check: check, check-merge,
@@ -57,6 +57,7 @@ var commands = [
   { id: "mode.incognito", title: "Incognito mode on or off", keys: [] },
   { id: "mode.downloadedOnly", title: "Downloaded only on or off", keys: [] },
   { id: "migrate.batch", title: "Migrate a source", keys: [] },
+  { id: "nextChapters.upNext", title: "Download next chapters of Up next", keys: [] },
   // Before library.reload and window.quit: on these screens r and Esc mean
   // something else.
   { id: "extensions.refresh", title: "Refresh extensions", keys: ["r"], view: "extensions", hidden: true },
@@ -107,6 +108,11 @@ var commands = [
   { id: "manga.selectEnd", title: "End the selection", keys: ["Esc", "v"], view: "manga-select", hidden: true },
   { id: "manga.optionsClose", title: "Close chapter filter and sort", keys: ["Esc", "Backspace", "F"], view: "manga-options", hidden: true },
   { id: "manga.downloadsClose", title: "Close the download menu", keys: ["Esc", "Backspace", "U"], view: "manga-download", hidden: true },
+  // The same menu for a set of manga (NextChaptersMenu.qml).
+  { id: "nextChapters.close", title: "Close the download menu", keys: ["Esc", "Backspace", "d"], view: "next-chapters", hidden: true },
+  { id: "nextChapters.up", title: "Previous row", keys: ["k", "Up"], view: "next-chapters", hidden: true },
+  { id: "nextChapters.down", title: "Next row", keys: ["j", "Down"], view: "next-chapters", hidden: true },
+  { id: "nextChapters.choose", title: "Download these chapters", keys: ["Enter", "Space"], view: "next-chapters", hidden: true },
   { id: "manga.duplicatesClose", title: "Cancel adding", keys: ["Esc", "Backspace"], view: "manga-duplicates", hidden: true },
   { id: "manga.duplicatesUp", title: "Previous manga", keys: ["k", "Up"], view: "manga-duplicates", hidden: true },
   { id: "manga.duplicatesDown", title: "Next manga", keys: ["j", "Down"], view: "manga-duplicates", hidden: true },
@@ -297,7 +303,7 @@ var commands = [
   { id: "library.invert", title: "Invert the selection", keys: ["I"], view: "library", hidden: true },
   { id: "library.markRead", title: "Mark every chapter read", keys: ["R"], view: "library", hidden: true },
   { id: "library.markUnread", title: "Mark every chapter unread", keys: ["U"], view: "library", hidden: true },
-  { id: "library.download", title: "Download unread chapters", keys: ["d"], view: "library", hidden: true },
+  { id: "library.download", title: "Download next, unread or bookmarked chapters", keys: ["d"], view: "library", hidden: true },
   { id: "library.deleteDownloads", title: "Delete downloads", keys: ["X"], view: "library", hidden: true },
   { id: "library.setCategories", title: "Change categories", keys: ["C"], view: "library", hidden: true },
   { id: "library.pickUp", title: "Previous category", keys: ["k", "Up"], view: "library-categories", hidden: true },

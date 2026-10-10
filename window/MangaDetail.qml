@@ -8,6 +8,7 @@ import "Downloads.js" as Downloads
 import "Chapters.js" as Chapters
 import "Commands.js" as Commands
 import "Prefs.js" as Prefs
+import "NextChapters.js" as NextChapters
 
 // A manga's detail over the view that opened it, Library or Browse: cover
 // and metadata beside the chapter list, filtered and sorted as the manga's
@@ -115,6 +116,13 @@ Rectangle {
     onFailed: function(reply) { view.optionsNote = reply.message || reply.state }
   }
 
+  // The download menu's last row (NextChapters.MENU_PREFS), global.
+  PrefStore {
+    id: menuPrefs
+    config: view.config
+    table: NextChapters.MENU_PREFS
+  }
+
   function send(payload, done) {
     return Session.send(config, payload, done)
   }
@@ -125,6 +133,7 @@ Rectangle {
     detail = Browse.detail(mangaId, fromSource)
     chapterPrefs.open(mangaId)
     scanlatorPrefs.open(mangaId)
+    menuPrefs.load()
     cursor = 0
     detailSeq++
     advance()
@@ -253,12 +262,6 @@ Rectangle {
     sendDownloads(Downloads.enqueuePayload(list))
   }
 
-  onCountingChanged: {
-    if (!counting) return
-    countField.text = ""
-    countField.forceActiveFocus()
-  }
-
   onWritingChanged: {
     if (!writing) return
     notesNote = ""
@@ -372,7 +375,7 @@ Rectangle {
         break
       case "manga.downloads":
         downloadsOpen = true
-        downloadsCursor = 0
+        downloadsCursor = NextChapters.rowIndex(menuPrefs.values.downloadMenuManga)
         downloadsNote = ""
         break
       case "manga.downloadsClose":
@@ -386,6 +389,7 @@ Rectangle {
       case "manga.downloadsChoose":
         var row = Chapters.DOWNLOADS[downloadsCursor]
         downloadsNote = ""
+        menuPrefs.set([{ key: "downloadMenuManga", value: NextChapters.rowKey(row) }])
         if (row.id === "next" && !row.count) counting = true
         else downloadRow(row, row.count)
         break
@@ -397,7 +401,7 @@ Rectangle {
           saveNotes()
           break
         }
-        var n = Chapters.count(countField.text)
+        var n = Chapters.count(downloadMenu.countText)
         if (!n) {
           downloadsNote = "Type a whole number above 0"
           break
@@ -706,92 +710,18 @@ Rectangle {
   }
 
   // Mihon's download menu.
-  Rectangle {
+  DownloadMenu {
+    id: downloadMenu
     anchors.top: parent.top
     anchors.right: parent.right
     anchors.margins: view.theme.fontSize * 2
-    width: view.theme.fontSize * 30
-    height: downloadRows.implicitHeight + view.theme.fontSize * 2
     visible: view.downloadsOpen
-    color: Qt.alpha(view.theme.panel, 1)
-    border.width: 1
-    border.color: view.theme.panelBorder
-
-    Column {
-      id: downloadRows
-      x: view.theme.fontSize
-      y: view.theme.fontSize
-      width: parent.width - view.theme.fontSize * 2
-
-      Text {
-        bottomPadding: view.theme.fontSize * 0.5
-        text: "Download"
-        color: view.theme.muted
-        font.family: view.theme.fontFamily
-        font.pixelSize: view.theme.fontSmall
-      }
-
-      Repeater {
-        model: Chapters.DOWNLOADS
-
-        Text {
-          id: downloadRow
-          required property var modelData
-          required property int index
-          readonly property bool current: index === view.downloadsCursor
-          width: downloadRows.width
-          elide: Text.ElideRight
-          text: modelData.label
-          color: current ? view.theme.accent : view.theme.foreground
-          font.family: view.theme.fontFamily
-          font.pixelSize: view.theme.fontSize
-
-          MouseArea {
-            anchors.fill: parent
-            enabled: !view.counting
-            onClicked: view.downloadsCursor = downloadRow.index
-            onDoubleClicked: {
-              view.downloadsCursor = downloadRow.index
-              view.key(Commands.enter())
-            }
-          }
-        }
-      }
-
-      Row {
-        visible: view.counting
-        topPadding: view.theme.fontSize * 0.5
-        spacing: view.theme.fontSize
-
-        Text {
-          text: "How many"
-          color: view.theme.muted
-          font.family: view.theme.fontFamily
-          font.pixelSize: view.theme.fontSize
-        }
-
-        TextInput {
-          id: countField
-          width: view.theme.fontSize * 8
-          color: view.theme.foreground
-          selectionColor: view.theme.selected
-          font.family: view.theme.fontFamily
-          font.pixelSize: view.theme.fontSize
-          Keys.onPressed: function(event) { view.key(event) }
-        }
-      }
-
-      Text {
-        width: parent.width
-        visible: text !== ""
-        topPadding: view.theme.fontSize * 0.8
-        wrapMode: Text.Wrap
-        text: view.downloadsNote
-        color: view.theme.accent
-        font.family: view.theme.fontFamily
-        font.pixelSize: view.theme.fontSmall
-      }
-    }
+    theme: view.theme
+    cursor: view.downloadsCursor
+    counting: view.counting
+    note: view.downloadsNote
+    onMoved: function(index) { view.downloadsCursor = index }
+    onKey: function(event) { view.key(event) }
   }
 
   // The chapter filter and sort, drawn as the Library's panel.
