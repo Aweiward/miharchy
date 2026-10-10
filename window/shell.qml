@@ -1241,6 +1241,7 @@ ShellRoot {
         config: root.config
         configPath: root.configPath
         flareOn: root.settingsState.values.flareSolverrEnabled === true
+        lastRun: nextChapters.lastRun
         onLeftQueue: function(items) {
           mangaDetail.downloadsLeft(items)
           updatesView.load()
@@ -1255,7 +1256,10 @@ ShellRoot {
         config: root.config
         queueItems: downloadsView.queue.items
         onDownloads: function(reply) { downloadsView.apply(reply) }
-        onQueued: downloadsView.run("downloads.open")
+        onQueued: {
+          downloadsView.cursor = -1
+          downloadsView.run("downloads.open")
+        }
         onKey: function(event) { event.accepted = root.handleKey(event) }
         onEditEnded: keyRoot.forceActiveFocus()
       }

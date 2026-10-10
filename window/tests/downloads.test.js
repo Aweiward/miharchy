@@ -269,6 +269,13 @@ test("only the last move of a reorder answers with the queue, which the queue re
   assert.deepEqual(polled(q, data).items.map((i) => i.chapterId), [3, 2, 1]);
 });
 
+test("a retry takes the failed chapters out and queues them again in one request, so their tries start over", () => {
+  const p = D.retryPayload([4, 9]);
+  assert.match(p.query, /dequeueChapterDownloads\(input: \{ ids: \$ids \}\).*enqueueChapterDownloads\(input: \{ ids: \$ids \}\)/);
+  assert.deepEqual(p.variables, { ids: [4, 9] });
+  assert.equal(D.retryPayload([]), null);
+});
+
 const failedItem = (id, source) => Object.assign(item(id, "ERROR", 0), { manga: { id: 5, title: "Spy Room", source } });
 const queueOf = (...items) => polled(D.initial(), { downloadStatus: status("STARTED", items) }).items;
 const gqlError = (raw) => M.reply(200, JSON.stringify({ errors: [{ message: raw }] }));

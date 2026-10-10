@@ -95,3 +95,62 @@ test("the refresh and the read ask the server for one manga and for the set", ()
   assert.ok(read.variables.keys.includes("miharchy.excludedScanlators"));
   assert.match(read.query, /mangas\(filter: \{ id: \{ in: \$ids \} \}\)/);
 });
+
+// The run in the download queue: queue items and live updates as Downloads.js
+// holds them.
+const q = (id, state) => ({ chapterId: id, state });
+const up = (type, id) => ({ type, download: { chapter: { id } } });
+const done = (failures) => Object.assign(N.queued(N.start(N.librarySet(shown, []), row("next", 2), 2), [11, 12, 13, 14]), failures ? { failures } : {});
+const follow = (run, steps) => steps.reduce((marks, [items, updates]) => N.track(marks, run, items, updates || []), {});
+
+test("a run chapter is queued until the queue has shown it, on disk once it leaves, failed while it is in ERROR", () => {
+  const run = done();
+  const items = [q(11, "DOWNLOADING"), q(12, "QUEUED"), q(13, "ERROR"), q(14, "QUEUED"), q(99, "QUEUED")];
+  let marks = follow(run, [[items]]);
+  assert.deepEqual(N.tally(run, items, marks), { onDisk: 0, queued: 3, failed: [13] }, "99 is not the run's");
+  const later = [q(13, "ERROR"), q(99, "QUEUED")];
+  marks = N.track(marks, run, later, [up("FINISHED", 11), up("FINISHED", 12), up("FINISHED", 14)]);
+  assert.deepEqual(N.tally(run, later, marks), { onDisk: 3, queued: 0, failed: [13] });
+  assert.deepEqual(N.tally(run, [], {}), { onDisk: 0, queued: 4, failed: [] }, "a chapter the queue has not shown yet is still to come");
+});
+
+test("a run chapter taken out of the queue counts nowhere, unless it comes back", () => {
+  const run = done();
+  const items = [q(11, "QUEUED"), q(12, "QUEUED"), q(13, "ERROR"), q(14, "QUEUED")];
+  let marks = follow(run, [[items], [[q(13, "ERROR")], [up("DEQUEUED", 11), up("DEQUEUED", 12), up("DEQUEUED", 14)]]]);
+  assert.deepEqual(N.tally(run, [q(13, "ERROR")], marks), { onDisk: 0, queued: 0, failed: [13] });
+  const retried = [q(13, "QUEUED")];
+  marks = N.track(marks, run, retried, [up("DEQUEUED", 13), up("QUEUED", 13)]);
+  assert.deepEqual(N.tally(run, retried, marks), { onDisk: 0, queued: 1, failed: [] }, "a retry dequeues and queues again in one result");
+});
+
+test("the run ends when none of its chapters is queued or downloading; failed ones stay behind", () => {
+  const run = done();
+  const marks = follow(run, [[[q(11, "QUEUED"), q(12, "QUEUED"), q(13, "QUEUED"), q(14, "QUEUED")]]]);
+  assert.equal(N.ended(run, N.tally(run, [q(13, "ERROR"), q(14, "DOWNLOADING")], marks)), false);
+  assert.equal(N.ended(run, N.tally(run, [q(13, "ERROR")], marks)), true);
+  assert.equal(N.ended(run, N.tally(run, [], {})), false, "not before the queue shows its chapters");
+  assert.equal(N.ended(N.start(N.librarySet(shown, []), row("next", 2), 2), { onDisk: 0, queued: 0, failed: [] }), false, "not while it fetches chapters");
+});
+
+test("the summary counts the run's chapters and the manga whose chapters could not be fetched", () => {
+  const run = done([{ mangaId: 2, title: "Two", message: "Missing source 7" }]);
+  assert.equal(N.summary(run, { onDisk: 38, queued: 0, failed: [1, 2, 3, 4] }), "Next 2 chapters of Action: 38 on disk, 4 failed, 1 manga could not fetch chapters");
+  assert.equal(N.summary(done(), { onDisk: 2, queued: 2, failed: [] }), "Next 2 chapters of Action: 2 on disk, 2 queued");
+  assert.equal(N.summary(N.start(N.upNextSet([]), row("next", 2), 2), { onDisk: 0, queued: 0, failed: [] }), "Next 2 chapters of Up next: fetching chapters");
+  assert.equal(N.summary(N.start(N.librarySet(shown, [1, 2]), row("next", 1), 1), { onDisk: 0, queued: 0, failed: [] }), "Next chapter of 2 manga: fetching chapters");
+});
+
+test("a run shows in the queue once it has something to count", () => {
+  assert.equal(N.shown(null), false);
+  assert.equal(N.shown(N.start(N.upNextSet([]), row("next", 2), 2)), true, "while it fetches chapters");
+  assert.equal(N.shown(N.queued(N.start(N.upNextSet([]), row("next", 2), 2), [])), false, "nothing queued and nothing failed");
+  assert.equal(N.shown(done()), true);
+  assert.equal(N.shown(Object.assign(N.queued(N.start(N.upNextSet([]), row("next", 2), 2), []), { failures: [{ mangaId: 1, title: "One", message: "x" }] })), true);
+});
+
+test("the end of a run notifies with the same summary, unless nothing of it was left to report", () => {
+  const run = done();
+  assert.deepEqual(N.notifyCommand(run, { onDisk: 3, queued: 0, failed: [13] }), ["notify-send", "-a", "Miharchy", "--", "Next 2 chapters of Action", "3 on disk, 1 failed"]);
+  assert.equal(N.notifyCommand(run, { onDisk: 0, queued: 0, failed: [] }), null, "every chapter taken out");
+});
