@@ -136,6 +136,14 @@ _Avoid_: export folder
 
 ### Surfaces
 
+**Reading card**:
+A small image of the user's recent reading, in the theme's colors, made to save and share: chapters read in the last 7 days, manga in progress, the streak, and a few covers.
+_Avoid_: stats, dashboard, wrapped, summary
+
+**Streak**:
+The number of days in a row, by local date, on which the user read at least one chapter, ending today or yesterday.
+_Avoid_: run, chain
+
 **Mark**:
 Miharchy's item in the Omarchy bar, showing the unread update count and server status.
 _Avoid_: icon, widget
