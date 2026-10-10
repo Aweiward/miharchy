@@ -396,12 +396,16 @@ footer img { width: 32px; height: 32px; display: inline-block; vertical-align: m
       <figcaption><span class="no">04</span><span class="txt"><b>Webtoon.</b> Long strips scroll as one, picked from the manga's tags.</span></figcaption>
     </figure>
     <figure class="tape">
-      <a href="img/updates.webp"><img src="img/updates.webp" width="1280" height="800" alt="The Updates view, last checked today, listing new chapters grouped by the day they were found: Today, Yesterday, 2026-10-02 and 2026-09-30. Series include The Guy She Was Interested in Wasn't a Guy at All, SSS-Class Revival Hunter, Iruma-kun, The Eminence in Shadow and The Rising of the Shield Hero, with a downloaded marker and two bookmark stars." loading="lazy"></a>
+      <a href="img/updates.webp"><img src="img/updates.webp" width="1280" height="800" alt="The Updates view, last checked today, listing new chapters grouped by the day they were found: Today, Yesterday, 2026-10-07 and 2026-10-05. Series include The Guy She Was Interested in Wasn't a Guy at All, SSS-Class Revival Hunter, Iruma-kun, The Eminence in Shadow and The Rising of the Shield Hero, with a downloaded marker and two bookmark stars." loading="lazy"></a>
       <figcaption><span class="no">05</span><span class="txt"><b>Updates.</b> New chapters from your library, with bookmarks, downloads, filters and bulk actions.</span></figcaption>
     </figure>
     <figure class="tape wide">
       <a href="img/browse.webp"><img src="img/browse.webp" width="1280" height="800" alt="Browse: MangaDex with six filters applied, a cover grid of the most-followed award-winning series such as Solo Leveling, Frieren, Komi Can't Communicate, SPY×FAMILY, Kaguya-sama, Delicious in Dungeon and Attack on Titan, with titles already in the library marked." loading="lazy"></a>
       <figcaption><span class="no">06</span><span class="txt"><b>Browse.</b> Every source from the extension repos you add. Here MangaDex with its own filters: safe, award winning, most followed.</span></figcaption>
+    </figure>
+    <figure class="tape wide">
+      <a href="img/reading-card.webp"><img src="img/reading-card.webp" width="2400" height="1350" alt="The reading card in Tokyo Night colors: 43 chapters in the last 7 days, 8 manga in progress, a 1 day streak, the dates Oct 3 to Oct 10, 2026, and the covers of The Saga of Tanya the Evil, Iruma-kun and The Guy She Was Interested in Wasn't a Guy at All." loading="lazy"></a>
+      <figcaption><span class="no">07</span><span class="txt"><b>Reading card.</b> Your week of reading, from <kbd>c</kbd> on History. <kbd>S</kbd> saves it, <kbd>Y</kbd> copies it.</span></figcaption>
     </figure>
   </div>
 </section>
@@ -412,16 +416,17 @@ footer img { width: 32px; height: 32px; display: inline-block; vertical-align: m
   <div class="two">
     <div>
       <div class="bar-shot">
-        <img src="img/bar-popup.webp" width="1520" height="1220" alt="The Miharchy mark in a bar strip with a count of 18, and its popup listing ten new chapters, 8 more in the window, and the hints enter read, w window, s sync and r refresh." loading="lazy">
+        <img src="img/bar-popup.webp" width="1520" height="1600" alt="The Miharchy mark in a bar strip with a count of 17, and its popup. Up next lists Eleceed at page 12 of 21, SSS-Class Revival Hunter with 2 chapters left and Iruma-kun with 3 left. Updates lists ten new chapters, 7 more in the window, and the hints enter read, w window, s sync and r refresh." loading="lazy">
       </div>
       <p class="note">The mark and its popup are the real <code>plugin/Mark.qml</code>, rendered offscreen. The bar around them (workspaces, clock, tray) and the popup's frame are stand-ins drawn for this picture, not a desktop capture.</p>
     </div>
     <ul class="keys">
       <li>The mark counts unread updates and checks once a minute.</li>
-      <li><kbd>Left click</kbd> lists the new chapters. <kbd>Enter</kbd> opens one in the reader.</li>
+      <li><kbd>Left click</kbd> lists the first 3 manga in Up next, then the new chapters. <kbd>Enter</kbd> opens one in the reader.</li>
       <li><kbd>Middle click</kbd> or <kbd>w</kbd> opens the window.</li>
       <li><kbd>s</kbd> syncs with your phone; the burst turns green while it runs.</li>
       <li>A notification tells you when new chapters land.</li>
+      <li>A line warns you when the phone falls behind on restores, or sends no backup for 3 days.</li>
     </ul>
   </div>
 </section>
@@ -429,15 +434,18 @@ footer img { width: 32px; height: 32px; display: inline-block; vertical-align: m
 <section id="peek" aria-labelledby="peek-h">
   <p class="label">Bonus track · the peek</p>
   <h2 id="peek-h">One key, over anything</h2>
-  <p class="lede">Press <kbd>Super + M</kbd> while you work. Miharchy slides in over the workspace you are on, on the next chapter to read. Press it again and it slides away. Only a tiling desktop can do this: Mihon is on your phone, Suwayomi is in a browser tab.</p>
+  <p class="lede">Press <kbd>Super + M</kbd> while you work. Miharchy slides in over the workspace you are on, on the next chapter of the first manga in Up next. Press it again and it slides away. Only a tiling desktop can do this: Mihon is on your phone, Suwayomi is in a browser tab.</p>
   <div class="sync" role="img" aria-label="Diagram: from any workspace, Super + M shows Miharchy on its own Hyprland special workspace, open on the next chapter to read; the same key hides it.">
     <div class="node"><span class="dev">Any workspace</span><h3>You, working</h3><p>A terminal, an editor, a browser. Nothing moves.</p></div>
     <div class="arrow" aria-hidden="true">→</div>
-    <div class="node"><span class="dev">One key</span><h3>Super + M</h3><p>Setup adds the bind to your Hyprland bindings, once.</p></div>
+    <div class="node"><span class="dev">One key</span><h3>Super + M</h3><p>Setup adds the binds to your Hyprland bindings, once.</p></div>
     <div class="arrow" aria-hidden="true">→</div>
-    <div class="node"><span class="dev">Special workspace</span><h3>The peek</h3><p>The reader, on the next chapter of the manga you read last.</p></div>
+    <div class="node"><span class="dev">Special workspace</span><h3>The peek</h3><p>The reader, on the next chapter of the first manga in Up next.</p></div>
   </div>
   <ul class="keys">
+    <li>Up next puts the manga you are reading first, then the manga close to caught up, then fresh updates.</li>
+    <li><kbd>Super + Ctrl + M</kbd> moves on to the next manga in Up next.</li>
+    <li>Catch-up stops a peek after 3 chapters of one manga and names the next one. <kbd>c</kbd> goes on anyway.</li>
     <li>The same key, or a workspace switch, hides the peek. It comes back on the page you left.</li>
     <li>The next chapter comes from your read state, so a chapter you finished on the phone counts after a sync.</li>
     <li>A window you already placed on a workspace stays there: the key brings it up and resumes.</li>
@@ -461,6 +469,7 @@ footer img { width: 32px; height: 32px; display: inline-block; vertical-align: m
     <li><span>Press <kbd>s</kbd> in the window or the bar popup. Miharchy merges the newest phone backup and writes <code>miharchy-&lt;time&gt;.tachibk</code>.</span></li>
     <li><span>Restore that file in Mihon. Anything a restore cannot apply, such as a manga you removed, is listed after the sync.</span></li>
   </ol>
+  <p class="note">Setup pairs the phone over Syncthing: it shows this desktop's ID as a QR code to scan in Syncthing-Fork. Settings → Phone sync then tells you if the phone restored the newest desktop backup, and lists what is left to repeat by hand.</p>
 </section>
 
 <section id="features" aria-labelledby="features-h">
@@ -474,10 +483,14 @@ footer img { width: 32px; height: 32px; display: inline-block; vertical-align: m
     <div class="feat"><span class="ico">TRACK</span><h3>Trackers</h3><p>Log in to the trackers Suwayomi offers. Progress goes out when you finish a chapter.</p></div>
     <div class="feat"><span class="ico">LOCAL</span><h3>Local manga</h3><p>Point it at a folder of chapters or CBZ files and read them like any source.</p></div>
     <div class="feat"><span class="ico">DL</span><h3>Downloads</h3><p>A queue you can reorder, CBZ, auto-download of new chapters, delete after reading.</p></div>
+    <div class="feat"><span class="ico">TRIP</span><h3>Offline before a trip</h3><p>Download the next chapters of many manga at once. Failed chapters say why, and <kbd>r</kbd> retries them.</p></div>
+    <div class="feat"><span class="ico">SCAN</span><h3>Scan cleanup</h3><p>Crops white or black borders and stretches washed-out pages, on screen only. <kbd>O</kbd> shows the original.</p></div>
     <div class="feat"><span class="ico">BAK</span><h3>Backups and restore</h3><p>Write and restore Mihon-format backups, by hand or on a schedule.</p></div>
     <div class="feat"><span class="ico">INC</span><h3>Incognito mode</h3><p>Read without saving progress or history, and nothing goes to trackers. Downloaded-only mode for offline days.</p></div>
     <div class="feat"><span class="ico">MIG</span><h3>Migrate</h3><p>Move a manga to another source with its read state, categories and tracks.</p></div>
     <div class="feat"><span class="ico">LIB</span><h3>Library tools</h3><p>Categories, sorts, filters, selection and bulk actions, history with search.</p></div>
+    <div class="feat"><span class="ico">CHECK</span><h3>Library check</h3><p>Lists missing sources, failed updates, duplicates and stalled manga, and leads to Migrate.</p></div>
+    <div class="feat"><span class="ico">CARD</span><h3>Reading card</h3><p>Your week of reading as an image in your theme's colors, to save and share.</p></div>
     <div class="feat"><span class="ico">THEME</span><h3>Your Omarchy theme</h3><p>Colors and fonts follow the active theme, live.</p></div>
   </div>
 </section>
@@ -486,17 +499,16 @@ footer img { width: 32px; height: 32px; display: inline-block; vertical-align: m
   <p class="label">Install</p>
   <h2 id="install-h">One command, then Setup</h2>
   <pre><code>omarchy plugin add https://github.com/Aweiward/miharchy --enable</code></pre>
-  <p class="note">This adds the mark to the bar. Middle click it to open the window. The first time, the window opens on Setup. Move with <kbd>j</kbd> and <kbd>k</kbd>, press <kbd>Enter</kbd> on a step, and <kbd>y</kbd> to run it. Setup never runs <code>sudo</code>: it shows the command for you to run.</p>
+  <p class="note">This adds the mark to the bar. Middle click it to open the window. The first time, the window opens on Setup. Move with <kbd>j</kbd> and <kbd>k</kbd>, press <kbd>Enter</kbd> on a step, and <kbd>y</kbd> to run it. Setup never runs <code>sudo</code> out of sight: the step that installs packages opens Omarchy's terminal on the exact command, and you type your password there.</p>
   <ol class="setup">
-    <li><b>Java</b><code>sudo pacman -S jdk-openjdk</code></li>
-    <li><b>Suwayomi-Server</b><code>yay -S suwayomi-server-bin</code></li>
-    <li><b>Qt WebSockets</b><code>sudo pacman -S qt6-websockets</code></li>
+    <li><b>Packages</b>A JDK, Qt WebSockets and Suwayomi-Server, through Omarchy's installer.</li>
     <li><b>Server</b>A local user service on 127.0.0.1, with its own password.</li>
     <li><b>FlareSolverr</b>Optional, for Cloudflare sources (Docker).</li>
     <li><b>Sync folder</b>The folder Mihon and Miharchy share.</li>
+    <li><b>Phone backups</b>Installs Syncthing and pairs the phone with a QR code.</li>
     <li><b>Sync helper</b>Builds the sync helper once, a few minutes.</li>
     <li><b>App launcher entry</b>Miharchy in Super + Space.</li>
-    <li><b>Peek key</b>Super + M shows and hides the peek.</li>
+    <li><b>Peek key</b>Super + M for the peek, Super + Ctrl + M for the next manga.</li>
   </ol>
   <p class="note">Update with <code>omarchy plugin update miharchy</code>, then <code>omarchy-restart-shell</code> so the bar runs the new code. The <a href="https://github.com/Aweiward/miharchy#readme">README</a> has the details and how to uninstall.</p>
 </section>

@@ -32,7 +32,7 @@ ShellRoot {
 
   FloatingWindow {
     implicitWidth: 760
-    implicitHeight: 720
+    implicitHeight: 800
     color: Color.background
 
     Item {

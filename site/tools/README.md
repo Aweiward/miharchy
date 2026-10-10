@@ -27,6 +27,7 @@ Never run them inside an installed clone (`~/.config/omarchy/plugins/miharchy`):
 | `steps/gallery.js` | Drive steps: Library, a manga page, the paged reader, then Updates with a real library update (`u`). |
 | `steps/webtoon.js` | Drive steps: the long-strip reader on Eleceed, scrolled down the chapter. |
 | `steps/browse.js` | Drive steps: MangaDex in Browse, with filters set through the filter panel. |
+| `steps/card.js` | Drive steps: History, the reading card (`c`), then the card's own save (`S`) into the run home. |
 | `mark.sh` | Renders the real bar mark and its popup offscreen in a stand-in bar (`mark/harness.qml`, `mark/KeyboardPanel.qml`). |
 | `images.sh` | Converts the captures to `site/img/*.webp` with ImageMagick and copies `icons/miharchy.svg` to `site/`. |
 | `render/render.js` | Renders full-page previews of `site/index.html` (desktop, phone) and writes `site/banner.png` from the hero. It also prints any element past the right edge. |
@@ -40,6 +41,7 @@ Never run them inside an installed clone (`~/.config/omarchy/plugins/miharchy`):
 | `w-40000.png` | `steps/webtoon.js` | `site/img/reader-webtoon.webp` |
 | `g6-browse.png` | `steps/browse.js` | `site/img/browse.webp` |
 | `mark-popup.png` | `mark.sh` | `site/img/bar-popup.webp` |
+| `reading-card.png` (`images.sh` copies the newest `home/Pictures/Miharchy/reading-card-*.png`) | `steps/card.js` | `site/img/reading-card.webp` |
 | `site-desktop.png`, `site-phone.png` | `render/render.js` | previews (not published) |
 
 ## What you need
@@ -108,6 +110,7 @@ Run every command from the repo root of a dev checkout.
    HOME=$MIHARCHY_VERIFY_DIR/home $S/drive.sh $T/steps/gallery.js 180
    HOME=$MIHARCHY_VERIFY_DIR/home $S/drive.sh $T/steps/webtoon.js 120
    HOME=$MIHARCHY_VERIFY_DIR/home $S/drive.sh $T/steps/browse.js 90
+   HOME=$MIHARCHY_VERIFY_DIR/home $S/drive.sh $T/steps/card.js 90
    $T/mark.sh
    ```
 

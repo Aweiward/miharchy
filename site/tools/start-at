@@ -13,7 +13,7 @@ ss -ltn | grep -q ":$PORT " && { echo "port $PORT is taken" >&2; exit 1; }
 install -d -m 700 "$RUN" "$SERVER_DIR" "$SERVER_DIR/tmp" "$EVIDENCE"
 [ -f "$SERVER_JSON" ] || (umask 077; printf '{"url":"http://127.0.0.1:%s","username":"verify","password":"%s"}\n' "$PORT" "$(openssl rand -hex 16)" > "$SERVER_JSON")
 pw=$(jq -r .password "$SERVER_JSON")
-printf 'server.ip = "127.0.0.1"\nserver.port = %s\nserver.webUIEnabled = false\nserver.systemTrayEnabled = false\nserver.authMode = "basic_auth"\nserver.authUsername = "verify"\nserver.authPassword = "%s"\n' "$PORT" "$pw" > "$SERVER_DIR/server.conf"
+printf 'server.ip = "127.0.0.1"\nserver.port = %s\nserver.webUIEnabled = false\nserver.systemTrayEnabled = false\nserver.authMode = "ui_login"\nserver.authUsername = "verify"\nserver.authPassword = "%s"\nserver.jwtTokenExpiry = "5m"\n' "$PORT" "$pw" > "$SERVER_DIR/server.conf"
 pre=$JAR_DIR/bin/catch_abort.so
 if [ "$1" != 0 ]; then
   pre=$pre:$FAKETIME_LIB
@@ -22,7 +22,7 @@ fi
 ( cd "$JAR_DIR" && LD_PRELOAD=$pre setsid /usr/bin/java -Dsuwayomi.tachidesk.config.server.rootDir="$SERVER_DIR" -Djava.io.tmpdir="$SERVER_DIR/tmp" -jar bin/Suwayomi-Server.jar > "$RUN/server.log" 2>&1 < /dev/null & )
 unset FAKETIME
 for _ in $(seq 150); do
-  v=$(curl -s -m 30 -u "verify:$pw" -H 'content-type: application/json' -d '{"query":"{aboutServer{version}}"}' "http://127.0.0.1:$PORT/api/graphql" | jq -r '.data.aboutServer.version // empty' 2>/dev/null || true)
+  v=$(curl -s -m 30 -H "Authorization: Bearer $(token)" -H 'content-type: application/json' -d '{"query":"{aboutServer{version}}"}' "http://127.0.0.1:$PORT/api/graphql" | jq -r '.data.aboutServer.version // empty' 2>/dev/null || true)
   if [ -n "$v" ]; then
     ss -ltnp | grep ":$PORT " | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2 > "$RUN/server.pid"
     echo "ready: Suwayomi $v on 127.0.0.1:$PORT, clock offset $1, pid $(cat "$RUN/server.pid")"; exit 0
