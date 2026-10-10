@@ -120,6 +120,7 @@ var commands = [
   { id: "manga.duplicateMigrate", title: "Migrate the manga in the library to this one", keys: ["M"], view: "manga-duplicates", hidden: true },
   { id: "manga.addAnyway", title: "Add anyway", keys: ["a"], view: "manga-duplicates", hidden: true },
   { id: "downloads.close", title: "Close the download queue", keys: ["Esc", "D"], view: "downloads", hidden: true },
+  { id: "downloads.retry", title: "Download the failed chapters again", keys: ["r"], view: "downloads", hidden: true },
   { id: "reader.close", title: "Close the reader", keys: ["Esc", "q"], view: "reader", hidden: true },
   { id: "sync.close", title: "Close the sync result", keys: ["Esc", "q", "Enter"], view: ["sync", "sync-held"], hidden: true },
   { id: "sync.apply", title: "Apply the held sync", keys: ["y"], view: "sync-held", hidden: true },

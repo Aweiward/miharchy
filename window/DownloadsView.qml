@@ -1,14 +1,18 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import "Model.js" as Model
 import "Session.js" as Session
 import "Downloads.js" as Downloads
+import "Failure.js" as Failure
+import "NextChapters.js" as NextChapters
 
 // The download queue over the whole window, kept live by Suwayomi's
 // downloadStatusChanged subscription while the overlay shows or anything
 // waits in the queue. Downloads.js decides; shell.qml forwards every
-// "downloads." command to run().
+// "downloads." command to run(). The last next-chapters run (NextChapters.js)
+// shows as a summary line above the queue, at cursor -1.
 Rectangle {
   id: view
 
@@ -25,12 +29,21 @@ Rectangle {
   // The server's flareSolverrEnabled: a Cloudflare row hints at Setup
   // while it is off.
   property bool flareOn: false
+  // nextChapters.lastRun; what the queue has shown of it (NextChapters.track),
+  // and whether its end has notified.
+  property var lastRun: null
+  property var marks: ({})
+  property bool notified: false
+  // A settlePayload request is out.
+  property bool settling: false
+  readonly property bool summaryShown: NextChapters.shown(lastRun)
+  readonly property var tally: lastRun ? NextChapters.tally(lastRun, queue.items, marks) : null
 
   readonly property var problem: Model.problem(queue, configPath)
   // The first X arms "cancel all"; shell.qml disarms it on any other key.
   property bool armed: false
   readonly property string hint: armed ? "X again to cancel every download, any other key keeps them"
-    : "j k move   J K reorder   t top   b bottom   n sort by number   u sort by upload date   x take out   X cancel all   space " + (queue.running ? "pause" : "start") + "   esc close"
+    : "j k move   J K reorder   t top   b bottom   n sort by number   u sort by upload date   x take out   r retry   X cancel all   space " + (queue.running ? "pause" : "start") + "   esc close"
 
   // Items gone from the queue since the last reply: finished or taken out.
   signal leftQueue(var items)
@@ -49,15 +62,58 @@ Rectangle {
     send({ query: Downloads.STATUS_QUERY })
   }
 
+  onLastRunChanged: {
+    if (lastRun && lastRun.state === "refreshing") {
+      marks = {}
+      notified = false
+    }
+    follow([])
+  }
+
   function update(event) {
     var next = Downloads.reduce(queue, event)
     var gone = Downloads.left(queue.items, next.items)
     queue = next
-    cursor = Math.max(0, Math.min(cursor, queue.items.length - 1))
+    cursor = Math.max(summaryShown ? -1 : 0, Math.min(cursor, queue.items.length - 1))
     var f = Downloads.failed(queue.items, reasons)
     reasons = f.reasons
     f.probe.forEach(probe)
+    var live = event.type === "live" && event.data.downloadStatusChanged
+    follow(live && !live.initial ? live.updates || [] : [])
     if (gone.length) leftQueue(gone)
+  }
+
+  function follow(updates) {
+    if (!lastRun) return
+    marks = NextChapters.track(marks, lastRun, queue.items, updates)
+    if (!notified && NextChapters.looksOver(lastRun, queue.items)) settle()
+  }
+
+  // The server decides the end (NextChapters.settle), once per run: a
+  // retry after it shows in the summary line only.
+  function settle() {
+    if (settling || !config) return
+    settling = true
+    var run = lastRun
+    Session.send(config, NextChapters.settlePayload(run), function(reply) {
+      view.settling = false
+      if (reply.state !== "ok" || run !== view.lastRun || view.notified) return
+      view.marks = NextChapters.settle(view.marks, run, view.queue.items, reply.data)
+      if (!NextChapters.ended(run, view.tally)) return
+      view.notified = true
+      var command = NextChapters.notifyCommand(run, view.tally)
+      if (command) Quickshell.execDetached(command)
+    })
+  }
+
+  // A retried chapter loses its reason, so its next failure is probed again.
+  function retry(chapterIds) {
+    var payload = Downloads.retryPayload(chapterIds)
+    if (!payload) return
+    var r = Object.assign({}, reasons)
+    chapterIds.forEach(function(id) { delete r[id] })
+    reasons = r
+    send(payload)
   }
 
   // Outside seq: a probe never touches the queue.
@@ -103,7 +159,10 @@ Rectangle {
         break
       case "downloads.up":
       case "downloads.down":
-        cursor = Math.max(0, Math.min(queue.items.length - 1, cursor + (id === "downloads.up" ? -1 : 1)))
+        cursor = Math.max(summaryShown ? -1 : 0, Math.min(queue.items.length - 1, cursor + (id === "downloads.up" ? -1 : 1)))
+        break
+      case "downloads.retry":
+        retry(cursor === -1 && tally ? tally.failed : item && item.state === "ERROR" ? [item.chapterId] : [])
         break
       case "downloads.moveUp":
       case "downloads.moveDown":
@@ -167,9 +226,59 @@ Rectangle {
     font.pixelSize: view.theme.fontSmall
   }
 
+  Column {
+    id: summary
+    anchors.top: title.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.leftMargin: view.theme.fontSize * 2
+    anchors.rightMargin: view.theme.fontSize * 2
+    anchors.topMargin: view.theme.fontSize * 2
+    visible: view.summaryShown
+
+    Rectangle {
+      width: summary.width
+      height: view.theme.fontSize * 2.4
+      color: view.cursor === -1 ? view.theme.selected : "transparent"
+
+      MouseArea {
+        anchors.fill: parent
+        onClicked: view.cursor = -1
+      }
+
+      Text {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: view.theme.fontSize * 0.5
+        anchors.verticalCenter: parent.verticalCenter
+        elide: Text.ElideRight
+        text: view.summaryShown ? NextChapters.summary(view.lastRun, view.tally) : ""
+        color: view.cursor === -1 ? view.theme.selectedText : view.theme.foreground
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSize
+      }
+    }
+
+    // The manga whose chapters could not be fetched: not queue rows.
+    Repeater {
+      model: view.summaryShown ? view.lastRun.failures : []
+
+      Text {
+        required property var modelData
+        width: summary.width
+        leftPadding: view.theme.fontSize * 0.5
+        elide: Text.ElideRight
+        text: modelData.title + "   could not fetch chapters   " + Failure.reason(modelData.message).text
+        color: view.theme.urgent
+        font.family: view.theme.fontFamily
+        font.pixelSize: view.theme.fontSmall
+      }
+    }
+  }
+
   ListView {
     id: list
-    anchors.top: title.bottom
+    anchors.top: view.summaryShown ? summary.bottom : title.bottom
     anchors.bottom: hintText.top
     anchors.left: parent.left
     anchors.right: parent.right

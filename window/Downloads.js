@@ -21,6 +21,10 @@ var DELETE_MUTATION = "mutation($ids: [Int!]!) { deleteDownloadedChapters(input:
 // folder goes.
 var REMOVE_MUTATION = "mutation($queued: [Int!]!, $ids: [Int!]!) { dequeueChapterDownloads(input: { ids: $queued }) { " + STATUS + " }"
   + " deleteDownloadedChapters(input: { ids: $ids }) { chapters { id isDownloaded } } }"
+// Suwayomi never retries a failed download on its own, and a new enqueue
+// of one keeps its tries; out and in again starts them over.
+var RETRY_MUTATION = "mutation($ids: [Int!]!) { dequeueChapterDownloads(input: { ids: $ids }) { clientMutationId }"
+  + " enqueueChapterDownloads(input: { ids: $ids }) { " + STATUS + " } }"
 var START_MUTATION = "mutation { startDownloader(input: {}) { " + STATUS + " } }"
 var STOP_MUTATION = "mutation { stopDownloader(input: {}) { " + STATUS + " } }"
 // Mihon's cancel all; the server also stops the downloader.
@@ -194,6 +198,11 @@ function dequeuePayload(chapterId) {
   return { query: DEQUEUE_MUTATION, variables: { ids: [chapterId] } }
 }
 
+// chapterIds: failed downloads, all in the queue (see removePayload).
+function retryPayload(chapterIds) {
+  return chapterIds.length ? { query: RETRY_MUTATION, variables: { ids: chapterIds } } : null
+}
+
 function chapterIds(items) {
   return items.map(function(i) { return i.chapterId })
 }
@@ -329,6 +338,7 @@ if (typeof module !== "undefined") {
     autoDeleteQuery: autoDeleteQuery,
     autoDeletePayload: autoDeletePayload,
     dequeuePayload: dequeuePayload,
+    retryPayload: retryPayload,
     moved: moved,
     sorted: sorted,
     orderPayload: orderPayload,

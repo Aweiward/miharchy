@@ -604,6 +604,7 @@ test("the download queue opens from the palette or D on the Library and a manga;
   assert.equal(C.dispatch(q, key(C.KEY.Escape)), "downloads.close");
   assert.equal(C.dispatch(q, text("D")), "downloads.close");
   assert.equal(C.dispatch(q, text("q")), "window.quit");
+  assert.equal(C.dispatch(q, text("r")), "downloads.retry", "r retries there, it does not reload the library");
 });
 
 test("d on the categories screen flags a category for auto-download", () => {

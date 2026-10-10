@@ -89,6 +89,106 @@ function queued(run, chapterIds) {
   return Object.assign({}, run, { queued: chapterIds, state: "done" })
 }
 
+// The run in the download queue. A finished download leaves the queue as a
+// dequeued one does, so the queue view keeps marks, { chapterId: "seen" |
+// "out" | "disk" }: a run chapter the queue has shown, one a DEQUEUED
+// update took out, or what settle() read from the server. Updates first,
+// then the items, so a retry (dequeued and queued again in one result)
+// stays seen. items: Downloads queue items; updates: a live result's
+// updates, [] for any other.
+function track(marks, run, items, updates) {
+  var next = Object.assign({}, marks)
+  updates.forEach(function(u) {
+    if (u.type === "DEQUEUED" && run.queued.indexOf(u.download.chapter.id) !== -1) next[u.download.chapter.id] = "out"
+  })
+  items.forEach(function(i) {
+    if (run.queued.indexOf(i.chapterId) !== -1) next[i.chapterId] = "seen"
+  })
+  return next
+}
+
+function inRun(run, items) {
+  return items.filter(function(i) { return run.queued.indexOf(i.chapterId) !== -1 })
+}
+
+// The live queue alone cannot end a run: a result past maxUpdates leaves
+// changes out, and a dequeue before the subscription runs has no type. So
+// once the window's queue holds none of the run's chapters queued or
+// downloading, the view reads settlePayload and settle() decides.
+function looksOver(run, items) {
+  return run.state === "done" && run.queued.length > 0
+    && !inRun(run, items).some(function(i) { return i.state === "QUEUED" || i.state === "DOWNLOADING" })
+}
+
+function settlePayload(run) {
+  return {
+    query: "query($ids: [Int!]) { downloadStatus { queue { chapter { id } } } chapters(filter: { id: { in: $ids } }) { nodes { id isDownloaded } } }",
+    variables: { ids: run.queued }
+  }
+}
+
+// data: settlePayload()'s reply. Each run chapter outside the window's
+// queue is "disk" when the server has it on disk, taken out ("out") when
+// its queue no longer holds it either, else unchanged: the live queue
+// lags, so it still waits.
+function settle(marks, run, items, data) {
+  var next = Object.assign({}, marks)
+  var queued = data.downloadStatus.queue.map(function(d) { return d.chapter.id })
+  data.chapters.nodes.forEach(function(c) {
+    if (run.queued.indexOf(c.id) === -1 || items.some(function(i) { return i.chapterId === c.id })) return
+    if (c.isDownloaded) next[c.id] = "disk"
+    else if (queued.indexOf(c.id) === -1) next[c.id] = "out"
+  })
+  return next
+}
+
+// -> { onDisk, queued, failed: [chapterId] } over the run's chapters: in
+// the queue by its state; out of it, on disk once seen or settled so, and
+// still to come when never seen (the queue lags the enqueue reply). One
+// taken out counts nowhere.
+function tally(run, items, marks) {
+  var t = { onDisk: 0, queued: 0, failed: [] }
+  run.queued.forEach(function(id) {
+    var item = items.find(function(i) { return i.chapterId === id })
+    if (item) {
+      if (item.state === "ERROR") t.failed.push(id)
+      else if (item.state !== "FINISHED") t.queued++
+      else t.onDisk++
+    } else if (marks[id] === "seen" || marks[id] === "disk") t.onDisk++
+    else if (marks[id] !== "out") t.queued++
+  })
+  return t
+}
+
+function ended(run, t) {
+  return run.state === "done" && t.queued === 0
+}
+
+// A run with nothing queued and no failure leaves the menu's note only.
+function shown(run) {
+  return !!run && (run.state === "refreshing" || run.queued.length > 0 || run.failures.length > 0)
+}
+
+function counts(run, t) {
+  if (run.state === "refreshing") return "fetching chapters"
+  var parts = [t.onDisk + " on disk"]
+  if (t.queued) parts.push(t.queued + " queued")
+  if (t.failed.length) parts.push(t.failed.length + " failed")
+  if (run.failures.length) parts.push(run.failures.length + " manga could not fetch chapters")
+  return parts.join(", ")
+}
+
+function summary(run, t) {
+  return run.label + ": " + counts(run, t)
+}
+
+// The desktop notification at the end of a run, or null when it queued
+// nothing (the menu's note says so) or every chapter of it was taken out.
+function notifyCommand(run, t) {
+  if (!t.onDisk && !t.failed.length) return null
+  return ["notify-send", "-a", "Miharchy", "--", run.label, counts(run, t)]
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     MENU_PREFS: MENU_PREFS,
@@ -101,6 +201,15 @@ if (typeof module !== "undefined") {
     pick: pick,
     start: start,
     failed: failed,
-    queued: queued
+    queued: queued,
+    track: track,
+    looksOver: looksOver,
+    settlePayload: settlePayload,
+    settle: settle,
+    tally: tally,
+    ended: ended,
+    shown: shown,
+    summary: summary,
+    notifyCommand: notifyCommand
   }
 }
