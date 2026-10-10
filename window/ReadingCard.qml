@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import "Model.js" as Model
@@ -180,21 +181,25 @@ Rectangle {
       y: 56
       spacing: 16
 
-      // icons/miharchy.svg in the theme's colors: rays in the accent, the
-      // M in the foreground.
-      Item {
+      // icons/miharchy.svg in the theme's colors: the burst in the accent, the
+      // cross in the foreground. Paths from icons/mark.py (the full mark).
+      Shape {
         width: 40
         height: 40
-        Repeater {
-          model: [[1, 5, 12, 4, 1], [1, 11, 12, 4, 1], [1, 33, 12, 4, 1], [1, 39, 12, 4, 1], [35, 5, 12, 4, 1], [35, 11, 12, 4, 1], [35, 33, 12, 4, 1], [35, 39, 12, 4, 1], [15, 3, 18, 42, 0], [2, 18, 44, 12, 0]]
-          Rectangle {
-            required property var modelData
-            x: modelData[0] * 40 / 48
-            y: modelData[1] * 40 / 48
-            width: modelData[2] * 40 / 48
-            height: modelData[3] * 40 / 48
-            color: modelData[4] ? view.theme.accent : view.theme.foreground
-          }
+        preferredRendererType: Shape.CurveRenderer
+        transform: Scale { xScale: 40 / 48; yScale: 40 / 48 }
+        ShapePath {
+          fillColor: view.theme.accent
+          fillRule: ShapePath.WindingFill
+          strokeColor: "transparent"
+          strokeWidth: 0
+          PathSvg { path: "M13.2 16.4 L13.5 16.0 L14.7 14.7 L16.0 13.5 L16.4 13.2 L16.4 16.4Z M16.4 12.6 L12.7 7.0 L13.3 6.7 L13.8 6.3 L14.4 6.0 L14.9 5.7 L16.4 8.7Z M15.4 16.4 L8.7 10.5 L9.1 10.0 L9.6 9.6 L10.0 9.1 L10.5 8.7 L16.4 15.4 L16.4 16.4Z M8.7 16.4 L5.7 14.9 L6.0 14.4 L6.3 13.8 L6.7 13.3 L7.0 12.7 L12.6 16.4Z M31.6 13.2 L32.0 13.5 L33.3 14.7 L34.5 16.0 L34.8 16.4 L31.6 16.4Z M35.4 16.4 L41.0 12.7 L41.3 13.3 L41.7 13.8 L42.0 14.4 L42.3 14.9 L39.3 16.4Z M31.6 15.4 L37.5 8.7 L38.0 9.1 L38.4 9.6 L38.9 10.0 L39.3 10.5 L32.6 16.4 L31.6 16.4Z M31.6 8.7 L33.1 5.7 L33.6 6.0 L34.2 6.3 L34.7 6.7 L35.3 7.0 L31.6 12.6Z M34.8 31.6 L34.5 32.0 L33.3 33.3 L32.0 34.5 L31.6 34.8 L31.6 31.6Z M31.6 35.4 L35.3 41.0 L34.7 41.3 L34.2 41.7 L33.6 42.0 L33.1 42.3 L31.6 39.3Z M32.6 31.6 L39.3 37.5 L38.9 38.0 L38.4 38.4 L38.0 38.9 L37.5 39.3 L31.6 32.6 L31.6 31.6Z M39.3 31.6 L42.3 33.1 L42.0 33.6 L41.7 34.2 L41.3 34.7 L41.0 35.3 L35.4 31.6Z M16.4 34.8 L16.0 34.5 L14.7 33.3 L13.5 32.0 L13.2 31.6 L16.4 31.6Z M12.6 31.6 L7.0 35.3 L6.7 34.7 L6.3 34.2 L6.0 33.6 L5.7 33.1 L8.7 31.6Z M16.4 32.6 L10.5 39.3 L10.0 38.9 L9.6 38.4 L9.1 38.0 L8.7 37.5 L15.4 31.6 L16.4 31.6Z M16.4 39.3 L14.9 42.3 L14.4 42.0 L13.8 41.7 L13.3 41.3 L12.7 41.0 L16.4 35.4Z" }
+        }
+        ShapePath {
+          fillColor: view.theme.foreground
+          strokeColor: "transparent"
+          strokeWidth: 0
+          PathSvg { path: "M17.4 3H30.6V17.4H45V30.6H30.6V45H17.4V30.6H3V17.4H17.4Z" }
         }
       }
 
