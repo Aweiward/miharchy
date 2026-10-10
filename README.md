@@ -8,7 +8,7 @@ A manga reader that feels native on [Omarchy](https://omarchy.org). It runs [Mih
 
 Miharchy is not affiliated with Mihon, Suwayomi or Omarchy. It provides no extensions or extension repos and hosts no content. Extension repos are third-party: add only ones you trust.
 
-Status: [v1.0.0](https://github.com/Aweiward/miharchy/releases/tag/v1.0.0), at Mihon parity. See `GLOSSARY.md` and `docs/adr/`.
+Status: [v1.1.0](https://github.com/Aweiward/miharchy/releases/tag/v1.1.0), at Mihon parity. See `GLOSSARY.md` and `docs/adr/`.
 
 ## Install
 
