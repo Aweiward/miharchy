@@ -47,4 +47,27 @@ These wait for a grilling session:
 2. Where it lives: a key on the manga detail, or a section in Browse.
 3. The term: **Recommendation**, to add to `GLOSSARY.md` when the plan settles.
 4. The ADR for the window's first outside call.
-5. Does Suwayomi's `searchTracker` answer for AniList with no login? If it does, the title → AniList id lookup stays on localhost, and only the recommendations call crosses the new boundary.
+5. Does every tracker go through AniList, or does MangaUpdates keep its own recommendations? See the next section.
+
+## The other trackers (2026-10-10)
+
+Question: can a track on MyAnimeList, Kitsu, MangaUpdates, Shikimori or Bangumi start a recommendation too?
+
+Answer: yes for four of the five, with no login. A track gives the tracker's id (`remoteId`), and each tracker except Bangumi leads to AniList or has its own list. A login does not open anything new: the server keeps the token, and none of these trackers offers a personal manga feed.
+
+| Tracker | Own recommendations, no login | Path to AniList | Verdict |
+|---|---|---|---|
+| AniList | `Media.recommendations` | itself | ✓ |
+| MyAnimeList | API v2 needs a client id (403); Jikan timed out 3 times | `Media(idMal:)` answered for id 13 | ✓ through AniList |
+| Kitsu | none: no recommendation relation on a manga | `/manga/{id}/mappings` gives the MAL and AniList ids | ✓ through AniList |
+| MangaUpdates | `/v1/series/{id}`: `recommendations` (5) and `category_recommendations` (5) | none in the reply | ✓ its own list |
+| Shikimori | `/api/mangas/{id}/similar` (86 for One Piece); the host moved to `shikimori.io` | its ids are MAL ids, so `Media(idMal:)` | ✓ either way |
+| Bangumi | none: `/v0/subjects/{id}/subjects` lists only relations (games, anime) | none | ✗ falls back to a title search on AniList |
+
+### Findings
+
+- **The login matters only for tracks.** Suwayomi's `searchTracker` refuses a tracker that is not logged in (`Tracker needs to be logged-in to search`). So the window cannot ask the server for a tracker's id without a login. A track already carries the id, and binding a track needs the login anyway.
+- **AniList can be the one engine.** MAL, Kitsu and Shikimori ids all lead to an AniList id. Asking AniList alone keeps the new trust boundary to one host and one rate limit. Kitsu's mapping costs one extra request.
+- **MangaUpdates is the only real second opinion.** Its user recommendations overlap AniList's for One Piece (Naruto, Bleach). Its category recommendations are noisier: 2 of 5 were novels.
+- **Order of seeds.** For one manga: an AniList track, then a MAL or Shikimori track, then a Kitsu track, then a MangaUpdates track, then a title search on AniList. Bangumi and untracked manga take the title search.
+- **Not measured.** Rate limits for Kitsu, MangaUpdates and Shikimori. Whether Suwayomi's MangaUpdates `remoteId` is the numeric `series_id` that `/v1/series/{id}` takes, which needs a scratch server with a MangaUpdates login.
