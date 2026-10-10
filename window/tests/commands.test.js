@@ -511,6 +511,22 @@ test("in the download menu j/k move, Enter or Space downloads, Esc or U closes; 
   assert.equal(C.dispatch(field, text("7")), null, "digits type into the field");
 });
 
+test("the next chapters menu: d on the Library opens it, the palette opens it for Up next, j/k move, Enter downloads, Esc or d closes", () => {
+  assert.equal(C.dispatch(screen("library"), text("d")), "library.download");
+  assert.ok(C.paletteRows("next chapters of up next").some((c) => c.id === "nextChapters.upNext"));
+  const d = screen("next-chapters");
+  assert.equal(C.dispatch(d, text("j")), "nextChapters.down");
+  assert.equal(C.dispatch(d, text("k")), "nextChapters.up");
+  assert.equal(C.dispatch(d, key(C.KEY.Return)), "nextChapters.choose");
+  assert.equal(C.dispatch(d, C.keyEvent(C.KEY.Space, " ", 0)), "nextChapters.choose");
+  assert.equal(C.dispatch(d, key(C.KEY.Escape)), "nextChapters.close");
+  assert.equal(C.dispatch(d, text("d")), "nextChapters.close");
+  assert.equal(C.dispatch(d, text("x")), null, "the library keys wait while the menu shows");
+  const field = { palette: false, view: "next-chapters", editing: "nextChapters" };
+  assert.equal(C.dispatch(field, key(C.KEY.Return)), "nextChapters.commit");
+  assert.equal(C.dispatch(field, key(C.KEY.Escape)), "nextChapters.cancel");
+});
+
 test("o opens and y copies the link: the manga's on a manga, the chapter's in the reader", () => {
   assert.equal(C.dispatch(screen("manga"), text("o")), "manga.openWeb");
   assert.equal(C.dispatch(screen("manga"), text("y")), "manga.copyLink");

@@ -71,6 +71,19 @@ The mark's popup lists the first 3 manga in Up next above the new chapters. Each
 
 **Original pages.** `O` in the reader shows the pages as their files have them, without the crop or the levels, and the bottom line says "original page". Press `O` again to see the cleaned pages. Nothing saves: the next reader you open shows cleaned pages again.
 
+## Next chapters for offline reading
+
+Press `d` on the Library to download the next chapters of many manga at once, for example before a trip. The command acts on the selected manga. With no selection, it acts on every manga the category tab shows. To do the same for every manga in Up next, open the palette (`:`) and run "Download next chapters of Up next".
+
+A menu opens with the rows of a manga's download menu (`U`): the next chapter, the next 2, 5, 10 or 25, a number you type, all unread chapters, or all bookmarked chapters. The menu opens on the row you chose last time.
+
+1. Miharchy fetches the chapter list of each manga from its source, one manga at a time.
+2. For each manga, it takes the next unread chapters by that manga's chapter filters and excluded scanlators.
+3. It queues only the chapters that are not on disk yet. A manga whose next chapters are on disk already gets nothing.
+4. The download queue opens.
+
+"Next 2" means the next 2 unread chapters, so a chapter already on disk counts toward the 2. A manga's `U` menu uses the same rule. Downloaded only has no effect on the choice. If a source fails to give its chapter list, Miharchy uses the chapters the server already has.
+
 ## Library check
 
 Press `!` on the Library, or open Settings → Library check, to list the problems in your library. The row shows how many there are. The check reads only what the server knows, so it contacts no source. It groups the problems by kind, then by source:

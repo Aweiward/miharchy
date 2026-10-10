@@ -1,6 +1,31 @@
 # Download queue
 
-`D` on the Library or a manga (or the palette's "Download queue") opens the server's download queue over the window (`DownloadsView.qml`, decisions in `window/Downloads.js`). It loads `downloadStatus` once, then follows the `downloadStatusChanged` subscription while it shows, and also while anything waits in the queue (see the SKILL's live updates section). `D` is bound on the Library and a manga only, not on Updates. Other ways in: the manga detail's `d`/`x` and `U` download menu (`manga.md`), the reader's download ahead (`reader.md`), Library and Updates `d`.
+`D` on the Library or a manga (or the palette's "Download queue") opens the server's download queue over the window (`DownloadsView.qml`, decisions in `window/Downloads.js`). It loads `downloadStatus` once, then follows the `downloadStatusChanged` subscription while it shows, and also while anything waits in the queue (see the SKILL's live updates section). `D` is bound on the Library and a manga only, not on Updates. Other ways in: the manga detail's `d`/`x` and `U` download menu (`manga.md`), the reader's download ahead (`reader.md`), Updates `d`, and the next chapters of a set of manga below, which opens the queue when it queued anything.
+
+## Next chapters of a set of manga
+
+`d` on the Library opens the download menu (`NextChaptersMenu.qml`, shell id `nextChapters`, scope `next-chapters`) for the selection, or with none for the shown category tab; the palette's "Download next chapters of Up next" opens it for all of Up next. The menu starts on the row chosen last (global meta `miharchy.downloadMenuSet`). A row fetches each manga's chapters (`fetchChapters`), one at a time, then queues only the missing chapters among each manga's next N unread (by its chapter filters and excluded scanlators; Downloaded only ignored). A failed fetch uses the stored chapters and lands in `nextChapters.lastRun.failures` with the server's message. Rules in `docs/agents/library.md`.
+
+Setup: `seed.sh --library 3`; `createCategory`, `updateMangasCategories` for two manga; download one manga's next chapter (enqueue, `startDownloader`, poll `isDownloaded`), then `stopDownloader`. To force failed fetches, uninstall the extension (`updateExtension(patch:{uninstall:true})`): every refresh then fails with "Missing source <id>". Up next drops a manga whose source is missing, so drive Up next with the extension installed, and give it a manga by marking one chapter read.
+
+```js
+[
+  [7000, function() { key("Tab"); key("Tab"); log("tab", root.shown.name) }],
+  [500, function() { key("d") }],
+  [1500, function() { log("menu", [nextChapters.set, nextChapters.cursor]); grab("menu") }],
+  [300, function() { key("j"); key("Enter") }],
+  [12000, function() {
+    log("run", nextChapters.lastRun)
+    log("queue", downloadsView.queue.items.map(function(i) { return i.chapterId }))
+    grab("queue")
+  }],
+  [500, function() { done() }]
+]
+```
+
+For Up next: `key(":")`, set the palette field's text (`find(palette, function(i) { return i.cursorPosition !== undefined })`) to "next chapters of up next", `key("Enter")`, then `key("Enter")` on the menu.
+
+Read back `{ downloadStatus { queue { chapter { id } } } chapters(filter:{mangaId:{in:[...]}}) { nodes { id isDownloaded } } metas(filter:{key:{startsWith:"miharchy.downloadMenu"}}) { nodes { key value } } }`: the queue (or `isDownloaded`, once the downloader ran) holds exactly `lastRun.queued`, the chapter downloaded first is not queued again, and the meta holds the row (`next2`). The enqueue starts the downloader, so MangaDex may finish a chapter before the read-back.
 
 ## Keys
 

@@ -241,10 +241,12 @@ function nextUnread(shown, prefs) {
   return prefs.chapterSortDirection === "asc" ? unread[0] : unread[unread.length - 1]
 }
 
-// Mihon's download menu (DownloadDropdownMenu). count: how many unread
+// Mihon's download menu (DownloadDropdownMenu), plus Next 2, for a manga
+// and for a set of manga (NextChapters.js). count: how many unread
 // chapters a "next" row takes; the custom row asks for it.
 var DOWNLOADS = [
   { id: "next", count: 1, label: "Next chapter" },
+  { id: "next", count: 2, label: "Next 2 chapters" },
   { id: "next", count: 5, label: "Next 5 chapters" },
   { id: "next", count: 10, label: "Next 10 chapters" },
   { id: "next", count: 25, label: "Next 25 chapters" },
@@ -253,22 +255,27 @@ var DOWNLOADS = [
   { id: "bookmarked", label: "Bookmarked chapters" }
 ]
 
-// The chapters a download row queues, from MangaViewModel's
+// The chapters a download row queues. "next" tops up, for a manga's menu
+// and a set's (NextChapters.js) alike: of the first count unread chapters
+// in reading order, by the filters and excluded scanlators with the
+// downloaded filter off, those not on disk; one on disk counts toward
+// count. "unread" and "bookmarked" follow MangaViewModel's
 // getUnreadChaptersSorted and getBookmarkedChapters: not on disk yet, never
 // an excluded scanlator's, and only those the filters show while skip
-// filtered is on. "next" takes the first count unread in reading order.
+// filtered is on.
 function toDownload(chapters, prefs, skipFiltered, row, count) {
+  if (row.id === "next") {
+    var p = Prefs.force(prefs, "chapterFilterDownloaded", "off", true)
+    var next = apply(chapters, p).filter(function(c) { return !c.read })
+    if (p.chapterSortDirection !== "asc") next.reverse()
+    return next.slice(0, count).filter(function(c) { return !c.downloaded })
+  }
   var gone = excluded(prefs)
   var pool = chapters.filter(function(c) {
     return !c.downloaded && gone.indexOf(c.scanlator) === -1 && (!skipFiltered || passes(c, prefs))
   })
   if (row.id === "bookmarked") return pool.filter(function(c) { return c.bookmarked })
-  var unread = pool.filter(function(c) { return !c.read })
-  if (row.id === "unread") return unread
-  var sort = sortOf(prefs)
-  return unread.sort(function(a, b) {
-    return (sort.value(a) - sort.value(b)) || (a.sourceOrder - b.sourceOrder)
-  }).slice(0, count)
+  return pool.filter(function(c) { return !c.read })
 }
 
 // The custom amount typed, or 0 for anything but a whole number above 0.
