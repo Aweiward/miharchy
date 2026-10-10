@@ -217,37 +217,70 @@ Rectangle {
       font.pixelSize: 24
     }
 
-    Grid {
-      id: numbers
+    // The body: one band centered under the header. With covers, the
+    // numbers column and the covers share its top and bottom; without, the
+    // numbers stand in one row.
+    Item {
+      id: band
       x: 64
-      anchors.top: brand.bottom
-      anchors.topMargin: view.coversShown ? 40 : 120
-      columns: view.coversShown ? 1 : 3
-      columnSpacing: 96
-      rowSpacing: 16
+      width: parent.width - 128
+      height: view.coversShown ? 336 : numbers.implicitHeight
+      y: brand.y + brand.height + (parent.height - brand.y - brand.height - height) / 2
       visible: view.card !== null
 
-      Repeater {
-        model: view.card ? [
-          [view.card.chapters, (view.card.chapters === 1 ? "chapter" : "chapters") + ", last 7 days"],
-          [view.card.inProgress, "manga in progress"],
-          [view.card.streak, "day streak"]
-        ] : []
+      Grid {
+        id: numbers
+        columns: view.coversShown ? 1 : 3
+        columnSpacing: 96
 
-        Column {
-          required property var modelData
-          Text {
-            text: String(parent.modelData[0])
-            color: view.theme.accent
-            font.family: view.theme.fontFamily
-            font.pixelSize: 76
-            font.bold: true
+        Repeater {
+          model: view.card ? [
+            [view.card.chapters, (view.card.chapters === 1 ? "chapter" : "chapters") + ", last 7 days"],
+            [view.card.inProgress, "manga in progress"],
+            [view.card.streak, "day streak"]
+          ] : []
+
+          Column {
+            required property var modelData
+            height: view.coversShown ? band.height / 3 : implicitHeight
+            Text {
+              text: String(parent.modelData[0])
+              color: view.theme.accent
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.coversShown ? 64 : 104
+              font.bold: true
+            }
+            Text {
+              text: parent.modelData[1]
+              color: view.theme.muted
+              font.family: view.theme.fontFamily
+              font.pixelSize: view.coversShown ? 22 : 28
+            }
           }
-          Text {
-            text: parent.modelData[1]
-            color: view.theme.muted
-            font.family: view.theme.fontFamily
-            font.pixelSize: 24
+        }
+      }
+
+      Row {
+        anchors.right: parent.right
+        height: parent.height
+        spacing: 20
+        visible: view.coversShown
+
+        Repeater {
+          id: covers
+          model: view.card ? view.card.covers : []
+
+          ServerImage {
+            required property var modelData
+            width: height / 1.5
+            height: band.height
+            config: view.config
+            url: modelData
+            fillMode: Image.PreserveAspectCrop
+            sourceSize.width: width * 2
+            sourceSize.height: height * 2
+            onStatusChanged: view.flush()
+            onFailedChanged: view.flush()
           }
         }
       }
@@ -262,33 +295,6 @@ Rectangle {
       color: view.problem ? view.theme.urgent : view.theme.foreground
       font.family: view.theme.fontFamily
       font.pixelSize: 26
-    }
-
-    Row {
-      anchors.right: parent.right
-      anchors.rightMargin: 64
-      anchors.bottom: parent.bottom
-      anchors.bottomMargin: 64
-      spacing: 24
-      visible: view.coversShown
-
-      Repeater {
-        id: covers
-        model: view.card ? view.card.covers : []
-
-        ServerImage {
-          required property var modelData
-          width: 200
-          height: 300
-          config: view.config
-          url: modelData
-          fillMode: Image.PreserveAspectCrop
-          sourceSize.width: 400
-          sourceSize.height: 600
-          onStatusChanged: view.flush()
-          onFailedChanged: view.flush()
-        }
-      }
     }
   }
 
