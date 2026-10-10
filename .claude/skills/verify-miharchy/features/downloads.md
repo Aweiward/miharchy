@@ -10,6 +10,18 @@
 - `X` asks first and the second `X` cancels every download (Mihon's cancel all): `clearDownloader`, which also stops the downloader. Any other key keeps the queue (`shell.qml` disarms on every other key, as for Updates' `x`). With the queue empty, `X` does nothing.
 - Every reorder is one request: one `reorderChapterDownload(chapterId, to)` per download out of place, run in order; only the last answers with the status. `to` counts from 0, and a `to` past the end fails the request, so `Downloads.moved` clamps.
 
+## Failed rows
+
+A failed download's row shows its reason after "failed" (`Downloads.statusText`, `window/Failure.js`): "Source not installed   see the library check, ! on the Library" for a manga whose extension is gone (no probe), else what one `fetchChapterPages` probe of the chapter says. Messages seen on Suwayomi v2.3.2243: `Chapter not found` (not found), `Source not installed: <source id>` (source missing), and an empty `pages` list for a chapter folder with no images (shown as "Chapter does not have any pages to download"). Cloudflare and network rows are node-tested only (`window/tests/failure.test.js`).
+
+Setup, with the scratch server and `seed.sh --library 2`:
+
+1. `seed.sh --hold-queue <MangaDex chapter ids>`, then uninstall MangaDex: `updateExtension(input: { id: "eu.kanade.tachiyomi.extension.all.mangadex", patch: { uninstall: true } })`.
+2. A local-source manga with two chapters: `$RUN/server/local/Broken/ch1/001.png` and `ch2/001.png`; `fetchSourceManga(source: "0", type: POPULAR)`, `updateManga(inLibrary: true)`, `fetchChapters`.
+3. Delete the `ch1` folder and the image in `ch2`, enqueue both, start the downloader. Every item turns `ERROR` (`tries` 3).
+
+Drive: `root.run("downloads.open")`, wait 4 s, log `Downloads.statusText(i, downloadsView.reasons[i.chapterId], downloadsView.flareOn)` per item and grab. Proof of one probe per failure: `grep -F 'ChapterMutation$fetchChapterPages' $RUN/server.log` gains one line per window start (the not-found chapter only; the source-missing ones never), and one more after `x` and a new enqueue of that chapter fails it again.
+
 ## Settings
 
 - "Save downloads as CBZ" is the server setting `downloadAsCbz` (Mihon's "Save as CBZ archive"). It applies to new downloads: the chapter lands as `<scanlator>_<name>.cbz` in the manga's folder under `$RUN/server/downloads/mangas/<source>/`, and `fetchChapterPages` still serves its pages. Proof: Enter on the row, `settings { downloadAsCbz }` reads `true`, download a chapter, `find` the `.cbz`.

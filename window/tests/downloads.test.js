@@ -268,3 +268,70 @@ test("only the last move of a reorder answers with the queue, which the queue re
   const data = { m2: { downloadStatus: status("STARTED", [item(3, "QUEUED", 0), item(2, "QUEUED", 0), item(1, "QUEUED", 0)]) }, m0: { clientMutationId: null } };
   assert.deepEqual(polled(q, data).items.map((i) => i.chapterId), [3, 2, 1]);
 });
+
+const failedItem = (id, source) => Object.assign(item(id, "ERROR", 0), { manga: { id: 5, title: "Spy Room", source } });
+const queueOf = (...items) => polled(D.initial(), { downloadStatus: status("STARTED", items) }).items;
+const gqlError = (raw) => M.reply(200, JSON.stringify({ errors: [{ message: raw }] }));
+
+test("the queue asks each manga's source, so a missing one shows without a probe", () => {
+  assert.match(D.STATUS_QUERY, /manga \{ id title source \{ id \} \}/);
+  assert.match(D.LIVE_QUERY, /manga \{ id title source \{ id \} \}/);
+  const items = queueOf(failedItem(13, null), failedItem(14, { id: "0" }));
+  assert.deepEqual(items.map((i) => i.sourceMissing), [true, false]);
+});
+
+test("a healthy queue is never probed", () => {
+  const f = D.failed(queueOf(item(13, "DOWNLOADING", 0.4), item(14, "QUEUED", 0), item(15, "FINISHED", 1)), {});
+  assert.deepEqual(f.probe, []);
+  assert.deepEqual(f.reasons, {});
+});
+
+test("a failed chapter is probed once, with fetchChapterPages, until it is retried", () => {
+  const first = D.failed(queueOf(failedItem(13, { id: "0" }), item(14, "QUEUED", 0)), {});
+  assert.deepEqual(first.probe, [13]);
+  assert.match(D.probePayload(13).query, /fetchChapterPages\(input: \{ chapterId: \$id \}\) \{ pages \}/);
+  assert.deepEqual(D.probePayload(13).variables, { id: 13 });
+  assert.deepEqual(D.failed(queueOf(failedItem(13, { id: "0" })), first.reasons).probe, [], "probe in flight");
+  const known = D.probed(first.reasons, 13, gqlError("Exception while fetching data (/a) : Chapter not found\r\n\r\nat x"));
+  assert.equal(known[13].kind, "notFound");
+  assert.deepEqual(D.failed(queueOf(failedItem(13, { id: "0" })), known).probe, [], "reason cached");
+  const retried = D.failed(queueOf(item(13, "QUEUED", 0)), known);
+  assert.deepEqual(retried.reasons, {});
+  assert.deepEqual(D.failed(queueOf(failedItem(13, { id: "0" })), retried.reasons).probe, [13], "failed again");
+});
+
+test("a chapter that left the queue loses its reason", () => {
+  const known = D.probed(D.failed(queueOf(failedItem(13, { id: "0" })), {}).reasons, 13, gqlError("timeout"));
+  assert.deepEqual(D.failed([], known).reasons, {});
+});
+
+test("a failed chapter whose source is missing gets its reason without a probe", () => {
+  const f = D.failed(queueOf(failedItem(13, null)), {});
+  assert.deepEqual(f.probe, []);
+  assert.equal(f.reasons[13].kind, "sourceMissing");
+});
+
+test("a probe that loads says what it found, and one the server never answered goes again", () => {
+  const pending = D.failed(queueOf(failedItem(13, { id: "0" })), {}).reasons;
+  assert.deepEqual(D.probed(pending, 13, ok({ fetchChapterPages: { pages: [] } }))[13], { kind: "other", text: "Chapter does not have any pages to download" });
+  assert.equal(D.probed(pending, 13, ok({ fetchChapterPages: { pages: ["a"] } }))[13].kind, "other");
+  const down = D.probed(pending, 13, M.reply(0, ""));
+  assert.deepEqual(down, {});
+  assert.deepEqual(D.failed(queueOf(failedItem(13, { id: "0" })), down).probe, [13]);
+});
+
+test("a probe answer for a chapter no longer waiting on one changes nothing", () => {
+  const known = { 13: { kind: "network", text: "No connection to the source" } };
+  assert.equal(D.probed(known, 13, gqlError("Chapter not found")), known);
+  assert.deepEqual(D.probed({}, 13, gqlError("Chapter not found")), {}, "left the queue or retried meanwhile");
+});
+
+test("a failed row shows its reason and hint beside failed", () => {
+  const it = queueOf(failedItem(13, { id: "0" }))[0];
+  assert.equal(D.statusText(it, undefined, false), "failed");
+  assert.equal(D.statusText(it, null, false), "failed");
+  assert.equal(D.statusText(it, { kind: "notFound", text: "Not found on the source" }, false), "failed   Not found on the source");
+  assert.equal(D.statusText(it, { kind: "cloudflare", text: "Cloudflare blocked the source" }, false), "failed   Cloudflare blocked the source   set up FlareSolverr in Setup");
+  assert.equal(D.statusText(it, { kind: "cloudflare", text: "Cloudflare blocked the source" }, true), "failed   Cloudflare blocked the source");
+  assert.equal(D.statusText(queueOf(item(14, "DOWNLOADING", 0.5))[0], undefined, false), "50%");
+});
