@@ -32,8 +32,33 @@ Read back `{ downloadStatus { queue { chapter { id } } } chapters(filter:{mangaI
 - `j`/`k` move the cursor. `x` takes the download out of the queue. `Space` starts or pauses the downloader. `Esc`/`D` close.
 - `K`/`J` move the download up or down, `t` to the top, `b` to the bottom (Mihon's move actions). The cursor follows the download.
 - `n` sorts by chapter number, `u` by upload date: ascending, or descending when the queue already runs ascending (Mihon's sort menu offers both directions). The whole queue sorts; Mihon sorts within each source group.
+- `r` retries: on the run's summary line every failed chapter of the run, on a failed row that chapter (dequeue and enqueue in one request, so tries start over).
 - `X` asks first and the second `X` cancels every download (Mihon's cancel all): `clearDownloader`, which also stops the downloader. Any other key keeps the queue (`shell.qml` disarms on every other key, as for Updates' `x`). With the queue empty, `X` does nothing.
 - Every reorder is one request: one `reorderChapterDownload(chapterId, to)` per download out of place, run in order; only the last answers with the status. `to` counts from 0, and a `to` past the end fails the request, so `Downloads.moved` clamps.
+
+### The run's summary
+
+The queue shows the last run as a line above its rows ("Next 2 chapters of All: 2 on disk, 2 failed, 1 manga could not fetch chapters"), at cursor -1 (the queue opens there after a run), with each refresh failure under it. When none of the run's chapters is queued or downloading, the window runs `notify-send -a Miharchy -- <label> <counts>` once. Put a logging `notify-send` stub first on `PATH` (a literal `PATH=<stubdir>:/usr/local/bin:/usr/bin:... drive.sh ...`): never a real notification.
+
+Setup, local source only (no extension): `$RUN/server/local/{Good,Broken,Gone}/{ch1,ch2}/001.png` (Gone needs only `ch1`), `fetchSourceManga(source: "0", type: POPULAR)`, `updateMangas(inLibrary: true)`, `fetchChapters` for each. Download Broken's `ch1` (it counts toward "Next 2"), then delete the image in Broken's `ch2` and the whole `Gone` folder: Gone's refresh then fails with "No chapters found" and its stored `ch1` fails to download (not found); Broken's `ch2` fails with no pages; Good's two download.
+
+```js
+[
+  [7000, function() { key("d") }],
+  [1500, function() { key("k"); key("k"); key("k"); key("j"); key("Enter") }],
+  [15000, function() {
+    log("tally", downloadsView.tally)
+    log("line", find(downloadsView, function(i) { return typeof i.text === "string" && nextChapters.lastRun && i.text.indexOf(nextChapters.lastRun.label + ":") === 0 }).text)
+    grab("summary")
+  }],
+  [300, function() { key("r") }],
+  [800, function() { log("after r", downloadsView.queue.items.map(function(i) { return [i.chapterId, i.state] })); grab("retrying") }],
+  [12000, function() { log("notified", downloadsView.notified) }],
+  [300, function() { done() }]
+]
+```
+
+Proof: the line reads 2 on disk, 2 failed, 1 manga; after `r` both failed chapters are `QUEUED` and the server log gains a new `downloadChapter(... tries= 0 ...)` warning for each; the stub logged one line. `fetchChapters` on a missing local folder reads "No chapters found", which `Failure.reason` leaves as "other".
 
 ## Failed rows
 

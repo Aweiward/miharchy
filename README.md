@@ -84,6 +84,8 @@ A menu opens with the rows of a manga's download menu (`U`): the next chapter, t
 
 "Next 2" means the next 2 unread chapters, so a chapter already on disk counts toward the 2. A manga's `U` menu uses the same rule. Downloaded only has no effect on the choice. If a source fails to give its chapter list, Miharchy uses the chapters the server already has.
 
+The download queue shows one summary line for the last download of this kind, for example "Next 2 chapters of Action: 38 on disk, 4 failed". The line counts only the chapters this download queued, plus each manga whose chapter list could not be fetched. Under the line, each such manga shows why it failed, and each failed chapter shows its reason in its row. Press `r` on the summary line to queue all its failed chapters again, or `r` on one failed row to retry that chapter. When no chapter of the download is queued or downloading any more, a desktop notification gives the same summary, once. The summary lives in the window only: closing the window drops it, and the server keeps downloading.
+
 ## Library check
 
 Press `!` on the Library, or open Settings → Library check, to list the problems in your library. The row shows how many there are. The check reads only what the server knows, so it contacts no source. It groups the problems by kind, then by source:
