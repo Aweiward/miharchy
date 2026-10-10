@@ -153,4 +153,6 @@ test("the end of a run notifies with the same summary, unless nothing of it was 
   const run = done();
   assert.deepEqual(N.notifyCommand(run, { onDisk: 3, queued: 0, failed: [13] }), ["notify-send", "-a", "Miharchy", "--", "Next 2 chapters of Action", "3 on disk, 1 failed"]);
   assert.equal(N.notifyCommand(run, { onDisk: 0, queued: 0, failed: [] }), null, "every chapter taken out");
+  const empty = Object.assign(N.queued(N.start(N.upNextSet([]), row("next", 2), 2), []), { failures: [{ mangaId: 1, title: "One", message: "x" }] });
+  assert.equal(N.notifyCommand(empty, N.tally(empty, [], {})), null, "nothing queued: the menu's note says so");
 });

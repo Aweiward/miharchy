@@ -149,10 +149,10 @@ function summary(run, t) {
   return run.label + ": " + counts(run, t)
 }
 
-// The desktop notification at the end of a run, or null when every
-// chapter of it was taken out.
+// The desktop notification at the end of a run, or null when it queued
+// nothing (the menu's note says so) or every chapter of it was taken out.
 function notifyCommand(run, t) {
-  if (!t.onDisk && !t.failed.length && !run.failures.length) return null
+  if (!t.onDisk && !t.failed.length) return null
   return ["notify-send", "-a", "Miharchy", "--", run.label, counts(run, t)]
 }
 
