@@ -38,7 +38,7 @@ Item {
 
   readonly property var entries: History.search(history.entries, query)
   readonly property var notice: History.notice(history, configPath, query)
-  readonly property string hint: "j k move   enter resume   x remove   X clear all   " + (query ? "esc clear search   " : "/ search   ")
+  readonly property string hint: "j k move   enter resume   x remove   X clear all   c reading card   " + (query ? "esc clear search   " : "/ search   ")
 
   // chapters: newest first, as the manga detail holds them.
   signal resume(var manga, var chapters, int chapterId)

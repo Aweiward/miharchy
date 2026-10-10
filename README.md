@@ -101,6 +101,18 @@ Press `space` to select a problem, or a whole group on its header. Press `x` to 
 
 Press `M` to migrate the selected manga, or the group or row under the cursor, in one batch. For each manga, Miharchy searches a source with the same name as its own first, then your pinned sources in pin order. It searches one source at a time and takes the first close match. A stalled manga takes a match only when it has a higher chapter number; otherwise its row says "No source has more chapters." With nothing pinned and no same-named source, you pick one source for all of them. Then review the picks and confirm, as when you migrate a source from Browse (`M` on Sources), which searches in the same order.
 
+## Reading card
+
+Press `c` on History, or pick "Reading card" in the `:` palette, to see a small card of your recent reading in your theme's colors. It shows three numbers:
+
+1. Chapters: the chapters you finished in the last 7 days.
+2. Manga in progress: library manga with a read and an unread chapter that you read in the last 30 days.
+3. Streak: the days in a row on which you finished a chapter, ending today, or yesterday when you have read nothing yet today.
+
+The card also shows the covers of up to 3 manga you read most this week, and the dates. Chapters you read on the phone count after a sync. Entries you removed from History still count: removing hides an entry, not what you read. Re-reading a chapter moves it to the day you re-read it, so a past day can drop out of the streak.
+
+Press `S` to save the card as `reading-card-YYYY-MM-DD.png` (2400 × 1350) in the "Save pages to" folder (`~/Pictures/Miharchy` by default). Press `Y` to copy it. Press `h` to hide or show the covers; the card remembers the choice. Press Esc or `c` to close it.
+
 ## Sync with Mihon
 
 1. In Mihon, turn on automatic backups (More → Settings → Data and storage).

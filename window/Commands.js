@@ -33,7 +33,7 @@ var KEY = {
 // source-settings, sources-languages; Library screen: categories; or
 // overlay: library-options, updates-filter, library-categories, library-remove, manga, manga-categories, manga-options,
 // manga-download, next-chapters, manga-duplicates, manga-select, manga-track,
-// manga-track-pick, track-ask, downloads, reader, reader-settings, sync,
+// manga-track-pick, track-ask, downloads, reader, reader-settings, reading-card, sync,
 // sync-held,
 // the library check: check, check-merge,
 // or a restore step: restore-confirm, -checking, -running, -done, -failed,
@@ -58,6 +58,7 @@ var commands = [
   { id: "mode.downloadedOnly", title: "Downloaded only on or off", keys: [] },
   { id: "migrate.batch", title: "Migrate a source", keys: [] },
   { id: "nextChapters.upNext", title: "Download next chapters of Up next", keys: [] },
+  { id: "readingCard.open", title: "Reading card", keys: [] },
   // Before library.reload and window.quit: on these screens r and Esc mean
   // something else.
   { id: "extensions.refresh", title: "Refresh extensions", keys: ["r"], view: "extensions", hidden: true },
@@ -132,6 +133,12 @@ var commands = [
   { id: "history.reload", title: "Reload history", keys: ["r"], view: "history", hidden: true },
   // With no search, shell.qml quits, as Esc does elsewhere.
   { id: "history.clearSearch", title: "Clear the search", keys: ["Esc"], view: "history", hidden: true },
+  // c as in card; c closes it again, as F closes the Library's options.
+  { id: "readingCard.open", title: "Reading card", keys: ["c"], view: "history", hidden: true },
+  { id: "readingCard.close", title: "Close the reading card", keys: ["Esc", "Backspace", "q", "c"], view: "reading-card", hidden: true },
+  { id: "readingCard.save", title: "Save the reading card", keys: ["S"], view: "reading-card", hidden: true },
+  { id: "readingCard.copy", title: "Copy the reading card", keys: ["Y"], view: "reading-card", hidden: true },
+  { id: "readingCard.covers", title: "Hide or show the covers", keys: ["h"], view: "reading-card", hidden: true },
   { id: "library.reload", title: "Reload library", keys: ["r"] },
   { id: "window.quit", title: "Quit", keys: ["q", "Esc"] },
   // Q, as q quits: quits, then starts a window on the code now on disk.
