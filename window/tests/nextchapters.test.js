@@ -149,6 +149,29 @@ test("a run shows in the queue once it has something to count", () => {
   assert.equal(N.shown(Object.assign(N.queued(N.start(N.upNextSet([]), row("next", 2), 2), []), { failures: [{ mangaId: 1, title: "One", message: "x" }] })), true);
 });
 
+const server = (queue, downloaded) => ({ downloadStatus: { queue: queue.map((id) => ({ chapter: { id } })) }, chapters: { nodes: [11, 12, 13, 14].map((id) => ({ id, isDownloaded: downloaded.includes(id) })) } });
+
+test("the run looks over once none of its chapters is queued or downloading in the window's queue, seen or not", () => {
+  const run = done();
+  assert.equal(N.looksOver(run, [q(11, "QUEUED"), q(13, "ERROR")]), false);
+  assert.equal(N.looksOver(run, [q(13, "ERROR"), q(99, "QUEUED")]), true);
+  assert.equal(N.looksOver(run, []), true, "even with chapters never seen: the server settles them");
+  assert.equal(N.looksOver(N.start(N.upNextSet([]), row("next", 2), 2), []), false, "not while it fetches chapters");
+  assert.deepEqual(N.settlePayload(run).variables, { ids: [11, 12, 13, 14] });
+  assert.match(N.settlePayload(run).query, /downloadStatus \{ queue \{ chapter \{ id \} \} \}.*chapters\(filter: \{ id: \{ in: \$ids \} \}\) \{ nodes \{ id isDownloaded \} \}/);
+});
+
+test("the server settles what the live queue missed: on disk, still in its queue, or taken out", () => {
+  const run = done();
+  const items = [q(13, "ERROR")];
+  const marks = N.settle({ 12: "seen" }, run, items, server([14], [11]));
+  assert.deepEqual(N.tally(run, items, marks), { onDisk: 1, queued: 1, failed: [13] }, "11 finished unseen, 12 was taken out before the subscription ran, 14 still waits");
+  assert.equal(N.ended(run, N.tally(run, items, marks)), false);
+  const later = N.settle(marks, run, items, server([], [11, 14]));
+  assert.deepEqual(N.tally(run, items, later), { onDisk: 2, queued: 0, failed: [13] });
+  assert.equal(N.ended(run, N.tally(run, items, later)), true);
+});
+
 test("the end of a run notifies with the same summary, unless nothing of it was left to report", () => {
   const run = done();
   assert.deepEqual(N.notifyCommand(run, { onDisk: 3, queued: 0, failed: [13] }), ["notify-send", "-a", "Miharchy", "--", "Next 2 chapters of Action", "3 on disk, 1 failed"]);

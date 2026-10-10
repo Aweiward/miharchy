@@ -58,7 +58,7 @@ Setup, local source only (no extension): `$RUN/server/local/{Good,Broken,Gone}/{
 ]
 ```
 
-Proof: the line reads 2 on disk, 2 failed, 1 manga; after `r` both failed chapters are `QUEUED` and the server log gains a new `downloadChapter(... tries= 0 ...)` warning for each; the stub logged one line. `fetchChapters` on a missing local folder reads "No chapters found", which `Failure.reason` leaves as "other".
+Proof: the line reads 2 on disk, 2 failed, 1 manga; after `r` both failed chapters are `QUEUED` and the server log gains a new `downloadChapter(... tries= 0 ...)` warning for each; the stub logged one line. To prove the end needs no live update, drop the stream before the run: `var ls = downloadsView.children.find(function(c) { return c.query === Downloads.LIVE_QUERY }); ls.running = false; ls.close(); ls.subscribed = true` (the enqueue reply is then ignored too). The window sees none of the run's chapters (`tally.queued` 4); `ls.running = true; ls.restart()` brings the failed ones, the settle read marks the finished ones `disk`, and the stub logs one notification. `fetchChapters` on a missing local folder reads "No chapters found", which `Failure.reason` leaves as "other".
 
 ## Failed rows
 

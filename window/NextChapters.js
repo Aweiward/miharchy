@@ -91,10 +91,11 @@ function queued(run, chapterIds) {
 
 // The run in the download queue. A finished download leaves the queue as a
 // dequeued one does, so the queue view keeps marks, { chapterId: "seen" |
-// "out" }: a run chapter the queue has shown, or one a DEQUEUED update took
-// out. Updates first, then the items, so a retry (dequeued and queued again
-// in one result) stays seen. items: Downloads queue items; updates: a live
-// result's updates, [] for any other.
+// "out" | "disk" }: a run chapter the queue has shown, one a DEQUEUED
+// update took out, or what settle() read from the server. Updates first,
+// then the items, so a retry (dequeued and queued again in one result)
+// stays seen. items: Downloads queue items; updates: a live result's
+// updates, [] for any other.
 function track(marks, run, items, updates) {
   var next = Object.assign({}, marks)
   updates.forEach(function(u) {
@@ -106,13 +107,45 @@ function track(marks, run, items, updates) {
   return next
 }
 
+function inRun(run, items) {
+  return items.filter(function(i) { return run.queued.indexOf(i.chapterId) !== -1 })
+}
+
+// The live queue alone cannot end a run: a result past maxUpdates leaves
+// changes out, and a dequeue before the subscription runs has no type. So
+// once the window's queue holds none of the run's chapters queued or
+// downloading, the view reads settlePayload and settle() decides.
+function looksOver(run, items) {
+  return run.state === "done" && run.queued.length > 0
+    && !inRun(run, items).some(function(i) { return i.state === "QUEUED" || i.state === "DOWNLOADING" })
+}
+
+function settlePayload(run) {
+  return {
+    query: "query($ids: [Int!]) { downloadStatus { queue { chapter { id } } } chapters(filter: { id: { in: $ids } }) { nodes { id isDownloaded } } }",
+    variables: { ids: run.queued }
+  }
+}
+
+// data: settlePayload()'s reply. Each run chapter outside the window's
+// queue is "disk" when the server has it on disk, taken out ("out") when
+// its queue no longer holds it either, else unchanged: the live queue
+// lags, so it still waits.
+function settle(marks, run, items, data) {
+  var next = Object.assign({}, marks)
+  var queued = data.downloadStatus.queue.map(function(d) { return d.chapter.id })
+  data.chapters.nodes.forEach(function(c) {
+    if (run.queued.indexOf(c.id) === -1 || items.some(function(i) { return i.chapterId === c.id })) return
+    if (c.isDownloaded) next[c.id] = "disk"
+    else if (queued.indexOf(c.id) === -1) next[c.id] = "out"
+  })
+  return next
+}
+
 // -> { onDisk, queued, failed: [chapterId] } over the run's chapters: in
-// the queue by its state; out of it, on disk once seen, and still to come
-// when never seen (the queue lags the enqueue reply). One taken out counts
-// nowhere.
-// ponytail: a chapter that finishes while the subscription restarts after
-// omitted updates is never seen, so the run never ends; read isDownloaded
-// then if it shows up.
+// the queue by its state; out of it, on disk once seen or settled so, and
+// still to come when never seen (the queue lags the enqueue reply). One
+// taken out counts nowhere.
 function tally(run, items, marks) {
   var t = { onDisk: 0, queued: 0, failed: [] }
   run.queued.forEach(function(id) {
@@ -121,7 +154,7 @@ function tally(run, items, marks) {
       if (item.state === "ERROR") t.failed.push(id)
       else if (item.state !== "FINISHED") t.queued++
       else t.onDisk++
-    } else if (marks[id] === "seen") t.onDisk++
+    } else if (marks[id] === "seen" || marks[id] === "disk") t.onDisk++
     else if (marks[id] !== "out") t.queued++
   })
   return t
@@ -170,6 +203,9 @@ if (typeof module !== "undefined") {
     failed: failed,
     queued: queued,
     track: track,
+    looksOver: looksOver,
+    settlePayload: settlePayload,
+    settle: settle,
     tally: tally,
     ended: ended,
     shown: shown,

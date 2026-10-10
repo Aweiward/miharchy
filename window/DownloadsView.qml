@@ -34,6 +34,8 @@ Rectangle {
   property var lastRun: null
   property var marks: ({})
   property bool notified: false
+  // A settlePayload request is out.
+  property bool settling: false
   readonly property bool summaryShown: NextChapters.shown(lastRun)
   readonly property var tally: lastRun ? NextChapters.tally(lastRun, queue.items, marks) : null
 
@@ -81,14 +83,27 @@ Rectangle {
     if (gone.length) leftQueue(gone)
   }
 
-  // Once per run: a retry after its end shows in the summary line only.
   function follow(updates) {
     if (!lastRun) return
     marks = NextChapters.track(marks, lastRun, queue.items, updates)
-    if (notified || !NextChapters.ended(lastRun, tally)) return
-    notified = true
-    var command = NextChapters.notifyCommand(lastRun, tally)
-    if (command) Quickshell.execDetached(command)
+    if (!notified && NextChapters.looksOver(lastRun, queue.items)) settle()
+  }
+
+  // The server decides the end (NextChapters.settle), once per run: a
+  // retry after it shows in the summary line only.
+  function settle() {
+    if (settling || !config) return
+    settling = true
+    var run = lastRun
+    Session.send(config, NextChapters.settlePayload(run), function(reply) {
+      view.settling = false
+      if (reply.state !== "ok" || run !== view.lastRun || view.notified) return
+      view.marks = NextChapters.settle(view.marks, run, view.queue.items, reply.data)
+      if (!NextChapters.ended(run, view.tally)) return
+      view.notified = true
+      var command = NextChapters.notifyCommand(run, view.tally)
+      if (command) Quickshell.execDetached(command)
+    })
   }
 
   // A retried chapter loses its reason, so its next failure is probed again.
