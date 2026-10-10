@@ -5,8 +5,8 @@ Stages A to D add manga from MangaDex. Each manga joins the library before its c
 fetched, so chapters with recent uploads count as updates. Updates group by the day the server
 fetched them, so run each stage on a server whose clock is shifted (start-at): A at -5d, B at -3d,
 C at -1d, D at 0. `finish` runs on the real clock: it leaves each series' two newest updates
-unread and marks its older updates read, then bookmarks and downloads a few updates."""
-import base64, json, os, sys, time, urllib.request
+unread and marks its older updates read (with today's lastReadAt, for the reading card), then bookmarks and downloads a few updates."""
+import json, os, sys, time, urllib.request
 
 RUN = os.environ.get("MIHARCHY_VERIFY_DIR") or sys.exit("set MIHARCHY_VERIFY_DIR (see README.md)")
 MANGADEX = "2499283573021220255"
@@ -48,12 +48,17 @@ BOOKMARK = ("The Guy She Was Interested in Wasn't a Guy at All", "Welcome to Dem
 DOWNLOAD = "SSS-Class Revival Hunter"
 
 
+def post(cfg, body, headers):
+    req = urllib.request.Request(cfg["url"] + "/api/graphql", json.dumps(body).encode(), {"content-type": "application/json", **headers})
+    return json.load(urllib.request.urlopen(req, timeout=180))
+
+
 def gql(q, v=None):
+    # A fresh ui_login token per call: a stage outlives the server's 5-minute tokens.
     cfg = json.load(open(RUN + "/server.json"))
-    auth = base64.b64encode((cfg["username"] + ":" + cfg["password"]).encode()).decode()
-    req = urllib.request.Request(cfg["url"] + "/api/graphql", json.dumps({"query": q, "variables": v or {}}).encode(),
-                                 {"content-type": "application/json", "authorization": "Basic " + auth})
-    r = json.load(urllib.request.urlopen(req, timeout=180))
+    token = post(cfg, {"query": "mutation($u: String!, $p: String!) { login(input:{username:$u, password:$p}) { accessToken } }",
+                       "variables": {"u": cfg["username"], "p": cfg["password"]}}, {})["data"]["login"]["accessToken"]
+    r = post(cfg, {"query": q, "variables": v or {}}, {"authorization": "Bearer " + token})
     if r.get("errors"):
         raise RuntimeError(json.dumps(r["errors"]))
     return r["data"]
@@ -114,10 +119,11 @@ def finish():
         read += [c["id"] for c in cs[len(keep):]]
         print(title, "keeps", [c["name"] for c in keep], flush=True)
     mark(read, {"isRead": True})
+    mark(read, {"lastPageRead": 1})  # isRead alone leaves lastReadAt at 0; a page save sets it, as the reader does.
     mark(unread, {"isRead": False})
     mark([by[t][0]["id"] for t in BOOKMARK if t in by], {"isBookmarked": True})
-    if DOWNLOAD in by:
-        cid = by[DOWNLOAD][0]["id"]
+    cid = by[DOWNLOAD][0]["id"] if DOWNLOAD in by else None
+    if cid and not gql('query($id: Int!) { chapter(id:$id) { isDownloaded } }', {"id": cid})["chapter"]["isDownloaded"]:
         gql('mutation($ids: [Int!]!) { enqueueChapterDownloads(input:{ids:$ids}) { downloadStatus { state } } }', {"ids": [cid]})
         gql('mutation { startDownloader(input:{}) { downloadStatus { state } } }')
         for _ in range(60):
