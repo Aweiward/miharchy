@@ -30,6 +30,7 @@ Read back: `manga(id: <target>) { inLibrary trackRecords { nodes { trackerId rem
 A batch: pin the target with `setGlobalMeta(input: { meta: { key: "miharchy.pinnedSources", value: "[\"<source id>\"]" } })` before the drive (the window reads it at start), then `root.run("migrate.batch")`, set `migrateView.cursor` to the `froms` index of the source, `key("Enter")`, wait ~20 s and log `migrateView.rows` (each right side ends with the source searched, except the two messages above). With `[]` pinned and one MangaDex language, the batch stops on step `to` instead. The stalled rule cannot be reached from the check on a scratch server; `migrateView.startList([{ id, title, sourceId, sourceName, stalled: true }, ...])` drives the same path: with Eleceed on MangaDex (highest 390) and Weeb Central (421) both pinned, the MangaDex one takes Weeb Central and the Weeb Central one says "No source has more chapters."
 
 ## Gotchas
+- A view key or a launcher path during an apply leaves Migrate open on step `busy` (`MigrateView.close` refuses while `running`); the jobs run to the end.
 - A failed pick (the target fetch errors) stays on step `busy` with the error in `migrateView.busyText`; log it.
 - A single migration that succeeds closes the view and opens the target's detail, so `migrateView.jobs` is empty afterwards; read the target id from the confirm step (`migrateView.job.target.id`).
 - `grab()` runs after the step; a key in the same step shows in the capture. Grab the confirm in a step of its own.

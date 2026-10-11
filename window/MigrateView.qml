@@ -112,7 +112,11 @@ Rectangle {
     return Session.send(config, payload, done)
   }
 
+  // A running apply keeps the view open, against a view key, a launcher
+  // path or a config reset alike: closing it would drop the jobs still to
+  // run. finish() then shows the result.
   function close() {
+    if (running) return
     if (editing) endEdit()
     seq++
     step = ""
@@ -317,7 +321,7 @@ Rectangle {
     return reply.message || (p ? p.title : reply.state)
   }
 
-  // Runs to the end even if the view closes: each manga's writes are
+  // Runs to the end: close() waits for it, and each manga's writes are
   // already on their way.
   function apply(replace) {
     running = true
