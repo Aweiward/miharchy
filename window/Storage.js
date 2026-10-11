@@ -1,4 +1,5 @@
 .pragma library
+.import "Capped.js" as Capped
 
 // Settings' storage rows: the disk space downloads and the server's image
 // cache use, and the cache clear. Suwayomi has no API for either size, so
@@ -28,13 +29,17 @@ function localFolder(env, localSourcePath) {
 
 // Bytes on disk. A missing folder makes du fail but still print the rest,
 // so the caller reads stdout whatever the exit code.
+// du prints a line per folder; a large download folder takes a while.
+var CAP = 65536
+
 function command(d) {
-  return ["du", "-s", "-B1", "--", d.downloads].concat(d.cache)
+  return Capped.command(["du", "-s", "-B1", "--", d.downloads].concat(d.cache), CAP, 300)
 }
 
 // du's "<bytes>\t<path>" lines -> { downloads, cache } in bytes; a folder
-// du did not list holds nothing.
+// du did not list holds nothing. Output over the cap -> null, not measured.
 function sizes(d, stdout) {
+  if (Capped.over(stdout || "", CAP)) return null
   var by = {}
   String(stdout || "").split("\n").forEach(function(line) {
     var tab = line.indexOf("\t")

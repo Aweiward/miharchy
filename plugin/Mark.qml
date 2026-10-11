@@ -119,7 +119,7 @@ Panel {
     id: phoneCheck
     stdout: StdioCollector {
       onStreamFinished: {
-        var found = text.trim()
+        var found = Mark.found(text)
         if (!found || found === root.lastTried || root.sync.state === "running") return
         root.lastTried = found
         root.autoRun = true
@@ -132,7 +132,7 @@ Panel {
     id: newestPhone
     stdout: StdioCollector {
       onStreamFinished: {
-        var found = text.trim()
+        var found = Mark.found(text)
         if (found === root.lastPhone) return
         root.lastPhone = found
         root.refreshHealth()

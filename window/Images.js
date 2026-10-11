@@ -1,4 +1,5 @@
 .pragma library
+.import "Capped.js" as Capped
 
 // One fetched copy of each server image per process (#215). ServerImage
 // instances hold a copy by URL: the first hold fetches, a hold while the
@@ -44,21 +45,27 @@ function shared(dir, pid) {
 // lists the dir and the running processes with this command, and sweep()
 // picks the files to remove. Lines: "f <mtime s> <name>" for each regular
 // file directly in dir, "b <boot time s>", "t <clock ticks per s>", and
-// "p <pid> <start, ticks since boot>" for each running process.
+// "p <pid> <start, ticks since boot>" for each running process, then
+// "end". A process line is some 20 bytes.
+var SWEEP_CAP = 4194304
+
 function sweepCommand(dir) {
-  return ["sh", "-c",
+  return Capped.command(["sh", "-c",
     "find \"$1\" -mindepth 1 -maxdepth 1 -type f -printf 'f %Ts %f\\n'\n" +
     "while read -r k v _; do [ \"$k\" = btime ] && echo \"b $v\"; done < /proc/stat\n" +
     "echo \"t $(getconf CLK_TCK)\"\n" +
-    "for s in /proc/[0-9]*/stat; do read -r l 2>/dev/null < \"$s\" || continue; p=${s#/proc/}; l=${l##*) }; set -- $l; echo \"p ${p%/stat} ${20}\"; done",
-    "sh", dir]
+    "for s in /proc/[0-9]*/stat; do read -r l 2>/dev/null < \"$s\" || continue; p=${s#/proc/}; l=${l##*) }; set -- $l; echo \"p ${p%/stat} ${20}\"; done\n" +
+    "echo end",
+    "sh", dir], SWEEP_CAP, 30)
 }
 
 // The paths in dir to remove, from sweepCommand's output: files with no
 // PID in their name (older builds), files whose process is gone, and files
 // older than their process, whose PID a new process took. selfPid's files
-// always stay.
+// always stay. Output the cap or the deadline cut short lists too few
+// processes, so it removes nothing.
 function sweep(text, dir, selfPid) {
+  if (!/\nend\n?$/.test(text) || Capped.over(text, SWEEP_CAP)) return []
   var files = [], start = {}, boot = 0, tick = 100
   text.split("\n").forEach(function(line) {
     var m = /^(f|b|t|p) (\S+)(?: (.+))?$/.exec(line)

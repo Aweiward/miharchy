@@ -1,6 +1,7 @@
 .pragma library
 .import "Settings.js" as Settings
 .import "Session.js" as Session
+.import "Capped.js" as Capped
 
 // The setup screen's steps and state. Pure, so tests/setup.test.js pins it;
 // SetupView.qml runs the commands built here and feeds their output back.
@@ -123,6 +124,31 @@ function command(script, args) {
   return ["/bin/sh", "-c", "(\n" + script + "\n) 2>&1\nprintf '\\n%s\\n' \"$?\"", "sh"].concat(args || [])
 }
 
+// Each job's output cap in bytes and deadline in seconds (Capped.js). The
+// helper build and FlareSolverr's image download take minutes; the
+// terminal launcher returns at once (ADR 0007).
+var LIMITS = {
+  probe: [65536, 60],
+  phones: [65536, 30],
+  syncthing: [1048576, 60],
+  packages: [65536, 60],
+  server: [1048576, 600],
+  flaresolverr: [1048576, 1800],
+  syncFolder: [16384, 10],
+  helper: [4194304, 1800],
+  phoneBackups: [65536, 120],
+  peekKey: [65536, 30],
+  launcher: [16384, 10]
+}
+
+function job(id, script, args) {
+  return limit(id, command(script, args))
+}
+
+function limit(id, argv) {
+  return Capped.command(argv, LIMITS[id][0], LIMITS[id][1])
+}
+
 // The launcher entry for the plugin's window/. Exec quotes its path as the
 // desktop entry spec says: \ " ` $ escaped, then \ escaped again for the
 // key file. A % in the path stays unsupported: GLib, which gtk-launch uses,
@@ -161,7 +187,7 @@ var PHONE_PROBE = [
 ].join("\n")
 
 function phoneProbeCommand(folder) {
-  return command(PHONE_PROBE, [folder])
+  return job("phones", PHONE_PROBE, [folder])
 }
 
 // The phone check's output -> { count, newest, autobackup }.
@@ -223,7 +249,7 @@ var SYNCTHING_ACCEPT = SYNCTHING_API + "\n" + [
 ].join("\n")
 
 function syncthingProbeCommand(folder, qrPath) {
-  return command(SYNCTHING_PROBE, [folder, qrPath])
+  return job("syncthing", SYNCTHING_PROBE, [folder, qrPath])
 }
 
 // The Syncthing check's output -> { installed (Syncthing wrote its config,
@@ -248,13 +274,18 @@ function parseSyncthing(text) {
 }
 
 function probeCommand(configPath, syncDir, windowDir, skipAur) {
-  return command(PROBE, [configPath, syncDir, desktopEntry(windowDir), windowDir.replace(/\/window$/, "") + "/server/miharchy-server.service", skipAur ? "1" : ""])
+  return job("probe", PROBE, [configPath, syncDir, desktopEntry(windowDir), windowDir.replace(/\/window$/, "") + "/server/miharchy-server.service", skipAur ? "1" : ""])
 }
 
 // The job a confirmed or committed step runs.
 // ctx: { serverScript, folder, syncDir, windowDir, pair: pairing(),
 // install: the confirmed step's terminal command, if it has one }.
 function runCommand(id, ctx) {
+  var argv = stepCommand(id, ctx)
+  return argv && limit(id, argv)
+}
+
+function stepCommand(id, ctx) {
   switch (id) {
     // The user sees this command in the terminal and types the password there;
     // the launcher returns at once (ADR 0007).
@@ -274,11 +305,14 @@ function runCommand(id, ctx) {
   return null
 }
 
-// A job's collected output -> { code, output }.
-function parseJob(text) {
+// A job's collected output -> { code, output }. Output over cap bytes is a
+// failure; so is output with no status line, which a deadline or the cap
+// cut off.
+function parseJob(text, cap) {
+  if (cap && Capped.over(text, cap)) return { code: -1, output: "The job printed more than " + cap + " bytes." }
   var lines = String(text).replace(/\s+$/, "").split("\n")
-  var code = parseInt(lines.pop(), 10)
-  return { code: isNaN(code) ? -1 : code, output: lines.join("\n").trim() }
+  var last = lines.pop()
+  return { code: /^\d+$/.test(last) ? Number(last) : -1, output: lines.join("\n").trim() }
 }
 
 // "openjdk version "26.0.2" ..." -> 26; Java 8 and older say "1.8.0".
@@ -376,10 +410,11 @@ function reduce(s, event) {
         if (!f.aurSuwayomi && s.probe) f.aurSuwayomi = s.probe.aurSuwayomi
         return copy(s, { job: null, probe: f })
       }
-      if (event.id === "phones") return copy(s, { job: null, phones: parsePhones(parseJob(event.text).output) })
-      if (event.id === "syncthing") return copy(s, { job: null, syncthing: parseSyncthing(parseJob(event.text).output) })
+      var done = parseJob(event.text, LIMITS[event.id][0])
+      if (event.id === "phones") return copy(s, { job: null, phones: parsePhones(done.output) })
+      if (event.id === "syncthing") return copy(s, { job: null, syncthing: parseSyncthing(done.output) })
       var results = copy(s.results, {})
-      results[event.id] = parseJob(event.text)
+      results[event.id] = done
       return copy(s, { job: null, results: results })
     case "server":
       var r = event.reply
@@ -624,6 +659,7 @@ if (typeof module !== "undefined") {
     STEPS: STEPS,
     SERVER_QUERY: SERVER_QUERY,
     command: command,
+    LIMITS: LIMITS,
     probeCommand: probeCommand,
     phoneProbeCommand: phoneProbeCommand,
     parsePhones: parsePhones,

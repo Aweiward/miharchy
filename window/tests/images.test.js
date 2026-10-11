@@ -222,8 +222,15 @@ test("each fetch writes a new file name, under the dir", () => {
 // 1500 s, pid 9 (this window) at 2000 s.
 const listing = (files) => [
   ...files.map(([mtime, name]) => `f ${mtime} ${name}`),
-  "b 1000", "t 100", "p 7 10000", "p 8 50000", "p 9 100000", "",
+  "b 1000", "t 100", "p 7 10000", "p 8 50000", "p 9 100000", "end", "",
 ].join("\n");
+
+test("sweep of a listing cut short removes nothing: its missing processes may be running", () => {
+  const files = listing([[1200, "7-abc-1"], [1600, "12-ghi-1"]]);
+  assert.equal(Images.sweep(files, "/run/images/", 9).length, 1, "the whole listing sweeps");
+  assert.deepEqual(Images.sweep(files.replace("end\n", ""), "/run/images/", 9), [], "no end line: the deadline cut it");
+  assert.deepEqual(Images.sweep(files + "p 1 1\n".repeat(400000), "/run/images/", 9), [], "over the cap");
+});
 
 test("sweep removes the files of gone processes and unprefixed ones, and keeps a running process's", () => {
   const out = Images.sweep(listing([

@@ -668,7 +668,7 @@ Rectangle {
   // reaches nothing still reads as online.
   Process {
     id: route
-    command: ["sh", "-c", "command -v ip >/dev/null || echo unknown; ip route show default; ip -6 route show default"]
+    command: Reader.routeCommand()
     stdout: StdioCollector {
       onStreamFinished: view.offline = text.trim() === ""
     }

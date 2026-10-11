@@ -2,6 +2,7 @@
 .import "Model.js" as Model
 .import "Chapters.js" as Chapters
 .import "Settings.js" as Settings
+.import "Capped.js" as Capped
 
 // The reader: one chapter's pages, the page shown, and the read state to
 // save. Pure, so tests/reader.test.js pins it; ReaderView.qml fetches pages,
@@ -179,19 +180,27 @@ function pageTarget(r, folder, home, contentType) {
 // The commands, as argv: the paths go in as arguments, never into the
 // script, so no name can run as shell. Each prints "ok" when it worked,
 // else the error (pageResult()).
+var PAGE_CAP = 4096
+
 function saveCommand(file, target) {
-  return ["sh", "-c", "{ mkdir -p -- \"$1\" && cp -- \"$2\" \"$1/$3\"; } 2>&1 && echo ok", "sh", target.dir, file, target.name]
+  return Capped.command(["sh", "-c", "{ mkdir -p -- \"$1\" && cp -- \"$2\" \"$1/$3\"; } 2>&1 && echo ok", "sh", target.dir, file, target.name], PAGE_CAP, 30)
 }
 
 function copyCommand(file, contentType) {
-  return ["sh", "-c", "{ wl-copy --type \"$1\" < \"$2\"; } 2>&1 && echo ok", "sh", imageType(contentType).type, file]
+  return Capped.command(["sh", "-c", "{ wl-copy --type \"$1\" < \"$2\"; } 2>&1 && echo ok", "sh", imageType(contentType).type, file], PAGE_CAP, 30)
 }
 
 // A command's output -> the note: done when it ends in ok, else what went
 // wrong.
 function pageResult(output, done, failed) {
+  if (Capped.over(output, PAGE_CAP)) return failed + ": too much output"
   var text = String(output).trim()
   return /(^|\n)ok$/.test(text) ? done : failed + ": " + (text || "no output")
+}
+
+// The default routes, which stand for online (ReaderView's route check).
+function routeCommand() {
+  return Capped.command(["sh", "-c", "command -v ip >/dev/null || echo unknown; ip route show default; ip -6 route show default"], 65536, 5)
 }
 
 function relist(chapters, chapterId) {
@@ -681,6 +690,7 @@ if (typeof module !== "undefined") {
     saveCommand: saveCommand,
     copyCommand: copyCommand,
     pageResult: pageResult,
+    routeCommand: routeCommand,
     chapterId: chapterId,
     chapterName: chapterName,
     pagesPayload: pagesPayload,
