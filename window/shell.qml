@@ -189,9 +189,13 @@ ShellRoot {
     else if (pendingPeek) peek(pendingPeek === "next")
   }
 
-  // Every path that opens a view or a chapter closes these first; view.*
-  // also closes the sync result, the restore panel and Migrate.
+  // Every path that opens a view or a chapter closes these first. A running
+  // sync or restore goes on under its closed panel; a running migration
+  // keeps Migrate open (MigrateView.close).
   function closeOverlays() {
+    syncView.open = false
+    restoreView.close()
+    migrateView.close()
     if (reader.open) reader.close()
     mangaDetail.close()
     downloadsView.open = false
@@ -518,9 +522,6 @@ ShellRoot {
 
   function run(id) {
     if (id.indexOf("view.") === 0) {
-      syncView.open = false
-      restoreView.close()
-      migrateView.close()
       closeOverlays()
       view = id.slice(5)
       return
