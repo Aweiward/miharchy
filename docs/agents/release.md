@@ -10,4 +10,4 @@ A release is a git tag `vX.Y.Z` and a GitHub release on `Aweiward/miharchy`. Use
 4. After the user approves, merge the PR. Tag the merge commit and push the tag: `git tag vX.Y.Z <sha> && git push origin vX.Y.Z`.
 5. Publish: `gh release create vX.Y.Z --title "Miharchy X.Y.Z" --notes-file <notes>`.
 6. The `Release` workflow fails if the tag differs from `manifest.json`. Check it with `gh run list -w Release -L 1`.
-7. Record the release: the "Current work" paragraph in `AGENTS.md`, the roadmap plans that shipped, and the site (`site/index.html`, screenshots through `site/tools/README.md`) when features changed.
+7. Record the release: the release link in "Current work" in `AGENTS.md` (replace it; the release notes hold the history), the roadmap plans that shipped, and the site (`site/index.html`, screenshots through `site/tools/README.md`) when features changed.
