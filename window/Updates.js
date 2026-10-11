@@ -276,7 +276,7 @@ function reduce(u, event) {
       return copy(u, { checking: true, stopped: null })
     case "stopped":
       if (!u.running && !u.checking) return u
-      return copy(u, { running: false, checking: false, stopped: u.total ? u.finished + " / " + u.total : "" })
+      return copy(u, { running: false, checking: false, stopped: stoppedAt(u) })
     case "failed":
       return copy(u, { running: false, checking: false })
     case "live":
@@ -291,10 +291,17 @@ function reduce(u, event) {
   return u
 }
 
+function stoppedAt(u) {
+  return u.total ? u.finished + " / " + u.total : ""
+}
+
 // The server forgets a stopped run's counts, so the stop stays in u until
-// a run starts.
+// a run starts. A run that ends on its own keeps its counts; one that ends
+// with all zeros was stopped, and its result can come before the stop's
+// reply.
 function withStatus(u, s) {
-  return copy(copy(u, s), { stopped: s.running ? null : u.stopped })
+  var stopped = u.running && !s.running && !s.total ? stoppedAt(u) : u.stopped
+  return copy(copy(u, s), { stopped: s.running ? null : stopped })
 }
 
 // Whether a run ended between two states, so the list is due a reload.

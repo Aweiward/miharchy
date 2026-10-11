@@ -137,6 +137,18 @@ test("a stopped run says where it stopped until the next run starts", () => {
   assert.equal(U.progress(U.reduce(after, live({ isRunning: true, finishedJobs: 0, totalJobs: 5 })), now), "Checking for new chapters 0 / 5", "so does a scheduled run");
 });
 
+test("a stop keeps its line whether the zeroed live result or the stop reply comes first", () => {
+  const running = U.reduce(U.reduce(loaded([]), { type: "checking" }), live({ isRunning: true, finishedJobs: 8, totalJobs: 20 }));
+  const liveFirst = U.reduce(running, live({}));
+  assert.equal(U.finished(running, liveFirst), true, "the list reloads");
+  const reloaded = reload(liveFirst, status(), at(2026, 10, 4, 3));
+  assert.equal(U.progress(U.reduce(reloaded, { type: "stopped" }), now), "Stopped checking for new chapters at 8 / 20");
+  const replyFirst = U.reduce(U.reduce(running, { type: "stopped" }), live({}));
+  assert.equal(U.progress(reload(replyFirst, status(), at(2026, 10, 4, 3)), now), "Stopped checking for new chapters at 8 / 20");
+  const done = U.reduce(running, live({ finishedJobs: 20, totalJobs: 20 }));
+  assert.equal(U.progress(reload(done, status({ finishedJobs: 20, totalJobs: 20 }), at(2026, 10, 4, 14, 59)), now), "Last checked Today 14:59", "a run that ends on its own is no stop");
+});
+
 test("a check the server skips entirely still ends, and says what it skipped", () => {
   const asked = U.reduce(loaded([]), { type: "checking" });
   const skipped = U.reduce(U.reduce(asked, live({})), live({ skippedMangasCount: 3 }));
