@@ -36,7 +36,8 @@ Library → `Enter` on a manga → `Enter` on a chapter.
   [4000, function() { key("Enter") }],
   [5000, function() { key("Enter") }],
   [6000, function() { var r = reader.reader; log("opened", [r.chapters[r.index].id, r.page, r.pages.length, r.mode]); key(" ") }],
-  [800,  function() { var r = reader.reader; log("turned", [r.chapters[r.index].id, r.page]); grab("reader-page2"); root.run("window.quit") }]
+  [800,  function() { var r = reader.reader; log("turned", [r.chapters[r.index].id, r.page]); grab("reader-page2") }],
+  [200, function() { root.run("window.quit") }]
 ]
 ```
 Read back after exit (the quit at 0.8 s happens before the 1 s debounce, so this also proves save-on-quit):
