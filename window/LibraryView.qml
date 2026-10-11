@@ -5,6 +5,9 @@ import "Commands.js" as Commands
 import "Library.js" as Library
 import "Model.js" as Model
 import "Prefs.js" as Prefs
+import "Session.js" as Session
+import "Downloads.js" as Downloads
+import "Browse.js" as Browse
 import "Updates.js" as Updates
 
 // The Library view: the category switcher with the search field and a note
@@ -12,8 +15,9 @@ import "Updates.js" as Updates
 // grid or a list (Library.PREFS libraryDisplay) with its cursor, or a notice
 // in its place, and the sort, filter and display panel or the change
 // categories panel over it. The view owns its state (Library.initial()),
-// its prefs and its lists; shell.qml passes the library in and forwards the
-// "library." commands and categories.back to run().
+// its prefs and its lists, and sends its own changes to the server.
+// shell.qml passes the library in, forwards the "library." commands and
+// categories.back to run(), and handles mark, downloads and edited.
 Item {
   id: view
 
@@ -23,6 +27,8 @@ Item {
   // Model.reduce()'s connection: the library manga and categories.
   property var connection: Model.initial()
   property bool downloadedOnly: false
+  // The download queue's items, for a downloads delete.
+  property var queue: []
   // The categories screen's hint, shown while that screen is.
   property string categoriesHint: ""
   property var library: Library.initial()
@@ -76,6 +82,12 @@ Item {
 
   signal key(var event)
   signal editEnded()
+  // R and U: shell.qml's one mark path, which Updates shares.
+  signal mark(var chapters, string action, var mangaIds)
+  // A download mutation's reply, which carries the queue.
+  signal downloads(var reply)
+  // A change reached the server: shell.qml fetches the library again.
+  signal edited()
 
   onShownChanged: reduce({ type: "shown", shown: shown })
   // Once the rows changed too: the cursor follows its manga in the same
@@ -87,7 +99,7 @@ Item {
     id: store
     config: view.config
     table: Library.PREFS
-    onFailed: function(reply) { view.fail(reply.message || Model.problem(reply, view.configPath).title) }
+    onFailed: function(reply) { view.report(reply) }
   }
 
   RowModel {
@@ -97,6 +109,63 @@ Item {
 
   function reduce(event) {
     library = Library.reduce(library, event)
+  }
+
+  function send(payload, done) {
+    return Session.send(config, payload, done)
+  }
+
+  function report(reply) {
+    if (reply.state !== "ok") fail(reply.message || Model.problem(reply, configPath).title)
+  }
+
+  // x and X ask once; the same key again acts.
+  function arm(kind, action) {
+    var acts = Library.acts(library, kind)
+    reduce({ type: "arm", kind: kind, ready: targets.length > 0 && !!config })
+    if (acts) act(action)
+  }
+
+  // Mihon's library selection actions, on the targets: "read" and "unread"
+  // mark every chapter, "delete" takes the downloads off the disk, "remove"
+  // takes the manga out of the library, and "removeDeleting" does both, as
+  // Mihon's remove dialog with both boxes ticked. The selection ends, as in
+  // Mihon.
+  function act(action) {
+    var ids = targetIds
+    reduce({ type: "deselect" })
+    if (!ids.length || !config) return
+    var remove = function() {
+      view.send(Library.removePayload(ids), function(reply) {
+        view.report(reply)
+        view.edited()
+      })
+    }
+    if (action === "remove") return remove()
+    send(Library.chaptersPayload(ids), function(reply) {
+      if (reply.state !== "ok") return view.report(reply)
+      var chapters = Browse.toChapters(reply.data.chapters.nodes)
+      if (action === "read" || action === "unread") return view.mark(chapters, action, ids)
+      var payload = Downloads.removePayload(chapters, view.queue)
+      if (action === "removeDeleting") {
+        if (!payload) return remove()
+        // The manga leave only once their downloads are gone.
+        return view.send(payload, function(done) {
+          view.downloads(done)
+          if (done.state === "ok") remove()
+          else view.report(done)
+        })
+      }
+      if (!payload) {
+        view.reduce({ type: "note", text: "No chapter is downloaded." })
+        return
+      }
+      view.send(payload, function(done) {
+        view.report(done)
+        view.downloads(done)
+        view.edited()
+      })
+    })
   }
 
   function fail(message) {
@@ -206,6 +275,26 @@ Item {
       case "library.pickUp":
       case "library.pickDown":
         reduce({ type: "pickMove", by: id === "library.pickUp" ? -1 : 1, count: pickRows.length })
+        break
+      case "library.remove":
+        arm("remove", "remove")
+        break
+      case "library.removeWithDownloads":
+        act("removeDeleting")
+        break
+      case "library.deleteDownloads":
+        arm("delete", "delete")
+        break
+      case "library.markRead":
+      case "library.markUnread":
+        act(id === "library.markRead" ? "read" : "unread")
+        break
+      case "library.pickToggle":
+        var pick = pickRows[pickCursor]
+        if (pick) send(Library.categoryPayload(pick, pickIds), function(reply) {
+          view.report(reply)
+          view.edited()
+        })
         break
       case "library.pickClose":
         reduce({ type: "pickClose" })
