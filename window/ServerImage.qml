@@ -4,12 +4,13 @@ import Quickshell.Io
 import "Images.js" as Images
 import "Model.js" as Model
 import "Session.js" as Session
+import "Runtime.js" as Runtime
 
 // An Image that loads the server's own images with the access token.
 // Image sends no headers, so Session.image fetches the bytes into a file in
-// $XDG_RUNTIME_DIR and the Image shows that file. Images.js shares one file
-// per URL between instances. Any other host loads as a plain Image, without
-// the token.
+// the runtime folder (Runtime.js; none: the image fails) and the Image
+// shows that file. Images.js shares one file per URL between instances. Any
+// other host loads as a plain Image, without the token.
 Image {
   id: image
 
@@ -33,7 +34,6 @@ Image {
   property string fileUrl: ""
   property string loadedUrl: ""
   property bool hold: false
-  readonly property string dir: Quickshell.env("XDG_RUNTIME_DIR") + "/miharchy/images/"
 
   onUrlChanged: Qt.callLater(load)
   onConfigChanged: Qt.callLater(load)
@@ -86,7 +86,7 @@ Image {
   }
 
   function release(copy) {
-    if (copy) Images.release(Images.shared(dir, Quickshell.processId), copy, image, keepIdle)
+    if (copy) Images.release(Images.shared(Runtime.folder() + "/images/", Quickshell.processId), copy, image, keepIdle)
   }
 
   // The new copy is held before the old one goes, so a reload of the same
@@ -104,9 +104,11 @@ Image {
     if (!server) {
       fileUrl = url
       apply()
+    } else if (!Runtime.folder()) {
+      fail()
     } else {
       var c = config
-      held = Images.hold(Images.shared(dir, Quickshell.processId), server, image, function(u, done) { Session.image(c, u, done) })
+      held = Images.hold(Images.shared(Runtime.folder() + "/images/", Quickshell.processId), server, image, function(u, done) { Session.image(c, u, done) })
     }
     release(old)
   }

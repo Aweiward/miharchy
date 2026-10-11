@@ -83,6 +83,20 @@ test("the Syncthing check reads nothing pending, writes the desktop ID as a QR c
   } finally { st.close(); }
 });
 
+test("with no runtime folder the check writes no QR code, not even into its working folder", async () => {
+  const st = await syncthing(routes());
+  const h = home(st.port);
+  fs.writeFileSync(path.join(h.dir, "bin/qrencode"), "#!/bin/sh\n: > \"$HOME/qrencode-ran\"\n", { mode: 0o755 });
+  try {
+    const argv = S.syncthingProbeCommand(h.folder, "");
+    const { stdout } = await execFile(argv[0], argv.slice(1), { env: h.env, cwd: h.dir });
+    const f = S.parseSyncthing(S.parseJob(stdout).output);
+    assert.equal(f.myId, DESKTOP);
+    assert.equal(f.qr, "");
+    assert.deepEqual(fs.readdirSync(h.dir).sort(), [".local", "Sync", "bin"]);
+  } finally { st.close(); }
+});
+
 test("a sync folder Syncthing already shares with a device counts as paired, under ~ too", async () => {
   const st = await syncthing(routes({ "/rest/config/folders": [
     { id: "other", path: "/elsewhere", devices: [{ deviceID: DESKTOP }, { deviceID: PHONE }] },

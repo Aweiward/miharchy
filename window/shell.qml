@@ -16,6 +16,7 @@ import "Browse.js" as Browse
 import "Storage.js" as Storage
 import "Restart.js" as Restart
 import "Images.js" as Images
+import "Runtime.js" as Runtime
 import "UpNext.js" as UpNext
 import "Sync.js" as Sync
 import "Overlays.js" as Overlays
@@ -74,13 +75,36 @@ ShellRoot {
     }
   }
 
-  // Server images left in the runtime dir by windows that crashed or were
-  // killed go at start (Images.sweep).
+  // The runtime folder (Runtime.js) is decided before the config applies:
+  // all that writes there (server images, the reading card, Setup's QR
+  // code) follows the config. heldConfig waits for it.
+  property bool runtimeChecked: runtimeCheck.dir === ""
+  property var heldConfig: null
+
+  Process {
+    id: runtimeCheck
+    readonly property string dir: Runtime.candidate(Quickshell.env("XDG_RUNTIME_DIR"))
+    command: Runtime.checkCommand(dir)
+    running: dir !== ""
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var folder = Runtime.decide(runtimeCheck.dir, text)
+        if (folder) {
+          imageSweep.dir = folder + "/images/"
+          imageSweep.running = true
+        }
+        root.runtimeChecked = true
+        if (root.heldConfig !== null) root.applyConfig(root.heldConfig)
+      }
+    }
+  }
+
+  // Server images left in the runtime folder by windows that crashed or
+  // were killed go at start (Images.sweep).
   Process {
     id: imageSweep
-    readonly property string dir: Quickshell.env("XDG_RUNTIME_DIR") + "/miharchy/images/"
+    property string dir: ""
     command: Images.sweepCommand(dir)
-    running: true
     stdout: StdioCollector {
       onStreamFinished: {
         var paths = Images.sweep(text, imageSweep.dir, Quickshell.processId)
@@ -116,6 +140,10 @@ ShellRoot {
   }
 
   function applyConfig(text) {
+    if (!runtimeChecked) {
+      heldConfig = text
+      return
+    }
     var next = Model.parseConfig(text)
     if (next && config && JSON.stringify(next) === JSON.stringify(config)) return
     config = next
