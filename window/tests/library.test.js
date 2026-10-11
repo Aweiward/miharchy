@@ -271,6 +271,7 @@ test("the hint follows the screen, the panels, the note, an arm, the error and t
     [state({ armed: "remove" }), ctx({ targets: 1 }), "x again to remove the manga from the library   d also delete the downloads   esc keep   "],
     [state({ armed: "delete" }), ctx(), "X again to delete the downloads of 2 manga, any other key keeps them   "],
     [state({ error: "Server down", selected: [1, 2] }), ctx(), "Server down   2 selected   v select   A all   I invert   R read   U unread   d download   X delete downloads   C categories   x remove   esc clear   "],
+    [state({ error: "Server down" }), ctx(), "Server down   enter open   space read   v select   x remove   / search   F sort & filter   L list   tab category   " + tail],
     [state(), ctx(), "enter open   space read   v select   x remove   / search   F sort & filter   L list   tab category   " + tail],
     [state({ query: "b" }), ctx({ tabs: false, prefs: prefs({ libraryDisplay: "list" }) }), "enter open   space read   v select   x remove   esc clear search   F sort & filter   L grid   " + tail],
   ];

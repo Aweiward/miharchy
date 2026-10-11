@@ -13,7 +13,7 @@ import "Updates.js" as Updates
 // in its place, and the sort, filter and display panel or the change
 // categories panel over it. The view owns its state (Library.initial()),
 // its prefs and its lists; shell.qml passes the library in and forwards the
-// "library." commands to run().
+// "library." commands and categories.back to run().
 Item {
   id: view
 

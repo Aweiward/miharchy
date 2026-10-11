@@ -5,9 +5,10 @@
 .import "Model.js" as Model
 .import "Updates.js" as Updates
 
-// The Library's search, filters and sort, after Mihon's library sheet and
-// toolbar search. Pure, so tests/library.test.js pins it; shell.qml runs
-// apply() on the library before Model.switcher() groups it by category.
+// The Library view's state (initial, reduce, scope, hint), and its search,
+// filters and sort, after Mihon's library sheet and toolbar search. Pure, so
+// tests/library.test.js pins it; LibraryView.qml runs apply() on the library
+// before Model.switcher() groups it by category.
 // The choices live in server meta through Prefs.js (PREFS); the search
 // does not persist, as in Mihon.
 
