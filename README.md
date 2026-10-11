@@ -174,7 +174,11 @@ These folders stay. Delete them yourself when you no longer want what they hold:
 
 Files under `$XDG_RUNTIME_DIR/miharchy` go at logout.
 
-The packages Setup installed stay: `jdk-openjdk`, `qt6-websockets`, `suwayomi-server-bin`, and `syncthing` with its user service. Other programs may need them. Syncthing keeps the phone and the folder you paired.
+The packages Setup installed stay: `jdk-openjdk`, `qt6-websockets`, `suwayomi-server-bin`, and `syncthing` with its user service. Other programs may need them. Syncthing keeps the phone and the folder you paired. If you use Syncthing for nothing else, you can stop its service:
+
+```sh
+systemctl --user disable --now syncthing
+```
 
 ## Develop
 
