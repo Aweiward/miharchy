@@ -15,7 +15,6 @@ import "Library.js" as Library
 import "Browse.js" as Browse
 import "Storage.js" as Storage
 import "Prefs.js" as Prefs
-import "Updates.js" as Updates
 import "Restart.js" as Restart
 import "Images.js" as Images
 import "UpNext.js" as UpNext
@@ -41,25 +40,11 @@ ShellRoot {
   property var config: null
   property var connection: Model.initial()
   property bool paletteOpen: false
-  property int libraryCursor: 0
   // A mark read's question to the trackers (Chapters.trackAsk), or null.
   property var trackAsk: null
   // The top overlay's scope, editing prefix and hint (Overlays.js).
-  readonly property var overlay: Overlays.top({ trackAsk: trackAsk, readingCard: readingCard, nextChapters: nextChapters, restoreView: restoreView, syncView: syncView, downloadsView: downloadsView, reader: reader, migrateView: migrateView, trackPanel: trackPanel, mangaDetail: mangaDetail, view: view, browseView: browseView, extensionsView: extensionsView, libraryScreen: libraryScreen, checkView: checkView, libraryArmed: libraryArmed, libraryPickIds: libraryPickIds, libraryOptions: libraryOptions, updatesView: updatesView, settingsEditing: settingsEditing, libraryView: libraryView, historyView: historyView, settingsView: settingsView, setupView: setupView, categoriesView: categoriesView, libraryHint: libraryHint })
-  // The shown category's id in Model.switcher(); a deleted one falls back to All.
-  property int libraryCategory: -1
-  // "grid" | "categories"
-  property string libraryScreen: "grid"
-  property string libraryQuery: ""
-  // The Library's sort and filters, as server meta holds them.
-  // Downloaded only forces the Downloaded filter on, as in Mihon.
+  readonly property var overlay: Overlays.top({ trackAsk: trackAsk, readingCard: readingCard, nextChapters: nextChapters, restoreView: restoreView, syncView: syncView, downloadsView: downloadsView, reader: reader, migrateView: migrateView, trackPanel: trackPanel, mangaDetail: mangaDetail, view: view, browseView: browseView, extensionsView: extensionsView, libraryScreen: libraryView.screen, checkView: checkView, libraryArmed: libraryView.armed, libraryPickIds: libraryView.pickIds, libraryOptions: libraryView.optionsOpen, updatesView: updatesView, settingsEditing: settingsEditing, libraryView: libraryView, historyView: historyView, settingsView: settingsView, setupView: setupView, categoriesView: categoriesView, libraryHint: libraryView.hint })
   readonly property bool downloadedOnly: settingsState.values.downloadedOnly === true
-  readonly property var libraryPrefs: Prefs.force(libraryStore.values, "libraryFilterDownloaded", "include", downloadedOnly)
-  property bool libraryOptions: false
-  property int libraryOptionsCursor: 0
-  readonly property var switcher: Model.switcher({ manga: Library.apply(connection.manga, libraryPrefs, libraryQuery), categories: connection.categories })
-  readonly property int switcherIndex: Model.switcherIndex(switcher, libraryCategory)
-  readonly property var shown: switcher[switcherIndex]
   property var settingsState: Settings.initial()
   property int settingsCursor: 0
   property bool settingsEditing: false
@@ -75,41 +60,6 @@ ShellRoot {
   // The manga ids of Up next when the run of next presses began
   // (UpNext.after); in memory only.
   property var upNextOrder: []
-
-  // Manga ids picked with v. The actions take these, or the cursor's
-  // manga with none, as on Updates.
-  property var librarySelected: []
-  readonly property var libraryTargets: Updates.chosen(shown.manga, librarySelected, libraryCursor)
-  // What a second x ("remove") or X ("delete" the downloads) does to the
-  // targets, or "".
-  property string libraryArmed: ""
-  // The manga the change categories panel changes; [] while it is closed.
-  property var libraryPickIds: []
-  property int libraryPickCursor: 0
-  readonly property var libraryPickRows: Library.categoryRows(connection.categories, connection.manga.filter(function(m) { return root.libraryPickIds.indexOf(m.id) !== -1 }))
-  property string libraryError: ""
-  // What u on the Library started; in place of the hint until the next key.
-  property string libraryNote: ""
-
-  readonly property string libraryHint: libraryScreen === "categories" ? categoriesView.hint
-    : libraryPickIds.length ? "j k move   enter in or out   esc close   "
-    : libraryOptions ? "j k move   enter change   esc close   "
-    : libraryNote ? libraryNote + "   "
-    : libraryArmed === "remove" ? "x again to remove " + Library.count(libraryTargets.length) + " from the library   d also delete the downloads   esc keep   "
-    : libraryArmed === "delete" ? "X again to delete the downloads of " + Library.count(libraryTargets.length) + ", any other key keeps them   "
-    : (libraryError ? libraryError + "   " : "") + (librarySelected.length
-      ? librarySelected.length + " selected   v select   A all   I invert   R read   U unread   d download   X delete downloads   C categories   x remove   esc clear   "
-      : "enter open   space read   v select   x remove   " + (libraryQuery ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (libraryPrefs.libraryDisplay === "list" ? "L grid   " : "L list   ") + (switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D queue   s sync   ")
-
-  // The shown category as onShownChanged last saw it.
-  property var libraryWas: null
-  // The cursor stays on its manga when rows move or leave, or goes to the
-  // nearest one when its own leaves; another category starts at the top.
-  onShownChanged: {
-    libraryCursor = libraryWas && libraryWas.id === shown.id ? Model.follow(libraryWas.manga, shown.manga, libraryCursor) : 0
-    libraryWas = shown
-    librarySelected = Updates.keep(librarySelected, shown.manga)
-  }
 
   Theme { id: theme }
 
@@ -179,7 +129,7 @@ ShellRoot {
     }
     fetchLibrary()
     sendSettings(Settings.loadPayload())
-    libraryStore.load()
+    libraryView.reload()
     var peekTarget = Model.chapterTarget(pendingPeek)
     if (pendingChapter) openChapter(pendingChapter)
     else if (peekTarget) {
@@ -231,7 +181,7 @@ ShellRoot {
     var library = function(reply) {
       root.closeOverlays()
       root.view = "library"
-      if (reply && reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
+      if (reply && reply.state !== "ok") libraryView.fail(reply.message || Model.problem(reply, root.configPath).title)
       else libraryView.openSearch()
     }
     send(UpNext.payload(), function(reply) {
@@ -301,13 +251,6 @@ ShellRoot {
     Session.send(config, payload, function(reply) {
       root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
     })
-  }
-
-  PrefStore {
-    id: libraryStore
-    config: root.config
-    table: Library.PREFS
-    onFailed: function(reply) { root.libraryError = reply.message || Model.problem(reply, root.configPath).title }
   }
 
   function saveSetting(row, value) {
@@ -395,7 +338,7 @@ ShellRoot {
   // chapter, by its own chapter filters and sort, without the manga detail.
   function continueReading(m) {
     if (!m.unread) {
-      libraryNote = "Every chapter of " + m.title + " is read."
+      libraryView.assign({ note: "Every chapter of " + m.title + " is read." })
       return
     }
     var cfg = config
@@ -403,13 +346,13 @@ ShellRoot {
     send(Browse.detailPayload(d), function(reply) {
       d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
       if (!d.manga) {
-        root.libraryError = Browse.notice(d, root.configPath).title
+        libraryView.fail(Browse.notice(d, root.configPath).title)
         return
       }
       root.send(Prefs.loadPayload(Library.CHAPTER_PREFS, m.id), function(saved) {
         var next = Library.continueChapter(d.chapters, Library.chapterPrefs(saved.state === "ok" ? saved.data : {}, root.downloadedOnly))
         if (next) reader.start(d.manga, d.chapters, next.id, root.settingsState.values.defaultReadingMode)
-        else root.libraryNote = "No next chapter of " + m.title + " passes its chapter filters."
+        else libraryView.assign({ note: "No next chapter of " + m.title + " passes its chapter filters." })
       })
     })
   }
@@ -420,11 +363,11 @@ ShellRoot {
   // library, and "removeDeleting" does both, as Mihon's remove dialog with
   // both boxes ticked. The selection ends, as in Mihon.
   function actOnLibrary(action) {
-    var ids = libraryTargets.map(function(m) { return m.id })
-    librarySelected = []
+    var ids = libraryView.targetIds
+    libraryView.assign({ selected: [] })
     if (!ids.length || !config) return
     var failed = function(reply) {
-      if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
+      if (reply.state !== "ok") libraryView.fail(reply.message || Model.problem(reply, root.configPath).title)
     }
     var remove = function() {
       root.send(Library.removePayload(ids), function(reply) {
@@ -448,7 +391,7 @@ ShellRoot {
         })
       }
       if (!payload) {
-        root.libraryNote = "No chapter is downloaded."
+        libraryView.assign({ note: "No chapter is downloaded." })
         return
       }
       root.send(payload, function(done) {
@@ -466,7 +409,7 @@ ShellRoot {
     if (to === -1 && mangaDetail.open && mangaDetail.detail.mangaId === mangaId) mangaDetail.run("manga.categories")
     if (to === -1 || !connection.categories.length) return fetchLibrary()
     send(Library.moveToPayload(mangaId, to, connection.categories), function(reply) {
-      if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
+      if (reply.state !== "ok") libraryView.fail(reply.message || Model.problem(reply, root.configPath).title)
       mangaDetail.reload()
       root.fetchLibrary()
     })
@@ -474,11 +417,11 @@ ShellRoot {
 
   // x and X ask once; the same key again acts.
   function armLibrary(kind, action) {
-    if (libraryArmed === kind) {
-      libraryArmed = ""
+    if (libraryView.armed === kind) {
+      libraryView.assign({ armed: "" })
       actOnLibrary(action)
-    } else if (libraryTargets.length && config) {
-      libraryArmed = kind
+    } else if (libraryView.targets.length && config) {
+      libraryView.assign({ armed: kind })
     }
   }
 
@@ -496,11 +439,8 @@ ShellRoot {
   function handleKey(event) {
     var id = Commands.dispatch({ palette: paletteOpen, view: overlay.scope, editing: overlay.editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
     // Any other key disarms a remove or a delete, even one no command takes.
-    if (id !== "library.remove" && id !== "library.deleteDownloads") {
-      libraryArmed = ""
-      libraryError = ""
-    }
-    libraryNote = ""
+    if (id !== "library.remove" && id !== "library.deleteDownloads") libraryView.assign({ armed: "", error: "", note: "" })
+    else libraryView.assign({ note: "" })
     if (id !== "updates.deleteDownload") updatesView.armed = false
     if (id !== "downloads.clear") downloadsView.armed = false
     if (id !== null) run(id)
@@ -534,10 +474,7 @@ ShellRoot {
       browseView.run(id)
       return
     }
-    if (id === "categories.back") {
-      libraryScreen = "grid"
-      return
-    }
+    if ((id.indexOf("library.") === 0 || id === "categories.back") && libraryView.run(id)) return
     if (id.indexOf("categories.") === 0) {
       categoriesView.run(id)
       return
@@ -716,59 +653,19 @@ ShellRoot {
       case "settings.cancel":
         endEdit()
         break
-      case "library.left":
-      case "library.right":
-      case "library.up":
-      case "library.down":
-        var step = ({ "library.left": -1, "library.right": 1, "library.up": -libraryView.columns, "library.down": libraryView.columns })[id]
-        libraryCursor = Math.max(0, Math.min(shown.manga.length - 1, libraryCursor + step))
-        break
-      case "library.nextCategory":
-      case "library.previousCategory":
-        libraryCategory = switcher[Commands.moveCursor(switcherIndex, id === "library.nextCategory" ? 1 : -1, switcher.length)].id
-        break
-      case "library.categories":
-        libraryScreen = "categories"
-        break
       case "library.update":
         // All is the whole library, which skips excluded categories.
         if (!config) break
+        var shown = libraryView.shown
         var ids = shown.id === Model.ALL ? null : [shown.id]
-        libraryNote = updatesView.check(ids) ? "Checking " + (ids ? shown.name : "the library") + " for new chapters. Updates shows the progress." : "A check for new chapters is already running."
+        libraryView.assign({ note: updatesView.check(ids) ? "Checking " + (ids ? shown.name : "the library") + " for new chapters. Updates shows the progress." : "A check for new chapters is already running." })
         break
-      case "library.search":
-        libraryView.openSearch()
-        break
-      case "library.commit":
-        libraryView.closeSearch()
-        break
-      case "library.cancel":
-        libraryQuery = ""
-        libraryView.closeSearch()
-        break
+      // libraryView.run() takes Esc while a selection or a search is there.
       case "library.clearSearch":
-        if (librarySelected.length) librarySelected = []
-        else if (libraryQuery) libraryQuery = ""
-        else run("window.quit")
-        break
-      case "library.options":
-        libraryOptions = true
-        break
-      case "library.optionsClose":
-        libraryOptions = false
-        break
-      case "library.optionsUp":
-      case "library.optionsDown":
-        libraryOptionsCursor = Commands.moveCursor(libraryOptionsCursor, id === "library.optionsUp" ? -1 : 1, Library.rows(libraryPrefs).length)
+        run("window.quit")
         break
       case "library.continue":
-        if (shown.manga[libraryCursor] && config) continueReading(shown.manga[libraryCursor])
-        break
-      case "library.display":
-        libraryStore.set([Library.toggleDisplay(libraryPrefs)])
-        break
-      case "library.optionsChoose":
-        libraryStore.set([Library.choose(libraryPrefs, Library.rows(libraryPrefs)[libraryOptionsCursor])])
+        if (libraryView.manga[libraryView.cursor] && config) continueReading(libraryView.manga[libraryView.cursor])
         break
       case "library.remove":
         armLibrary("remove", "remove")
@@ -776,59 +673,33 @@ ShellRoot {
       case "library.removeWithDownloads":
         actOnLibrary("removeDeleting")
         break
-      case "library.disarm":
-        break
       case "library.deleteDownloads":
         armLibrary("delete", "delete")
-        break
-      case "library.select":
-        if (shown.manga[libraryCursor]) librarySelected = Updates.toggle(librarySelected, shown.manga[libraryCursor].id)
-        break
-      case "library.selectAll":
-        librarySelected = shown.manga.map(function(m) { return m.id })
-        break
-      case "library.invert":
-        librarySelected = Updates.invert(librarySelected, shown.manga)
         break
       case "library.markRead":
       case "library.markUnread":
         actOnLibrary(id === "library.markRead" ? "read" : "unread")
         break
       case "library.download":
-        if (shown.manga.length && config) nextChapters.openFor(NextChapters.librarySet(shown, librarySelected))
-        librarySelected = []
-        break
-      case "library.setCategories":
-        if (!connection.categories.length) libraryNote = "No categories yet. Press c to make one."
-        else if (libraryTargets.length) {
-          libraryPickIds = libraryTargets.map(function(m) { return m.id })
-          libraryPickCursor = 0
-        }
-        break
-      case "library.pickUp":
-      case "library.pickDown":
-        libraryPickCursor = Math.max(0, Math.min(libraryPickRows.length - 1, libraryPickCursor + (id === "library.pickUp" ? -1 : 1)))
+        if (libraryView.manga.length && config) nextChapters.openFor(NextChapters.librarySet(libraryView.shown, libraryView.selected))
+        libraryView.assign({ selected: [] })
         break
       case "library.pickToggle":
-        var pick = libraryPickRows[libraryPickCursor]
-        if (pick) send(Library.categoryPayload(pick, libraryPickIds), function(reply) {
-          if (reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
+        var pick = libraryView.pickRows[libraryView.pickCursor]
+        if (pick) send(Library.categoryPayload(pick, libraryView.pickIds), function(reply) {
+          if (reply.state !== "ok") libraryView.fail(reply.message || Model.problem(reply, root.configPath).title)
           root.fetchLibrary()
         })
         break
-      case "library.pickClose":
-        libraryPickIds = []
-        librarySelected = []
-        break
       case "library.open":
-        var m = shown.manga[libraryCursor]
+        var m = libraryView.manga[libraryView.cursor]
         if (m) mangaDetail.openManga(m.id, false)
         break
       case "library.reload":
         if (config) {
           fetchLibrary()
           sendSettings(Settings.loadPayload())
-          libraryStore.load()
+          libraryView.reload()
           settingsView.loadTrackers()
           updatesView.load()
           if (view === "check") checkView.load()
@@ -935,43 +806,21 @@ ShellRoot {
         LibraryView {
           id: libraryView
           anchors.fill: parent
-          visible: root.view === "library" && root.libraryScreen === "grid"
+          visible: root.view === "library" && screen === "grid"
           theme: theme
           config: root.config
-          switcher: root.switcher
-          switcherIndex: root.switcherIndex
-          cursor: root.libraryCursor
-          armed: root.libraryArmed
-          selected: root.librarySelected
-          targets: root.libraryTargets.map(function(m) { return m.id })
-          picking: root.libraryPickIds.length > 0
-          pickRows: root.libraryPickRows
-          pickCursor: root.libraryPickCursor
-          notice: Model.notice(root.connection, root.configPath, root.shown, Library.narrowed(root.libraryPrefs, root.libraryQuery))
-          prefs: root.libraryPrefs
-          query: root.libraryQuery
-          optionsOpen: root.libraryOptions
-          optionsCursor: root.libraryOptionsCursor
+          configPath: root.configPath
+          connection: root.connection
+          downloadedOnly: root.downloadedOnly
+          categoriesHint: categoriesView.hint
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          onSearched: function(text) { root.libraryQuery = text }
-          // A click moves the targets, so it disarms x and X as a key does.
-          onPicked: function(index) {
-            root.libraryArmed = ""
-            root.libraryCursor = index
-          }
-          onCategoryPicked: function(index) {
-            root.libraryArmed = ""
-            root.libraryCategory = root.switcher[index].id
-          }
-          onOptionPicked: function(index) { root.libraryOptionsCursor = index }
-          onPickPicked: function(index) { root.libraryPickCursor = index }
         }
 
         CategoriesView {
           id: categoriesView
           anchors.fill: parent
-          visible: root.view === "library" && root.libraryScreen === "categories"
+          visible: root.view === "library" && libraryView.screen === "categories"
           theme: theme
           config: root.config
           categories: root.connection.categories

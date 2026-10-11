@@ -10,6 +10,17 @@
 
 var STATES = Prefs.TRI_STATE
 
+// The Library view's state. category: the shown category's id in
+// Model.switcher() (a deleted one falls back to All); screen: "grid" or
+// "categories"; selected: manga ids picked with v; armed: what a second x
+// ("remove") or X ("delete") does to the targets, or ""; pickIds: the manga
+// the change categories panel changes, [] while it is closed; note: what
+// u and friends started, in place of the hint until the next key; was: the
+// shown category as the last "shown" saw it.
+function initial() {
+  return { cursor: 0, category: -1, screen: "grid", query: "", options: false, optionsCursor: 0, selected: [], armed: "", pickIds: [], pickCursor: 0, note: "", error: "", was: null }
+}
+
 // A manga is the shape Model.fromResponse() builds.
 var FILTERS = [
   { id: "downloaded", label: "Downloaded", test: function(m) { return m.downloads > 0 } },
@@ -251,6 +262,7 @@ function summary(prefs, query) {
 if (typeof module !== "undefined") {
   module.exports = {
     PREFS: PREFS,
+    initial: initial,
     apply: apply,
     rows: rows,
     toggleDisplay: toggleDisplay,

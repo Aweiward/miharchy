@@ -3,42 +3,64 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "Commands.js" as Commands
 import "Library.js" as Library
+import "Model.js" as Model
+import "Prefs.js" as Prefs
+import "Updates.js" as Updates
 
 // The Library view: the category switcher with the search field and a note
 // of the search, filters and sort in use, then the shown category as a cover
 // grid or a list (Library.PREFS libraryDisplay) with its cursor, or a notice
 // in its place, and the sort, filter and display panel or the change
-// categories panel over it. shell.qml owns the cursor, the shown category, the search
-// and the choices.
+// categories panel over it. The view owns its state (Library.initial()),
+// its prefs and its lists; shell.qml passes the library in and forwards the
+// "library." commands to run().
 Item {
   id: view
 
   required property Theme theme
   property var config: null
+  property string configPath: ""
+  // Model.reduce()'s connection: the library manga and categories.
+  property var connection: Model.initial()
+  property bool downloadedOnly: false
+  // The categories screen's hint, shown while that screen is.
+  property string categoriesHint: ""
+  property var library: Library.initial()
+
+  // Typed copies of the fields the lists read: an int or a string signals
+  // only a real change, so a write to library that leaves them alone does
+  // not rebuild the switcher, which would run onShownChanged again.
+  readonly property int cursor: library.cursor
+  readonly property int category: library.category
+  readonly property string screen: library.screen
+  readonly property string query: library.query
+  readonly property bool optionsOpen: library.options
+  readonly property int optionsCursor: library.optionsCursor
+  readonly property var selected: library.selected
+  readonly property string armed: library.armed
+  readonly property var pickIds: library.pickIds
+  readonly property bool picking: pickIds.length > 0
+  readonly property int pickCursor: library.pickCursor
+  readonly property string note: library.note
+  readonly property string error: library.error
+
+  // The sort and filters, as server meta holds them. Downloaded only forces
+  // the Downloaded filter on, as in Mihon.
+  readonly property var prefs: Prefs.force(store.values, "libraryFilterDownloaded", "include", downloadedOnly)
   // Model.switcher(); one entry means no categories, so it hides.
-  property var switcher: []
-  property int switcherIndex: 0
+  readonly property var switcher: Model.switcher({ manga: Library.apply(connection.manga, prefs, query), categories: connection.categories })
+  readonly property int switcherIndex: Model.switcherIndex(switcher, category)
+  readonly property var shown: switcher[switcherIndex]
   // switcher and switcherIndex update one after the other.
-  readonly property var manga: switcher[switcherIndex] ? switcher[switcherIndex].manga : []
-  property int cursor: 0
-  // Manga ids picked with v; the actions take these, or the cursor's manga.
-  property var selected: []
-  // What a second x or X does to the targets: "remove", "delete" or "".
-  property string armed: ""
-  property var targets: []
+  readonly property var manga: shown ? shown.manga : []
+  // The selection, or the cursor's manga with none, as on Updates.
+  readonly property var targets: Updates.chosen(manga, selected, cursor)
+  readonly property var targetIds: targets.map(function(m) { return m.id })
   readonly property string armedText: armed === "remove" ? "x again to remove, d with downloads" : "X again to delete downloads"
-  // The change categories panel's rows (Library.categoryRows), shown while
-  // picking.
-  property bool picking: false
-  property var pickRows: []
-  property int pickCursor: 0
+  // The change categories panel's rows, shown while picking.
+  readonly property var pickRows: Library.categoryRows(connection.categories, connection.manga.filter(function(m) { return view.pickIds.indexOf(m.id) !== -1 }))
   // Model.notice(): null for the grid, otherwise { title, detail }.
-  property var notice: null
-  // Prefs values for Library.PREFS, and the search text.
-  property var prefs: ({})
-  property string query: ""
-  property bool optionsOpen: false
-  property int optionsCursor: 0
+  readonly property var notice: Model.notice(connection, configPath, shown, Library.narrowed(prefs, query))
   // Whether the search field is open.
   property bool editing: false
   readonly property string summary: Library.summary(prefs, editing ? "" : query)
@@ -49,23 +71,54 @@ Item {
   // How far j and k move the cursor.
   readonly property int columns: listed ? 1 : Math.max(1, Math.floor(grid.width / grid.cellWidth))
 
+  readonly property string hint: screen === "categories" ? categoriesHint
+    : picking ? "j k move   enter in or out   esc close   "
+    : optionsOpen ? "j k move   enter change   esc close   "
+    : note ? note + "   "
+    : armed === "remove" ? "x again to remove " + Library.count(targets.length) + " from the library   d also delete the downloads   esc keep   "
+    : armed === "delete" ? "X again to delete the downloads of " + Library.count(targets.length) + ", any other key keeps them   "
+    : (error ? error + "   " : "") + (selected.length
+      ? selected.length + " selected   v select   A all   I invert   R read   U unread   d download   X delete downloads   C categories   x remove   esc clear   "
+      : "enter open   space read   v select   x remove   " + (query ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (prefs.libraryDisplay === "list" ? "L grid   " : "L list   ") + (switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D queue   s sync   ")
+
   signal key(var event)
   signal editEnded()
-  signal searched(string text)
-  // A click puts shell.qml's cursor, category or options cursor there.
-  signal picked(int index)
-  signal categoryPicked(int index)
-  signal optionPicked(int index)
-  signal pickPicked(int index)
 
-  // Once the rows changed too: the cursor follows its manga (shell.qml) in
-  // the same turn as the rows change, in either order.
+  // The cursor stays on its manga when rows move or leave, or goes to the
+  // nearest one when its own leaves; another category starts at the top.
+  onShownChanged: assign({
+    cursor: library.was && library.was.id === shown.id ? Model.follow(library.was.manga, shown.manga, library.cursor) : 0,
+    was: shown,
+    selected: Updates.keep(library.selected, shown.manga)
+  })
+  // Once the rows changed too: the cursor follows its manga in the same
+  // turn as the rows change, in either order.
   onCursorChanged: Qt.callLater(show)
   onListedChanged: show()
+
+  PrefStore {
+    id: store
+    config: view.config
+    table: Library.PREFS
+    onFailed: function(reply) { view.fail(reply.message || Model.problem(reply, view.configPath).title) }
+  }
 
   RowModel {
     id: rows
     items: view.manga
+  }
+
+  // ponytail: a plain write until Library.reduce takes these events (#314, #315).
+  function assign(changes) {
+    library = Object.assign({}, library, changes)
+  }
+
+  function fail(message) {
+    assign({ error: message })
+  }
+
+  function reload() {
+    store.load()
   }
 
   function show() {
@@ -74,10 +127,11 @@ Item {
   }
 
   // A cover click moves the cursor as h, j, k and l do; a double click then
-  // sends Enter. Not while the search field types.
+  // sends Enter. Not while the search field types. A click moves the
+  // targets, so it disarms x and X as a key does.
   function point(index, twice) {
     if (editing) return
-    picked(index)
+    assign({ armed: "", cursor: index })
     if (twice) key(Commands.enter())
   }
 
@@ -90,6 +144,87 @@ Item {
   function closeSearch() {
     editing = false
     editEnded()
+  }
+
+  // The "library." commands that stay inside the view; false for the rest,
+  // which shell.qml runs.
+  function run(id) {
+    switch (id) {
+      case "library.left":
+      case "library.right":
+      case "library.up":
+      case "library.down":
+        var step = ({ "library.left": -1, "library.right": 1, "library.up": -columns, "library.down": columns })[id]
+        assign({ cursor: Math.max(0, Math.min(manga.length - 1, cursor + step)) })
+        break
+      case "library.nextCategory":
+      case "library.previousCategory":
+        assign({ category: switcher[Commands.moveCursor(switcherIndex, id === "library.nextCategory" ? 1 : -1, switcher.length)].id })
+        break
+      case "library.categories":
+        assign({ screen: "categories" })
+        break
+      case "categories.back":
+        assign({ screen: "grid" })
+        break
+      case "library.search":
+        openSearch()
+        break
+      case "library.commit":
+        closeSearch()
+        break
+      case "library.cancel":
+        assign({ query: "" })
+        closeSearch()
+        break
+      // Esc clears the selection, then the search; with neither, shell.qml quits.
+      case "library.clearSearch":
+        if (selected.length) assign({ selected: [] })
+        else if (query) assign({ query: "" })
+        else return false
+        break
+      case "library.options":
+        assign({ options: true })
+        break
+      case "library.optionsClose":
+        assign({ options: false })
+        break
+      case "library.optionsUp":
+      case "library.optionsDown":
+        assign({ optionsCursor: Commands.moveCursor(optionsCursor, id === "library.optionsUp" ? -1 : 1, optionRows.length) })
+        break
+      case "library.display":
+        store.set([Library.toggleDisplay(prefs)])
+        break
+      case "library.optionsChoose":
+        store.set([Library.choose(prefs, optionRows[optionsCursor])])
+        break
+      case "library.disarm":
+        break
+      case "library.select":
+        if (manga[cursor]) assign({ selected: Updates.toggle(selected, manga[cursor].id) })
+        break
+      case "library.selectAll":
+        assign({ selected: manga.map(function(m) { return m.id }) })
+        break
+      case "library.invert":
+        assign({ selected: Updates.invert(selected, manga) })
+        break
+      case "library.setCategories":
+        if (!connection.categories.length) assign({ note: "No categories yet. Press c to make one." })
+        else if (targets.length) assign({ pickIds: targetIds, pickCursor: 0 })
+        break
+      case "library.pickUp":
+      case "library.pickDown":
+        assign({ pickCursor: Math.max(0, Math.min(pickRows.length - 1, pickCursor + (id === "library.pickUp" ? -1 : 1))) })
+        break
+      case "library.pickClose":
+        assign({ pickIds: [], selected: [] })
+        break
+      default:
+        return false
+    }
+    return true
   }
 
   Row {
@@ -115,7 +250,7 @@ Item {
 
         MouseArea {
           anchors.fill: parent
-          onClicked: view.categoryPicked(tabName.index)
+          onClicked: view.assign({ armed: "", category: view.switcher[tabName.index].id })
         }
       }
     }
@@ -139,7 +274,7 @@ Item {
       selectionColor: view.theme.selected
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSmall
-      onTextChanged: if (view.editing) view.searched(text)
+      onTextChanged: if (view.editing) view.assign({ query: text })
       Keys.onPressed: function(event) { view.key(event) }
     }
 
@@ -172,7 +307,7 @@ Item {
       required property int index
       readonly property bool current: index === view.cursor
       readonly property bool chosen: view.selected.indexOf(modelData.id) !== -1
-      readonly property bool armed: view.armed !== "" && view.targets.indexOf(modelData.id) !== -1
+      readonly property bool armed: view.armed !== "" && view.targetIds.indexOf(modelData.id) !== -1
       width: grid.cellWidth
       height: grid.cellHeight
 
@@ -235,7 +370,7 @@ Item {
       required property int index
       readonly property bool current: index === view.cursor
       readonly property bool chosen: view.selected.indexOf(modelData.id) !== -1
-      readonly property bool armed: view.armed !== "" && view.targets.indexOf(modelData.id) !== -1
+      readonly property bool armed: view.armed !== "" && view.targetIds.indexOf(modelData.id) !== -1
       width: list.width
       height: view.theme.fontSize * 4
       color: current || chosen ? view.theme.selected : "transparent"
@@ -380,9 +515,9 @@ Item {
 
           MouseArea {
             anchors.fill: parent
-            onClicked: view.pickPicked(pick.index)
+            onClicked: view.assign({ pickCursor: pick.index })
             onDoubleClicked: {
-              view.pickPicked(pick.index)
+              view.assign({ pickCursor: pick.index })
               view.key(Commands.enter())
             }
           }
@@ -438,9 +573,9 @@ Item {
 
             MouseArea {
               anchors.fill: parent
-              onClicked: view.optionPicked(option.index)
+              onClicked: view.assign({ optionsCursor: option.index })
               onDoubleClicked: {
-                view.optionPicked(option.index)
+                view.assign({ optionsCursor: option.index })
                 view.key(Commands.enter())
               }
             }
