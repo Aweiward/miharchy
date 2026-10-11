@@ -565,11 +565,10 @@ Rectangle {
       clip: true
       visible: text !== ""
       wrapMode: Text.Wrap
-      // Markdown, as Mihon shows notes; Browse.notesMarkdown keeps out images and HTML.
+      // Markdown, as Mihon shows notes; Browse.notesMarkdown keeps out images, HTML and links.
       textFormat: Text.MarkdownText
       text: view.manga ? Browse.notesMarkdown(view.manga.notes) : ""
       color: view.theme.accent
-      linkColor: view.theme.accent
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSmall
     }

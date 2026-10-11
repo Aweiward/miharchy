@@ -332,10 +332,15 @@ function toManga(config, n, names) {
 // The notes as the detail renders them: Markdown, but Qt loads an image
 // for Markdown image syntax and passes raw HTML through, and notes also
 // arrive from the phone. "!" before "[" becomes an entity, so an image
-// shows as a link; "<" becomes an entity, so HTML shows as text. Inside a
-// code span, and after a backslash ("\![x]"), the entities show as typed.
+// never loads; "<" becomes an entity, so HTML shows as text. Qt draws a
+// link in the application palette's blue whatever linkColor says, and the
+// notes cannot open one, so links show as plain text: "[" breaks link and
+// image syntax, and "@", ":" before "//" and "." after "www" break the
+// autolinks. Inside a code span, and after a backslash ("\![x]"), the
+// entities show as typed.
 function notesMarkdown(notes) {
-  return String(notes || "").replace(/!(?=\[)/g, "&#33;").replace(/</g, "&lt;")
+  return String(notes || "").replace(/!(?=\[)/g, "&#33;").replace(/</g, "&lt;").replace(/\[/g, "&#91;")
+    .replace(/@/g, "&#64;").replace(/:(?=\/\/)/g, "&#58;").replace(/(www)\./gi, "$1&#46;")
 }
 
 function toChapters(nodes) {
