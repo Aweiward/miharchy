@@ -357,51 +357,6 @@ ShellRoot {
     })
   }
 
-  // Mihon's library selection actions, on the targets: "read" and "unread"
-  // mark every chapter, "delete" takes
-  // the downloads off the disk, "remove" takes the manga out of the
-  // library, and "removeDeleting" does both, as Mihon's remove dialog with
-  // both boxes ticked. The selection ends, as in Mihon.
-  function actOnLibrary(action) {
-    var ids = libraryView.targetIds
-    libraryView.reduce({ type: "deselect" })
-    if (!ids.length || !config) return
-    var failed = function(reply) {
-      if (reply.state !== "ok") libraryView.fail(reply.message || Model.problem(reply, root.configPath).title)
-    }
-    var remove = function() {
-      root.send(Library.removePayload(ids), function(reply) {
-        failed(reply)
-        root.fetchLibrary()
-      })
-    }
-    if (action === "remove") return remove()
-    send(Library.chaptersPayload(ids), function(reply) {
-      if (reply.state !== "ok") return failed(reply)
-      var chapters = Browse.toChapters(reply.data.chapters.nodes)
-      if (action === "read" || action === "unread") return root.markChapters(chapters, action, ids)
-      var payload = Downloads.removePayload(chapters, downloadsView.queue.items)
-      if (action === "removeDeleting") {
-        if (!payload) return remove()
-        // The manga leave only once their downloads are gone.
-        return root.send(payload, function(done) {
-          downloadsView.apply(done)
-          if (done.state === "ok") remove()
-          else failed(done)
-        })
-      }
-      if (!payload) {
-        libraryView.reduce({ type: "note", text: "No chapter is downloaded." })
-        return
-      }
-      root.send(payload, function(done) {
-        failed(done)
-        downloadsView.apply(done)
-        root.fetchLibrary()
-      })
-    })
-  }
-
   // Mihon's default category: a manga the detail adds goes to the chosen
   // category, or the detail's categories picker opens to ask.
   function addedToLibrary(mangaId) {
@@ -413,13 +368,6 @@ ShellRoot {
       mangaDetail.reload()
       root.fetchLibrary()
     })
-  }
-
-  // x and X ask once; the same key again acts.
-  function armLibrary(kind, action) {
-    var acts = Library.acts(libraryView.library, kind)
-    libraryView.reduce({ type: "arm", kind: kind, ready: libraryView.targets.length > 0 && !!config })
-    if (acts) actOnLibrary(action)
   }
 
   function fetchLibrary() {
@@ -664,29 +612,9 @@ ShellRoot {
       case "library.continue":
         if (libraryView.manga[libraryView.cursor] && config) continueReading(libraryView.manga[libraryView.cursor])
         break
-      case "library.remove":
-        armLibrary("remove", "remove")
-        break
-      case "library.removeWithDownloads":
-        actOnLibrary("removeDeleting")
-        break
-      case "library.deleteDownloads":
-        armLibrary("delete", "delete")
-        break
-      case "library.markRead":
-      case "library.markUnread":
-        actOnLibrary(id === "library.markRead" ? "read" : "unread")
-        break
       case "library.download":
         if (libraryView.manga.length && config) nextChapters.openFor(NextChapters.librarySet(libraryView.shown, libraryView.selected))
         libraryView.reduce({ type: "deselect" })
-        break
-      case "library.pickToggle":
-        var pick = libraryView.pickRows[libraryView.pickCursor]
-        if (pick) send(Library.categoryPayload(pick, libraryView.pickIds), function(reply) {
-          if (reply.state !== "ok") libraryView.fail(reply.message || Model.problem(reply, root.configPath).title)
-          root.fetchLibrary()
-        })
         break
       case "library.open":
         var m = libraryView.manga[libraryView.cursor]
@@ -810,8 +738,12 @@ ShellRoot {
           connection: root.connection
           downloadedOnly: root.downloadedOnly
           categoriesHint: categoriesView.hint
+          queue: downloadsView.queue.items
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
+          onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
+          onDownloads: function(reply) { downloadsView.apply(reply) }
+          onEdited: root.fetchLibrary()
         }
 
         CategoriesView {
