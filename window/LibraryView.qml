@@ -9,6 +9,7 @@ import "Session.js" as Session
 import "Downloads.js" as Downloads
 import "Browse.js" as Browse
 import "Updates.js" as Updates
+import "NextChapters.js" as NextChapters
 
 // The Library view: the category switcher with the search field and a note
 // of the search, filters and sort in use, then the shown category as a cover
@@ -17,7 +18,8 @@ import "Updates.js" as Updates
 // categories panel over it. The view owns its state (Library.initial()),
 // its prefs and its lists, and sends its own changes to the server.
 // shell.qml passes the library in, forwards the "library." commands and
-// categories.back to run(), and handles mark, downloads and edited.
+// categories.back to run(), and handles read, openManga, downloadMenu,
+// check, quit, mark, downloads and edited.
 Item {
   id: view
 
@@ -88,6 +90,17 @@ Item {
   signal downloads(var reply)
   // A change reached the server: shell.qml fetches the library again.
   signal edited()
+  // Space: the reader opens on chapterId, not as a peek.
+  signal read(var manga, var chapters, int chapterId)
+  // Enter: the manga detail opens on the cursor's manga.
+  signal openManga(int mangaId)
+  // d: the next chapters menu opens on NextChapters.librarySet().
+  signal downloadMenu(var set)
+  // u: a check for new chapters of categories (null for all); shell.qml
+  // calls done(started) with whether it began, a bool.
+  signal check(var categories, var done)
+  // Esc with no selection and no search.
+  signal quit()
 
   onShownChanged: reduce({ type: "shown", shown: shown })
   // Once the rows changed too: the cursor follows its manga in the same
@@ -181,6 +194,23 @@ Item {
     store.load()
   }
 
+  // Mihon's continue reading: the reader opens on the manga's next unread
+  // chapter, by its own chapter filters and sort, without the manga detail.
+  function continueReading(m) {
+    if (!m.unread) return reduce({ type: "note", text: "Every chapter of " + m.title + " is read." })
+    var cfg = config
+    var d = Browse.detail(m.id, false)
+    send(Browse.detailPayload(d), function(reply) {
+      d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
+      if (!d.manga) return view.fail(Browse.notice(d, view.configPath).title)
+      view.send(Prefs.loadPayload(Library.CHAPTER_PREFS, m.id), function(saved) {
+        var next = Library.continueChapter(d.chapters, Library.chapterPrefs(saved.state === "ok" ? saved.data : {}, view.downloadedOnly))
+        if (next) view.read(d.manga, d.chapters, next.id)
+        else view.reduce({ type: "note", text: "No next chapter of " + m.title + " passes its chapter filters." })
+      })
+    })
+  }
+
   function show() {
     if (listed) list.positionViewAtIndex(cursor, ListView.Contain)
     else grid.positionViewAtIndex(cursor, GridView.Contain)
@@ -206,8 +236,8 @@ Item {
     editEnded()
   }
 
-  // The "library." commands that stay inside the view; false for the rest,
-  // which shell.qml runs.
+  // The "library." commands and categories.back; false for the rest,
+  // library.reload among them, which shell.qml runs.
   function run(id) {
     switch (id) {
       case "library.left":
@@ -237,10 +267,28 @@ Item {
         reduce({ type: "query", query: "" })
         closeSearch()
         break
-      // Esc clears the selection, then the search; with neither, shell.qml quits.
+      // Esc clears the selection, then the search; with neither, the window quits.
       case "library.clearSearch":
-        if (!Library.escapes(library)) return false
-        reduce({ type: "escape" })
+        if (Library.escapes(library)) reduce({ type: "escape" })
+        else quit()
+        break
+      case "library.continue":
+        if (manga[cursor] && config) continueReading(manga[cursor])
+        break
+      case "library.open":
+        if (manga[cursor]) openManga(manga[cursor].id)
+        break
+      case "library.download":
+        if (manga.length && config) downloadMenu(NextChapters.librarySet(shown, selected))
+        reduce({ type: "deselect" })
+        break
+      // All is the whole library, which skips excluded categories.
+      case "library.update":
+        if (!config) break
+        var all = shown.id === Model.ALL, name = shown.name
+        check(all ? null : [shown.id], function(started) {
+          view.reduce({ type: "note", text: started ? "Checking " + (all ? "the library" : name) + " for new chapters. Updates shows the progress." : "A check for new chapters is already running." })
+        })
         break
       case "library.options":
         reduce({ type: "options", open: true })
