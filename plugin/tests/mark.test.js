@@ -150,6 +150,32 @@ test("the notification goes out once across bars, and a click opens Updates", ()
     "Normal Girl",
     "launcher open-updates"
   ]);
+  assert.equal(fs.statSync(path.join(dir, "miharchy")).mode & 0o777, 0o700, "the marker folder is private");
+});
+
+test("the notification fails closed: no XDG_RUNTIME_DIR, or a symlink at its folder, sends nothing and touches nothing", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { execFileSync } = require("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mark-notify-"));
+  const log = path.join(dir, "log");
+  fs.writeFileSync(path.join(dir, "notify-send"), "#!/bin/sh\necho \"notify-send $*\" >> " + log + "\n", { mode: 0o755 });
+  const [cmd, ...args] = Mark.notifyCommand({ key: "7", title: "1 new chapter", body: "Maid to Skate" }, path.join(dir, "launcher"), "/icons/miharchy.svg");
+
+  execFileSync(cmd, args, { env: { PATH: dir + ":" + process.env.PATH } });
+  assert.equal(fs.existsSync(log), false, "no XDG_RUNTIME_DIR notifies nothing");
+
+  const target = fs.mkdtempSync(path.join(os.tmpdir(), "mark-planted-"));
+  const old = path.join(target, "notified-1");
+  fs.writeFileSync(old, "");
+  fs.utimesSync(old, 0, 0);
+  const runtime = path.join(dir, "runtime");
+  fs.mkdirSync(runtime);
+  fs.symlinkSync(target, path.join(runtime, "miharchy"));
+  execFileSync(cmd, args, { env: { PATH: dir + ":" + process.env.PATH, XDG_RUNTIME_DIR: runtime } });
+  assert.equal(fs.existsSync(log), false, "a planted symlink notifies nothing");
+  assert.deepEqual(fs.readdirSync(target), ["notified-1"], "nothing written or deleted through the symlink");
 });
 
 const withSync = (autoSync, syncFolder) => M.reply(200, JSON.stringify({ data: {

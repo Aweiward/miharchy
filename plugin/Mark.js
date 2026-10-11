@@ -84,8 +84,13 @@ function notification(mark) {
 
 // The first bar to create the marker sends it; the others find it and stop.
 // Clicking it opens Updates in the window. Markers older than a day go.
-var NOTIFY_SCRIPT = "dir=\"${XDG_RUNTIME_DIR:-/tmp}/miharchy\"\n"
-  + "mkdir -p \"$dir\" && (set -C; : > \"$dir/notified-$1\") 2>/dev/null || exit 0\n"
+// No XDG_RUNTIME_DIR, or a folder that is not the user's own real directory
+// (a symlink planted there), sends nothing: never a shared /tmp path.
+var NOTIFY_SCRIPT = "[ -n \"$XDG_RUNTIME_DIR\" ] || exit 0\n"
+  + "dir=\"$XDG_RUNTIME_DIR/miharchy\"\n"
+  + "(umask 077; mkdir -p \"$dir\") 2>/dev/null\n"
+  + "[ -d \"$dir\" ] && [ ! -L \"$dir\" ] && [ -O \"$dir\" ] || exit 0\n"
+  + "(set -C; : > \"$dir/notified-$1\") 2>/dev/null || exit 0\n"
   + "find \"$dir\" -maxdepth 1 -name 'notified-*' -mmin +1440 -delete 2>/dev/null\n"
   + "[ \"$(notify-send -a Miharchy -i \"$5\" -A default=Open -- \"$2\" \"$3\")\" = default ] && exec sh \"$4\" open-updates\n"
   + "exit 0"
