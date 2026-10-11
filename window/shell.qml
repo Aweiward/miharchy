@@ -14,11 +14,9 @@ import "Downloads.js" as Downloads
 import "Library.js" as Library
 import "Browse.js" as Browse
 import "Storage.js" as Storage
-import "Prefs.js" as Prefs
 import "Restart.js" as Restart
 import "Images.js" as Images
 import "UpNext.js" as UpNext
-import "NextChapters.js" as NextChapters
 import "Sync.js" as Sync
 import "Overlays.js" as Overlays
 
@@ -181,7 +179,7 @@ ShellRoot {
     var library = function(reply) {
       root.closeOverlays()
       root.view = "library"
-      if (reply && reply.state !== "ok") libraryView.fail(reply.message || Model.problem(reply, root.configPath).title)
+      if (reply && reply.state !== "ok") libraryView.report(reply)
       else libraryView.openSearch()
     }
     send(UpNext.payload(), function(reply) {
@@ -334,29 +332,6 @@ ShellRoot {
     })
   }
 
-  // Mihon's continue reading: the reader opens on the manga's next unread
-  // chapter, by its own chapter filters and sort, without the manga detail.
-  function continueReading(m) {
-    if (!m.unread) {
-      libraryView.reduce({ type: "note", text: "Every chapter of " + m.title + " is read." })
-      return
-    }
-    var cfg = config
-    var d = Browse.detail(m.id, false)
-    send(Browse.detailPayload(d), function(reply) {
-      d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
-      if (!d.manga) {
-        libraryView.fail(Browse.notice(d, root.configPath).title)
-        return
-      }
-      root.send(Prefs.loadPayload(Library.CHAPTER_PREFS, m.id), function(saved) {
-        var next = Library.continueChapter(d.chapters, Library.chapterPrefs(saved.state === "ok" ? saved.data : {}, root.downloadedOnly))
-        if (next) reader.start(d.manga, d.chapters, next.id, root.settingsState.values.defaultReadingMode)
-        else libraryView.reduce({ type: "note", text: "No next chapter of " + m.title + " passes its chapter filters." })
-      })
-    })
-  }
-
   // Mihon's default category: a manga the detail adds goes to the chosen
   // category, or the detail's categories picker opens to ask.
   function addedToLibrary(mangaId) {
@@ -364,7 +339,7 @@ ShellRoot {
     if (to === -1 && mangaDetail.open && mangaDetail.detail.mangaId === mangaId) mangaDetail.run("manga.categories")
     if (to === -1 || !connection.categories.length) return fetchLibrary()
     send(Library.moveToPayload(mangaId, to, connection.categories), function(reply) {
-      if (reply.state !== "ok") libraryView.fail(reply.message || Model.problem(reply, root.configPath).title)
+      libraryView.report(reply)
       mangaDetail.reload()
       root.fetchLibrary()
     })
@@ -598,28 +573,6 @@ ShellRoot {
       case "settings.cancel":
         endEdit()
         break
-      case "library.update":
-        // All is the whole library, which skips excluded categories.
-        if (!config) break
-        var shown = libraryView.shown
-        var ids = shown.id === Model.ALL ? null : [shown.id]
-        libraryView.reduce({ type: "note", text: updatesView.check(ids) ? "Checking " + (ids ? shown.name : "the library") + " for new chapters. Updates shows the progress." : "A check for new chapters is already running." })
-        break
-      // libraryView.run() takes Esc while a selection or a search is there.
-      case "library.clearSearch":
-        run("window.quit")
-        break
-      case "library.continue":
-        if (libraryView.manga[libraryView.cursor] && config) continueReading(libraryView.manga[libraryView.cursor])
-        break
-      case "library.download":
-        if (libraryView.manga.length && config) nextChapters.openFor(NextChapters.librarySet(libraryView.shown, libraryView.selected))
-        libraryView.reduce({ type: "deselect" })
-        break
-      case "library.open":
-        var m = libraryView.manga[libraryView.cursor]
-        if (m) mangaDetail.openManga(m.id, false)
-        break
       case "library.reload":
         if (config) {
           fetchLibrary()
@@ -744,6 +697,11 @@ ShellRoot {
           onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
           onDownloads: function(reply) { downloadsView.apply(reply) }
           onEdited: root.fetchLibrary()
+          onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+          onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, false) }
+          onDownloadMenu: function(set) { nextChapters.openFor(set) }
+          onCheck: function(categories, done) { done(updatesView.check(categories)) }
+          onQuit: root.run("window.quit")
         }
 
         CategoriesView {
