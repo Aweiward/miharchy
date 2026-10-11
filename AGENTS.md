@@ -52,6 +52,20 @@ Read the doc for the area before you change it.
 
 The latest release is [v1.1.0](https://github.com/Aweiward/miharchy/releases/tag/v1.1.0) (2026-10-10). Its release notes list what shipped. No plan is open; new work starts with a grilling session. Logging in to a source in a WebView (#98) waits for an upstream Suwayomi change. Work items through `ready-for-agent` issues.
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on Aweiward/miharchy, through `gh` with the Aweiward token. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.
+
 ## Git
 
 - Write commit messages and PR descriptions with no `Co-Authored-By:` line and no session trailer or link.
