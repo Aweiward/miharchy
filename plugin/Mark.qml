@@ -270,6 +270,7 @@ Panel {
         spacing: Style.spacing.sm
 
         Text {
+          textFormat: Text.PlainText
           text: "Miharchy"
           color: Color.popups.text
           font.family: Style.font.family
@@ -277,6 +278,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           visible: root.sync.state !== "idle"
           wrapMode: Text.Wrap
@@ -287,6 +289,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           visible: text !== ""
           wrapMode: Text.Wrap
@@ -297,6 +300,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           visible: text !== ""
           wrapMode: Text.Wrap
@@ -319,6 +323,7 @@ Panel {
             spacing: Style.spacing.sm
 
             Text {
+              textFormat: Text.PlainText
               visible: entry.modelData.section !== ""
               text: entry.modelData.section
               color: Color.muted
@@ -341,6 +346,7 @@ Panel {
                 anchors.rightMargin: Style.spacing.md
 
                 Text {
+                  textFormat: Text.PlainText
                   width: parent.width
                   elide: Text.ElideRight
                   text: entry.modelData.title
@@ -355,6 +361,7 @@ Panel {
 
                   Text {
                     id: chapter
+                    textFormat: Text.PlainText
                     anchors.left: parent.left
                     anchors.right: date.left
                     anchors.rightMargin: Style.spacing.md
@@ -367,6 +374,7 @@ Panel {
 
                   Text {
                     id: date
+                    textFormat: Text.PlainText
                     anchors.right: parent.right
                     text: entry.modelData.side
                     color: Color.muted
@@ -388,6 +396,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           visible: root.notice !== null
           wrapMode: Text.Wrap
@@ -398,6 +407,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           visible: root.notice !== null && root.notice.detail !== ""
           wrapMode: Text.Wrap
@@ -408,6 +418,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           visible: root.notice === null && root.more > 0
           text: root.more + " more in the window"
           color: Color.muted
@@ -416,6 +427,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           text: "enter read   w window   s sync   r refresh"
           color: Color.muted
           font.family: Style.font.family

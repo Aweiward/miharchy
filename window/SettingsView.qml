@@ -216,6 +216,7 @@ Item {
       spacing: view.theme.fontSize
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         visible: view.problem !== null
         wrapMode: Text.Wrap
@@ -252,6 +253,7 @@ Item {
 
             Text {
               id: rowError
+              textFormat: Text.PlainText
               anchors.top: band.bottom
               width: parent.width
               leftPadding: view.theme.fontSize * 0.75
@@ -274,6 +276,7 @@ Item {
 
             Text {
               id: label
+              textFormat: Text.PlainText
               anchors.left: parent.left
               anchors.leftMargin: view.theme.fontSize * 0.75
               anchors.verticalCenter: band.verticalCenter
@@ -284,6 +287,7 @@ Item {
             }
 
             Text {
+              textFormat: Text.PlainText
               anchors.left: label.right
               anchors.leftMargin: view.theme.fontSize * 2
               anchors.right: parent.right
@@ -330,6 +334,7 @@ Item {
         width: Math.min(parent.width, view.theme.fontSize * 60)
 
         Text {
+          textFormat: Text.PlainText
           leftPadding: view.theme.fontSize * 0.75
           bottomPadding: view.theme.fontSize * 0.5
           text: "Storage   downloads " + (view.storage ? Storage.format(view.storage.downloads) : "measuring")
@@ -353,6 +358,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.left: parent.left
             anchors.leftMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
@@ -363,6 +369,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.right: parent.right
             anchors.rightMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
@@ -379,6 +386,7 @@ Item {
         width: Math.min(parent.width, view.theme.fontSize * 60)
 
         Text {
+          textFormat: Text.PlainText
           leftPadding: view.theme.fontSize * 0.75
           bottomPadding: view.theme.fontSize * 0.5
           text: view.trackers.state === "loading" && !view.trackers.list.length ? "Trackers   loading" : "Trackers"
@@ -407,6 +415,7 @@ Item {
             }
 
             Text {
+              textFormat: Text.PlainText
               anchors.left: parent.left
               anchors.leftMargin: view.theme.fontSize * 0.75
               anchors.verticalCenter: parent.verticalCenter
@@ -417,6 +426,7 @@ Item {
             }
 
             Text {
+              textFormat: Text.PlainText
               anchors.right: parent.right
               anchors.rightMargin: view.theme.fontSize * 0.75
               anchors.verticalCenter: parent.verticalCenter
@@ -437,6 +447,7 @@ Item {
 
           Text {
             id: loginPrompt
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             text: view.loginEditing ? view.trackers.login.name + " " + Trackers.prompt(view.trackers.login) : ""
             color: view.theme.muted
@@ -460,6 +471,7 @@ Item {
 
         // Selectable, so the login link can be copied when no browser opens.
         TextEdit {
+          textFormat: TextEdit.PlainText
           width: parent.width
           visible: text !== ""
           leftPadding: view.theme.fontSize * 0.75

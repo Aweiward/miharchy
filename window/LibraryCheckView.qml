@@ -146,6 +146,7 @@ Item {
 
   Text {
     id: head
+    textFormat: Text.PlainText
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: parent.right
@@ -161,6 +162,7 @@ Item {
   }
 
   Text {
+    textFormat: Text.PlainText
     anchors.centerIn: parent
     visible: view.check.state === "ok" && !view.rows.length
     text: view.showDismissed ? "No dismissed problems" : "No problems found"
@@ -202,6 +204,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         visible: row.group
         anchors.left: parent.left
         anchors.leftMargin: view.theme.fontSize * 0.5
@@ -222,6 +225,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           elide: Text.ElideRight
           text: (row.picked ? "● " : "") + (row.modelData.title || "")
@@ -231,6 +235,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           elide: Text.ElideRight
           text: row.modelData.reason || ""
@@ -265,6 +270,7 @@ Item {
       spacing: view.theme.fontSize * 0.5
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         wrapMode: Text.Wrap
         bottomPadding: view.theme.fontSize * 0.5
@@ -305,6 +311,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               elide: Text.ElideRight
               text: copyRow.modelData.title
@@ -314,6 +321,7 @@ Item {
             }
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               wrapMode: Text.Wrap
               text: LibraryCheck.copyText(copyRow.modelData)

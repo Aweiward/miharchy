@@ -226,6 +226,7 @@ Item {
     spacing: view.theme.fontSize / 2
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       visible: view.problem !== null
       wrapMode: Text.Wrap
@@ -241,6 +242,7 @@ Item {
 
       Text {
         id: prompt
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: view.editing === "repo" ? "repo url " : "/ "
         color: view.theme.accent
@@ -264,6 +266,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.left: prompt.right
         anchors.verticalCenter: parent.verticalCenter
         visible: view.editing === ""
@@ -275,6 +278,7 @@ Item {
 
       Text {
         id: scope
+        textFormat: Text.PlainText
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         text: (view.ext.state === "loading" ? "refreshing   " : "") + (view.allLanguages ? "every language" : "English")
@@ -285,6 +289,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       visible: text !== ""
       wrapMode: Text.Wrap
@@ -320,6 +325,7 @@ Item {
       width: list.width
 
       Text {
+        textFormat: Text.PlainText
         visible: entry.firstOfGroup
         height: entry.index === 0 ? implicitHeight * 1.6 : implicitHeight * 2.6
         verticalAlignment: Text.AlignBottom
@@ -355,6 +361,7 @@ Item {
 
         Text {
           id: name
+          textFormat: Text.PlainText
           anchors.left: icon.right
           anchors.leftMargin: view.theme.fontSize * 0.75
           anchors.verticalCenter: parent.verticalCenter
@@ -366,6 +373,7 @@ Item {
 
         Text {
           id: marker
+          textFormat: Text.PlainText
           anchors.left: name.right
           anchors.leftMargin: text ? view.theme.fontSize * 0.75 : 0
           anchors.verticalCenter: parent.verticalCenter
@@ -376,6 +384,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.left: marker.right
           anchors.leftMargin: view.theme.fontSize * 0.75
           anchors.right: statusText.left
@@ -390,6 +399,7 @@ Item {
 
         Text {
           id: statusText
+          textFormat: Text.PlainText
           anchors.right: parent.right
           anchors.rightMargin: view.theme.fontSize * 0.75
           anchors.verticalCenter: parent.verticalCenter
@@ -405,6 +415,7 @@ Item {
   }
 
   Text {
+    textFormat: Text.PlainText
     anchors.centerIn: list
     visible: !view.details && view.rows.length === 0 && view.problem === null
     text: view.ext.state === "loading" || view.ext.state === "idle" ? "Loading extensions"
@@ -438,6 +449,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           text: view.detailsExtension ? view.detailsExtension.name : ""
           color: view.theme.foreground
@@ -450,6 +462,7 @@ Item {
         model: view.details ? Extensions.detailsHeader(view.ext, view.details) : []
 
         Text {
+          textFormat: Text.PlainText
           required property var modelData
           width: detailsHead.width
           elide: Text.ElideRight
@@ -461,6 +474,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         readonly property bool failed: view.details !== null && (["ok", "loading"].indexOf(view.details.state) === -1 || text === view.ext.errors[view.details.pkgName])
         width: parent.width
         visible: text !== ""
@@ -476,6 +490,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         topPadding: view.theme.fontSize
         text: view.details && view.details.state === "ok" ? (view.details.sources.length === 1 ? "1 source" : view.details.sources.length + " sources") : "Sources"
         color: view.theme.accent
@@ -511,6 +526,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.left: parent.left
           anchors.leftMargin: view.theme.fontSize * 0.5
           anchors.right: sourceDetail.left
@@ -525,6 +541,7 @@ Item {
 
         Text {
           id: sourceDetail
+          textFormat: Text.PlainText
           anchors.right: parent.right
           anchors.rightMargin: view.theme.fontSize * 0.5
           anchors.verticalCenter: parent.verticalCenter

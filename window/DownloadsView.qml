@@ -207,6 +207,7 @@ Rectangle {
 
   Text {
     id: title
+    textFormat: Text.PlainText
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.margins: view.theme.fontSize * 2
@@ -217,6 +218,7 @@ Rectangle {
   }
 
   Text {
+    textFormat: Text.PlainText
     anchors.right: parent.right
     anchors.baseline: title.baseline
     anchors.rightMargin: view.theme.fontSize * 2
@@ -247,6 +249,7 @@ Rectangle {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: view.theme.fontSize * 0.5
@@ -264,6 +267,7 @@ Rectangle {
       model: view.summaryShown ? view.lastRun.failures : []
 
       Text {
+        textFormat: Text.PlainText
         required property var modelData
         width: summary.width
         leftPadding: view.theme.fontSize * 0.5
@@ -303,6 +307,7 @@ Rectangle {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.left: parent.left
         anchors.leftMargin: view.theme.fontSize * 0.5
         anchors.right: progressLabel.left
@@ -317,6 +322,7 @@ Rectangle {
 
       Text {
         id: progressLabel
+        textFormat: Text.PlainText
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.5
         anchors.verticalCenter: parent.verticalCenter
@@ -338,6 +344,7 @@ Rectangle {
   }
 
   Text {
+    textFormat: Text.PlainText
     anchors.centerIn: list
     width: list.width
     horizontalAlignment: Text.AlignHCenter

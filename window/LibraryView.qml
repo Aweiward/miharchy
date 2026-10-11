@@ -365,6 +365,7 @@ Item {
 
       Text {
         id: tabName
+        textFormat: Text.PlainText
         required property var modelData
         required property int index
         anchors.bottom: parent.bottom
@@ -382,6 +383,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.bottom: parent.bottom
       visible: view.editing
       text: "/"
@@ -405,6 +407,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.bottom: parent.bottom
       text: view.summary
       color: view.theme.accent
@@ -466,6 +469,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.top: coverBox.bottom
         anchors.topMargin: view.theme.fontSize / 2
         anchors.left: coverBox.left
@@ -534,6 +538,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           elide: Text.ElideRight
           text: row.modelData.title
@@ -543,6 +548,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           elide: Text.ElideRight
           text: row.armed ? view.armedText : row.modelData.source
@@ -554,6 +560,7 @@ Item {
 
       Text {
         id: unread
+        textFormat: Text.PlainText
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.5
         anchors.verticalCenter: parent.verticalCenter
@@ -573,6 +580,7 @@ Item {
     visible: view.notice !== null
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       text: view.notice ? view.notice.title : ""
@@ -582,6 +590,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.Wrap
@@ -619,6 +628,7 @@ Item {
       width: parent.width - view.theme.fontSize * 2
 
       Text {
+        textFormat: Text.PlainText
         text: "Categories"
         color: view.theme.muted
         font.family: view.theme.fontFamily
@@ -630,6 +640,7 @@ Item {
 
         Text {
           id: pick
+          textFormat: Text.PlainText
           required property var modelData
           required property int index
           width: picks.width
@@ -682,6 +693,7 @@ Item {
 
           // A heading before the first row of each kind.
           Text {
+            textFormat: Text.PlainText
             visible: option.index === 0 || option.modelData.kind !== view.optionRows[option.index - 1].kind
             topPadding: option.index === 0 ? 0 : view.theme.fontSize * 0.8
             text: ({ filter: "Filter", sort: "Sort", display: "Display", badge: "Badges", tabs: "Tabs" })[option.modelData.kind]
@@ -691,6 +703,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: ({ off: "[ ] ", include: "[+] ", exclude: "[-] ", "": "    ", asc: " ↑  ", desc: " ↓  ", picked: "(•) ", unpicked: "( ) ", on: "[x] " })[option.modelData.state] + option.modelData.label
             color: option.current ? view.theme.accent : option.on ? view.theme.foreground : view.theme.muted

@@ -207,6 +207,7 @@ Item {
     spacing: view.theme.fontSize
 
     Text {
+      textFormat: Text.PlainText
       text: "Miharchy needs these pieces. Nothing on the system changes until you confirm a step."
       color: view.theme.muted
       font.family: view.theme.fontFamily
@@ -214,6 +215,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: Math.min(parent.width, view.theme.fontSize * 60)
       visible: text !== ""
       wrapMode: Text.Wrap
@@ -249,6 +251,7 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
+            // Styled for the number's color; Setup.STEPS titles are constant text.
             textFormat: Text.StyledText
             text: "<font color='" + view.theme.muted + "'>" + (row.index + 1) + "</font> " + row.modelData.title
             color: row.current ? view.theme.selectedText : view.theme.foreground
@@ -257,6 +260,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.right: parent.right
             anchors.rightMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
@@ -274,6 +278,7 @@ Item {
       spacing: view.theme.fontSize * 0.5
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         wrapMode: Text.Wrap
         visible: text !== ""
@@ -295,6 +300,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         visible: !!view.currentStatus.command && view.currentStatus.state === "todo"
         text: "$ " + (view.currentStatus.command || "")
         color: view.theme.accent
@@ -303,6 +309,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         visible: view.confirming
         text: (view.currentStatus.prompt || view.current.prompt || "") + "  y run   n cancel"
         color: view.theme.accent
@@ -323,6 +330,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         visible: text !== ""
         wrapMode: Text.Wrap
@@ -333,6 +341,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         visible: view.currentStatus.state === "running" && text !== ""
         text: output.text.replace(/\s+$/, "").split("\n").slice(-12).join("\n")
@@ -342,6 +351,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         readonly property var result: view.setup.results[view.current.id] || null
         width: parent.width
         visible: result !== null && view.currentStatus.state !== "running"

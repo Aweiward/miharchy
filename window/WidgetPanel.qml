@@ -37,6 +37,7 @@ Rectangle {
 
   Text {
     id: heading
+    textFormat: Text.PlainText
     x: view.theme.fontSize
     y: view.theme.fontSize
     width: parent.width - view.theme.fontSize * 2
@@ -49,6 +50,7 @@ Rectangle {
 
   Text {
     id: problemText
+    textFormat: Text.PlainText
     anchors.top: heading.bottom
     anchors.topMargin: view.theme.fontSize * 0.5
     x: view.theme.fontSize
@@ -97,6 +99,7 @@ Rectangle {
 
         Text {
           id: label
+          textFormat: Text.PlainText
           width: Math.min(implicitWidth, parent.width - (detail.text ? detail.implicitWidth + view.theme.fontSize : 0))
           elide: Text.ElideRight
           text: (row.modelData.mark ? row.modelData.mark + " " : "") + row.modelData.label
@@ -107,6 +110,7 @@ Rectangle {
 
         Text {
           id: detail
+          textFormat: Text.PlainText
           anchors.right: parent.right
           width: Math.min(implicitWidth, parent.width / 2)
           elide: Text.ElideRight
@@ -119,6 +123,7 @@ Rectangle {
 
       Text {
         id: summary
+        textFormat: Text.PlainText
         anchors.top: line.bottom
         x: line.x
         width: line.width
@@ -143,6 +148,7 @@ Rectangle {
 
     Text {
       id: prompt
+      textFormat: Text.PlainText
       anchors.verticalCenter: parent.verticalCenter
       text: view.editLabel + " "
       color: view.theme.accent

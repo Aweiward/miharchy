@@ -162,6 +162,7 @@ Item {
     visible: view.editing || view.query !== ""
 
     Text {
+      textFormat: Text.PlainText
       text: "/"
       color: view.theme.accent
       font.family: view.theme.fontFamily
@@ -184,6 +185,7 @@ Item {
 
   Text {
     id: head
+    textFormat: Text.PlainText
     anchors.top: searchRow.visible ? searchRow.bottom : parent.top
     anchors.left: parent.left
     anchors.right: parent.right
@@ -223,6 +225,7 @@ Item {
       width: list.width
 
       Text {
+        textFormat: Text.PlainText
         visible: entry.firstOfDay
         topPadding: entry.index === 0 ? 0 : view.theme.fontSize
         bottomPadding: view.theme.fontSize * 0.5
@@ -270,6 +273,7 @@ Item {
           spacing: view.theme.fontSize * 0.25
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             elide: Text.ElideRight
             text: entry.modelData.title
@@ -279,6 +283,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             elide: Text.ElideRight
             text: entry.modelData.chapter + "   " + History.progress(entry.modelData)
@@ -290,6 +295,7 @@ Item {
 
         Text {
           id: status
+          textFormat: Text.PlainText
           anchors.right: parent.right
           anchors.rightMargin: view.theme.fontSize * 0.75
           anchors.verticalCenter: parent.verticalCenter
@@ -309,6 +315,7 @@ Item {
     visible: view.notice !== null
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       text: view.notice ? view.notice.title : ""
@@ -318,6 +325,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.Wrap

@@ -39,6 +39,7 @@ Rectangle {
 
   Text {
     id: placeholder
+    textFormat: Text.PlainText
     anchors.fill: parent
     anchors.margins: Math.min(cover.theme.fontSize * 0.5, cover.width / 10)
     visible: Model.placeholder(cover.source, image.failed)
@@ -92,6 +93,7 @@ Rectangle {
 
     Text {
       id: label
+      textFormat: Text.PlainText
       anchors.centerIn: parent
       color: badgeBox.theme.background
       font.family: badgeBox.theme.fontFamily

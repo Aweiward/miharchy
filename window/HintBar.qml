@@ -34,6 +34,7 @@ Flow {
 
     Text {
       id: part
+      textFormat: Text.PlainText
       required property var modelData
       required property int index
       text: modelData.text + (index < bar.parts.length - 1 ? "   " : "")

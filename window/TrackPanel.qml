@@ -150,6 +150,7 @@ Rectangle {
     spacing: view.theme.fontSize * 0.5
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       elide: Text.ElideRight
       text: !view.open ? "" : view.picking ? ({ results: "Pick the manga", status: "Reading status", score: "Score" })[view.panel.pick.kind] : "Tracking"
@@ -159,6 +160,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       wrapMode: Text.Wrap
       visible: text !== ""
@@ -179,6 +181,7 @@ Rectangle {
 
       Text {
         id: prompt
+        textFormat: Text.PlainText
         text: !view.open ? "" : ({ progress: "Chapters read", start: "Started (YYYY-MM-DD)", finish: "Finished (YYYY-MM-DD)" })[view.panel.mode] || "Search"
         color: view.theme.muted
         font.family: view.theme.fontFamily
@@ -228,6 +231,7 @@ Rectangle {
 
             Text {
               id: name
+              textFormat: Text.PlainText
               text: row.modelData.tracker.name
               color: row.current ? view.theme.selectedText : view.theme.foreground
               font.family: view.theme.fontFamily
@@ -235,6 +239,7 @@ Rectangle {
             }
 
             Text {
+              textFormat: Text.PlainText
               anchors.left: name.right
               anchors.leftMargin: view.theme.fontSize
               anchors.right: parent.right
@@ -248,6 +253,7 @@ Rectangle {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             elide: Text.ElideRight
             text: row.modelData.record ? row.modelData.record.title : ""
@@ -286,6 +292,7 @@ Rectangle {
 
         Text {
           id: label
+          textFormat: Text.PlainText
           anchors.left: parent.left
           anchors.leftMargin: view.theme.fontSize * 0.5
           anchors.right: detail.left
@@ -300,6 +307,7 @@ Rectangle {
 
         Text {
           id: detail
+          textFormat: Text.PlainText
           anchors.right: parent.right
           anchors.rightMargin: view.theme.fontSize * 0.5
           anchors.verticalCenter: parent.verticalCenter
@@ -312,6 +320,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       wrapMode: Text.Wrap
       visible: text !== ""

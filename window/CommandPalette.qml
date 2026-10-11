@@ -61,6 +61,7 @@ Rectangle {
         spacing: pal.theme.fontSize / 2
 
         Text {
+          textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           text: ":"
           color: pal.theme.accent
@@ -102,6 +103,7 @@ Rectangle {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.left: parent.left
             anchors.leftMargin: pal.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
@@ -112,6 +114,7 @@ Rectangle {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.right: parent.right
             anchors.rightMargin: pal.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
@@ -124,6 +127,7 @@ Rectangle {
       }
 
       Text {
+        textFormat: Text.PlainText
         visible: pal.rows.length === 0
         width: content.width
         height: pal.theme.fontSize * 2.2

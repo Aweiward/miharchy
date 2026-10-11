@@ -145,6 +145,7 @@ Item {
 
       Text {
         id: prompt
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: view.editing === "add" ? "new category " : view.editing === "rename" ? "rename " : "Categories"
         color: view.theme.accent
@@ -167,6 +168,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         visible: view.editing === ""
@@ -178,6 +180,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       visible: text !== ""
       wrapMode: Text.Wrap
@@ -216,6 +219,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.left: parent.left
         anchors.leftMargin: view.theme.fontSize * 0.5
         anchors.right: status.left
@@ -230,6 +234,7 @@ Item {
 
       Text {
         id: status
+        textFormat: Text.PlainText
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.75
         anchors.verticalCenter: parent.verticalCenter
@@ -242,6 +247,7 @@ Item {
   }
 
   Text {
+    textFormat: Text.PlainText
     anchors.centerIn: list
     visible: view.rows.length === 0
     text: "No categories. Press a to add one."
