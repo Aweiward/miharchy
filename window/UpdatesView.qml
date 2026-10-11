@@ -245,6 +245,7 @@ Item {
 
   Text {
     id: progress
+    textFormat: Text.PlainText
     x: view.theme.fontSize * 2
     y: view.theme.fontSize
     text: Updates.progress(view.updates, Date.now()) + (view.error ? "   " + view.error : "")
@@ -275,6 +276,7 @@ Item {
       width: list.width
 
       Text {
+        textFormat: Text.PlainText
         visible: entry.modelData.header !== ""
         topPadding: entry.index ? view.theme.fontSize : 0
         bottomPadding: view.theme.fontSize * 0.5
@@ -325,6 +327,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             elide: Text.ElideRight
             text: entry.modelData.title
@@ -335,6 +338,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             elide: Text.ElideRight
             // Mihon marks a bookmark with an icon and the accent color.
@@ -347,6 +351,7 @@ Item {
 
         Text {
           id: downloadMark
+          textFormat: Text.PlainText
           anchors.right: date.left
           anchors.rightMargin: text ? view.theme.fontSize * 1.5 : 0
           anchors.verticalCenter: parent.verticalCenter
@@ -358,6 +363,7 @@ Item {
 
         Text {
           id: date
+          textFormat: Text.PlainText
           anchors.right: parent.right
           anchors.rightMargin: view.theme.fontSize * 0.5
           anchors.verticalCenter: parent.verticalCenter
@@ -377,6 +383,7 @@ Item {
     visible: view.notice !== null
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       text: view.notice ? view.notice.title : ""
@@ -386,6 +393,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.Wrap

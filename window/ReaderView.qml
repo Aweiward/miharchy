@@ -851,6 +851,7 @@ Rectangle {
             spacing: view.theme.fontSize * 0.3
 
             Text {
+              textFormat: Text.PlainText
               visible: line.modelData.label !== undefined
               text: line.modelData.label || ""
               color: view.theme.muted
@@ -859,6 +860,7 @@ Rectangle {
             }
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               wrapMode: Text.Wrap
               maximumLineCount: 5
@@ -870,6 +872,7 @@ Rectangle {
             }
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               visible: text !== ""
               elide: Text.ElideRight
@@ -998,6 +1001,7 @@ Rectangle {
           width: panel.width
 
           Text {
+            textFormat: Text.PlainText
             visible: panelRow.index < 2
             topPadding: panelRow.index === 0 ? 0 : view.theme.fontSize * 0.8
             text: panelRow.modelData.manga ? "This manga" : "Every manga"
@@ -1012,6 +1016,7 @@ Rectangle {
 
             Text {
               id: rowLabel
+              textFormat: Text.PlainText
               width: parent.width - rowValue.implicitWidth - view.theme.fontSize
               elide: Text.ElideRight
               text: panelRow.modelData.label
@@ -1022,6 +1027,7 @@ Rectangle {
 
             Text {
               id: rowValue
+              textFormat: Text.PlainText
               anchors.right: parent.right
               text: panelRow.modelData.text
               color: panelRow.current ? view.theme.accent : view.theme.muted
@@ -1051,6 +1057,7 @@ Rectangle {
   }
 
   Text {
+    textFormat: Text.PlainText
     anchors.centerIn: parent
     width: Math.min(parent.width - view.theme.fontSize * 4, view.theme.fontSize * 50)
     horizontalAlignment: Text.AlignHCenter
@@ -1064,6 +1071,7 @@ Rectangle {
 
   Text {
     id: incognitoMark
+    textFormat: Text.PlainText
     anchors.left: parent.left
     anchors.bottom: parent.bottom
     anchors.margins: view.theme.fontSize
@@ -1075,6 +1083,7 @@ Rectangle {
   }
 
   Text {
+    textFormat: Text.PlainText
     anchors.left: incognitoMark.visible ? incognitoMark.right : parent.left
     anchors.bottom: parent.bottom
     anchors.margins: view.theme.fontSize
@@ -1085,6 +1094,7 @@ Rectangle {
   }
 
   Text {
+    textFormat: Text.PlainText
     anchors.right: parent.right
     anchors.bottom: parent.bottom
     anchors.margins: view.theme.fontSize
@@ -1110,6 +1120,7 @@ Rectangle {
       spacing: view.theme.fontSize / 2
 
       Text {
+        textFormat: Text.PlainText
         text: "Go to page"
         color: view.theme.accent
         font.family: view.theme.fontFamily
@@ -1129,6 +1140,7 @@ Rectangle {
       }
 
       Text {
+        textFormat: Text.PlainText
         text: view.reader && view.reader.state === "ok" ? "of " + view.reader.pages.length + "   enter go   esc cancel" : ""
         color: view.theme.muted
         font.family: view.theme.fontFamily

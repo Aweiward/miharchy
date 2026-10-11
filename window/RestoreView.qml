@@ -108,6 +108,7 @@ Rectangle {
       spacing: view.theme.fontSize * 0.75
 
       Text {
+        textFormat: Text.PlainText
         text: "Restore a backup"
         color: view.theme.accent
         font.family: view.theme.fontFamily
@@ -130,6 +131,7 @@ Rectangle {
         model: Restore.lines(view.restore)
 
         Text {
+          textFormat: Text.PlainText
           required property string modelData
           width: content.width
           wrapMode: Text.Wrap

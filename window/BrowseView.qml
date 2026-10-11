@@ -461,6 +461,7 @@ Item {
 
     Text {
       id: sourcesProblem
+      textFormat: Text.PlainText
       anchors.top: parent.top
       anchors.left: parent.left
       anchors.right: parent.right
@@ -495,6 +496,7 @@ Item {
 
         // Mihon's group headers: Last used, Pinned, then each language.
         Text {
+          textFormat: Text.PlainText
           visible: row.modelData.header !== ""
           topPadding: row.index ? view.theme.fontSize : 0
           bottomPadding: view.theme.fontSize * 0.4
@@ -529,6 +531,7 @@ Item {
 
           Text {
             id: sourceName
+            textFormat: Text.PlainText
             anchors.left: sourceIcon.right
             anchors.leftMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
@@ -539,6 +542,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.left: sourceName.right
             anchors.leftMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
@@ -552,6 +556,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.centerIn: sourceList
       visible: view.sourceRows.length === 0 && Model.problem(view.src, view.configPath) === null
       text: view.src.state !== "ok" ? "Loading sources" : view.src.sources.length ? "No source in the languages shown. Press l to pick them." : "No source yet. Press tab, then install an extension."

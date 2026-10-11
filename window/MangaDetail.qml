@@ -459,6 +459,7 @@ Rectangle {
     spacing: view.theme.fontSize * 0.5
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       wrapMode: Text.Wrap
       text: view.manga ? view.manga.title : "Loading"
@@ -468,6 +469,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       wrapMode: Text.Wrap
       visible: text !== ""
@@ -482,6 +484,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       wrapMode: Text.Wrap
       text: view.manga ? [view.manga.status, view.manga.source].filter(function(s) { return s }).join("   ") : ""
@@ -491,6 +494,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       wrapMode: Text.Wrap
       visible: text !== ""
@@ -501,6 +505,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       wrapMode: Text.Wrap
       visible: text !== ""
@@ -519,6 +524,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       wrapMode: Text.Wrap
       visible: text !== ""
@@ -529,6 +535,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       wrapMode: Text.Wrap
       visible: text !== ""
@@ -539,6 +546,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       wrapMode: Text.Wrap
       maximumLineCount: 6
@@ -557,8 +565,9 @@ Rectangle {
       clip: true
       visible: text !== ""
       wrapMode: Text.Wrap
+      // Markdown, as Mihon shows notes; Browse.notesMarkdown keeps out images and HTML.
       textFormat: Text.MarkdownText
-      text: view.manga ? view.manga.notes : ""
+      text: view.manga ? Browse.notesMarkdown(view.manga.notes) : ""
       color: view.theme.accent
       linkColor: view.theme.accent
       font.family: view.theme.fontFamily
@@ -577,6 +586,7 @@ Rectangle {
     model: view.shown
 
     header: Text {
+      textFormat: Text.PlainText
       bottomPadding: view.theme.fontSize * 0.5
       text: {
         if (!view.detail) return ""
@@ -610,6 +620,7 @@ Rectangle {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.left: parent.left
         anchors.leftMargin: view.theme.fontSize * 0.5
         anchors.right: mark.left
@@ -625,6 +636,7 @@ Rectangle {
 
       Text {
         id: mark
+        textFormat: Text.PlainText
         anchors.right: meta.left
         anchors.rightMargin: text ? view.theme.fontSize * 1.5 : 0
         anchors.verticalCenter: parent.verticalCenter
@@ -636,6 +648,7 @@ Rectangle {
 
       Text {
         id: meta
+        textFormat: Text.PlainText
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.5
         anchors.verticalCenter: parent.verticalCenter
@@ -667,6 +680,7 @@ Rectangle {
 
     Text {
       id: notesTitle
+      textFormat: Text.PlainText
       x: view.theme.fontSize
       y: view.theme.fontSize
       width: parent.width - view.theme.fontSize * 2
@@ -689,6 +703,7 @@ Rectangle {
 
       TextEdit {
         id: notesField
+        textFormat: TextEdit.PlainText
         width: notesScroll.width
         wrapMode: TextEdit.Wrap
         color: view.theme.foreground
@@ -756,6 +771,7 @@ Rectangle {
         width: options.width
 
         Text {
+          textFormat: Text.PlainText
           visible: option.index === 0 || option.modelData.kind !== view.optionRows[option.index - 1].kind
           topPadding: option.index === 0 ? 0 : view.theme.fontSize * 0.8
           text: ({ filter: "Filter", scanlator: "Scanlators (exclude)", sort: "Sort", "default": "Default" })[option.modelData.kind]
@@ -765,6 +781,7 @@ Rectangle {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           elide: Text.ElideRight
           text: ({ off: "[ ] ", include: "[+] ", exclude: "[-] ", "": "    ", asc: " ↑  ", desc: " ↓  " })[option.modelData.state] + option.modelData.label
@@ -786,6 +803,7 @@ Rectangle {
 
     Text {
       id: optionsNoteText
+      textFormat: Text.PlainText
       anchors.top: options.bottom
       x: options.x
       width: options.width
@@ -820,6 +838,7 @@ Rectangle {
       currentIndex: view.pickCursor
 
       header: Text {
+        textFormat: Text.PlainText
         width: pickList.width
         bottomPadding: view.theme.fontSize * 0.5
         wrapMode: Text.Wrap
@@ -849,6 +868,7 @@ Rectangle {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.left: parent.left
           anchors.leftMargin: view.theme.fontSize * 0.5
           anchors.right: parent.right
@@ -878,6 +898,7 @@ Rectangle {
 
     Text {
       id: dupesHead
+      textFormat: Text.PlainText
       x: view.theme.fontSize
       y: view.theme.fontSize
       width: parent.width - view.theme.fontSize * 2
@@ -926,6 +947,7 @@ Rectangle {
           anchors.verticalCenter: parent.verticalCenter
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             elide: Text.ElideRight
             text: dupe.modelData.title
@@ -935,6 +957,7 @@ Rectangle {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             elide: Text.ElideRight
             text: [dupe.modelData.source, dupe.modelData.author, dupe.modelData.total + (dupe.modelData.total === 1 ? " chapter" : " chapters")].filter(function(t) { return t !== "" }).join("   ")

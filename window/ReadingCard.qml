@@ -204,6 +204,7 @@ Rectangle {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: "Miharchy"
         color: view.theme.foreground
@@ -213,6 +214,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.right: parent.right
       anchors.rightMargin: 64
       anchors.verticalCenter: brand.verticalCenter
@@ -249,6 +251,7 @@ Rectangle {
             required property var modelData
             height: view.coversShown ? band.height / 3 : implicitHeight
             Text {
+              textFormat: Text.PlainText
               text: String(parent.modelData[0])
               color: view.theme.accent
               font.family: view.theme.fontFamily
@@ -256,6 +259,7 @@ Rectangle {
               font.bold: true
             }
             Text {
+              textFormat: Text.PlainText
               text: parent.modelData[1]
               color: view.theme.muted
               font.family: view.theme.fontFamily
@@ -292,6 +296,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       x: 64
       anchors.bottom: parent.bottom
       anchors.bottomMargin: 48
@@ -317,6 +322,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.horizontalCenter: parent.horizontalCenter
       visible: text !== ""
       text: view.pending ? "Waiting for the covers" : view.note

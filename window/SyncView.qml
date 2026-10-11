@@ -103,6 +103,7 @@ Rectangle {
       spacing: view.theme.fontSize * 0.75
 
       Text {
+        textFormat: Text.PlainText
         text: view.healthMode ? "Phone sync" : "Sync"
         color: view.theme.accent
         font.family: view.theme.fontFamily
@@ -110,6 +111,7 @@ Rectangle {
       }
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         visible: !view.report.length
         wrapMode: Text.Wrap
@@ -124,6 +126,7 @@ Rectangle {
         model: view.report
 
         Text {
+          textFormat: Text.PlainText
           required property string modelData
           width: content.width
           wrapMode: Text.Wrap
@@ -146,6 +149,7 @@ Rectangle {
           }) : []
 
         delegate: Text {
+          textFormat: Text.PlainText
           required property var modelData
           width: list.width
           wrapMode: Text.Wrap

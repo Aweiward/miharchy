@@ -77,7 +77,8 @@ function notification(mark) {
   return {
     key: String(mark.fresh.reduce(function(t, row) { return Math.max(t, row.id) }, 0)),
     title: n === 1 ? "1 new chapter" : n + " new chapters",
-    body: shown
+    // The notification spec reads the body as markup; titles come from sources.
+    body: shown.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   }
 }
 

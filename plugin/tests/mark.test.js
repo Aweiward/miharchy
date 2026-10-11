@@ -102,6 +102,12 @@ test("chapters above the newest seen notify once, naming each manga once", () =>
   assert.equal(Mark.notification(poll(second, withNotify([chapter(5, 9), chapter(6, 9), chapter(7, 9)]))), null, "the same updates again notify nothing");
 });
 
+test("the notification body shows titles as text: the notification daemon reads markup there", () => {
+  const first = poll(Mark.initial(), withNotify([chapter(1, 3)]));
+  const odd = Object.assign(chapter(2, 4), { manga: Object.assign({}, other, { title: "<b>Tom & Jerry</b>" }) });
+  assert.equal(Mark.notification(poll(first, withNotify([chapter(1, 3), odd]))).body, "&lt;b&gt;Tom &amp; Jerry&lt;/b&gt;");
+});
+
 test("a chapter marked unread again, or one back after a failed poll, is no new chapter", () => {
   const seen = poll(Mark.initial(), withNotify([chapter(3, 3), chapter(9, 4)]));
   const readThen = poll(seen, withNotify([chapter(9, 4)]));

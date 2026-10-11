@@ -52,6 +52,7 @@ Item {
 
     Text {
       id: sourceName
+      textFormat: Text.PlainText
       anchors.verticalCenter: parent.verticalCenter
       text: view.listing ? view.listing.source.name : ""
       color: view.theme.foreground
@@ -77,6 +78,7 @@ Item {
 
         Text {
           id: modeLabel
+          textFormat: Text.PlainText
           required property var modelData
           readonly property bool on: view.listing !== null && (modelData.mode === "filters" ? view.listing.filters.length > 0 : view.listing.mode === modelData.mode)
           visible: modelData.mode !== "latest" || (view.listing && view.listing.source.supportsLatest)
@@ -97,6 +99,7 @@ Item {
 
     Text {
       id: prompt
+      textFormat: Text.PlainText
       anchors.left: sourceName.right
       anchors.leftMargin: view.theme.fontSize * 2
       anchors.verticalCenter: parent.verticalCenter
@@ -122,6 +125,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       visible: !view.editing
@@ -185,6 +189,7 @@ Item {
 
           Text {
             id: badge
+            textFormat: Text.PlainText
             anchors.centerIn: parent
             text: "in library"
             color: view.theme.background
@@ -195,6 +200,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.top: coverBox.bottom
         anchors.topMargin: view.theme.fontSize / 2
         anchors.left: coverBox.left
@@ -217,6 +223,7 @@ Item {
     visible: view.notice !== null || (view.listing !== null && view.listing.items.length === 0)
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       text: view.notice ? view.notice.title : "Loading"
@@ -226,6 +233,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.Wrap

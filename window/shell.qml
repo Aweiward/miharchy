@@ -650,6 +650,7 @@ ShellRoot {
             Text {
               id: label
               anchors.verticalCenter: parent.verticalCenter
+              // Styled for the key's color; Model.VIEWS is constant text.
               textFormat: Text.StyledText
               text: "<font color='" + theme.muted + "'>" + tab.modelData.key + "</font> " + tab.modelData.title
               color: tab.current ? theme.foreground : theme.muted
@@ -828,6 +829,7 @@ ShellRoot {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.centerIn: parent
           visible: Model.viewIndex(root.view) !== -1 && ["library", "updates", "history", "settings", "browse"].indexOf(root.view) === -1
           text: visible ? Model.VIEWS[Model.viewIndex(root.view)].title + " comes in a later version" : ""
@@ -915,6 +917,7 @@ ShellRoot {
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
           // The modes on follow, in the accent color, as Mihon's banners.
+          // Styled for that color; the states and Settings.modes are constant text.
           textFormat: Text.StyledText
           text: [({ loading: "connecting", ok: "connected", "no-config": "no server config", down: "server down", unauthorized: "unauthorized", error: "server error" })[root.connection.state]].concat(Settings.modes(root.settingsState.values).map(function(m) { return "<font color='" + theme.accent + "'>" + m + "</font>" })).join("&nbsp;&nbsp;&nbsp;")
           color: root.connection.state === "ok" || root.connection.state === "loading" ? theme.muted : theme.urgent
@@ -1036,6 +1039,7 @@ ShellRoot {
 
         Text {
           id: askText
+          textFormat: Text.PlainText
           anchors.centerIn: parent
           text: root.trackAsk ? Chapters.trackAskText(root.trackAsk) : ""
           color: theme.foreground

@@ -40,6 +40,7 @@ Rectangle {
     width: parent.width - menu.theme.fontSize * 2
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       elide: Text.ElideRight
       bottomPadding: menu.theme.fontSize * 0.5
@@ -54,6 +55,7 @@ Rectangle {
 
       Text {
         id: downloadRow
+        textFormat: Text.PlainText
         required property var modelData
         required property int index
         readonly property bool current: index === menu.cursor
@@ -82,6 +84,7 @@ Rectangle {
       spacing: menu.theme.fontSize
 
       Text {
+        textFormat: Text.PlainText
         text: "How many"
         color: menu.theme.muted
         font.family: menu.theme.fontFamily
@@ -100,6 +103,7 @@ Rectangle {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       visible: text !== ""
       topPadding: menu.theme.fontSize * 0.8

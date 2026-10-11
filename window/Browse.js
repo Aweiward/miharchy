@@ -329,6 +329,15 @@ function toManga(config, n, names) {
   }
 }
 
+// The notes as the detail renders them: Markdown, but Qt loads an image
+// for Markdown image syntax and passes raw HTML through, and notes also
+// arrive from the phone. "!" before "[" becomes an entity, so an image
+// shows as a link; "<" becomes an entity, so HTML shows as text. Inside a
+// code span the entities show as typed.
+function notesMarkdown(notes) {
+  return String(notes || "").replace(/!(?=\[)/g, "&#33;").replace(/</g, "&lt;")
+}
+
 function toChapters(nodes) {
   return (nodes || []).slice().sort(function(a, b) { return b.sourceOrder - a.sourceOrder }).map(function(c) {
     return { id: c.id, name: String(c.name || ""), url: String(c.realUrl || ""), number: c.chapterNumber, date: day(c.uploadDate), uploadDate: Number(c.uploadDate) || 0, sourceOrder: c.sourceOrder, read: c.isRead === true, bookmarked: c.isBookmarked === true, lastPage: c.lastPageRead || 0, downloaded: c.isDownloaded === true, scanlator: String(c.scanlator || "") }
@@ -492,6 +501,7 @@ if (typeof module !== "undefined") {
     duplicates: duplicates,
     categoryPayload: categoryPayload,
     markInLibrary: markInLibrary,
-    notice: notice
+    notice: notice,
+    notesMarkdown: notesMarkdown
   }
 }

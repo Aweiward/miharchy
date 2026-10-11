@@ -38,6 +38,7 @@ Item {
 
     Text {
       id: prompt
+      textFormat: Text.PlainText
       anchors.verticalCenter: parent.verticalCenter
       text: "search every source "
       color: view.editing ? view.theme.accent : view.theme.muted
@@ -60,6 +61,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.left: prompt.right
       anchors.verticalCenter: parent.verticalCenter
       visible: !view.editing
@@ -70,6 +72,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       visible: !view.editing
@@ -114,6 +117,7 @@ Item {
 
         Text {
           id: name
+          textFormat: Text.PlainText
           x: view.theme.fontSize * 0.5
           anchors.verticalCenter: parent.verticalCenter
           text: group.modelData.source.name
@@ -123,6 +127,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.left: name.right
           anchors.leftMargin: view.theme.fontSize
           anchors.right: parent.right
@@ -185,6 +190,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.top: coverBox.bottom
             anchors.topMargin: view.theme.fontSize / 3
             width: coverBox.width
@@ -200,6 +206,7 @@ Item {
   }
 
   Text {
+    textFormat: Text.PlainText
     anchors.centerIn: groups
     visible: text !== ""
     text: view.empty

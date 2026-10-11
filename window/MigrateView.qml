@@ -502,6 +502,7 @@ Rectangle {
 
   Text {
     id: head
+    textFormat: Text.PlainText
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: parent.right
@@ -559,6 +560,7 @@ Rectangle {
 
       Text {
         id: left
+        textFormat: Text.PlainText
         anchors.left: parent.left
         anchors.leftMargin: view.theme.fontSize * 0.5
         anchors.verticalCenter: parent.verticalCenter
@@ -571,6 +573,7 @@ Rectangle {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.left: left.right
         anchors.leftMargin: view.theme.fontSize * 1.5
         anchors.right: parent.right
@@ -616,6 +619,7 @@ Rectangle {
       }
 
       Text {
+        textFormat: Text.PlainText
         required property var modelData
         width: parent.width
         wrapMode: Text.Wrap
