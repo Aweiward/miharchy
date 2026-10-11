@@ -21,6 +21,7 @@ import "Images.js" as Images
 import "UpNext.js" as UpNext
 import "NextChapters.js" as NextChapters
 import "Sync.js" as Sync
+import "Overlays.js" as Overlays
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
 // `quickshell -p window`. Decisions live in Model.js and Commands.js; this
@@ -43,6 +44,8 @@ ShellRoot {
   property int libraryCursor: 0
   // A mark read's question to the trackers (Chapters.trackAsk), or null.
   property var trackAsk: null
+  // The top overlay's scope, editing prefix and hint (Overlays.js).
+  readonly property var overlay: Overlays.top({ trackAsk: trackAsk, readingCard: readingCard, nextChapters: nextChapters, restoreView: restoreView, syncView: syncView, downloadsView: downloadsView, reader: reader, migrateView: migrateView, trackPanel: trackPanel, mangaDetail: mangaDetail, view: view, browseView: browseView, extensionsView: extensionsView, libraryScreen: libraryScreen, checkView: checkView, libraryArmed: libraryArmed, libraryPickIds: libraryPickIds, libraryOptions: libraryOptions, updatesView: updatesView, settingsEditing: settingsEditing, libraryView: libraryView, historyView: historyView, settingsView: settingsView, setupView: setupView, categoriesView: categoriesView, libraryHint: libraryHint })
   // The shown category's id in Model.switcher(); a deleted one falls back to All.
   property int libraryCategory: -1
   // "grid" | "categories"
@@ -186,6 +189,15 @@ ShellRoot {
     else if (pendingPeek) peek(pendingPeek === "next")
   }
 
+  // Every path that opens a view or a chapter closes these first; view.*
+  // also closes the sync result, the restore panel and Migrate.
+  function closeOverlays() {
+    if (reader.open) reader.close()
+    mangaDetail.close()
+    downloadsView.open = false
+    readingCard.open = false
+  }
+
   // The mark's update rows land here, through the launcher's open-chapter.
   // peek: a peek opens it, so Catch-up counts from 0 in the new reader;
   // every peek that opens a manga comes through here.
@@ -193,10 +205,7 @@ ShellRoot {
     pendingChapter = target
     if (!config) return
     pendingChapter = null
-    if (reader.open) reader.close()
-    mangaDetail.close()
-    downloadsView.open = false
-    readingCard.open = false
+    closeOverlays()
     view = "updates"
     updatesView.openChapter(target.mangaId, target.chapterId, peek === true)
   }
@@ -204,10 +213,7 @@ ShellRoot {
   // The mark's new-chapter notification lands here, through the
   // launcher's open-updates.
   function openUpdates() {
-    if (reader.open) reader.close()
-    mangaDetail.close()
-    downloadsView.open = false
-    readingCard.open = false
+    closeOverlays()
     view = "updates"
   }
 
@@ -219,10 +225,7 @@ ShellRoot {
     if (!config) return
     pendingPeek = ""
     var library = function(reply) {
-      if (reader.open) reader.close()
-      mangaDetail.close()
-      downloadsView.open = false
-      readingCard.open = false
+      root.closeOverlays()
       root.view = "library"
       if (reply && reply.state !== "ok") root.libraryError = reply.message || Model.problem(reply, root.configPath).title
       else libraryView.openSearch()
@@ -487,21 +490,7 @@ ShellRoot {
   // The one key path: the window and the palette field both land here.
   // Returns whether a command took the key.
   function handleKey(event) {
-    var editing = nextChapters.editing ? "nextChapters" : restoreView.editing ? "restore" : reader.editing ? "reader" : settingsEditing ? "settings" : libraryView.editing ? "library" : historyView.editing ? "history" : settingsView.loginEditing ? "login" : trackPanel.editing ? "track" : mangaDetail.editing ? "manga" : migrateView.editing ? "migrate" : extensionsView.editing ? "extensions" : setupView.editing ? "setup" : categoriesView.editing ? "categories" : browseView.editing
-    // An open restore, sync result, download queue, reader, migration or manga
-    // detail decides which keys apply, in that order; on Browse, the screen
-    // or the panel over it does.
-    var scope = trackAsk ? "track-ask" : readingCard.open ? "reading-card" : nextChapters.open ? "next-chapters" : restoreView.open ? "restore-" + restoreView.restore.step : syncView.open ? (syncView.sync.state === "held" && !syncView.healthMode ? "sync-held" : "sync") : downloadsView.open ? "downloads" : reader.open ? (reader.panelOpen ? "reader-settings" : "reader")
-      : migrateView.open ? "migrate-" + migrateView.step
-      : trackPanel.open ? (trackPanel.picking ? "manga-track-pick" : "manga-track")
-      : mangaDetail.open ? (mangaDetail.dupesOpen ? "manga-duplicates" : mangaDetail.picking ? "manga-categories" : mangaDetail.optionsOpen ? "manga-options" : mangaDetail.downloadsOpen ? "manga-download" : mangaDetail.selecting ? "manga-select" : "manga")
-      : view === "browse" ? (browseView.scope === "extensions" && extensionsView.details ? "extension" : browseView.scope) : view === "library" && libraryScreen === "categories" ? "categories"
-      : view === "check" && checkView.merging ? "check-merge"
-      : view === "library" && libraryArmed === "remove" ? "library-remove"
-      : view === "library" && libraryPickIds.length ? "library-categories"
-      : view === "library" && libraryOptions ? "library-options"
-      : view === "updates" && updatesView.filterOpen ? "updates-filter" : view
-    var id = Commands.dispatch({ palette: paletteOpen, view: scope, editing: editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
+    var id = Commands.dispatch({ palette: paletteOpen, view: overlay.scope, editing: overlay.editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
     // Any other key disarms a remove or a delete, even one no command takes.
     if (id !== "library.remove" && id !== "library.deleteDownloads") {
       libraryArmed = ""
@@ -531,11 +520,8 @@ ShellRoot {
     if (id.indexOf("view.") === 0) {
       syncView.open = false
       restoreView.close()
-      if (reader.open) reader.close()
       migrateView.close()
-      mangaDetail.close()
-      downloadsView.open = false
-      readingCard.open = false
+      closeOverlays()
       view = id.slice(5)
       return
     }
@@ -1203,7 +1189,7 @@ ShellRoot {
           id: hintBar
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: root.trackAsk ? "y update   n keep" : syncView.open || restoreView.open ? "" : libraryView.editing || historyView.editing ? "enter keep   esc clear" : mangaDetail.writing ? "enter save   shift+enter new line   esc cancel" : root.settingsEditing || nextChapters.editing || settingsView.loginEditing || trackPanel.editing || mangaDetail.editing || migrateView.editing || extensionsView.editing || setupView.editing || categoriesView.editing || browseView.editing ? "enter save   esc cancel" : setupView.confirming ? "y run   n cancel" : nextChapters.open ? nextChapters.hint + ": commands   q quit" : migrateView.open ? migrateView.hint + ": commands   q quit" : trackPanel.open ? trackPanel.hint + ": commands   q quit" : mangaDetail.open ? mangaDetail.hint + ": commands   q quit" : (({ library: root.libraryHint, updates: updatesView.hint, history: historyView.hint, settings: "j k move   enter change   ", browse: browseView.panel || browseView.screen !== "extensions" ? browseView.hint : extensionsView.hint + (extensionsView.details ? "" : browseView.hint), setup: "j k move   enter act   ", check: checkView.hint })[root.view] || "") + ": commands   " + (root.view === "browse" ? "" : "r reload   ") + "q quit"
+          text: root.overlay.hint
           maxWidth: parent.width - connectionText.width - theme.fontSize * 2 - (codeHint.visible ? codeHint.width + theme.fontSize * 2 : 0)
           theme: theme
           onKey: function(event) { root.handleKey(event) }
