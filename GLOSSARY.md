@@ -172,6 +172,10 @@ _Avoid_: binge limit, session limit
 One screen of the window: Library, Updates, History, Browse or Settings. Exactly one view shows at a time.
 _Avoid_: tab, page, mode
 
+**Overlay**:
+A screen that shows over a view and takes the keys until it closes: the manga detail, the reader, the download queue, the reading card and the rest. When several are open, only the top one takes the keys. A panel, such as the **reader settings panel**, is one kind of overlay.
+_Avoid_: modal, dialog, sheet
+
 **Setup**:
 The window screen that checks and prepares what Miharchy needs, one confirmed step at a time. It is not one of the views.
 _Avoid_: onboarding, wizard, installer
@@ -211,6 +215,7 @@ _Avoid_: interstitial, chapter break
 - Each **chapter** has one **read state**. Opening a chapter adds a **history** entry.
 - **Sync** finds each side's changes against that side's **baseline**, merges them into the desktop library, then writes a new **backup** to the **sync folder**. Both **baselines** then move forward.
 
+- Exactly one **view** shows at a time. Zero or more **overlays** stack over it, and the top **overlay** takes the keys.
 - The **mark** opens the **popup**. The **popup** and the **mark** can open the **window**.
 - Each **manga** has one **reading mode**, which defaults from its source.
 - A **manga** has at most one **track** per **tracker**. Reading a **chapter** raises the chapters read on each of its **tracks**, never lowers it.
@@ -226,4 +231,5 @@ _Avoid_: interstitial, chapter break
 - "Health" was proposed for the library check. Resolved: **sync health** keeps "health"; the screen is the **library check**, and what it finds are **problems**.
 - "Trip pack" was proposed for downloading the next chapters of many manga at once. Resolved: it is a **download** of the next chapters of a set of manga; no new term.
 - "Queue" was proposed for the manga a peek offers. Resolved: it is **Up next**; "queue" stays with downloads.
+- "Overlay" can mean the window over the current workspace. Resolved: that is the **peek**; an **overlay** is a screen inside the window, over a view.
 - "Export" names the backup a sync writes. Resolved: it is a **desktop backup**, as "export" already means a one-way dump.

@@ -30,15 +30,8 @@ var KEY = {
 // view: the command works only while that view (or Browse screen:
 // sources, extensions, extension (an extension's details), source,
 // global, or its panel: source-filters,
-// source-settings, sources-languages; Library screen: categories; or
-// overlay: library-options, updates-filter, library-categories, library-remove, manga, manga-categories, manga-options,
-// manga-download, next-chapters, manga-duplicates, manga-select, manga-track,
-// manga-track-pick, track-ask, downloads, reader, reader-settings, reading-card, sync,
-// sync-held,
-// the library check: check, check-merge,
-// or a restore step: restore-confirm, -checking, -running, -done, -failed,
-// or a migration step: migrate-search, -from, -to, -match, -confirm, -busy,
-// -done) shows;
+// source-settings, sources-languages; or an overlay or screen scope from
+// Overlays.js) shows;
 // an array allows several.
 var commands = [
   { id: "view.library", title: "Library", keys: ["1"] },
