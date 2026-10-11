@@ -333,7 +333,7 @@ function toManga(config, n, names) {
 // for Markdown image syntax and passes raw HTML through, and notes also
 // arrive from the phone. "!" before "[" becomes an entity, so an image
 // shows as a link; "<" becomes an entity, so HTML shows as text. Inside a
-// code span the entities show as typed.
+// code span, and after a backslash ("\![x]"), the entities show as typed.
 function notesMarkdown(notes) {
   return String(notes || "").replace(/!(?=\[)/g, "&#33;").replace(/</g, "&lt;")
 }
