@@ -17,7 +17,7 @@ The seeded manga have no twin on another source. Use Eleceed: MangaDex and Weeb 
 A scratch server has no tracker login, but a restored backup brings track records: build a `.tachibk` with `BackupTracking` entries for a library manga (a throwaway test in a copy of `sync/` under your run dir, as `restore.md` describes), then restore it with `.claude/skills/verify-miharchy/scripts/qs.sh env sync/build/install/miharchy-sync/bin/miharchy-sync restore <file>`.
 ```js
 [
-  [5000, function() { root.libraryCursor = root.shown.manga.findIndex(function(m) { return m.id === <Eleceed's id> }); key("Enter") }],
+  [5000, function() { mangaDetail.openManga(<Eleceed's id>, false) }],
   [6000, function() { key("M") }],
   [15000, function() { log("search", [migrateView.step, migrateView.search.groups.map(function(g) { return [g.source.name, g.state, g.items.length] })]); key("Enter") }],
   [12000, function() { log("confirm", [migrateView.step, migrateView.tracks, migrateView.job.target.id]); grab("confirm") }],

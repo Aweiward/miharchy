@@ -200,3 +200,80 @@ test("the header names the search, the active filters and a sort other than the 
   assert.equal(L.narrowed(prefs({ librarySort: "added" }), ""), false, "a sort hides nothing");
   assert.equal(L.summary(prefs({ librarySortDirection: "desc" }), ""), "title ↓");
 });
+
+// The Library view's state: Library.reduce, Library.scope, Library.hint.
+const state = (extra) => ({ ...L.initial(), ...extra });
+const cat = (id, name, list) => ({ id, name, manga: list });
+const all = cat(-1, "All", shelf);
+const tabs = [all, cat(0, "Default", shelf.slice(0, 2)), cat(7, "Seinen", shelf.slice(2))];
+
+test("a move keeps the cursor inside the shown manga", () => {
+  assert.equal(L.reduce(state({ cursor: 1 }), { type: "move", by: 2, count: 4 }).cursor, 3);
+  assert.equal(L.reduce(state({ cursor: 3 }), { type: "move", by: 5, count: 4 }).cursor, 3);
+  assert.equal(L.reduce(state({ cursor: 1 }), { type: "move", by: -4, count: 4 }).cursor, 0);
+  assert.equal(L.reduce(state({ cursor: 0 }), { type: "move", by: 1, count: 0 }).cursor, 0);
+});
+
+test("a click puts the cursor or the category there and disarms x and X", () => {
+  assert.deepEqual(L.reduce(state({ armed: "remove" }), { type: "point", index: 2 }), state({ cursor: 2 }));
+  assert.deepEqual(L.reduce(state({ armed: "delete" }), { type: "tab", id: 7 }), state({ category: 7 }));
+});
+
+test("tab and shift-tab switch the category and wrap", () => {
+  assert.equal(L.reduce(state({ category: -1 }), { type: "switch", by: 1, switcher: tabs }).category, 0);
+  assert.equal(L.reduce(state({ category: 7 }), { type: "switch", by: 1, switcher: tabs }).category, -1);
+  assert.equal(L.reduce(state({ category: -1 }), { type: "switch", by: -1, switcher: tabs }).category, 7);
+  // A deleted category counts as All.
+  assert.equal(L.reduce(state({ category: 99 }), { type: "switch", by: 1, switcher: tabs }).category, 0);
+});
+
+test("the cursor follows its manga when the rows change, and another category starts at the top", () => {
+  const first = L.reduce(state(), { type: "shown", shown: all });
+  assert.equal(first.cursor, 0);
+  assert.equal(first.was, all);
+  const on = L.reduce({ ...first, cursor: 2, selected: [3, 4] }, { type: "shown", shown: cat(-1, "All", [shelf[2], shelf[0], shelf[3]]) });
+  assert.equal(on.cursor, 0, "Chainsaw Man moved to the top");
+  assert.deepEqual(on.selected, [3, 4]);
+  const gone = L.reduce({ ...first, cursor: 2, selected: [3, 4] }, { type: "shown", shown: cat(-1, "All", [shelf[0], shelf[1], shelf[3]]) });
+  assert.equal(gone.cursor, 2, "its own left: the nearest one after it");
+  assert.deepEqual(gone.selected, [4], "a manga that left leaves the selection");
+  assert.equal(L.reduce({ ...first, cursor: 3 }, { type: "shown", shown: tabs[2] }).cursor, 0);
+});
+
+test("the search query, the categories screen and the options panel", () => {
+  assert.equal(L.reduce(state(), { type: "query", query: "ber" }).query, "ber");
+  assert.equal(L.reduce(state(), { type: "screen", screen: "categories" }).screen, "categories");
+  assert.equal(L.reduce(state(), { type: "options", open: true }).options, true);
+  assert.equal(L.reduce(state({ options: true, optionsCursor: 2 }), { type: "options", open: false }).options, false);
+  assert.equal(L.reduce(state({ optionsCursor: 0 }), { type: "optionsMove", by: -1, count: 5 }).optionsCursor, 4);
+  assert.equal(L.reduce(state({ optionsCursor: 4 }), { type: "optionsMove", by: 1, count: 5 }).optionsCursor, 0);
+  assert.equal(L.reduce(state(), { type: "optionsPoint", index: 3 }).optionsCursor, 3);
+});
+
+test("the scope: the categories screen, then a remove armed, the categories panel, the options panel", () => {
+  assert.equal(L.scope(state()), "library");
+  assert.equal(L.scope(state({ screen: "categories", armed: "remove", pickIds: [1], options: true })), "categories");
+  assert.equal(L.scope(state({ armed: "remove", pickIds: [1], options: true })), "library-remove");
+  assert.equal(L.scope(state({ armed: "delete" })), "library");
+  assert.equal(L.scope(state({ pickIds: [1], options: true })), "library-categories");
+  assert.equal(L.scope(state({ options: true })), "library-options");
+});
+
+test("the hint follows the screen, the panels, the note, an arm, the error and the selection", () => {
+  const ctx = (extra) => ({ categoriesHint: "CAT", targets: 2, prefs: prefs(), tabs: true, ...extra });
+  const tail = "u update   c categories   D queue   s sync   ";
+  const cases = [
+    [state({ screen: "categories", pickIds: [1] }), ctx(), "CAT"],
+    [state({ pickIds: [1], options: true }), ctx(), "j k move   enter in or out   esc close   "],
+    [state({ options: true, note: "n" }), ctx(), "j k move   enter change   esc close   "],
+    [state({ note: "Checking", armed: "remove" }), ctx(), "Checking   "],
+    [state({ armed: "remove" }), ctx(), "x again to remove 2 manga from the library   d also delete the downloads   esc keep   "],
+    [state({ armed: "remove" }), ctx({ targets: 1 }), "x again to remove the manga from the library   d also delete the downloads   esc keep   "],
+    [state({ armed: "delete" }), ctx(), "X again to delete the downloads of 2 manga, any other key keeps them   "],
+    [state({ error: "Server down", selected: [1, 2] }), ctx(), "Server down   2 selected   v select   A all   I invert   R read   U unread   d download   X delete downloads   C categories   x remove   esc clear   "],
+    [state({ error: "Server down" }), ctx(), "Server down   enter open   space read   v select   x remove   / search   F sort & filter   L list   tab category   " + tail],
+    [state(), ctx(), "enter open   space read   v select   x remove   / search   F sort & filter   L list   tab category   " + tail],
+    [state({ query: "b" }), ctx({ tabs: false, prefs: prefs({ libraryDisplay: "list" }) }), "enter open   space read   v select   x remove   esc clear search   F sort & filter   L grid   " + tail],
+  ];
+  for (const [s, c, hint] of cases) assert.equal(L.hint(s, c), hint);
+});

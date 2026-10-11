@@ -6,7 +6,7 @@
       bg.color = theme.background
     }],
     [15000, function() {
-      var m = root.shown.manga.find(function(m) { return m.title === "Eleceed" })
+      var m = libraryView.shown.manga.find(function(m) { return m.title === "Eleceed" })
       log("eleceed", m ? m.id : null)
       mangaDetail.openManga(m.id, false)
     }],

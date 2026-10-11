@@ -7,9 +7,9 @@
       var bg = Qt.createQmlObject('import QtQuick; Rectangle { anchors.fill: parent; z: -1000 }', keyRoot)
       bg.color = theme.background
     }],
-    [15000, function() { log("library", root.shown.manga.length); grab("g1-library") }],
+    [15000, function() { log("library", libraryView.shown.manga.length); grab("g1-library") }],
     [500, function() {
-      var i = root.shown.manga.findIndex(function(m) { return m.title === "Yotsuba&!" })
+      var i = libraryView.shown.manga.findIndex(function(m) { return m.title === "Yotsuba&!" })
       times("j", Math.floor(i / 7)); times("l", i % 7)
     }],
     [500, function() { key("Enter") }],

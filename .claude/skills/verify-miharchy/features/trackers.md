@@ -19,7 +19,7 @@ A scratch server has no tracker login, and every `updateTrack` calls the tracker
 Never let `o` or `y` reach the desktop: put stub `xdg-open` and `wl-copy` that log their arguments first on `PATH` for `drive.sh`.
 ```js
 [
-  [5000, function() { root.libraryCursor = root.shown.manga.findIndex(function(m) { return m.id === <a manga with track records> }); key("Enter") }],
+  [5000, function() { mangaDetail.openManga(<a manga with track records>, false) }],
   [6000, function() { key("t") }],
   [3000, function() { log("rows", trackPanel.panel.rows.map(function(r) { return [r.tracker.name, r.record && r.record.url] })) }],
   [500, function() { key("y") }],

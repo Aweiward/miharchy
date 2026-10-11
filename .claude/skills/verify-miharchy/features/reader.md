@@ -59,7 +59,7 @@ Fit and width: `reader.shown` is what the pager shows (`Reader.spread`): its `it
 Auto-scroll. Seed two library manga; give the first in the Library (the title sort puts it first) manga meta `miharchy.readingMode` = `webtoon` and the second `paged-ltr` with `setMangaMeta`. Webtoon: `a` at 1x, three `+` to 3x, `j` stops it, the quit saves the page:
 ```js
 [
- [5000, function(){ log("first", root.shown.manga[0].id); key("Enter") }],
+ [5000, function(){ log("first", libraryView.shown.manga[0].id); key("Enter") }],
  [5000, function(){ key("Enter") }],
  [7000, function(){ root.v.s = find(reader, function(i){ return i.cacheBuffer !== undefined && i.cacheBuffer > 0 }); log("open", [reader.reader.mode, reader.reader.chapters[reader.reader.index].id, reader.reader.page, root.v.s.contentY]); key("a") }],
  [2000, function(){ log("t2", [reader.autoSpeed, root.v.s.contentY]); key("+"); key("+"); key("+") }],
@@ -74,7 +74,7 @@ Proof: `t2` shows `contentY` above `open`'s, `t10` far above at speed 3, `stoppe
 Paged at 3x (a turn every 2.7 s; the speed saved above), then the chapter's end. End stops it; `a` on the last page turns onto the transition page and stops there:
 ```js
 [
- [5000, function(){ key("l"); log("cursor-manga", root.shown.manga[root.libraryCursor].id); key("Enter") }],
+ [5000, function(){ key("l"); log("cursor-manga", libraryView.shown.manga[libraryView.cursor].id); key("Enter") }],
  [5000, function(){ key("Enter") }],
  [7000, function(){ root.v.c = reader.reader.chapters[reader.reader.index].id; log("open", [reader.reader.mode, root.v.c, reader.reader.page, reader.reader.pages.length]); key("a") }],
  [6000, function(){ log("t6", [reader.autoSpeed, reader.reader.page]); grab("auto-paged") }],

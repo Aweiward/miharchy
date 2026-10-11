@@ -231,5 +231,6 @@ _Avoid_: interstitial, chapter break
 - "Health" was proposed for the library check. Resolved: **sync health** keeps "health"; the screen is the **library check**, and what it finds are **problems**.
 - "Trip pack" was proposed for downloading the next chapters of many manga at once. Resolved: it is a **download** of the next chapters of a set of manga; no new term.
 - "Queue" was proposed for the manga a peek offers. Resolved: it is **Up next**; "queue" stays with downloads.
+- "Library" names both the set of manga the user follows and the view that shows it. Resolved: the **library** is the set; the Library **view** is the screen, written with a capital L.
 - "Overlay" can mean the window over the current workspace. Resolved: that is the **peek**; an **overlay** is a screen inside the window, over a view.
 - "Export" names the backup a sync writes. Resolved: it is a **desktop backup**, as "export" already means a one-way dump.
