@@ -277,3 +277,53 @@ test("the hint follows the screen, the panels, the note, an arm, the error and t
   ];
   for (const [s, c, hint] of cases) assert.equal(L.hint(s, c), hint);
 });
+
+test("x and X arm once when there is something to act on; the same key again disarms", () => {
+  assert.equal(L.reduce(state(), { type: "arm", kind: "remove", ready: true }).armed, "remove");
+  assert.equal(L.reduce(state(), { type: "arm", kind: "remove", ready: false }).armed, "");
+  assert.equal(L.reduce(state({ armed: "remove" }), { type: "arm", kind: "remove", ready: true }).armed, "");
+  assert.equal(L.reduce(state({ armed: "remove" }), { type: "arm", kind: "delete", ready: true }).armed, "delete");
+  assert.equal(L.acts(state({ armed: "delete" }), "delete"), true);
+  assert.equal(L.acts(state({ armed: "remove" }), "delete"), false);
+});
+
+test("any key clears the note, and every key but x and X also the arm and the error", () => {
+  const busy = state({ armed: "remove", error: "E", note: "N" });
+  assert.deepEqual(L.reduce(busy, { type: "key", id: "library.down" }), state());
+  assert.deepEqual(L.reduce(busy, { type: "key", id: null }), state(), "even a key no command takes");
+  assert.deepEqual(L.reduce(busy, { type: "key", id: "library.remove" }), state({ armed: "remove", error: "E" }));
+  assert.deepEqual(L.reduce(busy, { type: "key", id: "library.deleteDownloads" }), state({ armed: "remove", error: "E" }));
+  assert.deepEqual(L.reduce(busy, { type: "key", id: "library.removeWithDownloads" }), state());
+});
+
+test("v, A and I select; an action or Esc ends the selection", () => {
+  assert.deepEqual(L.reduce(state({ selected: [1] }), { type: "select", id: 3 }).selected, [1, 3]);
+  assert.deepEqual(L.reduce(state({ selected: [1, 3] }), { type: "select", id: 1 }).selected, [3]);
+  assert.deepEqual(L.reduce(state(), { type: "selectAll", manga: shelf }).selected, [1, 2, 3, 4]);
+  assert.deepEqual(L.reduce(state({ selected: [1, 4] }), { type: "invert", manga: shelf }).selected, [2, 3]);
+  assert.deepEqual(L.reduce(state({ selected: [1] }), { type: "deselect" }).selected, []);
+});
+
+test("Esc clears the selection first, then the search", () => {
+  assert.deepEqual(L.reduce(state({ selected: [1], query: "b" }), { type: "escape" }), state({ query: "b" }));
+  assert.deepEqual(L.reduce(state({ query: "b" }), { type: "escape" }), state());
+  assert.equal(L.escapes(state({ selected: [1] })), true);
+  assert.equal(L.escapes(state({ query: "b" })), true);
+  assert.equal(L.escapes(state()), false, "with neither, Esc quits");
+});
+
+test("a note and an error", () => {
+  assert.equal(L.reduce(state(), { type: "note", text: "No chapter is downloaded." }).note, "No chapter is downloaded.");
+  assert.equal(L.reduce(state(), { type: "error", message: "Server down" }).error, "Server down");
+});
+
+test("the categories panel opens on the targets, moves inside its rows, and its close ends the selection", () => {
+  assert.deepEqual(L.reduce(state({ pickCursor: 2 }), { type: "pickOpen", ids: [1, 3], hasCategories: true }), state({ pickIds: [1, 3] }));
+  assert.deepEqual(L.reduce(state(), { type: "pickOpen", ids: [1], hasCategories: false }), state({ note: "No categories yet. Press c to make one." }));
+  assert.deepEqual(L.reduce(state(), { type: "pickOpen", ids: [], hasCategories: true }), state());
+  assert.equal(L.reduce(state({ pickCursor: 1 }), { type: "pickMove", by: 1, count: 3 }).pickCursor, 2);
+  assert.equal(L.reduce(state({ pickCursor: 2 }), { type: "pickMove", by: 1, count: 3 }).pickCursor, 2);
+  assert.equal(L.reduce(state({ pickCursor: 0 }), { type: "pickMove", by: -1, count: 3 }).pickCursor, 0);
+  assert.equal(L.reduce(state(), { type: "pickPoint", index: 2 }).pickCursor, 2);
+  assert.deepEqual(L.reduce(state({ pickIds: [1], pickCursor: 1, selected: [1] }), { type: "pickClose" }), state({ pickCursor: 1 }));
+});

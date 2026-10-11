@@ -338,7 +338,7 @@ ShellRoot {
   // chapter, by its own chapter filters and sort, without the manga detail.
   function continueReading(m) {
     if (!m.unread) {
-      libraryView.assign({ note: "Every chapter of " + m.title + " is read." })
+      libraryView.reduce({ type: "note", text: "Every chapter of " + m.title + " is read." })
       return
     }
     var cfg = config
@@ -352,7 +352,7 @@ ShellRoot {
       root.send(Prefs.loadPayload(Library.CHAPTER_PREFS, m.id), function(saved) {
         var next = Library.continueChapter(d.chapters, Library.chapterPrefs(saved.state === "ok" ? saved.data : {}, root.downloadedOnly))
         if (next) reader.start(d.manga, d.chapters, next.id, root.settingsState.values.defaultReadingMode)
-        else libraryView.assign({ note: "No next chapter of " + m.title + " passes its chapter filters." })
+        else libraryView.reduce({ type: "note", text: "No next chapter of " + m.title + " passes its chapter filters." })
       })
     })
   }
@@ -364,7 +364,7 @@ ShellRoot {
   // both boxes ticked. The selection ends, as in Mihon.
   function actOnLibrary(action) {
     var ids = libraryView.targetIds
-    libraryView.assign({ selected: [] })
+    libraryView.reduce({ type: "deselect" })
     if (!ids.length || !config) return
     var failed = function(reply) {
       if (reply.state !== "ok") libraryView.fail(reply.message || Model.problem(reply, root.configPath).title)
@@ -391,7 +391,7 @@ ShellRoot {
         })
       }
       if (!payload) {
-        libraryView.assign({ note: "No chapter is downloaded." })
+        libraryView.reduce({ type: "note", text: "No chapter is downloaded." })
         return
       }
       root.send(payload, function(done) {
@@ -417,12 +417,9 @@ ShellRoot {
 
   // x and X ask once; the same key again acts.
   function armLibrary(kind, action) {
-    if (libraryView.armed === kind) {
-      libraryView.assign({ armed: "" })
-      actOnLibrary(action)
-    } else if (libraryView.targets.length && config) {
-      libraryView.assign({ armed: kind })
-    }
+    var acts = Library.acts(libraryView.library, kind)
+    libraryView.reduce({ type: "arm", kind: kind, ready: libraryView.targets.length > 0 && !!config })
+    if (acts) actOnLibrary(action)
   }
 
   function fetchLibrary() {
@@ -438,9 +435,9 @@ ShellRoot {
   // Returns whether a command took the key.
   function handleKey(event) {
     var id = Commands.dispatch({ palette: paletteOpen, view: overlay.scope, editing: overlay.editing, confirming: setupView.confirming }, Commands.keyEvent(event.key, event.text, event.modifiers))
-    // Any other key disarms a remove or a delete, even one no command takes.
-    if (id !== "library.remove" && id !== "library.deleteDownloads") libraryView.assign({ armed: "", error: "", note: "" })
-    else libraryView.assign({ note: "" })
+    // Every key, even one no command takes, clears the Library's note; all
+    // but x and X also disarm and clear its error (Library.reduce "key").
+    libraryView.keyed(id)
     if (id !== "updates.deleteDownload") updatesView.armed = false
     if (id !== "downloads.clear") downloadsView.armed = false
     if (id !== null) run(id)
@@ -658,7 +655,7 @@ ShellRoot {
         if (!config) break
         var shown = libraryView.shown
         var ids = shown.id === Model.ALL ? null : [shown.id]
-        libraryView.assign({ note: updatesView.check(ids) ? "Checking " + (ids ? shown.name : "the library") + " for new chapters. Updates shows the progress." : "A check for new chapters is already running." })
+        libraryView.reduce({ type: "note", text: updatesView.check(ids) ? "Checking " + (ids ? shown.name : "the library") + " for new chapters. Updates shows the progress." : "A check for new chapters is already running." })
         break
       // libraryView.run() takes Esc while a selection or a search is there.
       case "library.clearSearch":
@@ -682,7 +679,7 @@ ShellRoot {
         break
       case "library.download":
         if (libraryView.manga.length && config) nextChapters.openFor(NextChapters.librarySet(libraryView.shown, libraryView.selected))
-        libraryView.assign({ selected: [] })
+        libraryView.reduce({ type: "deselect" })
         break
       case "library.pickToggle":
         var pick = libraryView.pickRows[libraryView.pickCursor]

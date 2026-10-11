@@ -99,13 +99,13 @@ Item {
     library = Library.reduce(library, event)
   }
 
-  // ponytail: a plain write until Library.reduce takes these events (#315).
-  function assign(changes) {
-    library = Object.assign({}, library, changes)
+  function fail(message) {
+    reduce({ type: "error", message: message })
   }
 
-  function fail(message) {
-    assign({ error: message })
+  // Every key, from shell.qml's key path, before its command runs.
+  function keyed(id) {
+    reduce({ type: "key", id: id })
   }
 
   function reload() {
@@ -170,9 +170,8 @@ Item {
         break
       // Esc clears the selection, then the search; with neither, shell.qml quits.
       case "library.clearSearch":
-        if (selected.length) assign({ selected: [] })
-        else if (query) reduce({ type: "query", query: "" })
-        else return false
+        if (!Library.escapes(library)) return false
+        reduce({ type: "escape" })
         break
       case "library.options":
         reduce({ type: "options", open: true })
@@ -193,24 +192,23 @@ Item {
       case "library.disarm":
         break
       case "library.select":
-        if (manga[cursor]) assign({ selected: Updates.toggle(selected, manga[cursor].id) })
+        if (manga[cursor]) reduce({ type: "select", id: manga[cursor].id })
         break
       case "library.selectAll":
-        assign({ selected: manga.map(function(m) { return m.id }) })
+        reduce({ type: "selectAll", manga: manga })
         break
       case "library.invert":
-        assign({ selected: Updates.invert(selected, manga) })
+        reduce({ type: "invert", manga: manga })
         break
       case "library.setCategories":
-        if (!connection.categories.length) assign({ note: "No categories yet. Press c to make one." })
-        else if (targets.length) assign({ pickIds: targetIds, pickCursor: 0 })
+        reduce({ type: "pickOpen", ids: targetIds, hasCategories: connection.categories.length > 0 })
         break
       case "library.pickUp":
       case "library.pickDown":
-        assign({ pickCursor: Math.max(0, Math.min(pickRows.length - 1, pickCursor + (id === "library.pickUp" ? -1 : 1))) })
+        reduce({ type: "pickMove", by: id === "library.pickUp" ? -1 : 1, count: pickRows.length })
         break
       case "library.pickClose":
-        assign({ pickIds: [], selected: [] })
+        reduce({ type: "pickClose" })
         break
       default:
         return false
@@ -506,9 +504,9 @@ Item {
 
           MouseArea {
             anchors.fill: parent
-            onClicked: view.assign({ pickCursor: pick.index })
+            onClicked: view.reduce({ type: "pickPoint", index: pick.index })
             onDoubleClicked: {
-              view.assign({ pickCursor: pick.index })
+              view.reduce({ type: "pickPoint", index: pick.index })
               view.key(Commands.enter())
             }
           }
