@@ -8,6 +8,7 @@ import "Model.js" as Model
 import "Session.js" as Session
 import "Reader.js" as Reader
 import "ReadingCard.js" as ReadingCard
+import "Runtime.js" as Runtime
 
 // The reading card over the window: c on History or the palette. It pages
 // History's chapters itself; ReadingCard.js decides. S saves the card at 2x
@@ -36,7 +37,6 @@ Rectangle {
   property int seq: 0
 
   readonly property bool coversShown: prefs.values.readingCardCovers !== "hidden"
-  readonly property string grabFile: Quickshell.env("XDG_RUNTIME_DIR") + "/miharchy-reading-card.png"
   readonly property var problem: Model.problem({ state: phase, message: message }, configPath)
   readonly property string hint: "S save   Y copy   h " + (coversShown ? "hide" : "show") + " covers   esc close"
 
@@ -128,8 +128,13 @@ Rectangle {
     var id = pending
     pending = ""
     waitTimer.stop()
+    if (!Runtime.folder()) {
+      view.note = "No runtime folder: XDG_RUNTIME_DIR is not set or not private"
+      return
+    }
+    var grabFile = Runtime.folder() + "/reading-card.png"
     face.grabToImage(function(result) {
-      if (!result.saveToFile(view.grabFile)) {
+      if (!result.saveToFile(grabFile)) {
         view.note = "Could not draw the card"
         return
       }
@@ -137,11 +142,11 @@ Rectangle {
         var target = ReadingCard.target(view.folder, Quickshell.env("HOME"), view.now)
         pageProcess.done = "Saved to " + target.dir + "/" + target.name
         pageProcess.failed = "Saving failed"
-        pageProcess.command = Reader.saveCommand(view.grabFile, target)
+        pageProcess.command = Reader.saveCommand(grabFile, target)
       } else {
         pageProcess.done = "Card copied"
         pageProcess.failed = "Copying failed"
-        pageProcess.command = Reader.copyCommand(view.grabFile, "image/png")
+        pageProcess.command = Reader.copyCommand(grabFile, "image/png")
       }
       pageProcess.running = true
     }, Qt.size(face.width * 2, face.height * 2))

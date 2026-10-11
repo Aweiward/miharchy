@@ -7,6 +7,7 @@ import "Setup.js" as Setup
 import "Settings.js" as Settings
 import "Session.js" as Session
 import "Commands.js" as Commands
+import "Runtime.js" as Runtime
 
 // The setup screen: one row per Setup.STEPS entry. It owns the one Process
 // that runs checks and confirmed steps, and sends its own server reads and
@@ -86,12 +87,12 @@ Item {
   }
 
   // Where Syncthing stands, while no phone backup has landed: the step's text,
-  // its y and the QR code of this desktop's ID follow from it.
-  readonly property string qrPath: Quickshell.env("XDG_RUNTIME_DIR") + "/miharchy/syncthing-id.png"
+  // its y and the QR code of this desktop's ID follow from it. With no
+  // runtime folder (Runtime.js) the ID shows as text only.
   function checkSyncthing() {
     var p = setup.phones
     if (setup.job || setup.confirm || editing || !p || p.count || p.autobackup) return
-    start("syncthing", Setup.syncthingProbeCommand(setup.server.syncFolder, qrPath))
+    start("syncthing", Setup.syncthingProbeCommand(setup.server.syncFolder, Runtime.folder() ? Runtime.folder() + "/syncthing-id.png" : ""))
   }
 
   // The install terminal returns at once: check again until the packages are in.

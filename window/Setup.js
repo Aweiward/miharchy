@@ -218,7 +218,8 @@ var SYNCTHING_API = [
   "api() { printf 'X-API-Key: %s\\n' \"$key\" | curl -fsS -m 3 -H @- \"http://$addr/rest/$1\"; }"
 ].join("\n")
 
-// $1 is the sync folder, $2 where to write the desktop ID as a QR code.
+// $1 is the sync folder, $2 where to write the desktop ID as a QR code, or
+// empty for none (no runtime folder, Runtime.js).
 // Each line prints one fact; parseSyncthing reads them.
 var SYNCTHING_PROBE = SYNCTHING_API + "\n" + [
   "[ -f \"$cfg\" ] || exit 0",
@@ -232,7 +233,7 @@ var SYNCTHING_PROBE = SYNCTHING_API + "\n" + [
   "api config/devices | jq -e --arg me \"$id\" 'any(.[]; .deviceID != $me)' >/dev/null && echo knowsPhone",
   "echo \"pendingDevices $(api cluster/pending/devices | jq -c '[to_entries[] | {id: .key, name: .value.name}]')\"",
   "echo \"pendingFolders $(api cluster/pending/folders | jq -c '[to_entries[] | .key as $id | .value.offeredBy | to_entries[] | {id: $id, label: .value.label, device: .key}]')\"",
-  "command -v qrencode >/dev/null && mkdir -p \"$(dirname \"$2\")\" && qrencode -o \"$2\" \"$id\" && echo \"qr $2\""
+  "[ -n \"$2\" ] && command -v qrencode >/dev/null && qrencode -o \"$2\" \"$id\" && echo \"qr $2\""
 ].join("\n")
 
 // $1 the sync folder; $2 and $3 the phone's device id and name, or empty;
