@@ -150,11 +150,12 @@ Remove Miharchy in this order. Each command names one file or one thing; none de
 
    If you moved a key, or added the line yourself with another key, the line still holds `miharchy' peek` or `miharchy' peek-next`. Delete it too.
 
-4. If you added FlareSolverr, remove its container and its image:
+4. If you added FlareSolverr, remove its container and then the image it ran:
 
    ```sh
+   image=$(docker inspect -f '{{.Image}}' miharchy-flaresolverr)
    docker rm -f miharchy-flaresolverr
-   docker image rm ghcr.io/flaresolverr/flaresolverr:latest
+   docker image rm "$image"
    ```
 
 5. Remove the plugin:
