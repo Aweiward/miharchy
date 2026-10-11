@@ -2,7 +2,7 @@
 
 One file per user-facing feature: how a user reaches it, how to drive it with `.claude/skills/verify-miharchy/scripts/drive.sh`, and what end state proves it. Keep this map honest as features change (`/maintain-verification-skill`).
 
-A recipe takes its ids from the seed it names: read them with `gql.sh` or from the window (`root.shown.manga`), or write them as `<placeholder>`. The seed's order and ids change with what the sources list today.
+Mutations in recipes are shorthand for the server's `input:` form, e.g. `fetchSourceManga(input:{source, type: SEARCH, page: 1, query})` and `fetchMangaAndChapters(input:{id, fetchManga: true, fetchChapters: true})` (`scripts/seed.sh`). A recipe takes its ids from the seed it names: read them with `gql.sh` or from the window (`root.shown.manga`), or write them as `<placeholder>`. The seed's order and ids change with what the sources list today.
 
 | Feature | File | Proof is |
 |---|---|---|
@@ -30,6 +30,6 @@ Global search, the local source and the duplicate warning are in `browse.md`; in
 
 Not yet mapped: Setup (`window/Setup.js`; drive `root.run("view.setup")` with its probe commands stubbed on `PATH`, see `window/tests/setup.test.js`) and the Categories screen (`window/CategoriesView.qml`).
 
-The bar mark (`plugin/Mark.qml`) renders offscreen with `site/tools/mark.sh`: it copies the shell's `Commons` and `Ui` from `$OMARCHY_PATH/shell` into `$RUN/mark/root` with a stand-in bar, and `plugin/`, `window/` and `icons/` into `$RUN/mark/clone`, then writes `$EVIDENCE/mark-bar.png` and `mark-popup.png` and logs `HARNESS step= count= rows=` in `$RUN/mark/run.log`. Give it a theme home first (`site/tools/README.md`, step 1) and run it with `notify-send` stubbed on `PATH` and `XDG_RUNTIME_DIR` set to a 700 folder in the run dir, so a new-chapter notice and its marker file stay in the run (a long path makes Quickshell log "Failed to start IPC server"; the mark does not need IPC). The popup's count must match the Updates view's unread rows.
+The bar mark (`plugin/Mark.qml`) renders offscreen with `site/tools/mark.sh`: it copies the shell's `Commons` and `Ui` from `$OMARCHY_PATH/shell` into `$RUN/mark/root` with a stand-in bar, and `plugin/`, `window/` and `icons/` into `$RUN/mark/clone`, then writes `$EVIDENCE/mark-bar.png` and `mark-popup.png` and logs `HARNESS step= count= rows=` in `$RUN/mark/run.log`. Give it a theme home first (the theme copy in SKILL.md, Drive) and run it with `notify-send` stubbed on `PATH` and `XDG_RUNTIME_DIR` set to a 700 folder in the run dir, so a new-chapter notice and its marker file stay in the run (a long path makes Quickshell log "Failed to start IPC server"; the mark does not need IPC). The popup's count must match the Updates view's unread rows.
 
 The mark's new-chapter notification is proven without the shell: `plugin/tests/mark.test.js` pins the decision and runs the real notify script with a stub `notify-send` on `PATH`; feed `Mark.js` the scratch server's answer to `Mark.listPayload()` from node to check the query. For the click, start a drive with `MIHARCHY_OPEN_VIEW=updates` (the window opens on Updates), and while it runs send `.claude/skills/verify-miharchy/scripts/qs.sh ipc call miharchy openUpdates` to that offscreen copy. Never run the real `notify-send`.

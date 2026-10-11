@@ -18,10 +18,10 @@ Suwayomi stamps `lastReadAt` with its own clock on a `lastPageRead` save. A rest
 .claude/skills/verify-miharchy/scripts/seed.sh --library 4
 .claude/skills/verify-miharchy/scripts/history.py 1=2026-10-09T21:00 2=2026-10-08T20:00 3=2026-10-03T12:00 7=2026-10-08T09:00 8=2026-10-07T23:50 9=2026-10-07T23:55 12=2026-10-06T00:05 4=2026-10-04T18:00 13=2026-09-19T10:00 5=2026-08-30T10:00
 ```
-Take the chapter ids from `gql.sh '{ mangas(condition: { inLibrary: true }) { nodes { id chapters { nodes { id } } } } }'` and pick times before now. Work the expected numbers out by hand before the drive. With the seed above on 2026-10-09 at 22:30 (manga 1 has chapters 1 to 3, all read): chapters 8, in progress 3 (manga 1 has nothing unread), streak 4 (Oct 9 to Oct 6, a gap on Oct 5), covers of manga 1, 3, 4.
+Seed before any drive reads those chapters: a restore never lowers a newer `lastReadAt`, and `history.py` prints `WANTED <time>` instead of `ok` for such a chapter. Take the chapter ids from `gql.sh '{ mangas(condition: { inLibrary: true }) { nodes { id chapters { nodes { id } } } } }'` and pick times before now. Work the expected numbers out by hand before the drive. With the seed above on 2026-10-09 at 22:30 (manga 1 has chapters 1 to 3, all read): chapters 8, in progress 3 (manga 1 has nothing unread), streak 4 (Oct 9 to Oct 6, a gap on Oct 5), covers of manga 1, 3, 4.
 
 ## Driving it with drive.sh
-Copy a theme into the run home first (`site/tools/README.md`, step 1), and put a logging `wl-copy` stub first on `PATH` (`PATH=<stubs>:/usr/bin:/bin drive.sh ...`).
+Copy a theme into the run home first (SKILL.md, Drive), and put a logging `wl-copy` stub first on `PATH` (`PATH=<stubs>:/usr/bin:/bin drive.sh ...`).
 ```js
 [
   [3000, function() { key("3") }],
@@ -31,7 +31,8 @@ Copy a theme into the run home first (`site/tools/README.md`, step 1), and put a
   [6000, function() { log("save", readingCard.note) }],
   [200, function() { key("Y") }],
   [4000, function() { log("copy", readingCard.note); key("h") }],
-  [3000, function() { log("hidden", readingCard.coversShown); grab("nocovers"); done() }]
+  [3000, function() { log("hidden", readingCard.coversShown); grab("nocovers") }],
+  [300, function() { done() }]
 ]
 ```
 Proof: the logged numbers match the hand count; `file $RUN/home/Pictures/Miharchy/reading-card-*.png` says 2400 x 1350 (read the PNG too: covers drawn, not blank); the stub logged `--type image/png` and its stdin is the same PNG; `gql.sh '{ metas(filter: { key: { startsWith: "miharchy.readingCard" } }) { nodes { key value } } }'` reads `hidden`, and a second drive that opens the card with `root.run("readingCard.open")` logs `coversShown` false.

@@ -23,7 +23,8 @@ The window runs the helper Setup installs under `$HOME`; `drive.sh` gives it `$R
   }],
   [500, function() { settingsView.editValue = "<scratch>/backups"; key("Enter") }],
   [1500, function() { root.run("backup.create") }],
-  [12000, function() { log("backup", settingsView.backup); grab("wrote"); done() }]
+  [12000, function() { log("backup", settingsView.backup); grab("wrote") }],
+  [300, function() { done() }]
 ]
 ```
 Read back: `settings { backupPath autoBackupIncludeServerSettings }`, and the file in the folder. `gunzip -c <file> | grep -a -o '/chapter/' | wc -l` counts MangaDex chapter URLs: 0 with "Backups include chapters" off.
