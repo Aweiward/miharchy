@@ -459,12 +459,14 @@ test("a manga whose title is inside a library manga's title, ignoring case, is a
   assert.deepEqual(B.duplicates(library, { id: 9, title: "  " }), [], "a blank title matches nothing");
 });
 
-test("notesMarkdown keeps Markdown but loads no image and no raw HTML", () => {
-  assert.equal(B.notesMarkdown("**bold** and [a link](https://x.org)"), "**bold** and [a link](https://x.org)");
-  assert.equal(B.notesMarkdown("![cover](https://x.org/a.png)"), "&#33;[cover](https://x.org/a.png)");
-  assert.equal(B.notesMarkdown("![ref][1]\n\n[1]: https://x.org/a.png"), "&#33;[ref][1]\n\n[1]: https://x.org/a.png");
-  assert.equal(B.notesMarkdown("\\![escaped](u)"), "\\&#33;[escaped](u)");
-  assert.equal(B.notesMarkdown('<img src="https://x.org/a.png"> <b>x</b>'), '&lt;img src="https://x.org/a.png"> &lt;b>x&lt;/b>');
-  assert.equal(B.notesMarkdown("Wow! [x](u)"), "Wow! [x](u)");
-  assert.equal(B.notesMarkdown(""), "");
+test("notesMarkdown keeps Markdown but loads no image, no raw HTML and no link", () => {
+  const n = B.notesMarkdown;
+  assert.equal(n("**bold** and [a link](https://x.org)"), "**bold** and &#91;a link](https&#58;//x.org)");
+  assert.equal(n("![cover](http://x.org/a.png)"), "&#33;&#91;cover](http&#58;//x.org/a.png)");
+  assert.equal(n("![ref][1]\n\n[1]: x.png"), "&#33;&#91;ref]&#91;1]\n\n&#91;1]: x.png");
+  assert.equal(n("\\![escaped](u)"), "\\&#33;&#91;escaped](u)");
+  assert.equal(n("<img src=x> <b>x</b>"), "&lt;img src=x> &lt;b>x&lt;/b>");
+  assert.equal(n("mail a@x.org, see WWW.x.org"), "mail a&#64;x.org, see WWW&#46;x.org");
+  assert.equal(n("Wow! 10:30"), "Wow! 10:30");
+  assert.equal(n(""), "");
 });
