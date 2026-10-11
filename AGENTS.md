@@ -50,7 +50,7 @@ Read the doc for the area before you change it.
 
 ## Current work
 
-The latest release is [v1.1.0](https://github.com/Aweiward/miharchy/releases/tag/v1.1.0) (2026-10-10). Its release notes list what shipped. The open plan is the Omarchy Plugin Marketplace listing (ADR 0008, issues #323 to #331): fix the review findings, move users to the `stable` branch, release v1.1.1, then submit. New work starts with a grilling session. Logging in to a source in a WebView (#98) waits for an upstream Suwayomi change. Work items through `ready-for-agent` issues.
+The latest release is [v1.1.1](https://github.com/Aweiward/miharchy/releases/tag/v1.1.1) (2026-10-11). Its release notes list what shipped. Users install from `stable` (ADR 0008); work and PRs stay on `main`. The open plan is the Omarchy Plugin Marketplace listing (#331): v1.1.1 is submitted for review; leave `stable` alone until it is listed, and answer review findings within 7 days. New work starts with a grilling session. Logging in to a source in a WebView (#98) waits for an upstream Suwayomi change. Work items through `ready-for-agent` issues.
 
 ## Agent skills
 
