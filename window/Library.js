@@ -19,10 +19,9 @@ var STATES = Prefs.TRI_STATE
 // "categories"; selected: manga ids picked with v; armed: what a second x
 // ("remove") or X ("delete") does to the targets, or ""; pickIds: the manga
 // the change categories panel changes, [] while it is closed; note: what
-// u and friends started, in place of the hint until the next key; was: the
-// shown category as the last "shown" saw it.
+// u and friends started, in place of the hint until the next key.
 function initial() {
-  return { cursor: 0, category: -1, screen: "grid", query: "", options: false, optionsCursor: 0, selected: [], armed: "", pickIds: [], pickCursor: 0, note: "", error: "", was: null }
+  return { cursor: 0, category: -1, screen: "grid", query: "", options: false, optionsCursor: 0, selected: [], armed: "", pickIds: [], pickCursor: 0, note: "", error: "" }
 }
 
 function copy(l, changes) {
@@ -34,10 +33,12 @@ function copy(l, changes) {
 //   "point"        { index }: a click on a cover; it disarms x and X
 //   "tab"          { id }: a click on a category; it disarms x and X
 //   "switch"       { by, switcher }: tab and shift-tab, wrapping
-//   "shown"        { shown }: the shown category changed; the cursor stays
-//                  on its manga when rows move or leave, or goes to the
-//                  nearest one when its own leaves; another category starts
-//                  at the top. A manga that left leaves the selection.
+//   "shown"        { was, shown }: the shown category changed from was (null
+//                  at first); the cursor stays on its manga when rows move
+//                  or leave, or goes to the nearest one when its own leaves;
+//                  another category starts at the top. A manga that left
+//                  leaves the selection. The same state comes back when
+//                  neither changes, so the caller writes nothing.
 //   "query"        { query }
 //   "screen"       { screen }: "grid" or "categories"
 //   "options"      { open }: the sort, filter and display panel
@@ -69,12 +70,11 @@ function reduce(l, event) {
       var list = event.switcher
       return copy(l, { category: list[Commands.moveCursor(Model.switcherIndex(list, l.category), event.by, list.length)].id })
     case "shown":
-      var was = l.was, shown = event.shown
-      return copy(l, {
-        cursor: was && was.id === shown.id ? Model.follow(was.manga, shown.manga, l.cursor) : 0,
-        was: shown,
-        selected: Updates.keep(l.selected, shown.manga)
-      })
+      var was = event.was, shown = event.shown
+      var cursor = was && was.id === shown.id ? Model.follow(was.manga, shown.manga, l.cursor) : 0
+      var selected = Updates.keep(l.selected, shown.manga)
+      if (cursor === l.cursor && selected.length === l.selected.length) return l
+      return copy(l, { cursor: cursor, selected: selected })
     case "query":
       return copy(l, { query: event.query })
     case "screen":

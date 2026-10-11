@@ -228,16 +228,30 @@ test("tab and shift-tab switch the category and wrap", () => {
 });
 
 test("the cursor follows its manga when the rows change, and another category starts at the top", () => {
-  const first = L.reduce(state(), { type: "shown", shown: all });
+  const first = L.reduce(state(), { type: "shown", was: null, shown: all });
   assert.equal(first.cursor, 0);
-  assert.equal(first.was, all);
-  const on = L.reduce({ ...first, cursor: 2, selected: [3, 4] }, { type: "shown", shown: cat(-1, "All", [shelf[2], shelf[0], shelf[3]]) });
+  const on = L.reduce(state({ cursor: 2, selected: [3, 4] }), { type: "shown", was: all, shown: cat(-1, "All", [shelf[2], shelf[0], shelf[3]]) });
   assert.equal(on.cursor, 0, "Chainsaw Man moved to the top");
   assert.deepEqual(on.selected, [3, 4]);
-  const gone = L.reduce({ ...first, cursor: 2, selected: [3, 4] }, { type: "shown", shown: cat(-1, "All", [shelf[0], shelf[1], shelf[3]]) });
+  const gone = L.reduce(state({ cursor: 2, selected: [3, 4] }), { type: "shown", was: all, shown: cat(-1, "All", [shelf[0], shelf[1], shelf[3]]) });
   assert.equal(gone.cursor, 2, "its own left: the nearest one after it");
   assert.deepEqual(gone.selected, [4], "a manga that left leaves the selection");
-  assert.equal(L.reduce({ ...first, cursor: 3 }, { type: "shown", shown: tabs[2] }).cursor, 0);
+  assert.equal(L.reduce(state({ cursor: 3 }), { type: "shown", was: all, shown: tabs[2] }).cursor, 0);
+});
+
+// LibraryView skips the write of an unchanged state: a write from
+// onShownChanged while a binding on the state updates is a binding loop.
+test("a shown change that moves neither the cursor nor the selection keeps the state", () => {
+  const start = state();
+  assert.equal(L.reduce(start, { type: "shown", was: null, shown: all }), start, "the first shown");
+  const on = state({ cursor: 1, selected: [3] });
+  assert.equal(L.reduce(on, { type: "shown", was: all, shown: cat(-1, "All", [shelf[0], shelf[1], shelf[2]]) }), on, "rows after the cursor left");
+});
+
+test("the shown event changes neither the category nor the search", () => {
+  const next = L.reduce(state({ category: 7, query: "ber", cursor: 2 }), { type: "shown", was: all, shown: tabs[2] });
+  assert.equal(next.category, 7);
+  assert.equal(next.query, "ber");
 });
 
 test("the search query, the categories screen and the options panel", () => {
