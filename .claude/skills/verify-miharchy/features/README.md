@@ -2,7 +2,7 @@
 
 One file per user-facing feature: how a user reaches it, how to drive it with `.claude/skills/verify-miharchy/scripts/drive.sh`, and what end state proves it. Keep this map honest as features change (`/maintain-verification-skill`).
 
-Mutations in recipes are shorthand for the server's `input:` form, e.g. `fetchSourceManga(input:{source, type: SEARCH, page: 1, query})` and `fetchMangaAndChapters(input:{id, fetchManga: true, fetchChapters: true})` (`scripts/seed.sh`). A recipe takes its ids from the seed it names: read them with `gql.sh` or from the window (`root.shown.manga`), or write them as `<placeholder>`. The seed's order and ids change with what the sources list today.
+Mutations in recipes are shorthand for the server's `input:` form, e.g. `fetchSourceManga(input:{source, type: SEARCH, page: 1, query})` and `fetchMangaAndChapters(input:{id, fetchManga: true, fetchChapters: true})` (`scripts/seed.sh`). A recipe takes its ids from the seed it names: read them with `gql.sh` or from the window (`libraryView.shown.manga`), or write them as `<placeholder>`. The seed's order and ids change with what the sources list today.
 
 | Feature | File | Proof is |
 |---|---|---|

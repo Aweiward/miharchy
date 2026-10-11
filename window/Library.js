@@ -1,6 +1,9 @@
 .pragma library
 .import "Prefs.js" as Prefs
 .import "Chapters.js" as Chapters
+.import "Commands.js" as Commands
+.import "Model.js" as Model
+.import "Updates.js" as Updates
 
 // The Library's search, filters and sort, after Mihon's library sheet and
 // toolbar search. Pure, so tests/library.test.js pins it; shell.qml runs
@@ -19,6 +22,80 @@ var STATES = Prefs.TRI_STATE
 // shown category as the last "shown" saw it.
 function initial() {
   return { cursor: 0, category: -1, screen: "grid", query: "", options: false, optionsCursor: 0, selected: [], armed: "", pickIds: [], pickCursor: 0, note: "", error: "", was: null }
+}
+
+function copy(l, changes) {
+  return Object.assign({}, l, changes)
+}
+
+// event.type:
+//   "move"         { by, count }: the cursor moves, inside the shown manga
+//   "point"        { index }: a click on a cover; it disarms x and X
+//   "tab"          { id }: a click on a category; it disarms x and X
+//   "switch"       { by, switcher }: tab and shift-tab, wrapping
+//   "shown"        { shown }: the shown category changed; the cursor stays
+//                  on its manga when rows move or leave, or goes to the
+//                  nearest one when its own leaves; another category starts
+//                  at the top. A manga that left leaves the selection.
+//   "query"        { query }
+//   "screen"       { screen }: "grid" or "categories"
+//   "options"      { open }: the sort, filter and display panel
+//   "optionsMove"  { by, count }, wrapping
+//   "optionsPoint" { index }
+function reduce(l, event) {
+  switch (event.type) {
+    case "move":
+      return copy(l, { cursor: Math.max(0, Math.min(event.count - 1, l.cursor + event.by)) })
+    case "point":
+      return copy(l, { armed: "", cursor: event.index })
+    case "tab":
+      return copy(l, { armed: "", category: event.id })
+    case "switch":
+      var list = event.switcher
+      return copy(l, { category: list[Commands.moveCursor(Model.switcherIndex(list, l.category), event.by, list.length)].id })
+    case "shown":
+      var was = l.was, shown = event.shown
+      return copy(l, {
+        cursor: was && was.id === shown.id ? Model.follow(was.manga, shown.manga, l.cursor) : 0,
+        was: shown,
+        selected: Updates.keep(l.selected, shown.manga)
+      })
+    case "query":
+      return copy(l, { query: event.query })
+    case "screen":
+      return copy(l, { screen: event.screen })
+    case "options":
+      return copy(l, { options: event.open })
+    case "optionsMove":
+      return copy(l, { optionsCursor: Commands.moveCursor(l.optionsCursor, event.by, event.count) })
+    case "optionsPoint":
+      return copy(l, { optionsCursor: event.index })
+  }
+  return l
+}
+
+// The command scope (Commands.js) while the Library view shows.
+function scope(l) {
+  if (l.screen === "categories") return "categories"
+  if (l.armed === "remove") return "library-remove"
+  if (l.pickIds.length) return "library-categories"
+  if (l.options) return "library-options"
+  return "library"
+}
+
+// The hint before ": commands". ctx: { categoriesHint (the categories
+// screen's), targets (how many manga an action takes), prefs, tabs (whether
+// the category switcher shows) }.
+function hint(l, ctx) {
+  if (l.screen === "categories") return ctx.categoriesHint
+  if (l.pickIds.length) return "j k move   enter in or out   esc close   "
+  if (l.options) return "j k move   enter change   esc close   "
+  if (l.note) return l.note + "   "
+  if (l.armed === "remove") return "x again to remove " + count(ctx.targets) + " from the library   d also delete the downloads   esc keep   "
+  if (l.armed === "delete") return "X again to delete the downloads of " + count(ctx.targets) + ", any other key keeps them   "
+  return (l.error ? l.error + "   " : "") + (l.selected.length
+    ? l.selected.length + " selected   v select   A all   I invert   R read   U unread   d download   X delete downloads   C categories   x remove   esc clear   "
+    : "enter open   space read   v select   x remove   " + (l.query ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (ctx.prefs.libraryDisplay === "list" ? "L grid   " : "L list   ") + (ctx.tabs ? "tab category   " : "") + "u update   c categories   D queue   s sync   ")
 }
 
 // A manga is the shape Model.fromResponse() builds.
@@ -263,6 +340,9 @@ if (typeof module !== "undefined") {
   module.exports = {
     PREFS: PREFS,
     initial: initial,
+    reduce: reduce,
+    scope: scope,
+    hint: hint,
     apply: apply,
     rows: rows,
     toggleDisplay: toggleDisplay,

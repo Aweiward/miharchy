@@ -3,7 +3,7 @@
 The Library view (key `1`): a cover grid of the server's library manga with unread badges, a category switcher, search, sort and filters, and removal.
 
 ## Sub-features
-- Downloaded only (palette "Downloaded only on or off", `root.run("mode.downloadedOnly")`, meta `miharchy.downloadedOnly`): the Library shows only manga with downloads (`root.shown.manga`), a manga's chapter list only downloaded chapters (`mangaDetail.shown`), the reader's list only those plus the one opened (`reader.reader.chapters`), Updates only downloaded rows (it forces `updatesFilterDownloaded`, which the Updates panel shows as `[+]`); the status bar says "downloaded only". Seed a download with `enqueueChapterDownloads` + `startDownloader` and wait for `isDownloaded`. The stored filters stay as they were (read back `metas`).
+- Downloaded only (palette "Downloaded only on or off", `root.run("mode.downloadedOnly")`, meta `miharchy.downloadedOnly`): the Library shows only manga with downloads (`libraryView.shown.manga`), a manga's chapter list only downloaded chapters (`mangaDetail.shown`), the reader's list only those plus the one opened (`reader.reader.chapters`), Updates only downloaded rows (it forces `updatesFilterDownloaded`, which the Updates panel shows as `[+]`); the status bar says "downloaded only". Seed a download with `enqueueChapterDownloads` + `startDownloader` and wait for `isDownloaded`. The stored filters stay as they were (read back `metas`).
 - Cover grid with unread-chapter badges (`unreadCount`), placeholder tiles for missing covers.
 - `L` switches between the cover grid and a list (cover, title, source, unread count), as do the panel's Display rows; global meta `miharchy.libraryDisplay` keeps it. In the list, `j`/`k` move one row. A source that is not installed shows its name from meta `miharchy.sourceNames` with "(not installed)".
 - The panel's Badges rows turn on a downloaded-chapters badge (top-left, before the unread count) and the source's language (top-right); its Tabs row shows each category's manga count, which a search also shows, as in Mihon. The list shows the same as text. Meta `miharchy.libraryBadgeDownloads`, `miharchy.libraryBadgeLanguage`, `miharchy.libraryTabCounts` (`on`/`off`, off by default).
@@ -34,18 +34,18 @@ Open the window; it starts on Library. Or press `1`.
 ## Driving it with drive.sh
 ```js
 [
-  [7000, function() { log("library", root.shown.manga.map(function(m) { return [m.id, m.unread] })); grab("library") }],
+  [7000, function() { log("library", libraryView.shown.manga.map(function(m) { return [m.id, m.unread] })); grab("library") }],
   [300, function() { key("/") }],
-  [300, function() { libraryView.searchField.text = "romance"; log("search", root.shown.manga.map(function(m) { return m.id })) }],
-  [300, function() { key("Enter"); key("Esc"); log("cleared", root.libraryQuery) }],
-  [300, function() { key("F"); key("j"); key("Enter"); log("unread-include", root.shown.manga.map(function(m) { return m.id })) }],
+  [300, function() { libraryView.searchField.text = "romance"; log("search", libraryView.shown.manga.map(function(m) { return m.id })) }],
+  [300, function() { key("Enter"); key("Esc"); log("cleared", libraryView.query) }],
+  [300, function() { key("F"); key("j"); key("Enter"); log("unread-include", libraryView.shown.manga.map(function(m) { return m.id })) }],
   [300, function() { key("Esc"); grab("filtered") }],
   [200, function() { key("x") }],
   [200, function() { key("x") }],
   [3000, function() { log("after-remove", root.connection.manga.length); grab("library-removed"); root.run("window.quit") }]
 ]
 ```
-Read back: `.claude/skills/verify-miharchy/scripts/gql.sh '{ metas(filter:{key:{startsWith:"miharchy.library"}}) { nodes { key value } } mangas(condition:{inLibrary:true}){ totalCount nodes { title } } }'` shows the saved choices and one fewer manga; its chapters' `isRead` unchanged. Then a second `drive.sh` run that only logs `root.libraryPrefs` and grabs proves a restart keeps them.
+Read back: `.claude/skills/verify-miharchy/scripts/gql.sh '{ metas(filter:{key:{startsWith:"miharchy.library"}}) { nodes { key value } } mangas(condition:{inLibrary:true}){ totalCount nodes { title } } }'` shows the saved choices and one fewer manga; its chapters' `isRead` unchanged. Then a second `drive.sh` run that only logs `libraryView.prefs` and grabs proves a restart keeps them.
 
 Category updates: give manga 1, 2, 3 categories A, B and none (`createCategory`, `updateMangaCategories`) and set the three `exclude*` settings false. Then `key("Tab"); key("Tab"); key("u")` checks A only, and `key("c"); key("u"); key("u")` makes A EXCLUDE. A later `u` on Updates runs 2 jobs. Read back `{ categories { nodes { id includeInUpdate } } libraryUpdateStatus { jobsInfo { totalJobs } mangaUpdates { manga { id } } } }`: A is EXCLUDE, and the last run holds manga 2 and 3 only.
 
@@ -54,5 +54,5 @@ Selection: `key("v"); key("l"); key("v")` selects the first two covers; `key("R"
 ## Gotchas
 - The first manga's cover may still be loading at 4 s; grab later if covers matter. A change keeps the cells of the manga that stay (`RowModel.qml`); a manga coming into view gets a new cell, whose cover comes from `Images.js` without a request but may decode for a moment. To count rebuilt cells, keep the grid's delegates (`contentItem.children` with a `chosen` property) before a change and compare them by identity after it. A sort that moves most manga resets the grid (`Model.listChanges`).
 - The driver cannot type: set `libraryView.searchField.text` while the field is open. `key("Backtab")` sends a plain key, not Shift-Tab; use `root.run("library.previousCategory")`.
-- `root.shown.manga` is the filtered, sorted category; `root.connection.manga` is the whole library.
+- `libraryView.shown.manga` is the filtered, sorted category; `root.connection.manga` is the whole library.
 - Covers load through `ServerImage` (files in `$XDG_RUNTIME_DIR/miharchy/images`), never URLs with credentials. `drive.sh` runs the window with `XDG_RUNTIME_DIR=$RUN/runtime`, so a drive's files land in `$RUN/runtime/miharchy/images`, out of the real one, where they can be measured. To count requests, use the logging proxy pattern from SKILL.md's Live updates section; `done()` skips the window's quit path, so end with `root.run("window.quit")` when the files left after exit matter.

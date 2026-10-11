@@ -53,11 +53,8 @@ var ROWS = [
 function viewScope(s) {
   var v = s.view
   if (v === "browse") return s.browseView.scope === "extensions" && s.extensionsView.details ? "extension" : s.browseView.scope
-  if (v === "library" && s.libraryScreen === "categories") return "categories"
+  if (v === "library") return s.libraryView.scope
   if (v === "check" && s.checkView.merging) return "check-merge"
-  if (v === "library" && s.libraryArmed === "remove") return "library-remove"
-  if (v === "library" && s.libraryPickIds.length) return "library-categories"
-  if (v === "library" && s.libraryOptions) return "library-options"
   if (v === "updates" && s.updatesView.filterOpen) return "updates-filter"
   return v
 }
@@ -65,7 +62,7 @@ function viewScope(s) {
 function viewHint(s) {
   var b = s.browseView
   var text = ({
-    library: s.libraryHint,
+    library: s.libraryView.hint,
     updates: s.updatesView.hint,
     history: s.historyView.hint,
     settings: "j k move   enter change   ",

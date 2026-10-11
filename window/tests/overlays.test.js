@@ -2,6 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const O = require("./load")("Overlays.js");
 const C = require("./load")("Commands.js");
+const L = require("./load")("Library.js");
 
 // The window with nothing open, on the Library; each change(s) opens one thing.
 const state = (...changes) => {
@@ -14,11 +15,11 @@ const state = (...changes) => {
     trackPanel: { open: false, picking: false, editing: false, hint: "TP" },
     mangaDetail: { open: false, dupesOpen: false, picking: false, optionsOpen: false, downloadsOpen: false, selecting: false, editing: false, writing: false, hint: "MD" },
     view: "library", browseView: { scope: "sources", editing: "", panel: null, screen: "sources", hint: "BR" },
-    extensionsView: { details: false, editing: "", hint: "EX" }, libraryScreen: "", checkView: { merging: false, hint: "CK" },
-    libraryArmed: "", libraryPickIds: [], libraryOptions: false, updatesView: { filterOpen: false, hint: "UP" },
-    settingsEditing: false, libraryView: { editing: false }, historyView: { editing: false, hint: "HI" },
+    extensionsView: { details: false, editing: "", hint: "EX" }, checkView: { merging: false, hint: "CK" },
+    updatesView: { filterOpen: false, hint: "UP" },
+    settingsEditing: false, libraryView: { editing: false, scope: "library", hint: "LB" }, historyView: { editing: false, hint: "HI" },
     settingsView: { loginEditing: false }, setupView: { editing: false, confirming: false },
-    categoriesView: { editing: "" }, libraryHint: "LB",
+    categoriesView: { editing: "" },
   };
   changes.forEach((c) => c(s));
   return s;
@@ -70,10 +71,8 @@ test("the top open overlay gives the scope, in stack order", () => {
 test("with no overlay open, the view or a screen inside it gives the scope", () => {
   const cases = [
     [[], "library"],
-    [[set("libraryScreen", "categories"), set("libraryArmed", "remove")], "categories"],
-    [[set("libraryArmed", "remove"), set("libraryPickIds", [1])], "library-remove"],
-    [[set("libraryPickIds", [1]), set("libraryOptions", true)], "library-categories"],
-    [[set("libraryOptions", true)], "library-options"],
+    // The Library view gives its own scope (Library.scope).
+    [[set("libraryView.scope", "library-options")], "library-options"],
     [[set("view", "updates")], "updates"],
     [[set("view", "updates"), set("updatesView.filterOpen", true)], "updates-filter"],
     [[set("view", "check")], "check"],
@@ -82,7 +81,7 @@ test("with no overlay open, the view or a screen inside it gives the scope", () 
     [[set("view", "browse"), set("browseView.scope", "extensions")], "extensions"],
     [[set("view", "browse"), set("browseView.scope", "extensions"), set("extensionsView.details", true)], "extension"],
     // Library screens apply on the Library only.
-    [[set("view", "history"), set("libraryOptions", true)], "history"],
+    [[set("view", "history"), set("libraryView.scope", "library-options")], "history"],
   ];
   for (const [changes, scope] of cases) assert.equal(top(...changes).scope, scope);
 });
@@ -148,7 +147,8 @@ test("every overlay or screen scope in Commands.js is one the stack returns", ()
     ...views.map((v) => [set("view", v)]),
     ...browse.map((b) => [set("view", "browse"), set("browseView.scope", b)]),
     [set("view", "browse"), set("browseView.scope", "extensions"), set("extensionsView.details", true)],
-    [set("libraryScreen", "categories")], [set("libraryArmed", "remove")], [set("libraryPickIds", [1])], [set("libraryOptions", true)],
+    // Library.scope over a state for each of its branches.
+    ...[{ screen: "categories" }, { armed: "remove" }, { pickIds: [1] }, { options: true }].map((l) => [set("libraryView.scope", L.scope({ ...L.initial(), ...l }))]),
     [set("view", "updates"), set("updatesView.filterOpen", true)], [set("view", "check"), set("checkView.merging", true)],
     ...restores.map((r) => [restore(r)]), ...migrates.map((m) => [migrate(m)]),
   ];

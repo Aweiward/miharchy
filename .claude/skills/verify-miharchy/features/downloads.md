@@ -10,7 +10,7 @@ Setup: `seed.sh --library 3`; `createCategory`, `updateMangasCategories` for two
 
 ```js
 [
-  [7000, function() { key("Tab"); key("Tab"); log("tab", root.shown.name) }],
+  [7000, function() { key("Tab"); key("Tab"); log("tab", libraryView.shown.name) }],
   [500, function() { key("d") }],
   [1500, function() { log("menu", [nextChapters.set, nextChapters.cursor]); grab("menu") }],
   [300, function() { key("j"); key("Enter") }],

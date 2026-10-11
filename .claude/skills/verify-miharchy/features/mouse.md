@@ -18,7 +18,7 @@ Click a cover, double click it, then a chapter, then the reader's zones in both 
 ```js
 [
   [6000, function() { click(find(libraryView, function(i) { return i.modelData && i.index === 2 && i.current !== undefined })) }],
-  [300, function() { log("cover click", root.libraryCursor); dblclick(find(libraryView, function(i) { return i.modelData && i.index === 2 && i.current !== undefined })) }],
+  [300, function() { log("cover click", libraryView.cursor); dblclick(find(libraryView, function(i) { return i.modelData && i.index === 2 && i.current !== undefined })) }],
   [6000, function() { log("detail", mangaDetail.open); dblclick(find(mangaDetail, function(i) { return i.modelData && i.index === 0 && i.inRange !== undefined })) }],
   [8000, function() { log("reader", [reader.open, reader.reader.mode, reader.reader.page]); click(reader, reader.width * 0.1, reader.height / 2) }],
   [1000, function() { log("left third", reader.reader.page); key("m") }],

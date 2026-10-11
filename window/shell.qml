@@ -43,7 +43,7 @@ ShellRoot {
   // A mark read's question to the trackers (Chapters.trackAsk), or null.
   property var trackAsk: null
   // The top overlay's scope, editing prefix and hint (Overlays.js).
-  readonly property var overlay: Overlays.top({ trackAsk: trackAsk, readingCard: readingCard, nextChapters: nextChapters, restoreView: restoreView, syncView: syncView, downloadsView: downloadsView, reader: reader, migrateView: migrateView, trackPanel: trackPanel, mangaDetail: mangaDetail, view: view, browseView: browseView, extensionsView: extensionsView, libraryScreen: libraryView.screen, checkView: checkView, libraryArmed: libraryView.armed, libraryPickIds: libraryView.pickIds, libraryOptions: libraryView.optionsOpen, updatesView: updatesView, settingsEditing: settingsEditing, libraryView: libraryView, historyView: historyView, settingsView: settingsView, setupView: setupView, categoriesView: categoriesView, libraryHint: libraryView.hint })
+  readonly property var overlay: Overlays.top({ trackAsk: trackAsk, readingCard: readingCard, nextChapters: nextChapters, restoreView: restoreView, syncView: syncView, downloadsView: downloadsView, reader: reader, migrateView: migrateView, trackPanel: trackPanel, mangaDetail: mangaDetail, view: view, browseView: browseView, extensionsView: extensionsView, checkView: checkView, updatesView: updatesView, settingsEditing: settingsEditing, libraryView: libraryView, historyView: historyView, settingsView: settingsView, setupView: setupView, categoriesView: categoriesView })
   readonly property bool downloadedOnly: settingsState.values.downloadedOnly === true
   property var settingsState: Settings.initial()
   property int settingsCursor: 0

@@ -71,26 +71,13 @@ Item {
   // How far j and k move the cursor.
   readonly property int columns: listed ? 1 : Math.max(1, Math.floor(grid.width / grid.cellWidth))
 
-  readonly property string hint: screen === "categories" ? categoriesHint
-    : picking ? "j k move   enter in or out   esc close   "
-    : optionsOpen ? "j k move   enter change   esc close   "
-    : note ? note + "   "
-    : armed === "remove" ? "x again to remove " + Library.count(targets.length) + " from the library   d also delete the downloads   esc keep   "
-    : armed === "delete" ? "X again to delete the downloads of " + Library.count(targets.length) + ", any other key keeps them   "
-    : (error ? error + "   " : "") + (selected.length
-      ? selected.length + " selected   v select   A all   I invert   R read   U unread   d download   X delete downloads   C categories   x remove   esc clear   "
-      : "enter open   space read   v select   x remove   " + (query ? "esc clear search   " : "/ search   ") + "F sort & filter   " + (prefs.libraryDisplay === "list" ? "L grid   " : "L list   ") + (switcher.length > 1 ? "tab category   " : "") + "u update   c categories   D queue   s sync   ")
+  readonly property string scope: Library.scope(library)
+  readonly property string hint: Library.hint(library, { categoriesHint: categoriesHint, targets: targets.length, prefs: prefs, tabs: switcher.length > 1 })
 
   signal key(var event)
   signal editEnded()
 
-  // The cursor stays on its manga when rows move or leave, or goes to the
-  // nearest one when its own leaves; another category starts at the top.
-  onShownChanged: assign({
-    cursor: library.was && library.was.id === shown.id ? Model.follow(library.was.manga, shown.manga, library.cursor) : 0,
-    was: shown,
-    selected: Updates.keep(library.selected, shown.manga)
-  })
+  onShownChanged: reduce({ type: "shown", shown: shown })
   // Once the rows changed too: the cursor follows its manga in the same
   // turn as the rows change, in either order.
   onCursorChanged: Qt.callLater(show)
@@ -108,7 +95,11 @@ Item {
     items: view.manga
   }
 
-  // ponytail: a plain write until Library.reduce takes these events (#314, #315).
+  function reduce(event) {
+    library = Library.reduce(library, event)
+  }
+
+  // ponytail: a plain write until Library.reduce takes these events (#315).
   function assign(changes) {
     library = Object.assign({}, library, changes)
   }
@@ -131,7 +122,7 @@ Item {
   // targets, so it disarms x and X as a key does.
   function point(index, twice) {
     if (editing) return
-    assign({ armed: "", cursor: index })
+    reduce({ type: "point", index: index })
     if (twice) key(Commands.enter())
   }
 
@@ -155,17 +146,17 @@ Item {
       case "library.up":
       case "library.down":
         var step = ({ "library.left": -1, "library.right": 1, "library.up": -columns, "library.down": columns })[id]
-        assign({ cursor: Math.max(0, Math.min(manga.length - 1, cursor + step)) })
+        reduce({ type: "move", by: step, count: manga.length })
         break
       case "library.nextCategory":
       case "library.previousCategory":
-        assign({ category: switcher[Commands.moveCursor(switcherIndex, id === "library.nextCategory" ? 1 : -1, switcher.length)].id })
+        reduce({ type: "switch", by: id === "library.nextCategory" ? 1 : -1, switcher: switcher })
         break
       case "library.categories":
-        assign({ screen: "categories" })
+        reduce({ type: "screen", screen: "categories" })
         break
       case "categories.back":
-        assign({ screen: "grid" })
+        reduce({ type: "screen", screen: "grid" })
         break
       case "library.search":
         openSearch()
@@ -174,24 +165,24 @@ Item {
         closeSearch()
         break
       case "library.cancel":
-        assign({ query: "" })
+        reduce({ type: "query", query: "" })
         closeSearch()
         break
       // Esc clears the selection, then the search; with neither, shell.qml quits.
       case "library.clearSearch":
         if (selected.length) assign({ selected: [] })
-        else if (query) assign({ query: "" })
+        else if (query) reduce({ type: "query", query: "" })
         else return false
         break
       case "library.options":
-        assign({ options: true })
+        reduce({ type: "options", open: true })
         break
       case "library.optionsClose":
-        assign({ options: false })
+        reduce({ type: "options", open: false })
         break
       case "library.optionsUp":
       case "library.optionsDown":
-        assign({ optionsCursor: Commands.moveCursor(optionsCursor, id === "library.optionsUp" ? -1 : 1, optionRows.length) })
+        reduce({ type: "optionsMove", by: id === "library.optionsUp" ? -1 : 1, count: optionRows.length })
         break
       case "library.display":
         store.set([Library.toggleDisplay(prefs)])
@@ -250,7 +241,7 @@ Item {
 
         MouseArea {
           anchors.fill: parent
-          onClicked: view.assign({ armed: "", category: view.switcher[tabName.index].id })
+          onClicked: view.reduce({ type: "tab", id: view.switcher[tabName.index].id })
         }
       }
     }
@@ -274,7 +265,7 @@ Item {
       selectionColor: view.theme.selected
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSmall
-      onTextChanged: if (view.editing) view.assign({ query: text })
+      onTextChanged: if (view.editing) view.reduce({ type: "query", query: text })
       Keys.onPressed: function(event) { view.key(event) }
     }
 
@@ -573,9 +564,9 @@ Item {
 
             MouseArea {
               anchors.fill: parent
-              onClicked: view.assign({ optionsCursor: option.index })
+              onClicked: view.reduce({ type: "optionsPoint", index: option.index })
               onDoubleClicked: {
-                view.assign({ optionsCursor: option.index })
+                view.reduce({ type: "optionsPoint", index: option.index })
                 view.key(Commands.enter())
               }
             }
