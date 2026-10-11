@@ -126,15 +126,59 @@ A Mihon restore only adds: it cannot remove a manga from the library, take it ou
 
 ## Uninstall
 
-```sh
-omarchy plugin remove miharchy
-systemctl --user disable --now miharchy-server
-rm ~/.config/systemd/user/miharchy-server.service ~/.local/share/applications/miharchy.desktop
-rm -rf ~/.config/miharchy ~/.local/share/miharchy
-docker rm -f miharchy-flaresolverr   # if you added FlareSolverr
-```
+Remove Miharchy in this order. Each command names one file or one thing; none deletes a folder of your data.
 
-`~/.local/share/miharchy` holds the server's library and downloads, the sync helper and the sync baselines. Your sync folder stays.
+1. Stop the server and disable it:
+
+   ```sh
+   systemctl --user disable --now miharchy-server
+   ```
+
+2. Remove the server unit and the app launcher entry:
+
+   ```sh
+   rm ~/.config/systemd/user/miharchy-server.service ~/.local/share/applications/miharchy.desktop
+   systemctl --user daemon-reload
+   ```
+
+3. Open `~/.config/hypr/bindings.lua` and delete the two lines Setup added, the peek key and the next key. In them, `/home/you` is your home folder:
+
+   ```lua
+   o.bind("SUPER + M", "Miharchy peek", "'/home/you/.config/omarchy/plugins/miharchy/window/miharchy' peek")
+   o.bind("SUPER + CTRL + M", "Miharchy next manga", "'/home/you/.config/omarchy/plugins/miharchy/window/miharchy' peek-next")
+   ```
+
+   If you moved a key, or added the line yourself with another key, the line still holds `miharchy' peek` or `miharchy' peek-next`. Delete it too.
+
+4. If you added FlareSolverr, remove its container and then the image it ran:
+
+   ```sh
+   image=$(docker inspect -f '{{.Image}}' miharchy-flaresolverr)
+   docker rm -f miharchy-flaresolverr
+   docker image rm "$image"
+   ```
+
+5. Remove the plugin:
+
+   ```sh
+   omarchy plugin remove miharchy
+   ```
+
+These folders stay. Delete them yourself when you no longer want what they hold:
+
+- `~/.config/miharchy`: the server credentials (`server.json`).
+- `~/.local/share/miharchy`: the server's library, downloads, backups and settings (`suwayomi/server.conf`, which also holds the password), the sync helper and the sync baselines.
+- Your sync folder: the phone backups and the backups Miharchy wrote for the phone.
+- `~/Pictures/Miharchy`, or your "Save pages to" folder: the pages and reading cards you saved.
+- `~/.gradle`: Gradle and the libraries the sync helper build downloaded. Other projects may use it too.
+
+Files under `$XDG_RUNTIME_DIR/miharchy` go at logout.
+
+The packages Setup installed stay: `jdk-openjdk`, `qt6-websockets`, `suwayomi-server-bin`, and `syncthing` with its user service. Other programs may need them. Syncthing keeps the phone and the folder you paired. If you use Syncthing for nothing else, you can stop its service:
+
+```sh
+systemctl --user disable --now syncthing
+```
 
 ## Develop
 
