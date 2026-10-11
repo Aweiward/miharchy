@@ -43,6 +43,20 @@ function copy(l, changes) {
 //   "options"      { open }: the sort, filter and display panel
 //   "optionsMove"  { by, count }, wrapping
 //   "optionsPoint" { index }
+//   "arm"          { kind, ready }: x ("remove") or X ("delete") arms once
+//                  when ready (targets and a server); the same key again
+//                  disarms, and the caller acts (acts())
+//   "key"          { id }: any key, even one no command takes, clears the
+//                  note; all but x and X also clear the arm and the error
+//   "select"       { id }: v on a manga; "selectAll" and "invert" { manga }
+//   "deselect"     an action ended the selection, as in Mihon
+//   "escape"       Esc: the selection goes first, then the search
+//                  (escapes() says whether either is there)
+//   "note"         { text }; "error" { message }
+//   "pickOpen"     { ids, hasCategories }: the change categories panel on the
+//                  targets, or a note when no category exists
+//   "pickMove"     { by, count }; "pickPoint" { index }
+//   "pickClose"    the panel closes and the selection ends
 function reduce(l, event) {
   switch (event.type) {
     case "move":
@@ -71,8 +85,47 @@ function reduce(l, event) {
       return copy(l, { optionsCursor: Commands.moveCursor(l.optionsCursor, event.by, event.count) })
     case "optionsPoint":
       return copy(l, { optionsCursor: event.index })
+    case "arm":
+      if (l.armed === event.kind) return copy(l, { armed: "" })
+      return event.ready ? copy(l, { armed: event.kind }) : l
+    case "key":
+      if (event.id === "library.remove" || event.id === "library.deleteDownloads") return copy(l, { note: "" })
+      return copy(l, { armed: "", error: "", note: "" })
+    case "select":
+      return copy(l, { selected: Updates.toggle(l.selected, event.id) })
+    case "selectAll":
+      return copy(l, { selected: event.manga.map(function(m) { return m.id }) })
+    case "invert":
+      return copy(l, { selected: Updates.invert(l.selected, event.manga) })
+    case "deselect":
+      return copy(l, { selected: [] })
+    case "escape":
+      return l.selected.length ? copy(l, { selected: [] }) : copy(l, { query: "" })
+    case "note":
+      return copy(l, { note: event.text })
+    case "error":
+      return copy(l, { error: event.message })
+    case "pickOpen":
+      if (!event.hasCategories) return copy(l, { note: "No categories yet. Press c to make one." })
+      return event.ids.length ? copy(l, { pickIds: event.ids, pickCursor: 0 }) : l
+    case "pickMove":
+      return copy(l, { pickCursor: Math.max(0, Math.min(event.count - 1, l.pickCursor + event.by)) })
+    case "pickPoint":
+      return copy(l, { pickCursor: event.index })
+    case "pickClose":
+      return copy(l, { pickIds: [], selected: [] })
   }
   return l
+}
+
+// Whether a second x or X acts: the arm is already that kind.
+function acts(l, kind) {
+  return l.armed === kind
+}
+
+// Whether Esc has a selection or a search to clear; without, it quits.
+function escapes(l) {
+  return l.selected.length > 0 || l.query !== ""
 }
 
 // The command scope (Commands.js) while the Library view shows.
@@ -342,6 +395,8 @@ if (typeof module !== "undefined") {
     PREFS: PREFS,
     initial: initial,
     reduce: reduce,
+    acts: acts,
+    escapes: escapes,
     scope: scope,
     hint: hint,
     apply: apply,
