@@ -15,22 +15,22 @@ function own(text) {
   return function(s, edit) { return edit || text(s) + SUFFIX }
 }
 
-// Top first.
+// Top first, in the order shell.qml draws them.
 var ROWS = [
   { open: function(s) { return !!s.trackAsk },
     scope: function() { return "track-ask" },
     hint: function() { return "y update   n keep" } },
   { open: function(s) { return s.readingCard.open },
     scope: function() { return "reading-card" } },
-  { open: function(s) { return s.nextChapters.open },
-    scope: function() { return "next-chapters" },
-    hint: own(function(s) { return s.nextChapters.hint }) },
   { open: function(s) { return s.restoreView.open },
     scope: function(s) { return "restore-" + s.restoreView.restore.step },
     hint: function() { return "" } },
   { open: function(s) { return s.syncView.open },
     scope: function(s) { return s.syncView.sync.state === "held" && !s.syncView.healthMode ? "sync-held" : "sync" },
     hint: function() { return "" } },
+  { open: function(s) { return s.nextChapters.open },
+    scope: function() { return "next-chapters" },
+    hint: own(function(s) { return s.nextChapters.hint }) },
   { open: function(s) { return s.downloadsView.open },
     scope: function() { return "downloads" } },
   { open: function(s) { return s.reader.open },

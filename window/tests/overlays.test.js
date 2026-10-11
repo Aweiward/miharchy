@@ -45,8 +45,9 @@ test("the top open overlay gives the scope, in stack order", () => {
   const cases = [
     [[trackAsk, card], "track-ask"],
     [[card, next], "reading-card"],
-    [[next, restore("confirm")], "next-chapters"],
-    [[restore("running"), sync], "restore-running"],
+    [[next, downloads], "next-chapters"],
+    [[restore("running"), sync, next], "restore-running"],
+    [[sync, next], "sync"],
     [[sync, downloads], "sync"],
     [[held], "sync-held"],
     [[held, set("syncView.healthMode", true)], "sync"],
@@ -108,6 +109,8 @@ test("the hint follows the top overlay, its editing field, or the view", () => {
     [[manga, set("mangaDetail.editing", true), set("mangaDetail.writing", true)], "enter save   shift+enter new line   esc cancel"],
     [[next, set("nextChapters.editing", true)], "enter save   esc cancel"],
     [[set("view", "setup"), set("setupView.confirming", true)], "y run   n cancel"],
+    [[next, restore("confirm")], ""],
+    [[next, sync], ""],
     [[next], "NC: commands   q quit"],
     [[migrate("search"), track], "MG: commands   q quit"],
     [[track, manga], "TP: commands   q quit"],
@@ -129,7 +132,6 @@ test("the hint follows the top overlay, its editing field, or the view", () => {
 
 test("the hint names the field that takes the keys", () => {
   assert.equal(top(next, set("nextChapters.editing", true), set("libraryView.editing", true)).hint, "enter save   esc cancel");
-  assert.equal(top(next, restore("confirm")).hint, "NC: commands   q quit");
 });
 
 // A command for a scope nothing returns never runs. Browse screens, restore
