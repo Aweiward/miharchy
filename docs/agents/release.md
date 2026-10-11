@@ -17,3 +17,5 @@ A release is a git tag `vX.Y.Z`, a `stable` commit and a GitHub release on `Awei
 ## The first stable release (once)
 
 The first run of `tools/release-stable` makes `stable` from `main`'s tip, so every clone of `main` fast-forwards to it. Right after it, with no merge to `main` in between, make `stable` the default branch: `gh repo edit Aweiward/miharchy --default-branch stable`. A merge in that window strands the users who update in it: their clone is past `stable`'s first parent and cannot fast-forward.
+
+From then on GitHub opens a PR against `stable` by default, so every PR names its base: `gh pr create --base main`.
