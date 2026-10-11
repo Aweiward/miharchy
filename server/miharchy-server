@@ -8,23 +8,26 @@ creds=$config_dir/server.json
 conf=$root_dir/server.conf
 unit=$(dirname "$(readlink -f "$0")")/miharchy-server.service
 
-# Suwayomi rewrites server.conf as mode 644 with the password inside; the 700 folder keeps it private.
+# Both files hold the password: born 600 and repaired on each run. The 700 folders
+# keep them private too. No secret goes on a command line, where any user reads it.
 install -d -m 700 "$config_dir" "$root_dir"
 
 if [[ ! -f $creds ]]; then
-  (umask 077; jq -n --arg password "$(openssl rand -hex 24)" \
-    '{url: "http://127.0.0.1:4590", username: "miharchy", password: $password}' > "$creds")
+  (umask 077; openssl rand -hex 24 | jq -R \
+    '{url: "http://127.0.0.1:4590", username: "miharchy", password: .}' > "$creds")
 fi
+chmod 600 "$creds"
 
 port=$(jq -r '.url | capture(":(?<p>[0-9]+)$").p' "$creds")
 username=$(jq -r .username "$creds")
 password=$(jq -r .password "$creds")
 
-touch "$conf"
+(umask 077; touch "$conf")
+chmod 600 "$conf"
 before=$(sha256sum < "$conf")
 while IFS='=' read -r key value; do
   line="server.$key = $value"
-  grep -qFx -e "$line" "$conf" || grep -qF -e "$line #" "$conf" && continue
+  printf '%s\n' "$line" | grep -qFx -f - "$conf" || printf '%s #\n' "$line" | grep -qF -f - "$conf" && continue
   sed -i "/^server\.$key[ =]/d" "$conf"
   echo "$line" >> "$conf"
 done <<CONF
