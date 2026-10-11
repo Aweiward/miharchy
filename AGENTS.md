@@ -46,6 +46,7 @@ Read the doc for the area before you change it.
 - **Sync, backups, restore** (`sync/`, `Sync.js`, `Backup.js`, `Restore.js`): `docs/agents/sync.md`.
 - **Suwayomi-Server, credentials, server images** (`server/`, `ServerImage.qml`): `docs/agents/server.md`.
 - **Setup steps** (`Setup.js`, helper build, launcher entry): `docs/agents/setup.md`.
+- **Release** (version bump, tag, notes, site): `docs/agents/release.md`.
 
 ## Current work
 

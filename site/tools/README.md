@@ -77,12 +77,10 @@ Run every command from the repo root of a dev checkout.
  6 render previews + banner ◄── 5 webp (magick) ◄── 4 drive window + bar mark
 ```
 
-1. Choose a run dir and a port. Make the theme home (Tokyo Night) that the window and the mark read through `HOME`.
+1. Source `env.sh` once per shell. It keeps any value you already exported. Make the theme home (Tokyo Night) that the window and the mark read through `HOME`.
 
    ```sh
-   export MIHARCHY_VERIFY_DIR=$TMPDIR/miharchy-verify/showcase MIHARCHY_VERIFY_PORT=4648
-   export FAKETIME_LIB=...   # see libfaketime
-   T=site/tools S=.claude/skills/verify-miharchy/scripts
+   . site/tools/env.sh   # run dir, port 4648, the local libfaketime build if present, $T and $S
    mkdir -p "$MIHARCHY_VERIFY_DIR/home/.local/state/omarchy/current"
    cp -r "${OMARCHY_PATH:-$HOME/.local/share/omarchy}/themes/tokyo-night" "$MIHARCHY_VERIFY_DIR/home/.local/state/omarchy/current/theme"
    ```

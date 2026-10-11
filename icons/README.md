@@ -43,7 +43,7 @@ The full mark keeps the measured proportions. Its gap lets it work in one color.
 ## Change the mark
 
 1. Edit `FULL` or `BAR` in `mark.py`, from a dev checkout. Never run it inside an installed clone.
-2. Run `python3 icons/mark.py`. It checks that each quadrant is symmetric about its diagonal, writes the six SVGs, and prints the burst and cross paths of both marks.
-3. Paste the printed paths into the files that embed them: `plugin/MiharchyIcon.qml` (bar), `window/ReadingCard.qml` and the hero in `site/index.html` (full).
+2. Run `python3 -B icons/mark.py` (`-B` writes no `__pycache__`). It checks that each quadrant is symmetric about its diagonal, writes the six SVGs, and prints the burst and cross paths of both marks.
+3. Paste the printed paths into the files that embed them: `plugin/MiharchyIcon.qml` (bar), `window/ReadingCard.qml` and the hero in `site/index.html` (full). `npm test` in `window/` fails until all three match the SVGs.
 4. Make the PNGs: for each file in `png/`, `rsvg-convert -w <size> -h <size> <name>.svg -o png/<name>-<size>.png`.
 5. Copy `miharchy.svg` to `site/miharchy.svg` (`site/tools/images.sh` does it too), and render `site/banner.png` again with `site/tools/render/render.js`.
