@@ -183,3 +183,7 @@ systemctl --user disable --now syncthing
 ## Develop
 
 Run the window from a checkout with `window/miharchy`. Set `MIHARCHY_SERVER_JSON` to use another credentials file. Tests: `cd window && npm test`, `cd sync && ./gradlew test`.
+
+## License
+
+Miharchy is under the MIT License (`LICENSE`). The backup schema classes in `sync/src/main/kotlin/eu/kanade/tachiyomi/data/backup/models/` are copied from [Mihon](https://github.com/mihonapp/mihon) under the Apache License 2.0 (`LICENSE-Apache-2.0.txt` in that folder); each file names its source commit. Miharchy installs Suwayomi-Server and the other packages listed under Setup; each keeps its own license.
