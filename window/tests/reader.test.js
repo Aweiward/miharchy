@@ -563,15 +563,18 @@ test("a saved page goes to a folder per manga under ~/Pictures/Miharchy, named a
 
 test("save and copy pass the paths as arguments, never inside the script", () => {
   const target = { dir: "/p/M $(rm -rf ~)", name: "a\"b.png" };
-  const save = R.saveCommand("/run/img", target);
+  // Capped.command puts six words before the command it runs.
+  const inner = (argv) => argv.slice(6);
+  const save = inner(R.saveCommand("/run/img", target));
   assert.deepEqual(save.slice(3), ["sh", target.dir, "/run/img", target.name]);
   assert.ok(!save[2].includes("rm -rf"));
-  assert.deepEqual(R.copyCommand("/run/img", "image/webp; charset=binary").slice(3), ["sh", "image/webp", "/run/img"]);
-  assert.match(R.copyCommand("/run/img", "")[2], /^\{ wl-copy --type "\$1" < "\$2"; \} 2>&1 && echo ok$/);
+  assert.deepEqual(inner(R.copyCommand("/run/img", "image/webp; charset=binary")).slice(3), ["sh", "image/webp", "/run/img"]);
+  assert.match(inner(R.copyCommand("/run/img", ""))[2], /^\{ wl-copy --type "\$1" < "\$2"; \} 2>&1 && echo ok$/);
   assert.equal(R.pageResult("ok\n", "Page copied", "Copying failed"), "Page copied");
   assert.equal(R.pageResult("cp: No space left\n", "Saved", "Saving failed"), "Saving failed: cp: No space left");
   assert.equal(R.pageResult("", "Saved", "Saving failed"), "Saving failed: no output");
-  assert.equal(R.copyCommand("/run/img", "text/html")[4], "image/jpeg", "a type that is no image reads as JPEG");
+  assert.equal(R.pageResult("x".repeat(5000) + "\nok\n", "Saved", "Saving failed"), "Saving failed: too much output");
+  assert.equal(inner(R.copyCommand("/run/img", "text/html"))[4], "image/jpeg", "a type that is no image reads as JPEG");
 });
 
 test("download ahead takes the next unread chapters after the one open, in reading order", () => {

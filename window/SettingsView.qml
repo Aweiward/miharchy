@@ -173,7 +173,7 @@ Item {
         view.storage = Storage.sizes(view.storageDirs, text)
         if (!view.clearing) return
         view.clearing = false
-        view.storageNote = "Freed " + Storage.format(Math.max(0, (view.storageBefore ? view.storageBefore.cache : 0) - view.storage.cache))
+        if (view.storage) view.storageNote = "Freed " + Storage.format(Math.max(0, (view.storageBefore ? view.storageBefore.cache : 0) - view.storage.cache))
       }
     }
   }

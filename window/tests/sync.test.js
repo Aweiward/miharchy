@@ -40,7 +40,7 @@ async function run(dev, installed, apply) {
   if (dev !== null) stub(file, dev);
   if (installed) stub(path.join(dir, "home", S.HELPER_DIR, "bin", "miharchy-sync"), installed);
   const argv = S.command(file, apply);
-  const { stdout } = await execFile(argv[0], argv.slice(1), { env: { ...process.env, HOME: path.join(dir, "home") } });
+  const { stdout } = await execFile(argv[0], argv.slice(1), { env: { ...process.env, HOME: path.join(dir, "home") }, maxBuffer: 16 << 20 });
   return S.reduce({ state: "running" }, { type: "finish", text: stdout });
 }
 
@@ -90,6 +90,11 @@ test("the real command passes --json and the helper's output through", async () 
   assert.equal(s.export, "miharchy-2026-10-04_07-06-05.tachibk");
   const failed = await run("echo 'No sync folder is set. Choose one in Setup or Settings.' >&2\nexit 1");
   assert.deepEqual(failed, { state: "failed", message: "No sync folder is set. Choose one in Setup or Settings." });
+});
+
+test("a helper that prints more than the cap fails the sync, however its output ends", async () => {
+  const s = await run("yes x | head -c 9000000\necho '" + JSON.stringify(summary) + "'");
+  assert.deepEqual(s, { state: "failed", message: "The job printed more than 8388608 bytes." });
 });
 
 test("the helper Setup installed runs before a checkout's build", async () => {

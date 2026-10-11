@@ -270,7 +270,7 @@ ShellRoot {
 
     stdout: StdioCollector {
       onStreamFinished: {
-        var job = Setup.parseJob(text)
+        var job = Setup.parseJob(text, Setup.LIMITS.syncFolder[0])
         if (job.code !== 0) {
           root.settingsError = job.output
           return

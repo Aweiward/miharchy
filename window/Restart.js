@@ -1,4 +1,5 @@
 .pragma library
+.import "Capped.js" as Capped
 
 // The window runs as its own process, so after `omarchy plugin update` it
 // keeps running the code it loaded. These decide when that code changed on
@@ -9,8 +10,11 @@
 // window folder; the check only reads.
 var FINGERPRINT = 'cat "$1"/*.qml "$1"/*.js | sha256sum'
 
+// sha256sum prints one 67-byte line.
+var CAP = 256
+
 function fingerprintCommand(dir) {
-  return ["sh", "-c", FINGERPRINT, "sh", dir]
+  return Capped.command(["sh", "-c", FINGERPRINT, "sh", dir], CAP, 30)
 }
 
 // start: the fingerprint of the code this process loaded, from the first
@@ -19,7 +23,7 @@ var INITIAL = { start: "", changed: false }
 
 function check(state, output) {
   var m = /^[0-9a-f]{64}\b/.exec(String(output || ""))
-  if (!m) return state
+  if (!m || Capped.over(output, CAP)) return state
   if (!state.start) return { start: m[0], changed: false }
   return { start: state.start, changed: m[0] !== state.start }
 }

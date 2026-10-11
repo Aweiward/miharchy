@@ -1,5 +1,6 @@
 .pragma library
 .import "Setup.js" as Setup
+.import "Capped.js" as Capped
 
 // Sync now: the job that runs the sync helper and what its result says.
 // Pure, so tests/sync.test.js pins it; SyncView.qml and the mark's popup
@@ -16,8 +17,13 @@ var NOT_BUILT = 127
 // a lock, so the window and the popup start it the same way. apply runs a
 // sync the helper held.
 function command(devHelper, apply) {
-  return helperCommand(devHelper, ["sync", "--json"].concat(apply ? ["--apply"] : []))
+  return Capped.command(helperCommand(devHelper, ["sync", "--json"].concat(apply ? ["--apply"] : [])), SYNC_CAP, 1800)
 }
+
+// The sync's one JSON line lists every change: a first sync of a large
+// library makes thousands. Health lists manga, not changes.
+var SYNC_CAP = 8388608
+var HEALTH_CAP = 1048576
 
 // The desktop baseline before the last sync, under $HOME; restoring it
 // undoes that sync.
@@ -92,7 +98,7 @@ function reduce(s, event) {
     case "apply":
       return s.state === "held" ? { state: "running", apply: true } : s
     case "finish":
-      return result(Setup.parseJob(event.text))
+      return result(Setup.parseJob(event.text, SYNC_CAP))
   }
   return s
 }
@@ -142,11 +148,11 @@ function report(s) {
 // Sync health (`miharchy-sync health`): { state: "idle" | "ready" | "failed" },
 // with health, the helper's object, when ready, and message when failed.
 function healthCommand(devHelper) {
-  return helperCommand(devHelper, ["health"])
+  return Capped.command(helperCommand(devHelper, ["health"]), HEALTH_CAP, 120)
 }
 
 function parseHealth(text) {
-  var r = reply(Setup.parseJob(text))
+  var r = reply(Setup.parseJob(text, HEALTH_CAP))
   return r.value ? { state: "ready", health: r.value } : { state: "failed", message: r.message }
 }
 

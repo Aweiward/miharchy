@@ -1,6 +1,7 @@
 .pragma library
 .import "Setup.js" as Setup
 .import "Sync.js" as Sync
+.import "Capped.js" as Capped
 
 // Create a backup: the job that runs the sync helper's backup and what its
 // result says. Pure, so tests/backup.test.js pins it; SettingsView.qml runs
@@ -12,8 +13,11 @@ function folder(backupPath, env) {
   return backupPath || (env.MIHARCHY_SERVER_ROOT || env.HOME + "/.local/share/miharchy/suwayomi") + "/backups"
 }
 
+// The helper prints one short JSON line, after any JVM warnings.
+var CAP = 65536
+
 function command(devHelper, dir) {
-  return Sync.helperCommand(devHelper, ["backup", dir])
+  return Capped.command(Sync.helperCommand(devHelper, ["backup", dir]), CAP, 600)
 }
 
 // backup.state: "idle" | "running" | "done" (file) | "failed" (message)
@@ -27,7 +31,7 @@ function reduce(b, event) {
     case "start":
       return { state: "running" }
     case "finish":
-      var job = Setup.parseJob(event.text)
+      var job = Setup.parseJob(event.text, CAP)
       if (job.code === Sync.NOT_BUILT) return { state: "failed", message: "The sync helper is not built. Build it in Setup." }
       var lines = job.output.split("\n")
       var result = null

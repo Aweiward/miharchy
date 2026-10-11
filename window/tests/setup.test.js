@@ -50,6 +50,12 @@ test("a job's output ends with its exit status, even when the script exits early
   assert.deepEqual(S.parseJob(run(S.runCommand("server", { serverScript: "/bin/false" }))), { code: 1, output: "" });
 });
 
+test("a job its cap or deadline cut short fails", () => {
+  assert.equal(S.parseJob("Building\n42 tasks").code, -1, "no status line: a digit-led line is no status");
+  const s = S.reduce(S.initial(), { type: "finish", id: "launcher", text: "x".repeat(20000) + "\n0\n" });
+  assert.deepEqual(s.results.launcher, { code: -1, output: "The job printed more than 16384 bytes." });
+});
+
 test("java versions parse, old and missing ones are not enough", () => {
   const java = (line) => S.parseProbe("java " + line).java;
   assert.equal(java("openjdk version \"21.0.2\" 2024-01-16"), 21);

@@ -3,6 +3,7 @@
 .import "../window/Session.js" as Session
 .import "../window/Updates.js" as Updates
 .import "../window/UpNext.js" as UpNext
+.import "../window/Capped.js" as Capped
 
 // The mark and its popup: the unread update count, a dot when the updates
 // cannot be reached, and the newest updates. Pure, so tests/mark.test.js pins
@@ -107,13 +108,21 @@ var PHONE_CHECK_SCRIPT = "base=\"$HOME/.local/share/miharchy/sync/phone-baseline
   + "exit 0"
 
 function phoneCheckCommand(folder) {
-  return ["sh", "-c", PHONE_CHECK_SCRIPT, "sh", folder]
+  return Capped.command(["sh", "-c", PHONE_CHECK_SCRIPT, "sh", folder], FOUND_CAP, 30)
 }
 
 // The newest phone backup in the folder ("<mtime> <path>"), merged or not:
 // when the answer changes, the mark asks the helper for sync health again.
 function newestPhoneCommand(folder) {
-  return ["sh", "-c", "find \"$1\" -maxdepth 1 -type f -name '*.tachibk' ! -name 'miharchy-*' -printf '%T@ %p\\n' 2>/dev/null | sort -n | tail -n 1", "sh", folder]
+  return Capped.command(["sh", "-c", "find \"$1\" -maxdepth 1 -type f -name '*.tachibk' ! -name 'miharchy-*' -printf '%T@ %p\\n' 2>/dev/null | sort -n | tail -n 1", "sh", folder], FOUND_CAP, 30)
+}
+
+// Either command's one line: an mtime and a path of at most PATH_MAX.
+var FOUND_CAP = 8192
+
+// That line, or "" when there is none or the output passed the cap.
+function found(text) {
+  return Capped.over(text, FOUND_CAP) ? "" : String(text).trim()
 }
 
 // The desktop notification for a sync the mark started on a new phone
@@ -232,6 +241,7 @@ if (typeof module !== "undefined") {
     notifyCommand: notifyCommand,
     phoneCheckCommand: phoneCheckCommand,
     newestPhoneCommand: newestPhoneCommand,
+    found: found,
     syncNotification: syncNotification,
     label: label,
     down: down,

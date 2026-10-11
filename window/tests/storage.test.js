@@ -21,7 +21,7 @@ test("the local folder is the setting, or the server root's local", () => {
 test("a scratch server's root and tmpdir replace the real ones", () => {
   const d = S.dirs({ HOME: "/home/u", MIHARCHY_SERVER_ROOT: "/s/server", MIHARCHY_SERVER_TMPDIR: "/s/server/tmp" }, "");
   assert.deepEqual(d, { downloads: "/s/server/downloads", cache: ["/s/server/tmp/Tachidesk/manga-cache", "/s/server/tmp/Tachidesk/thumbnails"] });
-  assert.deepEqual(S.command(d), ["du", "-s", "-B1", "--", "/s/server/downloads", "/s/server/tmp/Tachidesk/manga-cache", "/s/server/tmp/Tachidesk/thumbnails"]);
+  assert.deepEqual(S.command(d).slice(6), ["du", "-s", "-B1", "--", "/s/server/downloads", "/s/server/tmp/Tachidesk/manga-cache", "/s/server/tmp/Tachidesk/thumbnails"]);
 });
 
 test("du's lines add up to downloads and cache, and a folder du skipped holds nothing", () => {
