@@ -65,7 +65,7 @@ test("no step but packages installs anything, and none runs sudo itself", () => 
 test("FlareSolverr runs as a restarting container bound to localhost", () => {
   const script = S.runCommand("flaresolverr", {}).join(" ");
   assert.match(script, /docker start miharchy-flaresolverr/);
-  assert.match(script, /docker run -d --name miharchy-flaresolverr --restart unless-stopped -p 127\.0\.0\.1:8191:8191 ghcr\.io\/flaresolverr\/flaresolverr:latest/);
+  assert.match(script, /docker run -d --name miharchy-flaresolverr --restart unless-stopped -p 127\.0\.0\.1:8191:8191 ghcr\.io\/flaresolverr\/flaresolverr@sha256:[0-9a-f]{64} /);
 });
 
 test("nothing is decided before the first check", () => {

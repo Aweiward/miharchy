@@ -9,6 +9,9 @@
 
 var FLARE_URL = "http://127.0.0.1:8191"
 var CONTAINER = "miharchy-flaresolverr"
+// FlareSolverr v3.5.2, by its multi-arch index digest. Bump it as
+// docs/agents/sources.md says.
+var FLARE_IMAGE = "ghcr.io/flaresolverr/flaresolverr@sha256:c80ae007ce2ccdcd217a12426e4f039ef763ff90738c808d38810c3e59323767"
 // Under $HOME. The shell reloads a plugin on any write inside its folder,
 // so the helper builds and installs here, never in the plugin's sync/.
 var HELPER_DIR = ".local/share/miharchy/helper"
@@ -108,7 +111,7 @@ var BUILD_SCRIPT = [
 // docker start makes a rerun reuse the container; the loop waits for the
 // first answer so the step only reports done once FlareSolverr serves.
 var FLARE_SCRIPT = [
-  "docker start " + CONTAINER + " >/dev/null 2>&1 || docker run -d --name " + CONTAINER + " --restart unless-stopped -p 127.0.0.1:8191:8191 ghcr.io/flaresolverr/flaresolverr:latest || exit",
+  "docker start " + CONTAINER + " >/dev/null 2>&1 || docker run -d --name " + CONTAINER + " --restart unless-stopped -p 127.0.0.1:8191:8191 " + FLARE_IMAGE + " || exit",
   "for i in $(seq 60); do curl -fs " + FLARE_URL + " >/dev/null && echo \"FlareSolverr answers on " + FLARE_URL + "\" && exit 0; sleep 1; done",
   "echo \"FlareSolverr did not answer on " + FLARE_URL + " within 60 s.\"",
   "exit 1"
