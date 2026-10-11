@@ -34,18 +34,21 @@ const CLIENTS = JSON.stringify([
 ]);
 const PEEKED = CLIENTS.replace('"name":"3"', '"name":"special:miharchy"');
 
-function run(args, env, starting) {
+// prepare(runtime) plants files in XDG_RUNTIME_DIR before the run.
+function run(args, env, prepare) {
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-launcher-"));
-  if (starting) fs.mkdirSync(path.join(bin, "runtime/miharchy/peek-starting"), { recursive: true });
+  const runtime = path.join(bin, "runtime");
+  fs.mkdirSync(runtime);
+  if (prepare) prepare(runtime);
   for (const [name, body] of Object.entries(STUBS)) fs.writeFileSync(path.join(bin, name), body, { mode: 0o755 });
   const log = path.join(bin, "log");
   fs.writeFileSync(log, "");
-  fs.mkdirSync(path.join(bin, "runtime"), { recursive: true });
   execFileSync("sh", [launcher, ...args], {
-    env: { PATH: bin + ":" + process.env.PATH, STUB_LOG: log, XDG_RUNTIME_DIR: path.join(bin, "runtime"), STUB_LIST: NONE, STUB_CLIENTS: CLIENTS, STUB_IPC_RC: "1", STUB_LUA_RC: "0", ...env },
+    env: { PATH: bin + ":" + process.env.PATH, STUB_LOG: log, XDG_RUNTIME_DIR: runtime, STUB_LIST: NONE, STUB_CLIENTS: CLIENTS, STUB_IPC_RC: "1", STUB_LUA_RC: "0", ...env },
+    stdio: "pipe"
   });
   const calls = fs.readFileSync(log, "utf8").trim().split("\n");
-  calls.runtime = path.join(bin, "runtime");
+  calls.runtime = runtime;
   return calls;
 }
 
@@ -134,9 +137,25 @@ test("peek gives up with an error when the new window never shows up", () => {
 });
 
 test("a second peek while the first window is still starting starts no other window", () => {
-  const calls = run(["peek"], { STUB_LIST_AFTER: RUNNING }, true);
+  const calls = run(["peek"], { STUB_LIST_AFTER: RUNNING }, (rt) => fs.mkdirSync(path.join(rt, "miharchy/peek-starting"), { recursive: true }));
   assert.deepEqual(launches(calls), []);
   assert.deepEqual(dispatches(calls), []);
+});
+
+test("a peek with no XDG_RUNTIME_DIR fails with an error and never falls back to /tmp", () => {
+  assert.throws(() => run(["peek"], { STUB_LIST_AFTER: RUNNING, XDG_RUNTIME_DIR: "" }), (e) => /XDG_RUNTIME_DIR is not set/.test(e.stderr));
+});
+
+test("a peek with a symlink planted at the marker's folder fails and creates nothing through it", () => {
+  const target = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-planted-"));
+  const plant = (rt) => fs.symlinkSync(target, path.join(rt, "miharchy"));
+  assert.throws(() => run(["peek"], { STUB_LIST_AFTER: RUNNING }, plant), (e) => /is not a private folder/.test(e.stderr));
+  assert.deepEqual(fs.readdirSync(target), []);
+});
+
+test("a peek makes the marker's folder private to the user", () => {
+  const calls = run(["peek"], { STUB_LIST_AFTER: RUNNING });
+  assert.equal(fs.statSync(path.join(calls.runtime, "miharchy")).mode & 0o777, 0o700);
 });
 
 const IPC_NEXT = "quickshell ipc -p " + dir + " call miharchy peekNext | MIHARCHY_OPEN_CHAPTER=";

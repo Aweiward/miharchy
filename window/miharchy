@@ -60,8 +60,13 @@ if [ "$1" = peek ] || [ "$1" = peek-next ] || [ "$1" = peek-open ]; then
   # A second press while the window starts must not start another.
   # ponytail: a launcher killed mid-start leaves the marker until logout;
   # check its age if that bites.
-  marker=${XDG_RUNTIME_DIR:-/tmp}/miharchy/peek-starting
-  mkdir -p "${marker%/*}" && mkdir "$marker" 2>/dev/null || exit 0
+  # Never a shared /tmp path: the marker's folder must be the user's own
+  # real directory, not a symlink planted there.
+  [ -n "$XDG_RUNTIME_DIR" ] || { echo "miharchy: XDG_RUNTIME_DIR is not set" >&2; exit 1; }
+  marker=$XDG_RUNTIME_DIR/miharchy/peek-starting
+  (umask 077; mkdir -p "${marker%/*}") 2>/dev/null
+  [ -d "${marker%/*}" ] && [ ! -L "${marker%/*}" ] && [ -O "${marker%/*}" ] || { echo "miharchy: ${marker%/*} is not a private folder" >&2; exit 1; }
+  mkdir "$marker" 2>/dev/null || exit 0
   trap 'rmdir "$marker"' EXIT
   peek=1
   [ "$1" = peek-next ] && peek=next
