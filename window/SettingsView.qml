@@ -195,8 +195,11 @@ Item {
   }
 
   // The rows outgrow the window, so the list scrolls: with the wheel, and
-  // to keep the cursor's row in view.
+  // to keep the cursor's row in view. The Columns place an item they just
+  // showed only on the next frame, so the layout runs first.
   function reveal(item) {
+    trackerRows.forceLayout()
+    content.forceLayout()
     var y = item.mapToItem(content, 0, 0).y
     if (y < flick.contentY) flick.contentY = y
     else if (y + item.height > flick.contentY + flick.height) flick.contentY = y + item.height - flick.height
@@ -438,12 +441,16 @@ Item {
           }
         }
 
+        // The field and its note sit below every tracker row, so a login
+        // scrolls them into view.
         Row {
+          id: loginRow
           visible: view.loginEditing
           width: parent.width
           height: view.theme.fontSize * 2.4
           leftPadding: view.theme.fontSize * 0.75
           spacing: view.theme.fontSize
+          onVisibleChanged: if (visible) view.reveal(loginRow)
 
           Text {
             id: loginPrompt
@@ -471,9 +478,11 @@ Item {
 
         // Selectable, so the login link can be copied when no browser opens.
         TextEdit {
+          id: loginNote
           textFormat: TextEdit.PlainText
           width: parent.width
           visible: text !== ""
+          onTextChanged: if (text && (view.trackers.login || view.trackers.error)) Qt.callLater(view.reveal, loginNote)
           leftPadding: view.theme.fontSize * 0.75
           topPadding: view.theme.fontSize * 0.5
           readOnly: true
