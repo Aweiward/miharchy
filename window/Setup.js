@@ -179,13 +179,14 @@ function parsePhones(text) {
 }
 
 // Syncthing's own config names its API address and key. Read by the
-// phone check's Syncthing part and by the accept, never shown.
+// phone check's Syncthing part and by the accept, never shown. The key
+// reaches curl on stdin, so no process's argv holds it.
 var SYNCTHING_API = [
   "cfg=$HOME/.local/state/syncthing/config.xml",
   "[ -f \"$cfg\" ] || cfg=$HOME/.config/syncthing/config.xml",
   "addr=$(awk '/<gui[ >]/{g=1} g&&/<address>/{gsub(/.*<address>|<\\/address>.*/,\"\"); print; exit}' \"$cfg\" 2>/dev/null)",
   "key=$(sed -n 's:.*<apikey>\\(.*\\)</apikey>.*:\\1:p' \"$cfg\" 2>/dev/null | head -n 1)",
-  "api() { curl -fsS -m 3 -H \"X-API-Key: $key\" \"http://$addr/rest/$1\"; }"
+  "api() { printf 'X-API-Key: %s\\n' \"$key\" | curl -fsS -m 3 -H @- \"http://$addr/rest/$1\"; }"
 ].join("\n")
 
 // $1 is the sync folder, $2 where to write the desktop ID as a QR code.
@@ -210,7 +211,7 @@ var SYNCTHING_PROBE = SYNCTHING_API + "\n" + [
 // adds this desktop to a folder on its own (ensureDevicePresent in its
 // lib/config/folderconfiguration.go).
 var SYNCTHING_ACCEPT = SYNCTHING_API + "\n" + [
-  "post() { curl -fsS -m 5 -H \"X-API-Key: $key\" -H \"Content-Type: application/json\" -X POST -d \"$2\" \"http://$addr/rest/$1\" >/dev/null 2>&1; }",
+  "post() { printf 'X-API-Key: %s\\n' \"$key\" | curl -fsS -m 5 -H @- -H \"Content-Type: application/json\" -X POST -d \"$2\" \"http://$addr/rest/$1\" >/dev/null 2>&1; }",
   "if [ -n \"$2\" ]; then",
   "  post config/devices \"$(jq -nc --arg id \"$2\" --arg name \"$3\" '{deviceID: $id, name: $name}')\" || { echo \"Syncthing did not take the device. Accept it at http://$addr.\"; exit 1; }",
   "  echo \"Syncthing now knows $3.\"",

@@ -8,7 +8,7 @@
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 
-gql() { curl -s -m 30 -H "Authorization: Bearer $(token)" -H 'content-type: application/json' -X POST -d "$1" "http://127.0.0.1:$PORT/api/graphql"; }
+gql() { printf 'Authorization: Bearer %s\n' "$(token)" | curl -s -m 30 -H @- -H 'content-type: application/json' -X POST -d "$1" "http://127.0.0.1:$PORT/api/graphql"; }
 
 # Suwayomi caches pages and covers in <java.io.tmpdir>/Tachidesk; the default
 # /tmp is shared with the user's server, so a cache clear here would empty it.

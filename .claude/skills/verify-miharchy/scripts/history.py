@@ -77,10 +77,11 @@ def main(args):
         f.write(backup(manga.values()))
     token = subprocess.run(["bash", "-c", 'source "$1/env.sh" && token && echo "$PORT"', "sh", HERE], check=True, capture_output=True, text=True).stdout.split()
     query = "mutation($backup: Upload!) { restoreBackup(input: { backup: $backup, flags: { includeManga: true, includeChapters: true, includeHistory: true, includeCategories: false, includeTracking: false, includeClientData: false, includeServerSettings: false } }) { id } }"
-    out = subprocess.run(["curl", "-s", "-m", "60", "-H", "Authorization: Bearer " + token[0],
+    out = subprocess.run(["curl", "-s", "-m", "60", "-H", "@-",
                           "-F", "operations=" + json.dumps({"query": query, "variables": {"backup": None}}),
                           "-F", 'map={"0": ["variables.backup"]}', "-F", "0=@" + f.name,
-                          "http://127.0.0.1:%s/api/graphql" % token[1]], check=True, capture_output=True, text=True).stdout
+                          "http://127.0.0.1:%s/api/graphql" % token[1]], input="Authorization: Bearer %s\n" % token[0],
+                         check=True, capture_output=True, text=True).stdout
     os.unlink(f.name)
     rid = json.loads(out)["data"]["restoreBackup"]["id"]
     for _ in range(120):

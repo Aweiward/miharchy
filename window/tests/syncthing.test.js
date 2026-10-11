@@ -10,14 +10,25 @@ const S = require("./load")("Setup.js");
 const DESKTOP = "DESKTOP-AAAAAAA-BBBBBBB-CCCCCCC-DDDDDDD-EEEEEEE-FFFFFFF-GGGGGGG";
 const PHONE = "PHONE00-AAAAAAA-BBBBBBB-CCCCCCC-DDDDDDD-EEEEEEE-FFFFFFF-GGGGGGG";
 
+// Every process whose argv holds text, read from /proc.
+function argvHolding(text) {
+  return fs.readdirSync("/proc").filter((p) => /^\d+$/.test(p)).filter((p) => {
+    try { return fs.readFileSync("/proc/" + p + "/cmdline", "utf8").includes(text); } catch (e) { return false; }
+  });
+}
+
 // A stand-in Syncthing: GET answers from routes, POST bodies recorded. It
-// answers only with the right API key, as Syncthing does.
+// answers only with the right API key, as Syncthing does. On each request
+// the client still waits for the answer, so leaks lists any argv holding
+// the key at that moment.
 async function syncthing(routes) {
   const posts = [];
+  const leaks = [];
   const server = http.createServer((req, res) => {
     let body = "";
     req.on("data", (c) => { body += c; });
     req.on("end", () => {
+      leaks.push(...argvHolding("test-key"));
       if (req.headers["x-api-key"] !== "test-key") { res.writeHead(403); return res.end("CSRF Error"); }
       if (req.method === "POST") { posts.push({ path: req.url, body: JSON.parse(body) }); res.writeHead(200); return res.end("{}"); }
       const r = routes[req.url];
@@ -26,7 +37,7 @@ async function syncthing(routes) {
     });
   });
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
-  return { port: server.address().port, posts, close: () => server.close() };
+  return { port: server.address().port, posts, leaks, close: () => server.close() };
 }
 
 // A HOME whose config.xml points at the stand-in, a sync folder, and a qrencode stub that writes its text.
@@ -68,6 +79,7 @@ test("the Syncthing check reads nothing pending, writes the desktop ID as a QR c
   try {
     assert.deepEqual(await probe(h), { installed: true, answering: true, myId: DESKTOP, shared: false, knowsPhone: false, pendingDevices: [], pendingFolders: [], qr: h.qr });
     assert.equal(fs.readFileSync(h.qr, "utf8"), DESKTOP);
+    assert.deepEqual(st.leaks, [], "no process argv holds the API key");
   } finally { st.close(); }
 });
 
@@ -199,6 +211,7 @@ test("y adds the phone's device to Syncthing, then the folder it offers at the s
       { path: "/rest/config/devices", body: { deviceID: PHONE, name: "Pixel" } },
       { path: "/rest/config/folders", body: { id: "abcd-1234", label: "Mihon backups", path: h.folder, type: "sendreceive", devices: [{ deviceID: PHONE }] } }
     ]);
+    assert.deepEqual(st.leaks, [], "no process argv holds the API key");
   } finally { st.close(); }
 });
 

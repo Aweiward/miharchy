@@ -348,6 +348,34 @@ test("server/miharchy-server moves a basic_auth server to ui_login once, keeping
   assert.match(run([script], env), /config changed: no/, "a rerun changes nothing");
 });
 
+test("server/miharchy-server keeps the password out of every argv and writes its secret files 0600 under umask 022", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "miharchy-secret-"));
+  const log = path.join(home, "argv.log");
+  const tools = ["install", "jq", "openssl", "touch", "chmod", "sha256sum", "grep", "sed", "cmp", "dirname", "readlink"];
+  const bin = stubs(Object.fromEntries(tools.map((t) => [t, "printf '%s\\n' \"$0 $*\" >> " + log + "\nexec /usr/bin/" + t + " \"$@\""]).concat([["systemctl", "true"]])));
+  const env = { PATH: bin + ":" + process.env.PATH, HOME: home };
+  const script = path.join(__dirname, "../../server/miharchy-server");
+  const creds = path.join(home, ".config/miharchy/server.json");
+  const conf = path.join(home, ".local/share/miharchy/suwayomi/server.conf");
+  const mode = (f) => (fs.statSync(f).mode & 0o777).toString(8);
+  const umask = process.umask(0o022);
+  try {
+    run([script], env);
+    const password = JSON.parse(fs.readFileSync(creds, "utf8")).password;
+    assert.match(password, /^[0-9a-f]{48}$/);
+    assert.match(fs.readFileSync(conf, "utf8"), new RegExp("^server\\.authPassword = \"" + password + "\"$", "m"));
+    assert.deepEqual([mode(creds), mode(conf)], ["600", "600"]);
+    // A rerun repairs files that an older version or Suwayomi left readable.
+    fs.chmodSync(creds, 0o644);
+    fs.chmodSync(conf, 0o644);
+    run([script], env);
+    assert.deepEqual([mode(creds), mode(conf)], ["600", "600"]);
+    const argv = fs.readFileSync(log, "utf8");
+    assert.match(argv, /\/grep /, "the wrappers saw the config loop");
+    assert.doesNotMatch(argv, new RegExp(password), "no argv holds the password");
+  } finally { process.umask(umask); }
+});
+
 test("a running server on basic_auth is due again, and keeps Setup open", () => {
   const old = finish(S.initial(), "probe", READY + "basicAuth\n");
   assert.equal(S.status(old, "server").state, "outdated");
