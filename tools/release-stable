@@ -1,0 +1,61 @@
+#!/bin/sh
+# Moves the stable branch to a release (ADR 0008). The new stable commit has
+# the tag's tree without the files only coding agents use, and two parents:
+# the previous stable commit (the remote's main on the first run) and the
+# tag. It pushes only when that tree has none of those files, passes
+# omarchy plugin validate, and fast-forwards from the previous stable.
+# Usage: tools/release-stable vX.Y.Z [remote]
+set -eu
+
+# The files only coding agents use: they stay on main.
+EXCLUDED="AGENTS.md CLAUDE.md .claude docs/agents"
+
+fail() { echo "release-stable: $*" >&2; exit 1; }
+
+tag=${1:-}
+remote=${2:-origin}
+case $tag in
+v[0-9]*.[0-9]*.[0-9]*) ;;
+*) fail "usage: tools/release-stable vX.Y.Z [remote]" ;;
+esac
+
+git fetch --quiet "$remote" "refs/tags/$tag:refs/tags/$tag" || fail "$remote has no tag $tag"
+release=$(git rev-parse "$tag^{commit}")
+version=$(git show "$release:manifest.json" | jq -r .version)
+[ "v$version" = "$tag" ] || fail "manifest.json at $tag says $version"
+
+# Users fast-forward from what they fetched: the remote's stable, or on the
+# first run its main.
+if git ls-remote --exit-code --heads "$remote" stable >/dev/null; then
+  git fetch --quiet "$remote" refs/heads/stable
+  ! git merge-base --is-ancestor "$release" FETCH_HEAD || fail "stable already holds $tag"
+else
+  git fetch --quiet "$remote" refs/heads/main
+  git merge-base --is-ancestor "$release" FETCH_HEAD || fail "$tag is not on $remote's main"
+fi
+previous=$(git rev-parse FETCH_HEAD)
+
+dir=$(mktemp -d)
+trap 'rm -rf "$dir"' EXIT
+GIT_INDEX_FILE=$dir/index git read-tree "$release^{tree}"
+# shellcheck disable=SC2086
+GIT_INDEX_FILE=$dir/index git rm -r -q --cached --ignore-unmatch -- $EXCLUDED
+tree=$(GIT_INDEX_FILE=$dir/index git write-tree)
+
+# On the first run main's tip is usually the tag itself: one parent then.
+if [ "$release" = "$previous" ]; then
+  commit=$(git commit-tree "$tree" -p "$previous" -m "Release $tag")
+else
+  commit=$(git commit-tree "$tree" -p "$previous" -p "$release" -m "Release $tag")
+fi
+
+# shellcheck disable=SC2086
+[ -z "$(git ls-tree -r --name-only "$commit" -- $EXCLUDED)" ] || fail "the stable tree still holds agent files"
+git merge-base --is-ancestor "$previous" "$commit" || fail "the stable commit does not fast-forward"
+mkdir "$dir/tree"
+git archive "$commit" | tar -x -C "$dir/tree"
+omarchy-plugin-validate "$dir/tree" || fail "the stable tree fails omarchy plugin validate"
+
+# No force: git refuses a push that does not fast-forward the remote.
+git push --quiet "$remote" "$commit:refs/heads/stable"
+echo "stable is $commit ($tag)"
