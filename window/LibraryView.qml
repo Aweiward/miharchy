@@ -36,12 +36,14 @@ Item {
   property var library: Library.initial()
 
   // Typed copies of the fields the lists read: an int or a string signals
-  // only a real change, so a write to library that leaves them alone does
-  // not rebuild the switcher, which would run onShownChanged again.
+  // only a real change.
   readonly property int cursor: library.cursor
-  readonly property int category: library.category
+  // shown reads these two, and onShownChanged writes library, so they are
+  // no bindings on library: reduce() sets them after each write. A binding
+  // would still be updating when the "shown" event writes library.
+  property int category: -1
   readonly property string screen: library.screen
-  readonly property string query: library.query
+  property string query: ""
   readonly property bool optionsOpen: library.options
   readonly property int optionsCursor: library.optionsCursor
   readonly property var selected: library.selected
@@ -102,7 +104,12 @@ Item {
   // Esc with no selection and no search.
   signal quit()
 
-  onShownChanged: reduce({ type: "shown", shown: shown })
+  // The shown category as onShownChanged last saw it.
+  property var was: null
+  onShownChanged: {
+    reduce({ type: "shown", was: was, shown: shown })
+    was = shown
+  }
   // Once the rows changed too: the cursor follows its manga in the same
   // turn as the rows change, in either order.
   onCursorChanged: Qt.callLater(show)
@@ -120,8 +127,14 @@ Item {
     items: view.manga
   }
 
+  // No write when nothing changed: at start, hint's first evaluation brings
+  // shown in, and a write of library then would land mid-update.
   function reduce(event) {
-    library = Library.reduce(library, event)
+    var next = Library.reduce(library, event)
+    if (next === library) return
+    library = next
+    category = library.category
+    query = library.query
   }
 
   function send(payload, done) {
