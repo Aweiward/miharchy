@@ -7,8 +7,9 @@
 # Usage: tools/release-stable vX.Y.Z [remote]
 set -eu
 
-# The files only coding agents use: they stay on main.
-EXCLUDED="AGENTS.md CLAUDE.md .claude docs/agents"
+# The files only coding agents use, and the site's trailer video, which only
+# the Pages build needs: they stay on main.
+EXCLUDED="AGENTS.md CLAUDE.md .claude docs/agents site/img/trailer.mp4 site/img/trailer-poster.webp"
 
 fail() { echo "release-stable: $*" >&2; exit 1; }
 
@@ -50,7 +51,7 @@ else
 fi
 
 # shellcheck disable=SC2086
-[ -z "$(git ls-tree -r --name-only "$commit" -- $EXCLUDED)" ] || fail "the stable tree still holds agent files"
+[ -z "$(git ls-tree -r --name-only "$commit" -- $EXCLUDED)" ] || fail "the stable tree still holds excluded files"
 git merge-base --is-ancestor "$previous" "$commit" || fail "the stable commit does not fast-forward"
 mkdir "$dir/tree"
 git archive "$commit" | tar -x -C "$dir/tree"
