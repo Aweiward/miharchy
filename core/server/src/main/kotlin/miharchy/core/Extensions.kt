@@ -123,6 +123,23 @@ class Extensions(private val db: Database, private val host: Host, private val d
         }
     }
 
+    /** The loaded sources, with their extension's icon and content warning, as the Browse view reads them. */
+    suspend fun sources(): List<JsonObject> = lock.withLock {
+        installed().flatMap { m ->
+            loaded[m.pkgName].orEmpty().map { s ->
+                val lang = s["lang"]!!.jsonPrimitive.content
+                buildJsonObject {
+                    put("id", s.id())
+                    // Suwayomi's displayName is the source's toString(): "MangaDex (EN)".
+                    put("displayName", "${s["name"]!!.jsonPrimitive.content} (${lang.uppercase()})")
+                    put("name", s["name"]!!); put("lang", lang)
+                    put("iconUrl", m.iconUrl); put("contentWarning", m.contentWarning)
+                    put("supportsLatest", s["supportsLatest"]!!); put("isConfigurable", s["configurable"]!!)
+                }
+            }
+        }
+    }
+
     private suspend fun stores(): List<Store> = db.run { c ->
         c.createStatement().use { s ->
             s.executeQuery("SELECT index_url, name, badge_label, signing_key, contact_website, contact_discord FROM extension_store ORDER BY name").use { r ->

@@ -23,6 +23,8 @@ miharchy-core replaces about 50 Suwayomi GraphQL operations that `window/`, `plu
 
 - The tables follow Mihon's current database (`data/src/main/sqldelight/tachiyomi/data/` on Mihon's `main`), with its table names, column names and meanings: `manga`, `chapter`, `category`, `manga_category`, `history`, `manga_track` (tracks), `extension_store` (repos, as `BackupExtensionStore`). Mihon renamed its older plural tables (`mangas`, `manga_sync`, `extension_repos`) to these. A `.tachibk` then maps almost field for field.
 - Core adds `metas` (scope `global`, `manga` or `category`, an id, a key, a string value) with the keys Miharchy uses on Suwayomi today, such as `miharchy.syncFolder`, and `download_queue`.
+- Source filters and settings keep the host's JSON (`type` plus `state`, sent back whole and applied by position), not Suwayomi's GraphQL kinds (`__typename`, per-change inputs). `window/Widgets.js` changes to read it when Browse moves (#378); translating in core would rebuild Suwayomi's schema for one view.
+- Covers and pages are `GET /api/cover/<manga>` and `GET /api/page/<chapter>/<index>`, with the same Bearer secret. Core fetches them through the source's client and sets the content type from the bytes. Covers are cached in `covers/`; page lists are kept in memory and fetched again on a miss.
 - Source settings and cookies stay in the host's files (`prefs/*.properties`, `cookies.txt`) in core's data folder, because extensions write them through Android's `SharedPreferences`.
 - Downloaded chapters use Mihon's layout, `downloads/<source>/<manga>/<chapter>.cbz`, under a "Downloads folder" setting. Covers are cached in the data folder.
 

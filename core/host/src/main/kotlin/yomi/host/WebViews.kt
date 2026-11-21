@@ -31,8 +31,15 @@ import java.util.concurrent.atomic.AtomicLong
 object Protocol {
     lateinit var out: PrintStream
     private val lock = Any()
-    fun send(line: String) = synchronized(lock) { out.println(line) }
+    // miharchy-core runs the host in-process with no app to show a WebView, so a source that needs one fails here.
+    fun send(line: String) = synchronized(lock) {
+        if (!::out.isInitialized) throw WebViewUnavailableException()
+        out.println(line)
+    }
 }
+
+/** miharchy-core: the source needs a WebView, and core has none (ADR 0009). An IOException, so OkHttp passes it on. */
+class WebViewUnavailableException : java.io.IOException("This source needs a WebView, which Miharchy does not have.")
 
 /** Relays Android WebViews to the app's hidden WebKit views. Events run on the main Looper, like Android's callbacks. */
 object WebViews {
