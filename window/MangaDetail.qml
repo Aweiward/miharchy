@@ -84,7 +84,8 @@ Rectangle {
     "manga.downloads": "Downloads are not on miharchy-core yet (#367)",
     "manga.deleteDownload": "Downloads are not on miharchy-core yet (#367)",
     "manga.track": "Tracking is not on miharchy-core yet (#371)",
-    "manga.migrate": "Migrate is not on miharchy-core yet (#394)"
+    "manga.migrate": "Migrate is not on miharchy-core yet (#394)",
+    "manga.duplicateMigrate": "Migrate is not on miharchy-core yet (#394)"
   })
   readonly property string hint: dupesOpen ? "j k move   enter open   M migrate to this   a add anyway   esc cancel   "
     : picking ? "j k move   space in or out   esc close   "

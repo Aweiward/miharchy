@@ -34,7 +34,8 @@ Item {
     "library.download": "Downloads are not on miharchy-core yet (#367)",
     "library.deleteDownloads": "Downloads are not on miharchy-core yet (#367)",
     "library.removeWithDownloads": "Downloads are not on miharchy-core yet (#367)",
-    "view.check": "The library check is not on miharchy-core yet (#394)"
+    "view.check": "The library check is not on miharchy-core yet (#394)",
+    "migrate.batch": "Migrate is not on miharchy-core yet (#394)"
   })
   property string configPath: ""
   // Model.reduce()'s connection: the library manga and categories.

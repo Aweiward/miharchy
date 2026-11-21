@@ -164,7 +164,11 @@ ShellRoot {
     var next = Model.parseCoreConfig(text)
     if (next && coreConfig && JSON.stringify(next) === JSON.stringify(coreConfig)) return
     coreConfig = next
-    if (coreConfig) return fetchLibrary(true)
+    if (coreConfig) {
+      fetchLibrary(true)
+      libraryView.reload()
+      return
+    }
     coreRequestSeq++
     coreConnection = Model.reduce(coreConnection, { type: "config-missing" })
   }
@@ -191,7 +195,7 @@ ShellRoot {
     }
     fetchLibrary()
     sendSettings(Settings.loadPayload())
-    libraryView.reload()
+    if (!coreBackend) libraryView.reload()
     var peekTarget = Model.chapterTarget(pendingPeek)
     if (pendingChapter) openChapter(pendingChapter)
     else if (peekTarget) {
@@ -680,11 +684,15 @@ ShellRoot {
         endEdit()
         break
       case "library.reload":
-        if (coreBackend) fetchLibrary(true)
+        // The Library's prefs live on the server it shows.
+        if (coreBackend) {
+          fetchLibrary(true)
+          libraryView.reload()
+        }
         if (config) {
           fetchLibrary()
           sendSettings(Settings.loadPayload())
-          libraryView.reload()
+          if (!coreBackend) libraryView.reload()
           settingsView.loadTrackers()
           updatesView.load()
           if (view === "check") checkView.load()
