@@ -31,8 +31,16 @@ import java.util.concurrent.atomic.AtomicLong
 object Protocol {
     lateinit var out: PrintStream
     private val lock = Any()
-    fun send(line: String) = synchronized(lock) { out.println(line) }
+    // miharchy-core runs the host in-process with no app to show a WebView, so a source that needs one fails here.
+    val attached get() = ::out.isInitialized
+    fun send(line: String) = synchronized(lock) {
+        if (!attached) throw WebViewUnavailableException()
+        out.println(line)
+    }
 }
+
+/** miharchy-core: the source needs a WebView, and core has none (ADR 0009). An IOException, so OkHttp passes it on. */
+class WebViewUnavailableException : java.io.IOException("This source needs a WebView, which Miharchy does not have.")
 
 /** Relays Android WebViews to the app's hidden WebKit views. Events run on the main Looper, like Android's callbacks. */
 object WebViews {
@@ -59,7 +67,7 @@ object WebViews {
 
         /** Cookies the host stored go to WebKit too, since on Android the WebView and app share one store. */
     fun cookiesStored(url: String, setCookies: List<String>) {
-        if (views.isEmpty() || setCookies.isEmpty()) return
+        if (!Protocol.attached || views.isEmpty() || setCookies.isEmpty()) return
         send("cookies", 0) {
             put("url", url)
             put("cookies", json(setCookies))
@@ -78,6 +86,11 @@ object WebViews {
     fun json(list: List<String>) = JsonArray(list.map(::JsonPrimitive))
 
     fun send(op: String, view: Int, fields: JsonObjectBuilder.() -> Unit) {
+        // miharchy-core: a view that cannot be shown must not stay registered, or later cookie syncs would fail too.
+        if (!Protocol.attached) {
+            views.remove(view)
+            throw WebViewUnavailableException()
+        }
         Protocol.send(buildJsonObject { put("wv", op); put("view", view); fields() }.toString())
     }
 

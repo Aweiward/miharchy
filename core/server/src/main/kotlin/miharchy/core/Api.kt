@@ -1,12 +1,16 @@
 package miharchy.core
 
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
 import io.ktor.server.request.receiveText
+import io.ktor.server.response.header
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
@@ -58,6 +62,7 @@ class Core(
     val db: Database,
     routes: Map<String, Route> = emptyMap(),
     val topics: Map<String, Flow<JsonElement>> = emptyMap(),
+    val images: Map<String, ImageRoute> = emptyMap(),
 ) {
     val routes: Map<String, Route> = mapOf<String, Route>(
         "health" to { buildJsonObject { put("ok", true); put("schema", db.run { db.schema }) } },
@@ -74,15 +79,19 @@ private fun errorJson(kind: Kind, message: String) = buildJsonObject {
 private suspend fun ApplicationCall.reply(status: HttpStatusCode, body: JsonElement) =
     respondText(body.toString(), ContentType.Application.Json, status)
 
+private fun ApplicationCall.authorize(core: Core) {
+    if (!core.accepts(request.headers["Authorization"]?.takeIf { it.startsWith("Bearer ") }?.removePrefix("Bearer "))) {
+        throw ApiError(Kind.unauthorized, "Send the secret from core.json as Authorization: Bearer <secret>.")
+    }
+}
+
 fun Application.api(core: Core) {
     install(WebSockets)
     routing {
         post("/api/{name}") {
             val name = call.parameters["name"].orEmpty()
             val result = try {
-                if (!core.accepts(call.request.headers["Authorization"]?.takeIf { it.startsWith("Bearer ") }?.removePrefix("Bearer "))) {
-                    throw ApiError(Kind.unauthorized, "Send the secret from core.json as Authorization: Bearer <secret>.")
-                }
+                call.authorize(core)
                 val route = core.routes[name] ?: throw ApiError(Kind.notFound, "There is no route $name.")
                 val text = call.receiveText()
                 val input = if (text.isBlank()) JsonObject(emptyMap()) else {
@@ -97,6 +106,21 @@ fun Application.api(core: Core) {
                 Kind.`internal`.status to errorJson(Kind.`internal`, "${e::class.java.simpleName}: ${e.message}")
             }
             call.reply(result.first, result.second)
+        }
+        // Covers and pages. The window fetches them with the same secret (ServerImage.qml).
+        get("/api/{kind}/{path...}") {
+            try {
+                call.authorize(core)
+                val route = core.images[call.parameters["kind"].orEmpty()] ?: throw ApiError(Kind.notFound, "There is no image route.")
+                val image = route(call.parameters.getAll("path").orEmpty())
+                call.response.header(HttpHeaders.CacheControl, "private, max-age=3600")
+                call.respondBytes(image.bytes, ContentType.parse(image.contentType))
+            } catch (e: ApiError) {
+                call.reply(e.kind.status, errorJson(e.kind, e.message.orEmpty()))
+            } catch (e: Exception) {
+                e.printStackTrace()
+                call.reply(Kind.`internal`.status, errorJson(Kind.`internal`, "${e::class.java.simpleName}: ${e.message}"))
+            }
         }
         webSocket("/api/live") { live(core) }
     }

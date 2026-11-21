@@ -174,6 +174,14 @@ class Host {
                     put("chapters", JsonArray(u.chapters.map { it.toJson() }))
                 }
             }
+            // miharchy-core: the addresses "Open in browser" uses.
+            "urls" -> buildJsonObject {
+                val src = source() as? HttpSource
+                put("manga", req["manga"]?.let { m -> runCatching { src?.getMangaUrl(mangaFrom(m.jsonObject)) }.getOrNull() })
+                put("chapters", JsonArray(req["chapters"]?.jsonArray.orEmpty().map { c ->
+                    JsonPrimitive(runCatching { src?.getChapterUrl(chapterFrom(c.jsonObject)) }.getOrNull())
+                }))
+            }
             "pages" -> JsonArray(source().getPageList(chapterFrom(req["chapter"]!!.jsonObject)).map { it.toJson() })
             // Downloads through the source's client so its interceptors (decryption, auth) run, then replies with the file path.
             "download" -> {

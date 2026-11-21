@@ -59,6 +59,6 @@ class Database(file: Path, private val migrations: List<String> = MIGRATIONS) : 
 
     companion object {
         /** In order. Never edit one that has shipped; add the next. */
-        val MIGRATIONS = listOf("0001-metas.sql", "0002-extension-store.sql")
+        val MIGRATIONS = listOf("0001-metas.sql", "0002-extension-store.sql", "0003-manga-chapter.sql")
     }
 }

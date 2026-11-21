@@ -21,6 +21,8 @@ dependencies {
     // Ktor logs through SLF4J; the same version as Ktor's slf4j-api. Logs go to stderr, so journald keeps them.
     runtimeOnly("org.slf4j:slf4j-simple:2.0.19")
     testImplementation("io.ktor:ktor-server-test-host:3.6.1")
+    // The version the host pins: the fixture source builds its client with it.
+    testImplementation("com.squareup.okhttp3:okhttp:5.4.0")
     testImplementation(kotlin("test"))
 }
 

@@ -3,10 +3,12 @@ package miharchy.core
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import io.ktor.websocket.Frame
@@ -28,6 +30,7 @@ class ApiTest {
         Database(Files.createTempDirectory("core").resolve("core.db")),
         routes = mapOf("boom" to { _ -> error("bug in core") }, "echo" to { input -> input }),
         topics = mapOf("counter" to flowOf(JsonPrimitive(1), JsonPrimitive(2))),
+        images = mapOf("cover" to { path -> if (path == listOf("7")) Image(byteArrayOf(1, 2), "image/png") else throw ApiError(Kind.notFound, "no") }),
     )
 
     private fun run(block: suspend ApplicationTestBuilder.(HttpClient) -> Unit) = testApplication {
@@ -69,6 +72,16 @@ class ApiTest {
     @Test
     fun aRouteGetsTheBody() = run { client ->
         assertEquals(200 to """{"a":1}""", client.call("echo", """{"a":1}""").let { it.first to it.second.toString() })
+    }
+
+    @Test
+    fun imagesNeedTheSecretToo() = run { client ->
+        val ok = client.get("/api/cover/7") { header("Authorization", "Bearer $secret") }
+        assertEquals(200 to "image/png", ok.status.value to ok.headers["Content-Type"])
+        assertEquals(2, ok.readRawBytes().size)
+        assertEquals(401, client.get("/api/cover/7").status.value)
+        assertEquals(404, client.get("/api/cover/8") { header("Authorization", "Bearer $secret") }.status.value)
+        assertEquals(404, client.get("/api/nope/1") { header("Authorization", "Bearer $secret") }.status.value)
     }
 
     @Test
