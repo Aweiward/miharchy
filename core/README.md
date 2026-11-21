@@ -38,6 +38,7 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 - A `lastPageRead` write stamps History (`history.read_at`). A plain mark-read does not, and neither does mark-unread's reset to page 0.
 - Category 0 is Default: it is never renamed, moved or deleted, and a manga in no category is in it. Category ids are never reused.
 - Id lists go to SQLite as one JSON parameter (`json_each`), so a whole library fits in one call.
+- `meta.get` takes one query `{ scope, owners?, keys? }` or several as `{ queries: [...] }`, answered in order. The window loads a manga's own choices with the global ones this way (#378).
 
 ## Known limits
 

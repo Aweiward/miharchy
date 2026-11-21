@@ -274,11 +274,13 @@ function reduceListing(l, event) {
 // while browsing a source, where cached details can be stale, so it always
 // refreshes once after showing the cache. retried, failedAt: see
 // Model.failure().
-function detail(mangaId, fromSource) {
-  return { mangaId: mangaId, fromSource: fromSource === true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null, retried: "", failedAt: 0 }
+// core: the manga is miharchy-core's (ADR 0010).
+function detail(mangaId, fromSource, core) {
+  return { mangaId: mangaId, fromSource: fromSource === true, core: core === true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null, retried: "", failedAt: 0 }
 }
 
 function detailPayload(d) {
+  if (d.core) return d.step === "read" ? { route: "manga.get", body: { id: d.mangaId } } : d.step === "fetch" ? { route: "manga.refresh", body: { id: d.mangaId } } : null
   if (d.step === "read") return { query: DETAIL_QUERY, variables: { id: d.mangaId } }
   if (d.step === "fetch") return { query: FETCH_MUTATION, variables: { id: d.mangaId } }
   if (d.step === "extension") return { query: EXTENSION_QUERY, variables: { name: d.manga.sourceName } }
@@ -341,7 +343,8 @@ function toManga(config, n, names) {
     sourceName: n.source ? source : String(names[n.sourceId] || ""),
     inLibrary: n.inLibrary === true,
     initialized: n.initialized === true,
-    categories: ((n.categories && n.categories.nodes) || []).map(function(c) { return c.id }),
+    // Core lists the ids, Suwayomi a connection.
+    categories: Array.isArray(n.categories) ? n.categories : ((n.categories && n.categories.nodes) || []).map(function(c) { return c.id }),
     longStrip: longStrip(n.genre || [], source),
     // "" until m picks one in the reader.
     readingMode: meta["miharchy.readingMode"] || "",
@@ -394,9 +397,10 @@ function reduceDetail(d, event) {
         var n = event.reply.data.manga
         var names = Model.parseNames(event.reply.data)
         var manga = toManga(event.config, n, names)
-        var chapters = toChapters(n.chapters && n.chapters.nodes)
+        var chapters = toChapters(d.core ? n.chapters : n.chapters && n.chapters.nodes)
         // A fetch goes through the source, so a missing one only fails.
-        if (manga.missing) return copy(d, { manga: manga, chapters: chapters, sourceNames: names, step: manga.sourceName ? "extension" : null, state: "ok" })
+        // ponytail: core keeps no source names yet, so no extension lookup.
+        if (manga.missing) return copy(d, { manga: manga, chapters: chapters, sourceNames: names, step: manga.sourceName && !d.core ? "extension" : null, state: "ok" })
         var stale = d.fromSource || !n.initialized || chapters.length === 0
         return copy(d, {
           manga: manga,
@@ -406,14 +410,13 @@ function reduceDetail(d, event) {
           state: stale && !d.fetched ? "loading" : "ok"
         })
       }
-      var f = event.reply.data.fetchMangaAndChapters
+      var f = d.core ? event.reply.data : event.reply.data.fetchMangaAndChapters
       return copy(d, { manga: toManga(event.config, f.manga, d.sourceNames), chapters: toChapters(f.chapters), step: null, state: "ok", fetched: true, retried: "" })
     case "library-request":
       return copy(d, { busy: true, libraryError: "" })
     case "library-reply":
       if (event.reply.state !== "ok") return copy(d, { busy: false, libraryError: event.reply.message || event.reply.state })
-      var m = event.reply.data.updateManga.manga
-      return copy(d, { busy: false, manga: copy(d.manga, { inLibrary: m.inLibrary === true }) })
+      return copy(d, { busy: false, manga: copy(d.manga, { inLibrary: libraryReply(event.reply) }) })
     case "categories-reply":
       if (event.reply.state !== "ok") return copy(d, { busy: false, libraryError: event.reply.message || event.reply.state })
       var nodes = event.reply.data.updateMangaCategories.manga.categories.nodes
@@ -441,7 +444,14 @@ function categoryPayload(d, categoryId) {
 // is in flight.
 function libraryPayload(d) {
   if (!d.manga || d.busy) return null
+  if (d.core) return { route: "manga.update", body: { ids: [d.mangaId], inLibrary: !d.manga.inLibrary } }
   return Model.inLibraryPayload(d.mangaId, !d.manga.inLibrary)
+}
+
+// Whether the manga is in the library after libraryPayload's ok reply.
+function libraryReply(reply) {
+  var m = reply.data.mangas ? reply.data.mangas[0] : reply.data.updateManga.manga
+  return m.inLibrary === true
 }
 
 // Mihon's GetDuplicateLibraryManga: the library manga, other than this
@@ -490,7 +500,12 @@ function gridChanges(shown, items) {
 // { title, detail } for a listing or detail that failed or came back empty,
 // else null. localFolder: where the local source reads, for its how-to.
 function notice(s, configPath, localFolder) {
-  var p = Model.again(s.flare ? { title: "This source needs FlareSolverr", detail: "It sits behind Cloudflare. Turn FlareSolverr on in Setup or Settings, then press r." } : Model.problem(s, configPath), s)
+  // A detail or a listing of miharchy-core's.
+  var core = s.core === true || !!(s.source && s.source.core)
+  // ponytail: core has no FlareSolverr fallback until #361.
+  var flare = core ? { title: "This source sits behind Cloudflare", detail: "miharchy-core cannot pass Cloudflare yet (#361)." }
+    : { title: "This source needs FlareSolverr", detail: "It sits behind Cloudflare. Turn FlareSolverr on in Setup or Settings, then press r." }
+  var p = Model.again(s.flare ? flare : Model.problem(s, configPath, core ? "core" : ""), s)
   if (p) return p
   if (s.state === "ok" && s.items && s.items.length === 0 && s.mode !== "search" && s.source && s.source.id === LOCAL_SOURCE) {
     return { title: "No local manga", detail: "Put a folder per manga in " + localFolder + ", holding a folder of images or a .cbz per chapter. Then press p. Settings sets the folder." }
@@ -507,6 +522,7 @@ if (typeof module !== "undefined") {
     loadAgain: loadAgain,
     SOURCES_QUERY: SOURCES_QUERY,
     sourcesPayload: sourcesPayload,
+    libraryReply: libraryReply,
     sources: sources,
     PREFS: PREFS,
     pinned: pinned,

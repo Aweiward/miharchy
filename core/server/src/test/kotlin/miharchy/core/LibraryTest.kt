@@ -138,6 +138,12 @@ class LibraryTest {
             r.expect(Kind.notFound, "meta.set", obj("metas" to listOf(obj("scope" to "manga", "owner" to 999, "key" to "k", "value" to "v"))))
             assertEquals("\"1700000000\"", r.call("meta.get", obj("scope" to "global", "keys" to listOf("miharchy.historyClearedAt")))["metas"]!!.jsonArray.single().o()["value"].toString())
             assertEquals(2, r.call("meta.get", obj("scope" to "manga", "keys" to listOf("miharchy.notes")))["metas"]!!.jsonArray.size)
+            // A manga's choices load with the global ones in one call, in query order.
+            val both = r.call("meta.get", obj("queries" to listOf(
+                obj("scope" to "global", "keys" to listOf("miharchy.historyClearedAt", "miharchy.notes")),
+                obj("scope" to "manga", "owners" to listOf(a), "keys" to listOf("miharchy.notes")),
+            )))["metas"]!!.jsonArray.map { it.o()["scope"]!!.jsonPrimitive.content + ":" + it.o()["value"]!!.jsonPrimitive.content }
+            assertEquals(listOf("global:1700000000", "manga:good"), both)
             assertEquals("2", r.call("meta.delete", obj("scope" to "manga", "owners" to listOf(a, b), "keys" to listOf("miharchy.notes")))["deleted"].toString())
             r.expect(Kind.invalid, "meta.get", obj("scope" to "chapter"))
 

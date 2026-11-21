@@ -72,7 +72,7 @@ QtObject {
   // manga drop their own choices to follow it.
   function saveDefault(mangaIds) {
     table.forEach(function(c) { store.save("global", c.key, Prefs.savePayload(c.key, store.values[c.key], undefined, store.core())) })
-    var reset = Prefs.resetPayload(table, mangaIds || [])
+    var reset = Prefs.resetPayload(table, mangaIds || [], core())
     if (reset) save("global", "reset", reset)
     pump()
   }

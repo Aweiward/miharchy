@@ -225,7 +225,9 @@ class Library(private val db: Database, private val extensions: Extensions) {
     }
 
     /** `{ scope, owners?, keys? }`: global metas have owner 0. */
+    /** One query `{ scope, owners?, keys? }`, or several as `{ queries: [...] }`, answered in that order. */
     private suspend fun getMetas(input: JsonObject): List<JsonObject> {
+        (input["queries"] as? JsonArray)?.let { qs -> return qs.flatMap { getMetas(it as? JsonObject ?: throw ApiError(Kind.invalid, "Each query is an object.")) } }
         val scope = input.scope()
         val owners = if ("owners" in input) input.longs("owners") else null
         val keys = if ("keys" in input) input.strings("keys") else null
