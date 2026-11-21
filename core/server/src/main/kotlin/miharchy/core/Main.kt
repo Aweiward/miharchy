@@ -26,7 +26,8 @@ fun main() {
     val extensions = Extensions(db, host, data.resolve("extensions"))
     runBlocking { extensions.start() }
     val browse = Browse(db, host, extensions, data.resolve("covers"))
-    val core = Core(config.secret, db, routes = extensions.routes + browse.routes, images = browse.images)
+    val library = Library(db, extensions)
+    val core = Core(config.secret, db, routes = extensions.routes + browse.routes + library.routes, images = browse.images)
     System.err.println("miharchy-core: listening on 127.0.0.1:$port")
     embeddedServer(CIO, host = "127.0.0.1", port = port) { api(core) }.start(wait = true)
 }

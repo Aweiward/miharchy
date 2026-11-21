@@ -69,8 +69,6 @@ suspend fun Host.call(req: JsonObject, seconds: Long = 120): JsonElement {
     }
 }
 
-/** Mihon's SManga status codes, by the names Suwayomi's MangaStatus gives them. */
-private val STATUS = listOf("UNKNOWN", "ONGOING", "COMPLETED", "LICENSED", "PUBLISHING_FINISHED", "CANCELLED", "ON_HIATUS")
 
 /**
  * Browsing and reading on the source side (#365): source listings, manga details and chapter lists
@@ -172,12 +170,12 @@ class Browse(private val db: Database, private val host: Host, private val exten
     private fun hostManga(row: Row) = JsonObject(row.fields.filterKeys { it != "favoriteAt" })
 
     private suspend fun detail(id: Long): JsonObject {
-        val (row, chapters) = db.run { c -> row(c, id) to chapters(c, id) }
-        return mangaJson(row, chapters)
+        val (row, chapters, extra) = db.run { c -> Triple(row(c, id), chapters(c, id), mangaCategories(c, listOf(id))[id]!! to mangaMetas(c, listOf(id))[id]!!) }
+        return mangaJson(row, chapters, extra.first, extra.second)
     }
 
-    /** The fields `Browse.toManga` reads today. Categories and metas come with #366. */
-    private suspend fun mangaJson(row: Row, chapters: List<JsonObject>): JsonObject {
+    /** The fields `Browse.toManga` reads today. */
+    private suspend fun mangaJson(row: Row, chapters: List<JsonObject>, categories: JsonArray, meta: JsonArray): JsonObject {
         val f = row.fields
         val source = extensions.sources().firstOrNull { it["id"]!!.jsonPrimitive.content == row.source.toString() }
         val urls = source?.let {
@@ -197,11 +195,14 @@ class Browse(private val db: Database, private val host: Host, private val exten
             put("realUrl", urls?.get("manga") ?: JsonNull)
             put("title", f["title"]!!)
             put("author", f["author"]!!); put("artist", f["artist"]!!); put("description", f["description"]!!)
-            put("genre", JsonArray(f.s("genre").orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.map(::JsonPrimitive)))
-            put("status", STATUS.getOrElse(f["status"]!!.jsonPrimitive.intOrNull ?: 0) { "UNKNOWN" })
+            put("genre", genres(f.s("genre")))
+            put("status", status(f["status"]!!.jsonPrimitive.intOrNull ?: 0))
             put("thumbnailUrl", if (f.s("thumbnailUrl") != null) "/api/cover/${row.id}" else null)
             put("inLibrary", f["favoriteAt"] !is JsonNull)
             put("initialized", f["initialized"]!!)
+            put("inLibraryAt", seconds(f["favoriteAt"]?.jsonPrimitive?.longOrNull))
+            put("categories", categories)
+            put("meta", meta)
             put("chapters", JsonArray(chapters.mapIndexed { i, ch ->
                 val realUrl = chapterUrls?.getOrNull(i)
                 if (realUrl == null) ch else JsonObject(ch + ("realUrl" to realUrl))
@@ -209,22 +210,7 @@ class Browse(private val db: Database, private val host: Host, private val exten
         }
     }
 
-    /** A manga's chapters, with the fields `Browse.toChapters` reads. A higher sourceOrder is newer, as on Suwayomi. */
-    private fun chapters(c: Connection, mangaId: Long): List<JsonObject> = c.prepareStatement(
-        """SELECT id, remote_url, remote_name, remote_chapter_number, remote_date_upload, user_read, user_bookmark,
-                  user_last_page_read, remote_scanlator, remote_order
-           FROM chapter WHERE manga_id = ? ORDER BY remote_order""",
-    ).use { p ->
-        p.setLong(1, mangaId)
-        p.executeQuery().use { r -> generateSequence { if (r.next()) chapterJson(r, mangaId) else null }.toList() }
-    }.let { list -> list.map { JsonObject(it + ("sourceOrder" to JsonPrimitive(list.size - it["sourceOrder"]!!.jsonPrimitive.content.toInt()))) } }
-
-    private fun chapterJson(r: ResultSet, mangaId: Long) = buildJsonObject {
-        put("id", r.getLong(1)); put("mangaId", mangaId); put("url", r.getString(2)); put("name", r.getString(3))
-        put("chapterNumber", r.getDouble(4)); put("uploadDate", r.getLong(5)); put("isRead", r.getInt(6) == 1)
-        put("isBookmarked", r.getInt(7) == 1); put("lastPageRead", r.getInt(8)); put("isDownloaded", false)
-        put("scanlator", r.getString(9)); put("sourceOrder", r.getInt(10))
-    }
+    private fun chapters(c: Connection, mangaId: Long) = chapterRows(c, "ch.manga_id = ?", mangaId)
 
     /** Fetches details and chapters, as `fetchMangaAndChapters` does. Read state survives: chapters match by URL. */
     private suspend fun refresh(id: Long): JsonObject {
@@ -337,6 +323,8 @@ class Browse(private val db: Database, private val host: Host, private val exten
         if (!fresh) synchronized(pages) { pages[id] }?.let { return state to it }
         val list = host.call(buildJsonObject { put("op", "pages"); put("source", source); put("chapter", chapter) }).jsonArray.map { it.jsonObject }
         synchronized(pages) { pages[id] = list }
+        // Suwayomi's pageCount, which History and Up next show.
+        db.run { c -> c.prepareStatement("UPDATE chapter SET page_count = ? WHERE id = ?").use { it.setInt(1, list.size); it.setLong(2, id); it.executeUpdate() } }
         return state to list
     }
 
