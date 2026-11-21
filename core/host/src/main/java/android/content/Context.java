@@ -11,7 +11,18 @@ public class Context {
 
     public Context() {}
 
-    public static void setDataDir(File dir) { dataDir = dir; }
+    /** The folder holds cookies and source settings, so only its owner may open it. */
+    public static void setDataDir(File dir) {
+        dir.mkdirs();
+        try {
+            java.nio.file.Files.setPosixFilePermissions(dir.toPath(), java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+        } catch (UnsupportedOperationException e) {
+            // Not a POSIX file system (Windows): the user's profile folder is private already.
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException("cannot make " + dir + " private", e);
+        }
+        dataDir = dir;
+    }
 
     public File getFilesDir() { return mk(new File(dataDir, "files")); }
     public File getCacheDir() { return mk(new File(dataDir, "cache")); }
