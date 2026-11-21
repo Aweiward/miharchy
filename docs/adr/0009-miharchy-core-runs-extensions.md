@@ -6,7 +6,7 @@ ADR 0001 rejected an extension host of our own, because it had to convert Androi
 
 Miharchy therefore replaces Suwayomi-Server with **miharchy-core**: one Kotlin service that owns all state and runs extensions in-process.
 
-- miharchy-core grows from the sync helper's Gradle module (`sync/`), which already has Mihon's backup classes and the tested merge.
+- miharchy-core lives in `core/`, outside `sync/`. Setup fingerprints every file in `sync/` to decide when the sync helper is out of date, so core code there would ask every user to rebuild the helper. Core reuses `sync/`'s Mihon backup classes and tested merge; whether `sync/` later merges into core is open (#359).
 - It copies NanoYomi's host code and calls it in the same JVM. It does not use the host's stdio protocol.
 - It keeps the library, chapters, categories and metas in SQLite.
 - It runs the download queue, library update runs and tracker clients.
