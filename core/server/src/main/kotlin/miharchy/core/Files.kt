@@ -24,7 +24,8 @@ data class CoreConfig(val url: String, val secret: String)
  * after the secret is in it, and its mode is repaired on each start, as `server/miharchy-server` does.
  */
 fun loadOrCreateConfig(file: Path, port: Int): CoreConfig {
-    ownerOnlyDir(file.parent)
+    // Only a folder core creates is made 700: the parent may be shared, such as /tmp or $HOME.
+    if (!Files.exists(file.parent)) ownerOnlyDir(file.parent)
     if (!Files.exists(file)) {
         val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val config = CoreConfig("http://127.0.0.1:$port", bytes.joinToString("") { "%02x".format(it) })

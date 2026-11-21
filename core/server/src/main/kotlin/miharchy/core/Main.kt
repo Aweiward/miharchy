@@ -13,9 +13,12 @@ fun main() {
     val home = Path.of(System.getProperty("user.home"))
     val data = ownerOnlyDir(System.getenv("MIHARCHY_CORE_DATA")?.let(Path::of) ?: home.resolve(".local/share/miharchy/core"))
     val configFile = System.getenv("MIHARCHY_CORE_CONFIG")?.let(Path::of) ?: home.resolve(".config/miharchy/core.json")
-    val port = System.getenv("MIHARCHY_CORE_PORT")?.toInt() ?: 4591
-
-    val config = loadOrCreateConfig(configFile, port)
+    // The port of a new core.json; after that, the file's url is the one source of the port,
+    // because every client reads it from there.
+    val asked = System.getenv("MIHARCHY_CORE_PORT")?.toInt()
+    val config = loadOrCreateConfig(configFile, asked ?: 4591)
+    val port = java.net.URI(config.url).port
+    require(asked == null || asked == port) { "MIHARCHY_CORE_PORT is $asked, but $configFile says ${config.url}" }
     startHost(data.resolve("host").toFile())
     val core = Core(config.secret, Database(data.resolve("core.db")))
     System.err.println("miharchy-core: listening on 127.0.0.1:$port")

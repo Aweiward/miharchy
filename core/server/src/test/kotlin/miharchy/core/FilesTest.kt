@@ -28,6 +28,14 @@ class FilesTest {
     }
 
     @Test
+    fun aSharedFolderKeepsItsMode() {
+        val shared = Files.createDirectories(dir.resolve("shared"), PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")))
+        loadOrCreateConfig(shared.resolve("core.json"), 4591)
+        assertEquals("rwxr-xr-x", mode(shared))
+        assertEquals("rw-------", mode(shared.resolve("core.json")))
+    }
+
+    @Test
     fun anOpenDataFolderIsRepaired() {
         val data = Files.createDirectories(dir.resolve("data"), PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")))
         ownerOnlyDir(data)
