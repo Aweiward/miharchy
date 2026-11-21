@@ -37,7 +37,7 @@ ShellRoot {
   // moved so far (Extensions) talk to miharchy-core through core.json, and
   // the rest stay on Suwayomi. Users never set it; #373 flips the default.
   readonly property bool coreBackend: Quickshell.env("MIHARCHY_BACKEND") === "core"
-  readonly property string coreConfigPath: Quickshell.env("MIHARCHY_CORE_JSON") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
+  readonly property string coreConfigPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
   property var coreConfig: null
 
   // The launcher's open-updates starts a window on Updates.

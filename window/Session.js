@@ -204,7 +204,7 @@ function wrongBackend(core, done) {
 // Model.coreReply gives.
 function send(config, payload, done) {
   var core = config.backend === "core"
-  if (core !== (typeof payload.route === "string")) return wrongBackend(core, done)
+  if (core !== (!!payload && typeof payload.route === "string")) return wrongBackend(core, done)
   if (core) return coreCall(config, config.url + "/api/" + payload.route, payload.body || {}, CORE, done)
   return call(config, config.url + "/api/graphql", payload, GRAPHQL, done)
 }

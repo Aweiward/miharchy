@@ -37,9 +37,9 @@ Item {
 
   readonly property var rows: Extensions.rows(ext, { query: query, allLanguages: allLanguages, showNsfw: showNsfw })
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.key === view.cursorKey }))
-  readonly property bool core: !!config && config.backend === "core"
-  // Set by shell.qml with MIHARCHY_BACKEND=core, so a missing core.json words itself.
+  // "core" with MIHARCHY_BACKEND=core (shell.qml), so a missing core.json words itself.
   property string backend: ""
+  readonly property bool core: backend === "core"
   readonly property var problem: Model.problem(ext, configPath, backend)
   readonly property var detailsExtension: details ? Extensions.find(ext, details.pkgName) : null
   readonly property bool updatable: ext.extensions.some(function(e) { return e.installed && e.hasUpdate })
@@ -69,7 +69,7 @@ Item {
     if (editing) closeField()
     loadSeq++
     closeDetails()
-    ext = config ? Extensions.initial(config.backend === "core") : Extensions.reduce(Extensions.initial(), { type: "config-missing" })
+    ext = config ? Extensions.initial(core) : Extensions.reduce(Extensions.initial(), { type: "config-missing" })
     if (active) load()
   }
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
@@ -80,7 +80,7 @@ Item {
 
   function load() {
     // Without core.json nothing else says so: the status bar is Suwayomi's.
-    if (!config && backend === "core") ext = Extensions.reduce(Extensions.initial(), { type: "config-missing" })
+    if (!config && core) ext = Extensions.reduce(Extensions.initial(), { type: "config-missing" })
     if (!config) return
     ext = Extensions.reduce(ext, { type: "load" })
     advance()
