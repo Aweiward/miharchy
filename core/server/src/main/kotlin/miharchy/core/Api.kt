@@ -68,6 +68,8 @@ class Core(
         "health" to { buildJsonObject { put("ok", true); put("schema", db.run { db.schema }) } },
     ) + routes
 
+    init { require("health" !in routes) { "health is core's own route" } }
+
     /** Compared in constant time, so the reply time does not leak the secret. */
     fun accepts(secret: String?) = secret != null && MessageDigest.isEqual(secret.toByteArray(), this.secret.toByteArray())
 }

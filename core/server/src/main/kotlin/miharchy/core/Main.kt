@@ -27,7 +27,10 @@ fun main() {
     runBlocking { extensions.start() }
     val browse = Browse(db, host, extensions, data.resolve("covers"))
     val library = Library(db, extensions)
-    val core = Core(config.secret, db, routes = extensions.routes + browse.routes + library.routes, images = browse.images)
+    val slices = listOf(extensions.routes, browse.routes, library.routes)
+    // A + B silently keeps one of two routes with the same name.
+    check(slices.sumOf { it.size } == slices.flatMap { it.keys }.toSet().size) { "two slices define the same route" }
+    val core = Core(config.secret, db, routes = slices.reduce { a, b -> a + b }, images = browse.images)
     System.err.println("miharchy-core: listening on 127.0.0.1:$port")
     embeddedServer(CIO, host = "127.0.0.1", port = port) { api(core) }.start(wait = true)
 }

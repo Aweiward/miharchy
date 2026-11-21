@@ -20,9 +20,9 @@ fun seconds(ms: Long?): Long = (ms ?: 0) / 1000
 fun chapterRows(c: Connection, where: String, vararg args: Any): List<JsonObject> = c.prepareStatement(
     """SELECT ch.id, ch.manga_id, ch.remote_url, ch.remote_name, ch.remote_chapter_number, ch.remote_date_upload, ch.user_read,
               ch.user_bookmark, ch.user_last_page_read, ch.remote_scanlator,
-              (SELECT count(*) FROM chapter o WHERE o.manga_id = ch.manga_id) - ch.remote_order,
-              h.read_at, ch.state_date_fetch, ch.page_count
+              n.total - ch.remote_order, h.read_at, ch.state_date_fetch, ch.page_count
        FROM chapter ch LEFT JOIN history h ON h.chapter_id = ch.id
+       JOIN (SELECT manga_id, count(*) AS total FROM chapter GROUP BY manga_id) n ON n.manga_id = ch.manga_id
        WHERE $where ORDER BY ch.manga_id, ch.remote_order""",
 ).use { p ->
     args.forEachIndexed { i, a -> p.setObject(i + 1, a) }
@@ -44,9 +44,9 @@ fun mangaMetas(c: Connection, ids: Collection<Long>): Map<Long, JsonArray> = met
 fun metasOf(c: Connection, scope: String, ids: Collection<Long>): Map<Long, JsonArray> {
     if (ids.isEmpty()) return emptyMap()
     val out = mutableMapOf<Long, MutableList<JsonObject>>()
-    c.prepareStatement("SELECT owner, key, value FROM metas WHERE scope = ? AND owner IN (${ids.joinToString(",") { "?" }}) ORDER BY key").use { p ->
+    c.prepareStatement("SELECT owner, key, value FROM metas WHERE scope = ? AND ${among("owner")} ORDER BY key").use { p ->
         p.setString(1, scope)
-        ids.forEachIndexed { i, id -> p.setLong(i + 2, id) }
+        p.setString(2, idList(ids))
         p.executeQuery().use { r ->
             while (r.next()) out.getOrPut(r.getLong(1)) { mutableListOf() } += buildJsonObject { put("key", r.getString(2)); put("value", r.getString(3)) }
         }
@@ -58,8 +58,8 @@ fun metasOf(c: Connection, scope: String, ids: Collection<Long>): Map<Long, Json
 fun mangaCategories(c: Connection, ids: Collection<Long>): Map<Long, JsonArray> {
     if (ids.isEmpty()) return emptyMap()
     val out = mutableMapOf<Long, MutableList<JsonPrimitive>>()
-    c.prepareStatement("SELECT manga_id, category_id FROM manga_category WHERE manga_id IN (${ids.joinToString(",") { "?" }}) ORDER BY category_id").use { p ->
-        ids.forEachIndexed { i, id -> p.setLong(i + 1, id) }
+    c.prepareStatement("SELECT manga_id, category_id FROM manga_category WHERE ${among("manga_id")} ORDER BY category_id").use { p ->
+        p.setString(1, idList(ids))
         p.executeQuery().use { r -> while (r.next()) out.getOrPut(r.getLong(1)) { mutableListOf() } += JsonPrimitive(r.getLong(2)) }
     }
     return ids.associateWith { JsonArray(out[it].orEmpty()) }

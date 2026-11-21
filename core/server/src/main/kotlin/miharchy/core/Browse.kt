@@ -97,7 +97,7 @@ class Browse(private val db: Database, private val host: Host, private val exten
         "chapter.list" to { input ->
             val ids = (input["mangaIds"] as? JsonArray)?.map { it.jsonPrimitive.longOrNull ?: throw ApiError(Kind.invalid, "mangaIds holds numbers.") }
                 ?: throw ApiError(Kind.invalid, "The request needs mangaIds, a list of manga ids.")
-            buildJsonObject { put("chapters", JsonArray(db.run { c -> ids.flatMap { chapters(c, it) } })) }
+            buildJsonObject { put("chapters", JsonArray(db.run { c -> chapterRows(c, among("ch.manga_id"), idList(ids)) })) }
         },
         "chapter.pages" to { input -> chapterPages(input.id("id")) },
     )

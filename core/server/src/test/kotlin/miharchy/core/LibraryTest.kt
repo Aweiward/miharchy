@@ -114,6 +114,8 @@ class LibraryTest {
             val saved = r.call("chapter.update", obj("ids" to listOf(4), "lastPageRead" to 2, "isBookmarked" to true))["chapters"]!!.jsonArray.single().o()
             assertEquals("true", saved["isBookmarked"].toString())
             assertTrue(saved.l("lastReadAt") > 1_700_000_000L, "lastReadAt is in seconds")
+            // Mark-unread resets the page, which is not reading.
+            r.call("chapter.update", obj("ids" to listOf(3), "isRead" to false, "lastPageRead" to 0))
             r.expect(Kind.notFound, "chapter.update", obj("ids" to listOf(999), "isRead" to true))
             r.expect(Kind.invalid, "chapter.update", obj("ids" to listOf(1), "lastPageRead" to -1))
 
@@ -138,6 +140,14 @@ class LibraryTest {
             assertEquals(2, r.call("meta.get", obj("scope" to "manga", "keys" to listOf("miharchy.notes")))["metas"]!!.jsonArray.size)
             assertEquals("2", r.call("meta.delete", obj("scope" to "manga", "owners" to listOf(a, b), "keys" to listOf("miharchy.notes")))["deleted"].toString())
             r.expect(Kind.invalid, "meta.get", obj("scope" to "chapter"))
+
+            // A whole library's chapters in one call, past SQLite's limit of 32,766 parameters.
+            val many = db.run { c ->
+                c.batch("INSERT INTO chapter (manga_id, remote_url, remote_name, remote_chapter_number, remote_order, state_date_fetch) VALUES (?, ?, ?, 1, ?, 0)",
+                    (0 until 40_000).map { listOf(a, "/bulk/$it", "Bulk $it", 100 + it) })
+                c.query("SELECT id FROM chapter WHERE manga_id = ?", a) { it.getLong(1) }
+            }
+            assertEquals(many.size, r.call("chapter.update", obj("ids" to many, "isRead" to true))["chapters"]!!.jsonArray.size)
         }
     }
 }

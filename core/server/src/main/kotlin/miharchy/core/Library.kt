@@ -123,17 +123,18 @@ class Library(private val db: Database, private val extensions: Extensions) {
         val page = input["lastPageRead"]?.let { (it as? JsonPrimitive)?.intOrNull?.takeIf { n -> n >= 0 } ?: throw ApiError(Kind.invalid, "lastPageRead is a page index.") }
         return db.run { c ->
             c.transaction {
-                val found = c.query("SELECT id FROM chapter WHERE id IN (${ids.joinToString(",") { "?" }})", *ids.toTypedArray()) { it.getLong(1) }.toSet()
+                val found = c.query("SELECT id FROM chapter WHERE ${among("id")}", idList(ids)) { it.getLong(1) }.toSet()
                 (ids - found).firstOrNull()?.let { throw ApiError(Kind.notFound, "There is no chapter $it.") }
                 val now = System.currentTimeMillis()
                 c.batch("UPDATE chapter SET user_read = coalesce(?, user_read), user_bookmark = coalesce(?, user_bookmark), user_last_page_read = coalesce(?, user_last_page_read) WHERE id = ?",
                     ids.map { listOf(read?.let { if (it) 1 else 0 }, bookmark?.let { if (it) 1 else 0 }, page, it) })
-                if (page != null) c.batch(
+                // Opening or saving a page is reading; mark-unread's reset to page 0 is not, as in History.js.
+                if (page != null && read != false) c.batch(
                     """INSERT INTO history (manga_id, chapter_id, read_at) SELECT manga_id, id, ? FROM chapter WHERE id = ?
                        ON CONFLICT (chapter_id) DO UPDATE SET read_at = excluded.read_at""",
                     ids.map { listOf(now, it) },
                 )
-                buildJsonObject { put("chapters", JsonArray(chapterRows(c, "ch.id IN (${ids.joinToString(",") { "?" }})", *ids.toTypedArray()))) }
+                buildJsonObject { put("chapters", JsonArray(chapterRows(c, among("ch.id"), idList(ids)))) }
             }
         }
     }
@@ -230,11 +231,11 @@ class Library(private val db: Database, private val extensions: Extensions) {
         val keys = if ("keys" in input) input.strings("keys") else null
         val where = buildList {
             add("scope = ?")
-            if (owners != null) add("owner IN (${owners.joinToString(",") { "?" }})")
-            if (keys != null) add("key IN (${keys.joinToString(",") { "?" }})")
+            if (owners != null) add(among("owner"))
+            if (keys != null) add(among("key"))
         }.joinToString(" AND ")
         return db.run { c ->
-            c.query("SELECT scope, owner, key, value FROM metas WHERE $where ORDER BY owner, key", scope, *owners.orEmpty().toTypedArray(), *keys.orEmpty().toTypedArray()) { r -> metaJson(r.getString(1), r.getLong(2), r.getString(3), r.getString(4)) }
+            c.query("SELECT scope, owner, key, value FROM metas WHERE $where ORDER BY owner, key", scope, *listOfNotNull(owners?.let(::idList), keys?.let(::textList)).toTypedArray()) { r -> metaJson(r.getString(1), r.getLong(2), r.getString(3), r.getString(4)) }
         }
     }
 
@@ -268,8 +269,7 @@ class Library(private val db: Database, private val extensions: Extensions) {
         val keys = input.strings("keys")
         return db.run { c ->
             c.transaction {
-                c.update("DELETE FROM metas WHERE scope = ? AND owner IN (${owners.joinToString(",") { "?" }}) AND key IN (${keys.joinToString(",") { "?" }})",
-                    scope, *owners.toTypedArray(), *keys.toTypedArray())
+                c.update("DELETE FROM metas WHERE scope = ? AND ${among("owner")} AND ${among("key")}", scope, idList(owners), textList(keys))
             }
         }
     }
@@ -288,7 +288,7 @@ class Library(private val db: Database, private val extensions: Extensions) {
                 limit + 1, offset,
             ) { it.getLong(1) }
             val page = ids.take(limit)
-            val chapters = if (page.isEmpty()) emptyMap() else chapterRows(c, "ch.id IN (${page.joinToString(",") { "?" }})", *page.toTypedArray()).associateBy { it["id"]!!.jsonPrimitive.content.toLong() }
+            val chapters = if (page.isEmpty()) emptyMap() else chapterRows(c, among("ch.id"), idList(page)).associateBy { it["id"]!!.jsonPrimitive.content.toLong() }
             val mangaIds = chapters.values.map { it["mangaId"]!!.jsonPrimitive.content.toLong() }.distinct()
             val metas = mangaMetas(c, mangaIds)
             val mangas = mangaIds.associateWith { id ->
@@ -309,7 +309,7 @@ class Library(private val db: Database, private val extensions: Extensions) {
     }
 
     private fun requireMangas(c: Connection, ids: List<Long>) {
-        val found = c.query("SELECT id FROM manga WHERE id IN (${ids.joinToString(",") { "?" }})", *ids.toTypedArray()) { it.getLong(1) }.toSet()
+        val found = c.query("SELECT id FROM manga WHERE ${among("id")}", idList(ids)) { it.getLong(1) }.toSet()
         (ids - found).firstOrNull()?.let { throw ApiError(Kind.notFound, "There is no manga $it.") }
     }
 }
@@ -337,6 +337,11 @@ private fun JsonObject.longs(k: String): List<Long> = (this[k] as? JsonArray)?.m
 
 private fun JsonObject.strings(k: String): List<String> = (this[k] as? JsonArray)?.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: throw ApiError(Kind.invalid, "$k holds strings.") }
     ?.takeIf { it.isNotEmpty() } ?: throw ApiError(Kind.invalid, "The request needs $k, a list of strings.")
+
+/** `col IN` the values of one JSON array parameter, so a list of any size fits SQLite's variable limit. */
+fun among(col: String) = "$col IN (SELECT value FROM json_each(?))"
+fun idList(ids: Collection<Long>) = JsonArray(ids.map(::JsonPrimitive)).toString()
+fun textList(items: Collection<String>) = JsonArray(items.map(::JsonPrimitive)).toString()
 
 /** One statement with [args]; returns the rows [map] makes. */
 fun <T> Connection.query(sql: String, vararg args: Any?, map: (java.sql.ResultSet) -> T): List<T> = prepareStatement(sql).use { p ->
