@@ -144,9 +144,10 @@ function onward(r, delta) {
 // to trackers and deletes nothing after reading.
 // mangaTitle names the folder a saved page goes to.
 // peek: a peek opened the chapter, so Catch-up applies (stops()).
-function open(mangaId, chapters, chapterId, readingMode, incognito, mangaTitle, peek) {
+// core: the chapters are miharchy-core's (ADR 0010).
+function open(mangaId, chapters, chapterId, readingMode, incognito, mangaTitle, peek, core) {
   var l = relist(chapters, chapterId)
-  return at({ mangaId: mangaId, chapters: l.chapters, mode: readingMode, incognito: incognito === true, mangaTitle: mangaTitle || "", peek: peek === true, finished: 0, lifted: false }, l.index, false)
+  return at({ mangaId: mangaId, core: core === true, chapters: l.chapters, mode: readingMode, incognito: incognito === true, mangaTitle: mangaTitle || "", peek: peek === true, finished: 0, lifted: false }, l.index, false)
 }
 
 // Saving and copying the page shown (Mihon's page actions). The page's
@@ -219,6 +220,7 @@ function chapterName(r) {
 }
 
 function pagesPayload(r) {
+  if (r.core) return r.state === "loading" ? { route: "chapter.pages", body: { id: chapterId(r) } } : null
   return r.state === "loading" ? { query: PAGES_MUTATION, variables: { id: chapterId(r) } } : null
 }
 
@@ -381,7 +383,7 @@ function spread(r, layout, fitMode, view, zoom) {
 function reduce(r, event) {
   switch (event.type) {
     case "pages":
-      var f = event.reply.state === "ok" ? event.reply.data.fetchChapterPages : null
+      var f = event.reply.state === "ok" ? (r.core ? event.reply.data : event.reply.data.fetchChapterPages) : null
       var pages = f ? (f.pages || []).map(function(p) { return Model.coverUrl(event.config, p) }) : []
       if (!pages.length) {
         var why = f ? { state: "error", message: "This chapter has no pages." } : { state: event.reply.state, message: event.reply.message }
@@ -446,12 +448,15 @@ function savePayload(r) {
   if (r.saved && r.saved.page === r.page && r.saved.read === r.read) return null
   var patch = { lastPageRead: r.page }
   if (r.read) patch.isRead = true
+  if (r.core) return { route: "chapter.update", body: copy(patch, { ids: [chapterId(r)] }) }
   return { query: SAVE_MUTATION, variables: { id: chapterId(r), patch: patch } }
 }
 
 // The tracker push due after savePayload()'s reply: only for the save that
 // first marks the chapter read. Take it before "saving" records the save.
+// ponytail: no trackers on core until #371 and #383.
 function trackPayload(r) {
+  if (r.core) return null
   if (r.state !== "ok" || r.incognito || !r.read || r.wasRead || (r.saved && r.saved.read)) return null
   return Chapters.trackPayload([r.mangaId])
 }
@@ -479,10 +484,11 @@ function deleteTarget(r, slots) {
 
 // Mihon's top bar bookmark: b turns the chapter open's bookmark on or off.
 function bookmarkPayload(r) {
-  return Chapters.bookmarkPayload([r.chapters[r.index]])
+  return Chapters.bookmarkPayload([r.chapters[r.index]], r.core)
 }
 
 function modePayload(r) {
+  if (r.core) return { route: "meta.set", body: { metas: [{ scope: "manga", owner: r.mangaId, key: MODE_KEY, value: r.mode }] } }
   return { query: MODE_MUTATION, variables: { meta: { mangaId: r.mangaId, key: MODE_KEY, value: r.mode } } }
 }
 

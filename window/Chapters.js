@@ -22,9 +22,12 @@ var BOOKMARK_MUTATION = "mutation($ids: [Int!]!, $bookmarked: Boolean!) {"
 // touches the unread chapters and keeps their page; marking unread touches
 // the read or started ones and sends them back to page 1. null when nothing
 // changes.
-function markPayload(chapters, read) {
+// core: one chapter.update; page 0 on the ones already there is no change,
+// and core stamps no History for an unread reset.
+function markPayload(chapters, read, core) {
   var todo = chapters.filter(function(c) { return read ? !c.read : c.read || c.lastPage > 0 })
   if (!todo.length) return null
+  if (core) return { route: "chapter.update", body: read ? { ids: todo.map(function(c) { return c.id }), isRead: true } : { ids: todo.map(function(c) { return c.id }), isRead: false, lastPageRead: 0 } }
   var started = read ? [] : todo.filter(function(c) { return c.lastPage > 0 })
   var ids = todo.filter(function(c) { return started.indexOf(c) === -1 }).map(function(c) { return c.id })
   return { query: MARK_MUTATION, variables: { ids: ids, started: started.map(function(c) { return c.id }), read: read } }
@@ -32,9 +35,10 @@ function markPayload(chapters, read) {
 
 // One key toggles: Mihon's menu offers bookmark while any chapter lacks
 // one, else remove. null when nothing changes.
-function bookmarkPayload(chapters) {
+function bookmarkPayload(chapters, core) {
   var bookmarked = chapters.some(function(c) { return !c.bookmarked })
   var todo = chapters.filter(function(c) { return c.bookmarked !== bookmarked })
+  if (core) return todo.length ? { route: "chapter.update", body: { ids: todo.map(function(c) { return c.id }), isBookmarked: bookmarked } } : null
   return todo.length ? { query: BOOKMARK_MUTATION, variables: { ids: todo.map(function(c) { return c.id }), bookmarked: bookmarked } } : null
 }
 

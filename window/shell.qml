@@ -242,7 +242,7 @@ ShellRoot {
       if (reply.state !== "ok") return library(reply)
       var list = UpNext.list(reply.data, root.downloadedOnly, Date.now())
       if (!next) root.upNextOrder = list.map(function(e) { return e.mangaId })
-      var target = next ? root.nextInOrder(list, reader.open ? reader.reader.mangaId : null) : list[0]
+      var target = next ? root.nextInOrder(list, reader.open && !reader.onCore ? reader.reader.mangaId : null) : list[0]
       if (target) root.openChapter(target, true)
       else library()
     })
@@ -267,7 +267,7 @@ ShellRoot {
   // the next key (peek(true)). Itself again, or none, is nothing to offer.
   function lookUpNext(mangaId) {
     send(UpNext.payload(), function(reply) {
-      if (!reader.open || reader.reader.mangaId !== mangaId) return
+      if (!reader.open || reader.onCore || reader.reader.mangaId !== mangaId) return
       var next = reply.state === "ok" ? root.nextInOrder(UpNext.list(reply.data, root.downloadedOnly, Date.now()), mangaId) : null
       if (next && next.mangaId === mangaId) next = null
       var manga = next ? (root.connection.manga || []).filter(function(m) { return m.id === next.mangaId })[0] : null
@@ -350,7 +350,10 @@ ShellRoot {
   // The one path that marks chapters, from any view. action: "read",
   // "unread" or "bookmark" (a toggle). The trackers hear of a mark read, and
   // every view showing read state or bookmarks reloads.
-  function markChapters(chapters, action, mangaIds) {
+  // core: the chapters are miharchy-core's (the detail's on core): no
+  // trackers or downloads there yet, and no Suwayomi view to refresh.
+  function markChapters(chapters, action, mangaIds, core) {
+    if (core === true) return markOnCore(chapters, action, mangaIds)
     var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters) : Chapters.markPayload(chapters, action === "read")
     if (!payload || !config) return
     // Mihon's delete after marked read takes the chapters this mark reads.
@@ -370,6 +373,14 @@ ShellRoot {
         updatesView.load()
         root.fetchLibrary()
       }
+    })
+  }
+
+  function markOnCore(chapters, action, mangaIds) {
+    var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters, true) : Chapters.markPayload(chapters, action === "read", true)
+    if (!payload || !coreConfig) return
+    Session.send(coreConfig, payload, function(reply) {
+      if (mangaDetail.open && mangaDetail.onCore && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
     })
   }
 
@@ -458,6 +469,11 @@ ShellRoot {
     if (id === "trackAsk.yes" || id === "trackAsk.no") {
       if (id === "trackAsk.yes") pushTrackers(trackAsk.mangaIds)
       trackAsk = null
+      return
+    }
+    // The detail says what miharchy-core does not serve yet.
+    if (mangaDetail.onCore && mangaDetail.coreGates[id]) {
+      mangaDetail.run(id)
       return
     }
     if (id === "manga.track") {
@@ -825,9 +841,7 @@ ShellRoot {
           localFolder: Storage.localFolder({ HOME: Quickshell.env("HOME"), MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT") }, root.settingsState.values.localSourcePath)
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          // ponytail: on core a manga's detail waits for its move (#378's
-          // second part); the shared detail still talks to Suwayomi.
-          onOpenManga: function(mangaId) { if (!root.coreBackend) mangaDetail.openManga(mangaId, true) }
+          onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, true, root.coreBackend) }
         }
 
         HistoryView {
@@ -902,22 +916,25 @@ ShellRoot {
           id: mangaDetail
           anchors.fill: parent
           theme: theme
-          config: root.config
+          // On core (onCore) nothing of Suwayomi's reaches it: both servers
+          // number their manga, chapters and categories from 1.
+          config: onCore ? root.coreConfig : root.config
           downloadedOnly: root.downloadedOnly
-          configPath: root.configPath
-          categories: root.connection.categories
+          configPath: onCore ? root.coreConfigPath : root.configPath
+          categories: onCore ? [] : root.connection.categories
           onCategorized: if (root.config) root.fetchLibrary()
-          onLibraryChanged: function(mangaId, inLibrary) {
-            // A Suwayomi id would mark the core row with the same number.
-            if (!root.coreBackend) browseView.markInLibrary(mangaId, inLibrary)
+          onLibraryChanged: function(mangaId, inLibrary, core) {
+            // Browse's rows are core's with the switch on, Suwayomi's without.
+            if (core === root.coreBackend) browseView.markInLibrary(mangaId, inLibrary)
+            if (core) return
             if (inLibrary) root.addedToLibrary(mangaId)
             else if (root.config) root.fetchLibrary()
           }
-          queue: downloadsView.queue.items
+          queue: onCore ? [] : downloadsView.queue.items
           onDownloads: function(reply) { downloadsView.apply(reply) }
-          libraryManga: root.connection.manga
-          onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
-          onMark: function(chapters, action, mangaId) { root.markChapters(chapters, action, [mangaId]) }
+          libraryManga: onCore ? [] : root.connection.manga
+          onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false, mangaDetail.onCore) }
+          onMark: function(chapters, action, mangaId, core) { root.markChapters(chapters, action, [mangaId], core) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           skipFiltered: root.settingsState.values.skipFiltered
@@ -1013,19 +1030,22 @@ ShellRoot {
         id: reader
         anchors.fill: parent
         theme: theme
-        config: root.config
-        configPath: root.configPath
+        config: onCore ? root.coreConfig : root.config
+        configPath: onCore ? root.coreConfigPath : root.configPath
         values: root.settingsState.values
         onKey: function(event) { event.accepted = root.handleKey(event) }
         onEditEnded: keyRoot.forceActiveFocus()
         onSetting: function(row, value) { root.saveSetting(row, value) }
         onClosed: function(chapterId) {
-          mangaDetail.reread(chapterId)
+          // A chapter id means something only to the server it came from.
+          if (mangaDetail.onCore === reader.onCore) mangaDetail.reread(chapterId)
+          if (reader.onCore) return
           updatesView.load()
           if (root.config) root.fetchLibrary()
         }
         onDeleted: mangaDetail.reload()
-        onCaughtUpOn: function(mangaId) { root.lookUpNext(mangaId) }
+        // ponytail: Up next reads Suwayomi's library until #379 moves it.
+        onCaughtUpOn: function(mangaId) { if (!reader.onCore) root.lookUpNext(mangaId) }
         onNextManga: root.peek(true)
       }
 

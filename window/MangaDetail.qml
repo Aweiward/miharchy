@@ -21,6 +21,10 @@ Rectangle {
   required property Theme theme
   property var config: null
   property string configPath: ""
+  // The manga is miharchy-core's: Browse opened it with MIHARCHY_BACKEND=core.
+  // shell.qml then gives the core config and no Suwayomi categories,
+  // library or queue. Set before the detail, as config's change closes it.
+  property bool onCore: false
   property var detail: null
   property int cursor: 0
   // The user's categories, from the library; the checklist lists them.
@@ -68,12 +72,21 @@ Rectangle {
   // Downloaded only forces the Downloaded filter on, as Mihon's
   // Manga.downloadedFilter does.
   property bool downloadedOnly: false
-  readonly property var prefs: Prefs.force(Object.assign({}, chapterPrefs.values, scanlatorPrefs.values), "chapterFilterDownloaded", "include", downloadedOnly)
+  readonly property var prefs: Prefs.force(Object.assign({}, chapterPrefs.values, scanlatorPrefs.values), "chapterFilterDownloaded", "include", downloadedOnly && !onCore)
   readonly property var shown: detail ? Chapters.apply(detail.chapters, prefs) : []
   readonly property var next: Chapters.nextUnread(shown, prefs)
   readonly property string resume: detail ? Chapters.resumeLabel(detail.chapters, next) : ""
   readonly property var optionRows: Chapters.rows(prefs, detail ? Chapters.scanlators(detail.chapters) : [])
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
+  // ponytail: what core does not serve yet, by key, with the issue that moves it.
+  readonly property var coreGates: ({
+    "manga.download": "Downloads are not on miharchy-core yet (#367)",
+    "manga.downloads": "Downloads are not on miharchy-core yet (#367)",
+    "manga.deleteDownload": "Downloads are not on miharchy-core yet (#367)",
+    "manga.categories": "Categories move to miharchy-core with the Library (#379)",
+    "manga.track": "Tracking is not on miharchy-core yet (#371)",
+    "manga.migrate": "Migrate moves to miharchy-core with the Library (#379)"
+  })
   readonly property string hint: dupesOpen ? "j k move   enter open   M migrate to this   a add anyway   esc cancel   "
     : picking ? "j k move   space in or out   esc close   "
     : optionsOpen ? "j k move   enter change   esc close   "
@@ -81,11 +94,12 @@ Rectangle {
     : selecting ? "j k extend   R read   u unread   b bookmark   d download   x delete download   esc end   "
     : (note ? note + "   " : "") + "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   n notes   o browser   y copy link   Y copy title   / search title   r refresh   esc back   "
 
-  signal libraryChanged(int mangaId, bool inLibrary)
+  // core: whether the manga is miharchy-core's.
+  signal libraryChanged(int mangaId, bool inLibrary, bool core)
   signal read(var chapters, int chapterId)
   // shell.qml's markChapters() applies it and answers with markReply().
   // action: "read", "unread" or "bookmark".
-  signal mark(var chapters, string action, int mangaId)
+  signal mark(var chapters, string action, int mangaId, bool core)
   signal categorized()
   // A download mutation's reply, which carries the queue.
   signal downloads(var reply)
@@ -128,9 +142,11 @@ Rectangle {
   }
 
   // fromSource: opened while browsing a source, so it refreshes once.
-  function openManga(mangaId, fromSource) {
+  // core: the manga is miharchy-core's.
+  function openManga(mangaId, fromSource, core) {
+    onCore = core === true
     dupes = []
-    detail = Browse.detail(mangaId, fromSource)
+    detail = Browse.detail(mangaId, fromSource, onCore)
     chapterPrefs.open(mangaId)
     scanlatorPrefs.open(mangaId)
     menuPrefs.load()
@@ -189,15 +205,17 @@ Rectangle {
       if (dupes.length) return
     }
     var mangaId = detail.mangaId
+    var core = onCore
+    var cfg = config
     detail = Browse.reduceDetail(detail, { type: "library-request" })
     send(payload, function(reply) {
-      if (view.detail && view.detail.mangaId === mangaId) view.detail = Browse.reduceDetail(view.detail, { type: "library-reply", reply: reply })
-      if (reply.state === "ok") view.libraryChanged(mangaId, reply.data.updateManga.manga.inLibrary === true)
+      if (view.detail && view.detail.mangaId === mangaId && view.config === cfg) view.detail = Browse.reduceDetail(view.detail, { type: "library-reply", reply: reply })
+      if (reply.state === "ok") view.libraryChanged(mangaId, Browse.libraryReply(reply), core)
     })
   }
 
   function downloadsLeft(items) {
-    if (detail && items.some(function(i) { return i.mangaId === view.detail.mangaId })) reload()
+    if (detail && !onCore && items.some(function(i) { return i.mangaId === view.detail.mangaId })) reload()
   }
 
   function sendDownloads(payload) {
@@ -212,7 +230,7 @@ Rectangle {
 
   function sendMark(list, action) {
     anchor = -1
-    mark(list, action, detail.mangaId)
+    mark(list, action, detail.mangaId, onCore)
   }
 
   function chooseOption() {
@@ -237,9 +255,10 @@ Rectangle {
   function saveNotes() {
     var mangaId = detail.mangaId
     var text = notesField.text
+    var cfg = config
     notesNote = "Saving"
-    send(Prefs.savePayload("notes", text, mangaId), function(reply) {
-      if (!view.detail || view.detail.mangaId !== mangaId) return
+    send(Prefs.savePayload("notes", text, mangaId, onCore), function(reply) {
+      if (!view.detail || view.detail.mangaId !== mangaId || view.config !== cfg) return
       if (reply.state !== "ok") {
         view.notesNote = reply.message || reply.state
         return
@@ -289,6 +308,10 @@ Rectangle {
 
   function run(id) {
     note = ""
+    if (onCore && coreGates[id]) {
+      note = coreGates[id]
+      return
+    }
     switch (id) {
       case "manga.openWeb":
       case "manga.copyLink":
@@ -361,7 +384,7 @@ Rectangle {
         dupesCursor = Math.max(0, Math.min(dupes.length - 1, dupesCursor + (id === "manga.duplicatesUp" ? -1 : 1)))
         break
       case "manga.duplicateOpen":
-        openManga(dupes[dupesCursor].id, false)
+        openManga(dupes[dupesCursor].id, false, onCore)
         break
       case "manga.select":
         anchor = cursor

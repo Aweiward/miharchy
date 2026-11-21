@@ -32,7 +32,11 @@ function keys(table) {
 
 // core: the payloads take miharchy-core's meta routes (ADR 0010).
 function loadPayload(table, mangaId, core) {
-  if (core) return coreOnly(mangaId, { route: "meta.get", body: { scope: "global", keys: keys(table) } })
+  if (core) {
+    var global = { scope: "global", keys: keys(table) }
+    if (mangaId === undefined) return { route: "meta.get", body: global }
+    return { route: "meta.get", body: { queries: [global, { scope: "manga", owners: [mangaId], keys: keys(table) }] } }
+  }
   if (mangaId === undefined) {
     return {
       query: "query($keys: [String!]) { metas(filter: { key: { in: $keys } }) { nodes { key value } } }",
@@ -45,21 +49,20 @@ function loadPayload(table, mangaId, core) {
   }
 }
 
-// ponytail: global choices only on core; a manga's own choices come with
-// the manga detail's move (#378).
-function coreOnly(mangaId, payload) {
-  if (mangaId !== undefined) throw new Error("A manga's own choices are not on miharchy-core yet.")
-  return payload
-}
-
 function savePayload(key, value, mangaId, core) {
-  if (core) return coreOnly(mangaId, { route: "meta.set", body: { metas: [{ scope: "global", key: PREFIX + key, value: String(value) }] } })
+  if (core) {
+    var meta = mangaId === undefined ? { scope: "global" } : { scope: "manga", owner: mangaId }
+    meta.key = PREFIX + key
+    meta.value = String(value)
+    return { route: "meta.set", body: { metas: [meta] } }
+  }
   if (mangaId === undefined) return { query: SAVE_MUTATION, variables: { key: PREFIX + key, value: String(value) } }
   return { query: MANGA_SAVE_MUTATION, variables: { id: mangaId, key: PREFIX + key, value: String(value) } }
 }
 
 // Drops the table's choices from each manga, or null for no manga.
-function resetPayload(table, mangaIds) {
+function resetPayload(table, mangaIds, core) {
+  if (core) return mangaIds.length ? { route: "meta.delete", body: { scope: "manga", owners: mangaIds, keys: keys(table) } } : null
   return mangaIds.length ? { query: RESET_MUTATION, variables: { ids: mangaIds, keys: keys(table) } } : null
 }
 
@@ -68,7 +71,8 @@ function resetPayload(table, mangaIds) {
 function read(table, data, values) {
   var stored = {}
   // Core answers with the metas themselves, Suwayomi with a connection.
-  var nodes = Array.isArray(data.metas) ? data.metas : (data.metas && data.metas.nodes) || (data.setGlobalMeta ? [data.setGlobalMeta.meta] : [])
+  // A manga's own value wins by its scope, whatever the order.
+  var nodes = Array.isArray(data.metas) ? data.metas.filter(function(m) { return m.scope !== "manga" }).concat(data.metas.filter(function(m) { return m.scope === "manga" })) : (data.metas && data.metas.nodes) || (data.setGlobalMeta ? [data.setGlobalMeta.meta] : [])
   nodes.concat((data.manga && data.manga.meta) || []).forEach(function(m) { if (m) stored[m.key] = m.value })
   var next = {}
   for (var k in values) next[k] = values[k]

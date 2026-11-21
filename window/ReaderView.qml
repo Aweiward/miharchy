@@ -23,6 +23,10 @@ Rectangle {
 
   required property Theme theme
   property var config: null
+  // The chapters are miharchy-core's: the manga detail opened them on core.
+  // shell.qml then gives the core config. Set before the reader, as
+  // config's change drops it.
+  property bool onCore: false
   property string configPath: ""
   property var reader: null
   // The Settings values: page fit, webtoon width, skips, delete after read.
@@ -210,7 +214,9 @@ Rectangle {
   // setting: miharchy.defaultReadingMode. The pages load at once with the
   // default chapter choices; the manga's own sort and filters follow.
   // peek: a peek opened it, so Catch-up counts.
-  function start(manga, chapters, chapterId, setting, peek) {
+  // core: the chapters are miharchy-core's.
+  function start(manga, chapters, chapterId, setting, peek, core) {
+    onCore = core === true
     var table = Chapters.PREFS.concat(Chapters.SCANLATOR_PREFS)
     var defaults = Prefs.defaults(table)
     source = { chapters: chapters, prefs: defaults }
@@ -218,13 +224,13 @@ Rectangle {
     autoSpeed = 0
     original = false
     upNext = undefined
-    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title, peek)
+    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title, peek, onCore)
     pageSizes = {}
     scans = {}
     aheadFor = -1
     loadPages()
     var seq = ++startSeq
-    send(Prefs.loadPayload(table, manga.id), function(reply) {
+    send(Prefs.loadPayload(table, manga.id, onCore), function(reply) {
       if (seq !== view.startSeq || !view.reader || reply.state !== "ok") return
       view.source = { chapters: chapters, prefs: Prefs.read(table, reply.data, defaults) }
       view.relist()
@@ -272,6 +278,8 @@ Rectangle {
   // new. The queue shows any failure; the reader says nothing.
   property int aheadFor: -1
   function downloadAhead() {
+    // ponytail: no downloads on core until #367.
+    if (onCore) return
     if (reader.state !== "ok" || Reader.chapterId(reader) === aheadFor) return
     aheadFor = Reader.chapterId(reader)
     var payload = Downloads.enqueuePayload(Reader.ahead(reader, values.downloadAhead))
@@ -299,6 +307,8 @@ Rectangle {
 
   // The chapter left counts as read: its save may still be on the way.
   function leave() {
+    // ponytail: no downloads to delete on core until #367.
+    if (onCore) return
     var target = Reader.deleteTarget(reader, Downloads.deleteSlots(values.deleteAfterRead))
     if (target === null) return
     var read = [Reader.chapterId(reader)]
@@ -501,7 +511,7 @@ Rectangle {
             return
           }
           // The chapter line then says "bookmarked" while it is.
-          if (view.reader) view.reader = Reader.reduce(view.reader, { type: "bookmarked", chapterId: chapter.id, bookmarked: payload.variables.bookmarked })
+          if (view.reader) view.reader = Reader.reduce(view.reader, { type: "bookmarked", chapterId: chapter.id, bookmarked: payload.body ? payload.body.isBookmarked : payload.variables.bookmarked })
         })
         return
       case "reader.openWeb":

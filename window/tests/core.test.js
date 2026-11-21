@@ -311,3 +311,97 @@ test("on core, global choices live in core's global metas", () => {
   assert.deepEqual(P.read(table, { metas: [{ scope: "global", owner: 0, key: "miharchy.pinnedSources", value: '["9"]' }] }, P.defaults(table)), { pinnedSources: '["9"]' });
   assert.ok(P.loadPayload(table).query, "Suwayomi still asks GraphQL");
 });
+
+// --- The manga detail and the reader on core ---
+
+const C = load("Chapters.js");
+const R = load("Reader.js");
+
+test("on core, a manga's choices load with the global ones, and the manga's win by scope", () => {
+  const table = [{ key: "chapterSort", default: "source" }, { key: "chapterFilterRead", default: "off" }];
+  assert.deepEqual(P.loadPayload(table, 7, true), { route: "meta.get", body: { queries: [
+    { scope: "global", keys: ["miharchy.chapterSort", "miharchy.chapterFilterRead"] },
+    { scope: "manga", owners: [7], keys: ["miharchy.chapterSort", "miharchy.chapterFilterRead"] }
+  ] } });
+  const metas = [
+    { scope: "manga", owner: 7, key: "miharchy.chapterSort", value: "number" },
+    { scope: "global", owner: 0, key: "miharchy.chapterSort", value: "date" },
+    { scope: "global", owner: 0, key: "miharchy.chapterFilterRead", value: "include" }
+  ];
+  assert.deepEqual(P.read(table, { metas }, P.defaults(table)), { chapterSort: "number", chapterFilterRead: "include" });
+  assert.deepEqual(P.savePayload("notes", "good", 7, true), { route: "meta.set", body: { metas: [{ scope: "manga", owner: 7, key: "miharchy.notes", value: "good" }] } });
+  assert.deepEqual(P.resetPayload(table, [7, 8], true), { route: "meta.delete", body: { scope: "manga", owners: [7, 8], keys: ["miharchy.chapterSort", "miharchy.chapterFilterRead"] } });
+  assert.equal(P.resetPayload(table, [], true), null);
+});
+
+test("on core, marks are one chapter.update each", () => {
+  const ch = [{ id: 1, read: false, lastPage: 0 }, { id: 2, read: true, lastPage: 4 }, { id: 3, read: true, lastPage: 0, bookmarked: true }];
+  assert.deepEqual(C.markPayload(ch, true, true), { route: "chapter.update", body: { ids: [1], isRead: true } });
+  assert.deepEqual(C.markPayload(ch, false, true), { route: "chapter.update", body: { ids: [2, 3], isRead: false, lastPageRead: 0 } });
+  assert.equal(C.markPayload([ch[0]], false, true), null);
+  assert.deepEqual(C.bookmarkPayload(ch, true), { route: "chapter.update", body: { ids: [1, 2], isBookmarked: true } });
+  assert.deepEqual(C.bookmarkPayload([ch[2]], true), { route: "chapter.update", body: { ids: [3], isBookmarked: false } });
+});
+
+const MANGA = {
+  id: 1, sourceId: "2499283573021220255", source: { displayName: "MangaDex (EN)" }, url: "/manga/x", realUrl: "https://mangadex.org/title/x",
+  title: "Fire Mage", author: "A", artist: "B", description: "D", genre: ["Action"], status: "ONGOING", thumbnailUrl: "/api/cover/1",
+  inLibrary: false, initialized: true, inLibraryAt: 0, categories: [3], meta: [{ key: "miharchy.notes", value: "hi" }],
+  chapters: [
+    { id: 11, name: "Ch. 1", realUrl: "https://mangadex.org/chapter/1", chapterNumber: 1, uploadDate: 1690000000000, isRead: true, isBookmarked: false, lastPageRead: 0, isDownloaded: false, scanlator: "G", sourceOrder: 1 },
+    { id: 12, name: "Ch. 2", chapterNumber: 2, uploadDate: 1690000000000, isRead: false, isBookmarked: false, lastPageRead: 3, isDownloaded: false, scanlator: "G", sourceOrder: 2 }
+  ]
+};
+
+test("on core, the detail reads manga.get, refreshes once from a source, and toggles the library", () => {
+  let d = B.detail(1, true, true);
+  assert.deepEqual(B.detailPayload(d), { route: "manga.get", body: { id: 1 } });
+  d = B.reduceDetail(d, { type: "reply", config: core, now: 0, reply: ok({ manga: MANGA }) });
+  assert.deepEqual(B.detailPayload(d), { route: "manga.refresh", body: { id: 1 } }, "opened from a source: one refresh");
+  assert.equal(d.manga.cover, "http://127.0.0.1:4591/api/cover/1");
+  assert.deepEqual(d.manga.categories, [3]);
+  assert.equal(d.manga.notes, "hi");
+  assert.deepEqual(d.chapters.map((c) => [c.id, c.read, c.lastPage]), [[12, false, 3], [11, true, 0]], "newest first");
+  const { chapters, ...rest } = MANGA;
+  d = B.reduceDetail(d, { type: "reply", config: core, now: 0, reply: ok({ manga: rest, chapters: chapters.concat([Object.assign({}, chapters[1], { id: 13, name: "Ch. 3", sourceOrder: 3 })]) }) });
+  assert.equal(d.state, "ok");
+  assert.equal(B.detailPayload(d), null);
+  assert.equal(d.chapters[0].name, "Ch. 3");
+
+  assert.deepEqual(B.libraryPayload(d), { route: "manga.update", body: { ids: [1], inLibrary: true } });
+  const added = ok({ mangas: [Object.assign({}, rest, { inLibrary: true })] });
+  assert.equal(B.libraryReply(added), true);
+  d = B.reduceDetail(B.reduceDetail(d, { type: "library-request" }), { type: "library-reply", reply: added });
+  assert.equal(d.manga.inLibrary, true);
+
+  // A missing source: no extension lookup on core.
+  const gone = B.reduceDetail(B.detail(1, false, true), { type: "reply", config: core, now: 0, reply: ok({ manga: Object.assign({}, MANGA, { source: null }) }) });
+  assert.equal(gone.step, null);
+  assert.equal(gone.manga.missing, true);
+});
+
+test("on core, a Cloudflare page says core cannot pass it yet", () => {
+  const n = B.notice({ core: true, state: "error", message: "x", flare: true }, "core.json");
+  assert.match(n.detail, /#361/);
+  assert.equal(B.notice({ core: true, state: "down" }, "core.json").title, "miharchy-core is not running");
+  assert.equal(B.notice({ state: "error", message: "x", flare: true }, "server.json").title, "This source needs FlareSolverr");
+});
+
+test("on core, the reader loads pages, saves, bookmarks and keeps its mode on core, and pushes no tracker", () => {
+  const ch = B.toChapters(MANGA.chapters);
+  let r = R.open(1, ch, 12, "paged-rtl", false, "Fire Mage", false, true);
+  assert.deepEqual(R.pagesPayload(r), { route: "chapter.pages", body: { id: 12 } });
+  r = R.reduce(r, { type: "pages", config: core, now: 0, reply: ok({ pages: ["/api/page/12/0", "/api/page/12/1", "/api/page/12/2", "/api/page/12/3", "/api/page/12/4"], chapter: { id: 12, isRead: false, lastPageRead: 3 } }) });
+  assert.equal(r.state, "ok");
+  assert.equal(r.page, 3, "resumes on the page core kept");
+  assert.equal(r.pages[0], "http://127.0.0.1:4591/api/page/12/0");
+  assert.deepEqual(R.savePayload(r), { route: "chapter.update", body: { lastPageRead: 3, ids: [12] } });
+  r = R.reduce(r, { type: "turn", delta: 1 });
+  assert.deepEqual(R.savePayload(r), { route: "chapter.update", body: { lastPageRead: 4, isRead: true, ids: [12] } });
+  assert.equal(R.trackPayload(r), null);
+  assert.deepEqual(R.bookmarkPayload(r), { route: "chapter.update", body: { ids: [12], isBookmarked: true } });
+  assert.deepEqual(R.modePayload(r), { route: "meta.set", body: { metas: [{ scope: "manga", owner: 1, key: "miharchy.readingMode", value: "paged-rtl" }] } });
+  // Incognito saves nothing, on core too.
+  const quiet = R.reduce(R.open(1, ch, 12, "paged-rtl", true, "", false, true), { type: "pages", config: core, now: 0, reply: ok({ pages: ["/api/page/12/0"], chapter: { id: 12, isRead: false, lastPageRead: 0 } }) });
+  assert.equal(R.savePayload(quiet), null);
+});
