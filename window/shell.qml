@@ -39,6 +39,11 @@ ShellRoot {
   readonly property bool coreBackend: Quickshell.env("MIHARCHY_BACKEND") === "core"
   readonly property string coreConfigPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
   property var coreConfig: null
+  // The library and categories on miharchy-core, beside connection's on
+  // Suwayomi: Library and Categories show it with the switch on, while
+  // Updates, Settings, Migrate and the status bar stay on connection.
+  property var coreConnection: Model.initial()
+  property int coreRequestSeq: 0
 
   // The launcher's open-updates starts a window on Updates.
   property string view: Quickshell.env("MIHARCHY_OPEN_VIEW") === "updates" ? "updates" : "library"
@@ -159,6 +164,9 @@ ShellRoot {
     var next = Model.parseCoreConfig(text)
     if (next && coreConfig && JSON.stringify(next) === JSON.stringify(coreConfig)) return
     coreConfig = next
+    if (coreConfig) return fetchLibrary(true)
+    coreRequestSeq++
+    coreConnection = Model.reduce(coreConnection, { type: "config-missing" })
   }
 
   Timer {
@@ -381,6 +389,7 @@ ShellRoot {
     if (!payload || !coreConfig) return
     Session.send(coreConfig, payload, function(reply) {
       if (mangaDetail.open && mangaDetail.onCore && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
+      root.fetchLibrary(true)
     })
   }
 
@@ -399,6 +408,14 @@ ShellRoot {
     })
   }
 
+  // ponytail: the default category setting holds a Suwayomi category id
+  // until #385 moves Settings, so on core it is not applied: the picker
+  // asks when there are categories, else the manga stays in Default.
+  function addedOnCore(mangaId) {
+    if (coreConnection.categories.length && mangaDetail.open && mangaDetail.onCore && mangaDetail.detail.mangaId === mangaId) mangaDetail.run("manga.categories")
+    fetchLibrary(true)
+  }
+
   // Mihon's default category: a manga the detail adds goes to the chosen
   // category, or the detail's categories picker opens to ask.
   function addedToLibrary(mangaId) {
@@ -412,7 +429,18 @@ ShellRoot {
     })
   }
 
-  function fetchLibrary() {
+  // core: refresh miharchy-core's library instead, for an event that came from it.
+  function fetchLibrary(core) {
+    if (core === true) {
+      var ccfg = coreConfig
+      if (!ccfg) return
+      var cseq = ++coreRequestSeq
+      coreConnection = Model.reduce(coreConnection, { type: "request" })
+      Session.send(ccfg, Model.libraryPayload(true), function(reply) {
+        if (cseq === root.coreRequestSeq) root.coreConnection = Model.reduce(root.coreConnection, { type: "response", reply: reply, config: ccfg })
+      })
+      return
+    }
     var cfg = config
     var seq = ++requestSeq
     connection = Model.reduce(connection, { type: "request" })
@@ -448,6 +476,12 @@ ShellRoot {
   }
 
   function run(id) {
+    // The Library says what miharchy-core does not serve yet.
+    if (coreBackend && libraryView.coreGates[id]) {
+      if (view !== "library") run("view.library")
+      libraryView.run(id)
+      return
+    }
     if (id.indexOf("view.") === 0) {
       closeOverlays()
       view = id.slice(5)
@@ -471,7 +505,7 @@ ShellRoot {
       trackAsk = null
       return
     }
-    // The detail says what miharchy-core does not serve yet.
+    // The detail and the Library say what miharchy-core does not serve yet.
     if (mangaDetail.open && mangaDetail.onCore && mangaDetail.coreGates[id]) {
       mangaDetail.run(id)
       return
@@ -646,6 +680,7 @@ ShellRoot {
         endEdit()
         break
       case "library.reload":
+        if (coreBackend) fetchLibrary(true)
         if (config) {
           fetchLibrary()
           sendSettings(Settings.loadPayload())
@@ -759,19 +794,22 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "library" && screen === "grid"
           theme: theme
-          config: root.config
-          configPath: root.configPath
-          connection: root.connection
-          downloadedOnly: root.downloadedOnly
+          // With the switch on, the Library is miharchy-core's: no Suwayomi
+          // queue or downloads reach it.
+          config: root.coreBackend ? root.coreConfig : root.config
+          configPath: root.coreBackend ? root.coreConfigPath : root.configPath
+          backend: root.coreBackend ? "core" : ""
+          connection: root.coreBackend ? root.coreConnection : root.connection
+          downloadedOnly: !root.coreBackend && root.downloadedOnly
           categoriesHint: categoriesView.hint
-          queue: downloadsView.queue.items
+          queue: root.coreBackend ? [] : downloadsView.queue.items
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
+          onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds, libraryView.core) }
           onDownloads: function(reply) { downloadsView.apply(reply) }
-          onEdited: root.fetchLibrary()
-          onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
-          onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, false) }
+          onEdited: root.fetchLibrary(libraryView.core)
+          onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false, libraryView.core) }
+          onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, false, libraryView.core) }
           onDownloadMenu: function(set) { nextChapters.openFor(set) }
           onCheck: function(categories, done) { done(updatesView.check(categories)) }
           onQuit: root.run("window.quit")
@@ -782,13 +820,14 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "library" && libraryView.screen === "categories"
           theme: theme
-          config: root.config
-          categories: root.connection.categories
-          manga: root.connection.manga
-          loading: root.connection.state === "loading"
+          config: root.coreBackend ? root.coreConfig : root.config
+          backend: root.coreBackend ? "core" : ""
+          categories: (root.coreBackend ? root.coreConnection : root.connection).categories
+          manga: (root.coreBackend ? root.coreConnection : root.connection).manga
+          loading: (root.coreBackend ? root.coreConnection : root.connection).state === "loading"
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          onEdited: if (root.config) root.fetchLibrary()
+          onEdited: if (config) root.fetchLibrary(core)
         }
 
         SettingsView {
@@ -921,18 +960,18 @@ ShellRoot {
           config: onCore ? root.coreConfig : root.config
           downloadedOnly: root.downloadedOnly
           configPath: onCore ? root.coreConfigPath : root.configPath
-          categories: onCore ? [] : root.connection.categories
-          onCategorized: if (root.config) root.fetchLibrary()
+          categories: onCore ? root.coreConnection.categories : root.connection.categories
+          onCategorized: if (config) root.fetchLibrary(onCore)
           onLibraryChanged: function(mangaId, inLibrary, core) {
             // Browse's rows are core's with the switch on, Suwayomi's without.
             if (core === root.coreBackend) browseView.markInLibrary(mangaId, inLibrary)
-            if (core) return
+            if (core) return inLibrary ? root.addedOnCore(mangaId) : root.fetchLibrary(true)
             if (inLibrary) root.addedToLibrary(mangaId)
             else if (root.config) root.fetchLibrary()
           }
           queue: onCore ? [] : downloadsView.queue.items
           onDownloads: function(reply) { downloadsView.apply(reply) }
-          libraryManga: onCore ? [] : root.connection.manga
+          libraryManga: onCore ? root.coreConnection.manga : root.connection.manga
           onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false, mangaDetail.onCore) }
           onMark: function(chapters, action, mangaId, core) { root.markChapters(chapters, action, [mangaId], core) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
@@ -1039,7 +1078,7 @@ ShellRoot {
         onClosed: function(chapterId) {
           // A chapter id means something only to the server it came from.
           if (mangaDetail.onCore === reader.onCore) mangaDetail.reread(chapterId)
-          if (reader.onCore) return
+          if (reader.onCore) return root.fetchLibrary(true)
           updatesView.load()
           if (root.config) root.fetchLibrary()
         }

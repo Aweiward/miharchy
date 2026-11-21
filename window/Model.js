@@ -22,6 +22,11 @@ var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDow
   + " chapters { totalCount } lastReadChapter { lastReadAt } latestUploadedChapter { uploadDate } latestFetchedChapter { fetchedAt }"
   + " trackRecords { totalCount } categories { nodes { id } } } } }"
 
+// The library request: Suwayomi's query, or core's library.list (ADR 0010).
+function libraryPayload(core) {
+  return core ? { route: "library.list" } : { query: LIBRARY_QUERY }
+}
+
 var LIBRARY_MUTATION = "mutation($id: Int!, $inLibrary: Boolean!) { updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) { manga { id inLibrary } } }"
 
 // Suwayomi's built-in "Default" category holds the manga in no category, as
@@ -205,12 +210,13 @@ function sourceLabel(n, names) {
 
 function fromResponse(r, config) {
   if (r.state !== "ok") return conn(r.state, { message: r.message })
-  var nodes = r.data.mangas && r.data.mangas.nodes
+  var data = config && config.backend === "core" ? coreLibrary(r.data) : r.data
+  var nodes = data.mangas && data.mangas.nodes
   if (!Array.isArray(nodes)) return conn("error", { message: "The server's reply has no library." })
   var ids = function(list) { return ((list && list.nodes) || []).map(function(c) { return c.id }) }
   // Timestamps come as LongString; 0 means never.
   var time = function(chapter, field) { return Number(chapter && chapter[field]) || 0 }
-  var names = parseNames(r.data)
+  var names = parseNames(data)
   return conn("ok", {
     manga: nodes.map(function(n) {
       var total = (n.chapters && n.chapters.totalCount) || 0
@@ -241,10 +247,28 @@ function fromResponse(r, config) {
         added: time(n, "inLibraryAt")
       }
     }),
-    categories: ((r.data.categories && r.data.categories.nodes) || [])
+    categories: ((data.categories && data.categories.nodes) || [])
       .filter(function(c) { return c.id !== DEFAULT_CATEGORY })
       .map(function(c) { return { id: c.id, name: String(c.name), download: c.includeInDownload || "UNSET", update: c.includeInUpdate || "UNSET", keep: Downloads.keepsDownloads(c.meta || []) } })
   })
+}
+
+// Core's library.list as Suwayomi's reply: the same fields in plain
+// arrays, with chapterCount and trackCount for the connections'
+// totalCount, in the same units.
+function coreLibrary(data) {
+  if (!Array.isArray(data.mangas)) return {}
+  return {
+    categories: { nodes: data.categories || [] },
+    mangas: { nodes: data.mangas.map(function(n) {
+      var m = {}
+      for (var k in n) m[k] = n[k]
+      m.chapters = { totalCount: n.chapterCount || 0 }
+      m.trackRecords = { totalCount: n.trackCount || 0 }
+      m.categories = { nodes: (n.categories || []).map(function(id) { return { id: id } }) }
+      return m
+    }) }
+  }
 }
 
 // The Library's category switcher, each entry { id, name, manga }: All, and
@@ -272,9 +296,9 @@ function switcherIndex(list, id) {
 // What the library view shows for a connection and its shown category: null
 // for the cover grid, otherwise { title, detail }. narrowed: a search or a
 // filter may be what empties the category (Library.narrowed()).
-function notice(connection, configPath, shown, narrowed) {
+function notice(connection, configPath, shown, narrowed, backend) {
   if (connection.state === "loading") return connection.manga.length ? null : { title: "Loading the library", detail: "" }
-  var p = problem(connection, configPath)
+  var p = problem(connection, configPath, backend)
   if (p) return p
   if (!connection.manga.length) return { title: "Your library is empty", detail: "Manga you follow show up here." }
   if (shown && !shown.manga.length && narrowed) return { title: "No manga match", detail: "Esc clears the search. F changes the filters." }
@@ -441,6 +465,7 @@ if (typeof module !== "undefined") {
     VIEWS: VIEWS,
     SOURCE_NAMES_META: SOURCE_NAMES_META,
     LIBRARY_QUERY: LIBRARY_QUERY,
+    libraryPayload: libraryPayload,
     parseNames: parseNames,
     sourceLabel: sourceLabel,
     parseConfig: parseConfig,

@@ -405,3 +405,70 @@ test("on core, the reader loads pages, saves, bookmarks and keeps its mode on co
   const quiet = R.reduce(R.open(1, ch, 12, "paged-rtl", true, "", false, true), { type: "pages", config: core, now: 0, reply: ok({ pages: ["/api/page/12/0"], chapter: { id: 12, isRead: false, lastPageRead: 0 } }) });
   assert.equal(R.savePayload(quiet), null);
 });
+
+const L = load("Library.js");
+const Cat = load("Categories.js");
+
+// One manga as core's library.list sends it (Library.kt), and as Suwayomi's
+// LIBRARY_QUERY sends the same manga.
+const coreManga = {
+  id: 1, title: "Manga 1", author: "A", artist: "B", genre: ["Action"], status: "ONGOING",
+  thumbnailUrl: "/api/cover/1", sourceId: "7", source: { id: "7", displayName: "MangaDex (EN)", lang: "en" },
+  inLibraryAt: 1700000000, chapterCount: 3, unreadCount: 2, bookmarkCount: 1, downloadCount: 0, trackCount: 0,
+  lastReadChapter: { lastReadAt: 1700000500 }, latestUploadedChapter: { uploadDate: 1690000000000 },
+  latestFetchedChapter: { fetchedAt: 1700000100 }, categories: [2], meta: []
+};
+const suwayomiManga = Object.assign({}, coreManga, {
+  thumbnailUrl: "/api/v1/manga/1/thumbnail", chapters: { totalCount: 3 }, trackRecords: { totalCount: 0 }, categories: { nodes: [{ id: 2 }] }
+});
+const coreCategories = [
+  { id: 0, name: "Default", includeInUpdate: "UNSET", includeInDownload: "UNSET", meta: [] },
+  { id: 2, name: "Drama", includeInUpdate: "EXCLUDE", includeInDownload: "UNSET", meta: [{ key: "miharchy.keepDownloads", value: "true" }] }
+];
+
+test("on core, the Library reads library.list into the same manga and categories as Suwayomi's reply", () => {
+  assert.deepEqual(M.libraryPayload(true), { route: "library.list" });
+  assert.equal(typeof M.libraryPayload(false).query, "string");
+  const fromCore = M.reduce(M.initial(), { type: "response", config: core, reply: { state: "ok", data: { categories: coreCategories, mangas: [coreManga] } } });
+  const fromSuwayomi = M.reduce(M.initial(), { type: "response", config: suwayomi, reply: { state: "ok", data: {
+    categories: { nodes: coreCategories }, metas: { nodes: [] }, mangas: { nodes: [suwayomiManga] } } } });
+  assert.equal(fromCore.state, "ok");
+  const strip = (m) => Object.assign({}, m, { cover: "" });
+  assert.deepEqual(fromCore.manga.map(strip), fromSuwayomi.manga.map(strip));
+  assert.deepEqual(fromCore.categories, fromSuwayomi.categories);
+  assert.deepEqual(fromCore.categories, [{ id: 2, name: "Drama", download: "UNSET", update: "EXCLUDE", keep: true }]);
+  assert.equal(fromCore.manga[0].cover, "http://127.0.0.1:4591/api/cover/1");
+  assert.deepEqual([fromCore.manga[0].read, fromCore.manga[0].lastRead, fromCore.manga[0].latestUpload], [1, 1700000500, 1690000000000]);
+  const broken = M.reduce(M.initial(), { type: "response", config: core, reply: { state: "ok", data: {} } });
+  assert.equal(broken.state, "error");
+});
+
+test("on core, the Library's and Categories' changes go to core's routes", () => {
+  assert.deepEqual(L.chaptersPayload([1, 2], true), { route: "chapter.list", body: { mangaIds: [1, 2] } });
+  assert.deepEqual(L.chapterNodes({ chapters: [{ id: 5 }] }), [{ id: 5 }]);
+  assert.deepEqual(L.chapterNodes({ chapters: { nodes: [{ id: 5 }] } }), [{ id: 5 }]);
+  assert.deepEqual(L.removePayload([1], true), { route: "manga.update", body: { ids: [1], inLibrary: false } });
+  assert.deepEqual(L.categoryPayload({ id: 2, state: "all" }, [1], true), { route: "manga.update", body: { ids: [1], removeFromCategories: [2] } });
+  assert.deepEqual(L.categoryPayload({ id: 2, state: "some" }, [1], true), { route: "manga.update", body: { ids: [1], addToCategories: [2] } });
+  assert.deepEqual(L.moveToPayload(1, 0, [{ id: 2 }], true), { route: "manga.update", body: { ids: [1], clearCategories: true, addToCategories: [] } });
+  assert.equal(typeof L.removePayload([1]).query, "string");
+
+  const cats = [{ id: 2, name: "Drama", download: "UNSET", update: "UNSET", keep: false }, { id: 3, name: "Action", download: "UNSET", update: "UNSET", keep: false }];
+  assert.deepEqual(Cat.createPayload("New", true), { route: "category.create", body: { name: "New" } });
+  assert.equal(Cat.createdId({ category: { id: 9 } }), 9);
+  assert.equal(Cat.createdId({ createCategory: { category: { id: 9 } } }), 9);
+  assert.deepEqual(Cat.renamePayload(2, "X", true), { route: "category.update", body: { id: 2, name: "X" } });
+  assert.deepEqual(Cat.deletePayload(2, true), { route: "category.delete", body: { id: 2 } });
+  assert.deepEqual(Cat.includePayload(cats, 2, "update", true), { route: "category.update", body: { id: 2, includeInUpdate: "INCLUDE" } });
+  assert.deepEqual(Cat.keepPayload(cats, 3, true), { route: "meta.set", body: { metas: [{ scope: "category", owner: 3, key: "miharchy.keepDownloads", value: "true" }] } });
+  assert.deepEqual(Cat.movePayload(cats, 1, -1, true), { route: "category.reorder", body: { id: 3, position: 1 } });
+  assert.equal(Cat.movePayload(cats, 0, -1, true), null);
+});
+
+test("on core, the detail's category toggle sends manga.update and reads core's reply", () => {
+  let d = Object.assign(B.detail(1, false, true), { manga: { inLibrary: true, categories: [2] } });
+  assert.deepEqual(B.categoryPayload(d, 2), { route: "manga.update", body: { ids: [1], removeFromCategories: [2] } });
+  assert.deepEqual(B.categoryPayload(d, 3), { route: "manga.update", body: { ids: [1], addToCategories: [3] } });
+  d = B.reduceDetail(d, { type: "categories-reply", reply: { state: "ok", data: { mangas: [{ id: 1, categories: [2, 3] }] } } });
+  assert.deepEqual(d.manga.categories, [2, 3]);
+});

@@ -33,43 +33,60 @@ function checkName(text, categories, exceptId) {
   return { name: name }
 }
 
-function createPayload(name) {
+// core (the last argument of each payload here): miharchy-core's routes (ADR 0010).
+function createPayload(name, core) {
+  if (core) return { route: "category.create", body: { name: name } }
   return { query: CREATE_MUTATION, variables: { name: name } }
 }
 
-function renamePayload(id, name) {
+function renamePayload(id, name, core) {
+  if (core) return { route: "category.update", body: { id: id, name: name } }
   return { query: RENAME_MUTATION, variables: { id: id, name: name } }
 }
 
-function deletePayload(id) {
+function deletePayload(id, core) {
+  if (core) return { route: "category.delete", body: { id: id } }
   return { query: DELETE_MUTATION, variables: { id: id } }
 }
 
 // Cycles the category's flag (kind "update" or "download") through unset,
 // included and excluded.
-function includePayload(categories, id, kind) {
+function includePayload(categories, id, kind, core) {
   var state = categories.filter(function(c) { return c.id === id })[0][kind]
+  var next = INCLUDE_STATES[(INCLUDE_STATES.indexOf(state) + 1) % INCLUDE_STATES.length]
+  if (core) {
+    var body = { id: id }
+    body[INCLUDE_FIELDS[kind]] = next
+    return { route: "category.update", body: body }
+  }
   return {
     query: "mutation($id: Int!, $include: IncludeOrExclude!) { updateCategory(input: { id: $id, patch: { " + INCLUDE_FIELDS[kind] + ": $include } }) { category { id } } }",
     variables: { id: id, include: INCLUDE_STATES[(INCLUDE_STATES.indexOf(state) + 1) % INCLUDE_STATES.length] }
   }
 }
 
-function keepPayload(categories, id) {
+function keepPayload(categories, id, core) {
   var keep = !categories.filter(function(c) { return c.id === id })[0].keep
+  if (core) return { route: "meta.set", body: { metas: [{ scope: "category", owner: id, key: Downloads.KEEP_KEY, value: String(keep) }] } }
   return { query: KEEP_MUTATION, variables: { meta: { categoryId: id, key: Downloads.KEEP_KEY, value: String(keep) } } }
 }
 
 // Moves categories[index] by delta (-1 or 1), or null past either end.
 // Positions count from 1, after Default at 0.
-function movePayload(categories, index, delta) {
+function movePayload(categories, index, delta, core) {
   var to = index + delta
   if (!categories[index] || to < 0 || to >= categories.length) return null
+  if (core) return { route: "category.reorder", body: { id: categories[index].id, position: to + 1 } }
   return { query: MOVE_MUTATION, variables: { id: categories[index].id, position: to + 1 } }
 }
 
 // Each category as { id, name, download, update, keep, count } with its
 // number of library manga.
+// createPayload's reply -> the new category's id.
+function createdId(data) {
+  return data.category ? data.category.id : data.createCategory.category.id
+}
+
 function rows(categories, manga) {
   return categories.map(function(c) {
     return { id: c.id, name: c.name, download: c.download || "UNSET", update: c.update || "UNSET", keep: c.keep === true, count: manga.filter(function(m) { return m.categories.indexOf(c.id) !== -1 }).length }
@@ -79,6 +96,7 @@ function rows(categories, manga) {
 if (typeof module !== "undefined") {
   module.exports = {
     checkName: checkName,
+    createdId: createdId,
     createPayload: createPayload,
     renamePayload: renamePayload,
     deletePayload: deletePayload,

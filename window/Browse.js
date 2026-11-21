@@ -419,8 +419,8 @@ function reduceDetail(d, event) {
       return copy(d, { busy: false, manga: copy(d.manga, { inLibrary: libraryReply(event.reply) }) })
     case "categories-reply":
       if (event.reply.state !== "ok") return copy(d, { busy: false, libraryError: event.reply.message || event.reply.state })
-      var nodes = event.reply.data.updateMangaCategories.manga.categories.nodes
-      return copy(d, { busy: false, manga: copy(d.manga, { categories: nodes.map(function(c) { return c.id }) }) })
+      var ids = d.core ? event.reply.data.mangas[0].categories : event.reply.data.updateMangaCategories.manga.categories.nodes.map(function(c) { return c.id })
+      return copy(d, { busy: false, manga: copy(d.manga, { categories: ids }) })
     case "mark-reply":
     case "downloads-reply":
       if (event.reply.state !== "ok") return copy(d, { libraryError: event.reply.message || event.reply.state })
@@ -437,6 +437,7 @@ function reduceDetail(d, event) {
 function categoryPayload(d, categoryId) {
   if (!d.manga || !d.manga.inLibrary || d.busy) return null
   var member = d.manga.categories.indexOf(categoryId) !== -1
+  if (d.core) return { route: "manga.update", body: member ? { ids: [d.mangaId], removeFromCategories: [categoryId] } : { ids: [d.mangaId], addToCategories: [categoryId] } }
   return { query: CATEGORY_MUTATION, variables: { id: d.mangaId, add: member ? [] : [categoryId], remove: member ? [categoryId] : [] } }
 }
 

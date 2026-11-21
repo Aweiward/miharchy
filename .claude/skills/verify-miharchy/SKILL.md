@@ -34,6 +34,19 @@ The sync helper builds once per checkout: `sync/gradlew -p sync installDist` →
 
 `server.sh restart` stops and starts the same instance: same port, credentials and library. Use it to prove the window reconnects after a server restart; `stop` then `start` wipes the library and changes the credentials.
 
+## miharchy-core
+
+The views moved to miharchy-core (ADR 0010) run with `MIHARCHY_BACKEND=core` in front of `drive.sh`, one more allowed `VAR=...` prefix. `window_env` points the window at this run's `$RUN/core/core.json`, so no other variable is needed.
+
+```
+.claude/skills/verify-miharchy/scripts/core.sh start    # builds core/ if needed; "ready: miharchy-core on 127.0.0.1:<port> …"
+.claude/skills/verify-miharchy/scripts/core.sh seed     # Keiyoushi repo + MangaDex, so Browse has a source
+.claude/skills/verify-miharchy/scripts/core.sh api library.list '{}'   # any route; the secret goes on stdin
+.claude/skills/verify-miharchy/scripts/core.sh stop     # keeps $RUN/core; start again resumes the same data
+```
+
+Core never uses 4590 or 4591, and keeps its data under `$RUN/core`. Rebuild with `./gradlew :server:installDist` in `core/` after a core change: `start` builds only when no build exists. Both servers number manga, chapters and categories from 1, so a crossed id hits a real row: a drive that touches one server diffs the other before and after. `server.sh stop` then `start` wipes the Suwayomi library; use `server.sh restart` to keep a seeded one. A drive greps `$RUN/window.log` for `miharchy: refused`, which `Session.send` logs when a request goes to the wrong server; it must stay 0.
+
 ## Live updates
 
 The download queue and Updates follow GraphQL subscriptions over a WebSocket (`window/LiveSocket.qml`), which needs `qt6-websockets`. Without the module the window still runs, with nothing live, and logs "Live updates need qt6-websockets". When it is not installed, extract the Arch package into a scratch dir (`pacman -Sp qt6-websockets` gives the URL; check the `.sig` with `pacman-key --verify`) and run `drive.sh` with `QML_IMPORT_PATH=<dir>/usr/lib/qt6/qml LD_LIBRARY_PATH=<dir>/usr/lib` in front: one of the two places a `VAR=...` prefix belongs; the other is a start target (`MIHARCHY_PEEK=1`, `MIHARCHY_OPEN_VIEW=updates`, `MIHARCHY_OPEN_CHAPTER="<mangaId> <chapterId>"`), which `drive.sh` passes through to the window as the launcher would set it. Each drive overwrites `$RUN/evidence/drive.log`, so copy it to its own name before the next drive. To show that nothing polls, point the drive at a logging proxy: write a copy of `$RUN/server.json` whose `url` is the proxy's port over `$RUN/server.json` (`gql.sh` and `server.sh` use `$RUN/port`, not the url), and log each request and WebSocket upgrade. Start the server with `MIHARCHY_VERIFY_TOKEN_EXPIRY=40s` to keep a socket open past its token, and run `server.sh restart` while a drive runs in the background to prove the reconnect. A library update only shows progress when the seeded manga pass the skip filters: `setSettings` with `excludeUnreadChapters`, `excludeNotStarted` and `excludeCompleted` false.
