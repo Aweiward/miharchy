@@ -1,0 +1,67 @@
+diff --git i/host/build.gradle.kts w/host/build.gradle.kts
+index 8bad4c1..9254fa2 100644
+--- i/host/build.gradle.kts
++++ w/host/build.gradle.kts
+@@ -21,6 +21,7 @@ dependencies {
+     implementation("com.squareup.okhttp3:okhttp-brotli:5.4.0")
+     implementation("com.squareup.okhttp3:okhttp-zstd:5.4.0")
+     implementation("org.jsoup:jsoup:1.22.2")
++    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
+     // Android ships org.json and extensions use it (Comix calls JSONObject.quote).
+     implementation("org.json:json:20250517")
+     implementation("com.github.mihonapp:injekt:91edab2317")
+diff --git i/host/src/main/kotlin/eu/kanade/tachiyomi/network/Network.kt w/host/src/main/kotlin/eu/kanade/tachiyomi/network/Network.kt
+index 1c998e4..aadc453 100644
+--- i/host/src/main/kotlin/eu/kanade/tachiyomi/network/Network.kt
++++ w/host/src/main/kotlin/eu/kanade/tachiyomi/network/Network.kt
+@@ -2,6 +2,7 @@
+ 
+ package eu.kanade.tachiyomi.network
+ 
++import okhttp3.MediaType.Companion.toMediaType
+ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
+ import android.content.Context
+@@ -123,6 +124,7 @@ class CloudflareInterceptor : okhttp3.Interceptor {
+             (res.header("cf-mitigated") == "challenge" || res.header("Content-Type").orEmpty().startsWith("text/html"))
+         ) {
+             res.close()
++            solverFallback(req)?.let { return it }
+             val ua = Injekt.get<NetworkHelper>().userAgents.forHost(req.url.host) ?: req.header("User-Agent") ?: NetworkHelper.USER_AGENT
+             throw CloudflareChallengeException(req.url.toString(), ua)
+         }
+@@ -179,3 +181,22 @@ class JavaScriptEngine(context: Context) {
+     suspend fun <T> evaluate(script: String): T =
+         throw UnsupportedOperationException("JavaScriptEngine is not available in this host")
+ }
++
++// spike: Suwayomi's flareSolverrAsResponseFallback. FlareSolverr fetches the page and its body is the reply.
++private val solverClient = okhttp3.OkHttpClient.Builder().readTimeout(java.time.Duration.ofSeconds(90)).build()
++private fun solverFallback(req: okhttp3.Request): okhttp3.Response? {
++    val base = System.getenv("NANO_SOLVER") ?: return null
++    if (req.method != "GET") return null
++    val body = kotlinx.serialization.json.buildJsonObject {
++        put("cmd", kotlinx.serialization.json.JsonPrimitive("request.get"))
++        put("url", kotlinx.serialization.json.JsonPrimitive(req.url.toString()))
++        put("maxTimeout", kotlinx.serialization.json.JsonPrimitive(60000))
++    }.toString()
++    val post = okhttp3.Request.Builder().url("$base/v1").post(okhttp3.RequestBody.create("application/json".toMediaType(), body)).build()
++    val v = solverClient.newCall(post).execute().use { kotlinx.serialization.json.Json.parseToJsonElement(it.body.string()) }
++    val sol = (v as kotlinx.serialization.json.JsonObject)["solution"] as? kotlinx.serialization.json.JsonObject ?: return null
++    val html = (sol["response"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return null
++    System.err.println("solver fallback: ${req.url} -> ${html.length} chars")
++    return okhttp3.Response.Builder().request(req).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK")
++        .body(okhttp3.ResponseBody.create("text/html; charset=utf-8".toMediaType(), html)).build()
++}
+diff --git i/host/src/main/kotlin/yomi/host/Main.kt w/host/src/main/kotlin/yomi/host/Main.kt
+index 37e3b94..5fd1c34 100644
+--- i/host/src/main/kotlin/yomi/host/Main.kt
++++ w/host/src/main/kotlin/yomi/host/Main.kt
+@@ -56,6 +56,7 @@ import java.util.jar.JarFile
+ 
+ /** Extension host. One JSON request per line on stdin, one reply per line on stdout, in any order. */
+ fun main(args: Array<String>) {
++    java.security.Security.addProvider(org.bouncycastle.jce.provider.BouncyCastleProvider())
+     Protocol.out = PrintStream(FileOutputStream(FileDescriptor.out), true, Charsets.UTF_8)
+     System.setOut(System.err) // anything an extension prints must not corrupt the protocol
+ 

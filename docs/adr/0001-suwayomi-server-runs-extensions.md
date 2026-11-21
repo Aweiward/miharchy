@@ -1,5 +1,7 @@
 # Suwayomi-Server runs extensions; Miharchy is its frontend
 
+Status: superseded by ADR 0009 (2026-11-21).
+
 Mihon extensions are Android APKs. They need a JVM, dex-to-jar conversion and an Android shim to run on Linux. Suwayomi-Server already does all of this, along with downloads, trackers and Mihon-compatible backups. Miharchy runs Suwayomi-Server as a localhost backend and spends its effort on the reading experience.
 
 ## Considered Options
