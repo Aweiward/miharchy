@@ -178,7 +178,7 @@ Rectangle {
     onTriggered: view.scanned()
   }
 
-  readonly property var problem: reader ? Model.again(Model.problem(reader, configPath), reader) : null
+  readonly property var problem: reader ? Model.again(Model.problem(reader, configPath, onCore ? "core" : ""), reader) : null
 
   // The chapter the reader showed last, when it closed.
   signal closed(int chapterId)

@@ -472,7 +472,7 @@ ShellRoot {
       return
     }
     // The detail says what miharchy-core does not serve yet.
-    if (mangaDetail.onCore && mangaDetail.coreGates[id]) {
+    if (mangaDetail.open && mangaDetail.onCore && mangaDetail.coreGates[id]) {
       mangaDetail.run(id)
       return
     }
