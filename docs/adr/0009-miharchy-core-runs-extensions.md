@@ -30,7 +30,7 @@ Miharchy therefore replaces Suwayomi-Server with **miharchy-core**: one Kotlin s
 - JDK 21+ stays a requirement. The `suwayomi-server-bin` package and the Suwayomi version pin go away.
 - Trackers need Miharchy's own OAuth app registrations. Today's OAuth login ends on a `suwayomi.org` page, which belongs to Suwayomi's apps. NanoYomi has clients only for MyAnimeList and AniList; Kitsu, Shikimori, Bangumi and MangaUpdates must be written.
 - ADR 0004 gets simpler: the merge writes to Miharchy's own database, so the split between `restoreBackup` and GraphQL mutations goes away.
-- ADR 0005 goes away: miharchy-core listens on `127.0.0.1` only and needs no login. Whether a local token is still worth having is a separate decision.
+- ADR 0005 goes away: miharchy-core listens on `127.0.0.1` only. It needs no login, but every request carries a shared secret, because any local user can open a `127.0.0.1` port (ADR 0010).
 - Every GraphQL call in `window/`, `plugin/Mark.js` and `sync/` moves to the new API (about 50 operations).
 - Users on v1.1.1 move once: Setup exports a `.tachibk` from Suwayomi and imports it into miharchy-core. Miharchy's own metas do not travel in a backup: the Settings rows stored in global meta, and the manga notes in meta (`Desktop.kt`: Suwayomi's backups have no notes field). Setup copies all metas over GraphQL before Suwayomi stops.
 - Extension installs move to `jarUrl`. A repo without jar builds cannot be used.
