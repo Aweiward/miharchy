@@ -7,6 +7,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -252,14 +254,15 @@ class Extensions(private val db: Database, private val host: Host, private val d
         return due.map { install(it, update = true) }
     }
 
-    private suspend fun remove(pkgName: String): JsonObject = lock.withLock {
+    /** The extension as its repo still offers it, or null when no repo does: the view then drops its row. */
+    private suspend fun remove(pkgName: String): JsonElement = lock.withLock {
         val meta = meta(pkgName) ?: throw ApiError(Kind.notFound, "$pkgName is not installed.")
         val ids = loaded.remove(pkgName).orEmpty().map { it.id() }
         if (ids.isNotEmpty()) host.handle(buildJsonObject { put("op", "unload"); put("sources", JsonArray(ids.map(::JsonPrimitive))) })
         Files.deleteIfExists(dir.resolve(meta.jar))
         Files.deleteIfExists(dir.resolve("$pkgName.json"))
         val offer = offerFor(pkgName)
-        if (offer != null) extensionJson(offer, null) else buildJsonObject { put("pkgName", pkgName); put("isInstalled", false) }
+        offer?.let { extensionJson(it, null) } ?: JsonNull
     }
 
     private suspend fun load(pkgName: String, jar: Path, key: String) {

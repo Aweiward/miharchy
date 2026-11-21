@@ -18,8 +18,10 @@ var STORES_QUERY = "{ extensionStores { nodes { indexUrl name } } metas(conditio
 // repos: [{ url, name }] with url as the server stores it; the server
 // rewrites the Keiyoushi URL to .../index.pb, so removal must send this one.
 // busy / errors: per extension pkgName, the action in flight or its failure.
-function initial() {
-  return { state: "idle", message: "", step: null, repos: [], extensions: [], busy: {}, errors: {}, repoError: "" }
+// core: the view talks to miharchy-core (config.backend "core", ADR 0010).
+// Every payload and reply below then takes core's routes and shapes.
+function initial(core) {
+  return { state: "idle", message: "", step: null, repos: [], extensions: [], busy: {}, errors: {}, repoError: "", core: core === true }
 }
 
 function copy(ext, changes) {
@@ -56,7 +58,10 @@ function toExtension(config, n) {
     hasUpdate: n.hasUpdate === true,
     obsolete: n.isObsolete === true,
     warning: String(n.contentWarning || "SAFE"),
-    repo: n.storeIndexUrl || ""
+    repo: n.storeIndexUrl || "",
+    // Core lists an installed extension's sources with it, so its details
+    // need no request of their own.
+    sources: n.sources || null
   }
 }
 
@@ -66,6 +71,7 @@ function toExtension(config, n) {
 // "fetch" refreshes every repo and returns the whole list.
 // Returns the payload for ext.step, or null when nothing is due.
 function next(ext) {
+  if (ext.core) return coreNext(ext)
   switch (ext.step) {
     case "stores":
       return { query: STORES_QUERY }
@@ -82,14 +88,37 @@ function next(ext) {
   return null
 }
 
-function addRepoPayload(url) {
+// On core the load reads the preset flag first ("stores"), then the repos
+// only when the flag is unset ("repos"), and extension.list fetches every
+// repo with the extensions in one reply.
+function coreNext(ext) {
+  switch (ext.step) {
+    case "stores":
+      return { route: "meta.get", body: { scope: "global", keys: [PRESET_META] } }
+    case "repos":
+      return { route: "extensionRepo.list" }
+    case "preset":
+      return addRepoPayload(KEIYOUSHI, true)
+    case "mark":
+      return { route: "meta.set", body: { metas: [{ scope: "global", key: PRESET_META, value: "true" }] } }
+    case "fetch":
+      return { route: "extension.list" }
+  }
+  return null
+}
+
+var CORE_ACTIONS = { install: "extension.install", update: "extension.update", uninstall: "extension.remove" }
+
+function addRepoPayload(url, core) {
+  if (core) return { route: "extensionRepo.add", body: { url: url } }
   return {
     query: "mutation($url: String!) { addExtensionStore(input: { indexUrl: $url }) { extensionStore { indexUrl name } } }",
     variables: { url: url }
   }
 }
 
-function removeRepoPayload(repo) {
+function removeRepoPayload(repo, core) {
+  if (core) return { route: "extensionRepo.remove", body: { url: repo.url } }
   return {
     query: "mutation($url: String!) { removeExtensionStore(input: { indexUrl: $url }) { extensionStore { indexUrl } } }",
     variables: { url: repo.url }
@@ -97,7 +126,8 @@ function removeRepoPayload(repo) {
 }
 
 // action: "install" | "update" | "uninstall".
-function actionPayload(pkgName, action) {
+function actionPayload(pkgName, action, core) {
+  if (core) return { route: CORE_ACTIONS[action], body: { pkgName: pkgName } }
   var patch = {}
   patch[action] = true
   return {
@@ -111,6 +141,7 @@ function actionPayload(pkgName, action) {
 function updateAll(ext) {
   var pkgNames = ext.extensions.filter(function(e) { return e.installed && e.hasUpdate && !ext.busy[e.pkgName] }).map(function(e) { return e.pkgName })
   if (!pkgNames.length) return null
+  if (ext.core) return { pkgNames: pkgNames, payload: { route: "extension.updateAll", body: { pkgNames: pkgNames } } }
   return {
     pkgNames: pkgNames,
     payload: {
@@ -152,7 +183,9 @@ function reduce(ext, event) {
     case "action-reply":
       var busy = without(ext.busy, event.pkgName)
       if (r.state !== "ok") return copy(ext, { busy: busy, errors: withKey(ext.errors, event.pkgName, r.message || Model.problem(r, "").title) })
-      var node = r.data.updateExtension && r.data.updateExtension.extension
+      // Core answers an uninstall of an extension no repo offers with null,
+      // as Suwayomi does: the row goes.
+      var node = ext.core ? r.data.extension : r.data.updateExtension && r.data.updateExtension.extension
       var list = ext.extensions.filter(function(e) { return e.pkgName !== event.pkgName || node })
       list = list.map(function(e) { return e.pkgName === event.pkgName ? toExtension(event.config, node) : e })
       return copy(ext, { busy: busy, extensions: list })
@@ -165,7 +198,8 @@ function reduce(ext, event) {
         return copy(done, { errors: event.pkgNames.reduce(function(m, p) { return withKey(m, p, why) }, ext.errors) })
       }
       var nodes = {}
-      r.data.updateExtensions.extensions.forEach(function(n) { nodes[n.pkgName] = n })
+      var updated = ext.core ? r.data.extensions : r.data.updateExtensions.extensions
+      updated.forEach(function(n) { nodes[n.pkgName] = n })
       return copy(done, { extensions: ext.extensions.map(function(e) { return nodes[e.pkgName] ? toExtension(event.config, nodes[e.pkgName]) : e }) })
     case "repo-reply":
       if (r.state !== "ok") return copy(ext, { repoError: r.message || Model.problem(r, "").title })
@@ -179,6 +213,7 @@ function reduce(ext, event) {
 }
 
 function loaded(ext, data, config) {
+  if (ext.core) return coreLoaded(ext, data, config)
   switch (ext.step) {
     case "stores":
       var repos = data.extensionStores.nodes.map(toRepo)
@@ -195,6 +230,30 @@ function loaded(ext, data, config) {
         step: null,
         repos: f.extensionStores.map(toRepo),
         extensions: f.extensions.map(function(n) { return toExtension(config, n) })
+      })
+  }
+  return ext
+}
+
+function coreLoaded(ext, data, config) {
+  switch (ext.step) {
+    case "stores":
+      return copy(ext, { step: data.metas.length ? "fetch" : "repos" })
+    case "repos":
+      return copy(ext, { repos: data.repos.map(toRepo), step: data.repos.length ? "fetch" : "preset" })
+    case "preset":
+      return copy(ext, { step: "mark" })
+    case "mark":
+      return copy(ext, { step: "fetch" })
+    case "fetch":
+      // A repo core could not reach keeps its last list; say so.
+      var failed = (data.errors || []).map(function(e) { return e.message }).join(" ")
+      return copy(ext, {
+        state: "ok",
+        step: null,
+        repoError: failed,
+        repos: data.repos.map(toRepo),
+        extensions: data.extensions.map(function(n) { return toExtension(config, n) })
       })
   }
   return ext
@@ -281,11 +340,22 @@ var DETAILS_QUERY = "query($pkg: String!) { extension(pkgName: $pkg) { source { 
 // details.state: "loading" | "ok" | a failed connection state. sources:
 // [{ id, name, lang, configurable }], fields Browse.sources() gives too,
 // so BrowseView's settings panel takes one as it is.
-function details(pkgName) {
-  return { pkgName: pkgName, state: "loading", message: "", sources: [], cursor: 0 }
+// ext: on core the details come from the extension list, ready at once.
+function details(pkgName, ext) {
+  var d = { pkgName: pkgName, state: "loading", message: "", sources: [], cursor: 0 }
+  var e = ext && ext.core ? find(ext, pkgName) : null
+  if (!e) return d
+  // ponytail: a source's settings open Browse's settings panel, which still
+  // talks to Suwayomi until #378 moves Browse; until then none shows as
+  // configurable on core.
+  var sources = (e.sources || []).map(function(n) { return { id: String(n.id), name: String(n.displayName || n.id), lang: String(n.lang || ""), configurable: false } })
+  sources.sort(function(a, b) { return a.name.localeCompare(b.name) })
+  return copy(d, { state: "ok", sources: sources })
 }
 
+// null when the details need no request.
 function detailsPayload(d) {
+  if (d.state !== "loading") return null
   return { query: DETAILS_QUERY, variables: { pkg: d.pkgName } }
 }
 

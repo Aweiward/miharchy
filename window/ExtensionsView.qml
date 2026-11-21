@@ -37,11 +37,15 @@ Item {
 
   readonly property var rows: Extensions.rows(ext, { query: query, allLanguages: allLanguages, showNsfw: showNsfw })
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.key === view.cursorKey }))
-  readonly property var problem: Model.problem(ext, configPath)
+  readonly property bool core: !!config && config.backend === "core"
+  // Set by shell.qml with MIHARCHY_BACKEND=core, so a missing core.json words itself.
+  property string backend: ""
+  readonly property var problem: Model.problem(ext, configPath, backend)
   readonly property var detailsExtension: details ? Extensions.find(ext, details.pkgName) : null
   readonly property bool updatable: ext.extensions.some(function(e) { return e.installed && e.hasUpdate })
   readonly property string hint: !details ? "j k move   enter install/details   u update   " + (updatable ? "U update all   " : "") + "x remove   a add repo   / filter   l languages   "
-    : "j k move   enter settings   " + (detailsExtension && detailsExtension.hasUpdate ? "u update   " : "") + "x uninstall   esc back   "
+    // On core no source settings open until #378, so the hint leaves them out.
+    : "j k move   " + (core ? "" : "enter settings   ") + (detailsExtension && detailsExtension.hasUpdate ? "u update   " : "") + "x uninstall   esc back   "
 
   signal key(var event)
   signal editEnded()
@@ -65,7 +69,7 @@ Item {
     if (editing) closeField()
     loadSeq++
     closeDetails()
-    ext = config ? Extensions.initial() : Extensions.reduce(Extensions.initial(), { type: "config-missing" })
+    ext = config ? Extensions.initial(config.backend === "core") : Extensions.reduce(Extensions.initial(), { type: "config-missing" })
     if (active) load()
   }
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
@@ -75,6 +79,8 @@ Item {
   }
 
   function load() {
+    // Without core.json nothing else says so: the status bar is Suwayomi's.
+    if (!config && backend === "core") ext = Extensions.reduce(Extensions.initial(), { type: "config-missing" })
     if (!config) return
     ext = Extensions.reduce(ext, { type: "load" })
     advance()
@@ -93,9 +99,11 @@ Item {
   }
 
   function showDetails(pkgName) {
-    details = Extensions.details(pkgName)
+    details = Extensions.details(pkgName, ext)
     var seq = ++detailsSeq
-    send(Extensions.detailsPayload(details), function(reply) {
+    var payload = Extensions.detailsPayload(details)
+    if (!payload) return
+    send(payload, function(reply) {
       if (seq === view.detailsSeq && view.details) view.details = Extensions.reduceDetails(view.details, { type: "reply", reply: reply })
     })
   }
@@ -108,13 +116,13 @@ Item {
   function act(a) {
     var cfg = config
     if (a.removeRepo) {
-      send(Extensions.removeRepoPayload(a.removeRepo), function(reply) {
+      send(Extensions.removeRepoPayload(a.removeRepo, core), function(reply) {
         view.ext = Extensions.reduce(view.ext, { type: "repo-reply", reply: reply, removed: a.removeRepo })
       })
       return
     }
     ext = Extensions.reduce(ext, { type: "action", pkgName: a.pkgName, action: a.action })
-    send(Extensions.actionPayload(a.pkgName, a.action), function(reply) {
+    send(Extensions.actionPayload(a.pkgName, a.action, core), function(reply) {
       view.ext = Extensions.reduce(view.ext, { type: "action-reply", pkgName: a.pkgName, reply: reply, config: cfg })
       // An uninstall from the details ends them.
       var left = Extensions.find(view.ext, a.pkgName)
@@ -202,7 +210,7 @@ Item {
             editError = p.error
             break
           }
-          send(Extensions.addRepoPayload(p.url), function(reply) {
+          send(Extensions.addRepoPayload(p.url, core), function(reply) {
             view.ext = Extensions.reduce(view.ext, { type: "repo-reply", reply: reply })
             view.advance()
           })

@@ -130,6 +130,7 @@ function renew(config, stale, back) {
 // back(failure, token), failure as renew() gives. stale: the token the
 // server refused, or "".
 function token(config, stale, back) {
+  if (config.backend === "core") return back({ state: "error", message: "miharchy-core's live socket takes the secret, not a token.", data: null }, "")
   renew(config, stale, function(failure) { back(failure, failure ? "" : session.access) })
 }
 
@@ -162,13 +163,55 @@ function call(config, url, payload, kind, done) {
   }
 }
 
-// payload: { query, variables? }; done(reply), reply as Model.reply gives.
+// --- miharchy-core (ADR 0010), behind MIHARCHY_BACKEND=core ---
+// Core takes core.json's secret as the bearer token on every request: no
+// login, no refresh, and nothing here touches the Suwayomi session above.
+
+// One request to core; done gets one answer. Returns { abort }, as call().
+function coreCall(config, url, payload, kind, done) {
+  var c = { xhr: null, over: false }
+  var finish = function(result) {
+    if (c.over) return
+    c.over = true
+    done(result)
+  }
+  c.xhr = open(url, payload, kind.binary, config.secret, function(xhr) {
+    c.xhr = null
+    finish(kind.read(xhr))
+  })
+  return {
+    abort: function() {
+      if (c.xhr) c.xhr.abort()
+      finish(kind.failed(Model.coreReply(0, "")))
+    }
+  }
+}
+
+var CORE = {
+  read: function(xhr) { return Model.coreReply(xhr.status, xhr.responseText) },
+  failed: function(reply) { return reply }
+}
+
+// A request sent to the wrong server fails at once, so a view half moved to
+// core can never reach Suwayomi, nor the other way round.
+function wrongBackend(core, done) {
+  done({ state: "error", message: core ? "This request is GraphQL, but this view talks to miharchy-core." : "This request is for miharchy-core, but this view talks to Suwayomi.", data: null, kind: "internal" })
+  return { abort: function() {} }
+}
+
+// payload: { query, variables? } for Suwayomi, { route, body? } for core
+// (config.backend "core"); done(reply), reply as Model.reply or
+// Model.coreReply gives.
 function send(config, payload, done) {
+  var core = config.backend === "core"
+  if (core !== (typeof payload.route === "string")) return wrongBackend(core, done)
+  if (core) return coreCall(config, config.url + "/api/" + payload.route, payload.body || {}, CORE, done)
   return call(config, config.url + "/api/graphql", payload, GRAPHQL, done)
 }
 
 // A server image's bytes: done({ status, data, contentType }).
 function image(config, url, done) {
+  if (config.backend === "core") return coreCall(config, url, null, IMAGE, done)
   return call(config, url, null, IMAGE, done)
 }
 

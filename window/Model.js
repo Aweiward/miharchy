@@ -43,6 +43,20 @@ function parseConfig(text) {
   return { url: c.url.replace(/\/+$/, ""), username: c.username, password: c.password }
 }
 
+// miharchy-core's core.json (ADR 0010) -> { url, secret, backend: "core" },
+// or null. backend tells Session.send and Model.problem which server a
+// view talks to; a Suwayomi config has none.
+function parseCoreConfig(text) {
+  var c
+  try {
+    c = JSON.parse(text)
+  } catch (e) {
+    return null
+  }
+  if (!c || typeof c.url !== "string" || typeof c.secret !== "string" || !c.url || !c.secret) return null
+  return { url: c.url.replace(/\/+$/, ""), secret: c.secret, backend: "core" }
+}
+
 // Puts a manga in the library or takes it out. Its chapters, read state
 // and downloads stay, as in Mihon.
 function inLibraryPayload(mangaId, inLibrary) {
@@ -139,6 +153,28 @@ function reply(status, body) {
     return message === "Unauthorized" ? fail("unauthorized") : fail("error", message)
   }
   return { state: "ok", message: "", data: json.data || {} }
+}
+
+// miharchy-core's answer -> the same { state, message, data } as reply(),
+// plus kind on a failure: core's error kind (ADR 0010), so a view can tell
+// a Cloudflare challenge or a WebView source from other errors. Core answers
+// a failure with a non-200 status and { error: { kind, message } }, and
+// success with the route's object itself.
+function coreReply(status, body) {
+  var fail = function(state, message, kind) { return { state: state, message: message || "", data: null, kind: kind || "" } }
+  if (status === 0) return fail("down")
+  var json
+  try {
+    json = JSON.parse(body)
+  } catch (e) {
+    return fail("error", status === 200 ? "miharchy-core sent a reply that is not JSON." : "miharchy-core answered HTTP " + status + ".")
+  }
+  if (json && json.error) {
+    var kind = String(json.error.kind || "")
+    return kind === "unauthorized" ? fail("unauthorized", "", kind) : fail("error", String(json.error.message || kind), kind)
+  }
+  if (status !== 200 || !json || typeof json !== "object") return fail("error", "miharchy-core answered HTTP " + status + ".")
+  return { state: "ok", message: "", data: json, kind: "" }
 }
 
 // Suwayomi wraps an exception as "Exception while fetching data (/path) :
@@ -248,7 +284,21 @@ function notice(connection, configPath, shown, narrowed) {
 
 // { title, detail } for a failed connection, null for "loading" and "ok".
 // Any { state, message } works, so other views reuse it.
-function problem(connection, configPath) {
+// backend: "core" for a view on miharchy-core, which words its own failures.
+function problem(connection, configPath, backend) {
+  if (backend === "core") {
+    switch (connection.state) {
+      case "no-config":
+        return { title: "No miharchy-core config", detail: configPath + " is missing or invalid. Start miharchy-core once to create it." }
+      case "down":
+        return { title: "miharchy-core is not running", detail: "Start it with: systemctl --user start miharchy-core. Press r to retry." }
+      case "unauthorized":
+        return { title: "miharchy-core rejected the secret", detail: "Check the secret in " + configPath + ". Press r to retry." }
+      case "error":
+        return { title: "miharchy-core sent an error", detail: connection.message + " Press r to retry." }
+    }
+    return null
+  }
   switch (connection.state) {
     case "no-config":
       return { title: "No server config", detail: configPath + " is missing or invalid. Run Setup from the : palette to create it." }
@@ -386,6 +436,8 @@ function follow(before, after, index, key) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+    parseCoreConfig: parseCoreConfig,
+    coreReply: coreReply,
     VIEWS: VIEWS,
     SOURCE_NAMES_META: SOURCE_NAMES_META,
     LIBRARY_QUERY: LIBRARY_QUERY,
