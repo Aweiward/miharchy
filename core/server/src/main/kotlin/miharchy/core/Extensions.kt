@@ -130,8 +130,7 @@ class Extensions(private val db: Database, private val host: Host, private val d
                 val lang = s["lang"]!!.jsonPrimitive.content
                 buildJsonObject {
                     put("id", s.id())
-                    // Suwayomi's displayName is the source's toString(): "MangaDex (EN)".
-                    put("displayName", "${s["name"]!!.jsonPrimitive.content} (${lang.uppercase()})")
+                    put("displayName", displayName(s))
                     put("name", s["name"]!!); put("lang", lang)
                     put("iconUrl", m.iconUrl); put("contentWarning", m.contentWarning)
                     put("supportsLatest", s["supportsLatest"]!!); put("isConfigurable", s["configurable"]!!)
@@ -307,7 +306,7 @@ class Extensions(private val db: Database, private val host: Host, private val d
         put("storeIndexUrl", meta?.indexUrl ?: offer!!.indexUrl)
         if (meta != null) put("sources", buildJsonArray {
             for (s in loaded[meta.pkgName].orEmpty()) add(buildJsonObject {
-                put("id", s.id()); put("displayName", s["name"]!!); put("lang", s["lang"]!!); put("isConfigurable", s["configurable"]!!)
+                put("id", s.id()); put("displayName", displayName(s)); put("lang", s["lang"]!!); put("isConfigurable", s["configurable"]!!)
             })
         })
     }
@@ -328,6 +327,9 @@ class Extensions(private val db: Database, private val host: Host, private val d
         }
     }
 }
+
+/** Suwayomi's displayName is the source's toString(): "MangaDex (EN)". */
+private fun displayName(s: JsonObject) = "${s["name"]!!.jsonPrimitive.content} (${s["lang"]!!.jsonPrimitive.content.uppercase()})"
 
 private fun JsonObject.id() = this["id"]!!.jsonPrimitive.content
 

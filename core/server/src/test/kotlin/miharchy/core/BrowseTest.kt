@@ -64,7 +64,12 @@ class BrowseTest {
         // The site refuses a request without the source's header, so an image core fetched itself would fail.
         Site { ex ->
             synchronized(requests) { requests += ex.requestURI.path }
-            if (ex.requestHeaders.getFirst("X-Fixture") == "yes" && ex.requestURI.path.endsWith(".png")) png else null
+            when {
+                ex.requestHeaders.getFirst("X-Fixture") != "yes" -> null
+                ex.requestURI.path == "/cover2.png" -> "<html>error</html>".toByteArray()
+                ex.requestURI.path.endsWith(".png") -> png
+                else -> null
+            }
         }.use { site ->
             FixtureSite.base = site.url
             TestRepo(work, "eu.kanade.tachiyomi.extension.en.fixturehttp").use { repo ->
@@ -98,6 +103,10 @@ class BrowseTest {
                     val cover = browse.images.getValue("cover")(listOf(id.toString()))
                     assertEquals("image/png", cover.contentType)
                     assertTrue(cover.bytes.contentEquals(png))
+                    // An error page is not served or cached as a cover.
+                    val second = first[1]["id"]!!.jsonPrimitive.long
+                    try { browse.images.getValue("cover")(listOf(second.toString())); kotlin.test.fail("not an image") } catch (e: ApiError) { assertEquals(Kind.source, e.kind) }
+                    assertEquals(1, Files.list(work.resolve("covers")).use { it.count() })
 
                     FixtureSite.chapters = listOf("/c/1", "/c/2", "/c/3")
                     val refreshed = r.call("manga.refresh", buildJsonObject { put("id", id) })
@@ -109,6 +118,8 @@ class BrowseTest {
                     // The source lists the newest first; the newest has the highest sourceOrder, as on Suwayomi.
                     assertEquals(listOf(3, 2, 1), chapters.map { it["sourceOrder"]!!.jsonPrimitive.content.toInt() })
                     assertEquals("\"${site.url}/c/1\"", chapters[0]["realUrl"].toString())
+                    // The source gives no numbers, so they come from the names, as in Mihon.
+                    assertEquals(listOf(1.0, 2.0, 3.0), chapters.map { it["chapterNumber"]!!.jsonPrimitive.content.toDouble() })
 
                     // A refresh keeps read state, adds new chapters and drops the ones the source no longer lists.
                     val read = chapters.first { it["url"]!!.jsonPrimitive.content == "/c/2" }["id"]!!.jsonPrimitive.long

@@ -22,6 +22,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import tachiyomi.domain.chapter.service.ChapterRecognition
 import yomi.host.Host
 import yomi.host.WebViewUnavailableException
 import java.io.File
@@ -61,6 +62,7 @@ suspend fun Host.call(req: JsonObject, seconds: Long = 120): JsonElement {
         if (e is IllegalArgumentException && e.message.orEmpty().startsWith("unknown source")) {
             throw ApiError(Kind.notFound, "The source ${req["source"]?.jsonPrimitive?.content} is not installed.")
         }
+        if (e is IllegalArgumentException && e.message.orEmpty().startsWith("no setting")) throw ApiError(Kind.invalid, e.message.orEmpty())
         chain.firstNotNullOfOrNull { it as? HttpException }?.let { throw ApiError(Kind.network, "The site answered HTTP ${it.code}.") }
         if (e is IOException) throw ApiError(Kind.network, "${e::class.java.simpleName}: ${e.message}")
         throw ApiError(Kind.source, "${e::class.java.simpleName}: ${e.message}")
@@ -226,16 +228,21 @@ class Browse(private val db: Database, private val host: Host, private val exten
 
     /** Fetches details and chapters, as `fetchMangaAndChapters` does. Read state survives: chapters match by URL. */
     private suspend fun refresh(id: Long): JsonObject {
-        val (row, known) = db.run { c -> row(c, id) to chapters(c, id) }
+        val (row, known) = db.run { c -> row(c, id) to hostChapters(c, id) }
         val reply = host.call(buildJsonObject {
             put("op", "update"); put("source", row.source.toString()); put("manga", hostManga(row))
-            put("chapters", JsonArray(known.map { ch -> buildJsonObject { put("url", ch["url"]!!); put("name", ch["name"]!!) } }))
+            put("chapters", JsonArray(known))
             put("needsDetails", true); put("needsChapters", true)
         }).jsonObject
         val m = reply["manga"]!!.jsonObject
         val list = reply["chapters"]!!.jsonArray.map { it.jsonObject }.filter { it.s("url") != null }
         // An empty list is a source failure, never a reason to drop the chapters the user has read.
         if (list.isEmpty()) throw ApiError(Kind.source, "The source returned no chapters for ${row.fields.s("title")}.")
+        // Many sources leave the number unset; Mihon reads it from the names, with the whole list for context.
+        val numbers = ChapterRecognition.parseChapterNumbers(
+            m.s("title") ?: row.fields.s("title").orEmpty(),
+            list.map { ChapterRecognition.Chapter(it.s("name").orEmpty(), it["chapterNumber"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: -1.0) },
+        ).map { n -> n.chapter?.let(ChapterRecognition::toDouble) ?: -1.0 }
         val coverChanged = m.s("thumbnailUrl") != null && m.s("thumbnailUrl") != row.fields.s("thumbnailUrl")
         db.run { c ->
             c.transaction {
@@ -256,11 +263,12 @@ class Browse(private val db: Database, private val host: Host, private val exten
                          remote_order, remote_memo, state_date_fetch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT (manga_id, remote_url) DO UPDATE SET remote_name = excluded.remote_name,
                          remote_scanlator = excluded.remote_scanlator, remote_chapter_number = excluded.remote_chapter_number,
-                         remote_date_upload = excluded.remote_date_upload, remote_order = excluded.remote_order, remote_memo = excluded.remote_memo""",
+                         remote_date_upload = CASE WHEN excluded.remote_date_upload = 0 THEN remote_date_upload ELSE excluded.remote_date_upload END,
+                         remote_order = excluded.remote_order, remote_memo = excluded.remote_memo""",
                 ).use { p ->
                     list.forEachIndexed { i, ch ->
                         p.setLong(1, id); p.setString(2, ch.s("url")); p.setString(3, ch.s("name") ?: ""); p.setString(4, ch.s("scanlator"))
-                        p.setDouble(5, ch["chapterNumber"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: -1.0)
+                        p.setDouble(5, numbers[i])
                         p.setLong(6, ch["dateUpload"]?.jsonPrimitive?.longOrNull ?: 0); p.setInt(7, i)
                         p.setString(8, (ch["memo"] as? JsonObject ?: JsonObject(emptyMap())).toString()); p.setLong(9, now)
                         p.addBatch()
@@ -269,8 +277,8 @@ class Browse(private val db: Database, private val host: Host, private val exten
                 }
                 // Chapters the source no longer lists go, as in Mihon.
                 val urls = list.map { it.s("url")!! }.toSet()
-                val gone = known.filter { it.s("url") !in urls }.map { it["id"]!!.jsonPrimitive.content.toLong() }
-                c.prepareStatement("DELETE FROM chapter WHERE id = ?").use { p -> gone.forEach { p.setLong(1, it); p.addBatch() }; p.executeBatch() }
+                val gone = known.mapNotNull { it.s("url") }.filter { it !in urls }
+                c.prepareStatement("DELETE FROM chapter WHERE manga_id = ? AND remote_url = ?").use { p -> gone.forEach { p.setLong(1, id); p.setString(2, it); p.addBatch() }; p.executeBatch() }
             }
         }
         if (coverChanged) dropCovers(id)
@@ -278,6 +286,21 @@ class Browse(private val db: Database, private val host: Host, private val exten
         return buildJsonObject {
             put("manga", JsonObject(fresh - "chapters"))
             put("chapters", fresh["chapters"]!!)
+        }
+    }
+
+    /** The stored chapters with every field the host's `update` takes, so a source that hands them back keeps them. */
+    private fun hostChapters(c: Connection, mangaId: Long): List<JsonObject> = c.prepareStatement(
+        "SELECT remote_url, remote_name, remote_chapter_number, remote_scanlator, remote_date_upload, remote_memo FROM chapter WHERE manga_id = ? ORDER BY remote_order",
+    ).use { p ->
+        p.setLong(1, mangaId)
+        p.executeQuery().use { r ->
+            generateSequence {
+                if (!r.next()) null else buildJsonObject {
+                    put("url", r.getString(1)); put("name", r.getString(2)); put("chapterNumber", r.getDouble(3))
+                    put("scanlator", r.getString(4)); put("dateUpload", r.getLong(5)); put("memo", Json.parseToJsonElement(r.getString(6)))
+                }
+            }.toList()
         }
     }
 
@@ -331,6 +354,8 @@ class Browse(private val db: Database, private val host: Host, private val exten
         val file = covers.resolve("$id-${sha1(url).take(16)}")
         withContext(Dispatchers.IO) { if (Files.exists(file)) Files.readAllBytes(file) else null }?.let { return Image(it, sniff(it)) }
         val image = download(buildJsonObject { put("op", "download"); put("source", row.source.toString()); put("url", url) })
+        // An error page must not stay cached under this cover's URL.
+        if (!image.contentType.startsWith("image/")) throw ApiError(Kind.source, "The cover of manga $id is not an image.")
         withContext(Dispatchers.IO) {
             dropCovers(id)
             val part = covers.resolve("$id.part")
