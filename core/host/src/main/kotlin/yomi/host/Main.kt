@@ -56,21 +56,10 @@ import java.util.jar.JarFile
 
 /** Extension host. One JSON request per line on stdin, one reply per line on stdout, in any order. */
 fun main(args: Array<String>) {
-    installCryptoProviders()
     Protocol.out = PrintStream(FileOutputStream(FileDescriptor.out), true, Charsets.UTF_8)
     System.setOut(System.err) // anything an extension prints must not corrupt the protocol
 
-    Context.setDataDir(File(args.getOrNull(0) ?: System.getenv("NANO_HOST_DATA") ?: "${System.getProperty("user.home")}/.yomi-host"))
-    val app = Application()
-    downloadsDir().deleteRecursively() // leftovers from a run that crashed before the app read them
-    val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
-    Injekt.addSingleton<Application>(app)
-    Injekt.addSingletonFactory { NetworkHelper(app) }
-    Injekt.addSingletonFactory { json }
-    // Mihon provides these too, and extensions fetch them by type (MANGA Plus needs ProtoBuf).
-    Injekt.addSingletonFactory<kotlinx.serialization.protobuf.ProtoBuf> { kotlinx.serialization.protobuf.ProtoBuf }
-
-    val host = Host()
+    val host = startHost(File(args.getOrNull(0) ?: System.getenv("NANO_HOST_DATA") ?: "${System.getProperty("user.home")}/.yomi-host"))
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     runBlocking {
         // readLine() uses the system charset, which isn't UTF-8 on Windows before Java 18.
@@ -113,6 +102,33 @@ fun main(args: Array<String>) {
         }
     }
     kotlin.system.exitProcess(0)
+}
+
+private var started: File? = null
+
+/**
+ * Sets up what extensions expect from Android: the data folder, the crypto providers and the
+ * Injekt singletons. Injekt and Context are global, so a JVM runs one host: a second call with
+ * the same folder returns a new [Host] over the same set-up, and another folder is an error.
+ */
+@Synchronized
+fun startHost(dataDir: File): Host {
+    started?.let {
+        require(it == dataDir) { "the host already runs on $it" }
+        return Host()
+    }
+    installCryptoProviders()
+    Context.setDataDir(dataDir)
+    val app = Application()
+    downloadsDir().deleteRecursively() // leftovers from a run that crashed before the app read them
+    val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+    Injekt.addSingleton<Application>(app)
+    Injekt.addSingletonFactory { NetworkHelper(app) }
+    Injekt.addSingletonFactory { json }
+    // Mihon provides these too, and extensions fetch them by type (MANGA Plus needs ProtoBuf).
+    Injekt.addSingletonFactory<kotlinx.serialization.protobuf.ProtoBuf> { kotlinx.serialization.protobuf.ProtoBuf }
+    started = dataDir
+    return Host()
 }
 
 /** Adds the providers Android has and the JDK lacks. */

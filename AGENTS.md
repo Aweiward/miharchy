@@ -47,6 +47,7 @@ Read the doc for the area before you change it.
 - **Suwayomi-Server, credentials, server images** (`server/`, `ServerImage.qml`): `docs/agents/server.md`.
 - **Setup steps** (`Setup.js`, helper build, launcher entry): `docs/agents/setup.md`.
 - **Release** (version bump, tag, notes, site): `docs/agents/release.md`.
+- **miharchy-core** (`core/`, map #359): `core/README.md`, ADR 0009 and ADR 0010.
 
 ## Current work
 

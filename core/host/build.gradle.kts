@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.4.10"
+    kotlin("jvm")
     application
 }
 
