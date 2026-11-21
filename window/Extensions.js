@@ -345,10 +345,8 @@ function details(pkgName, ext) {
   var d = { pkgName: pkgName, state: "loading", message: "", sources: [], cursor: 0 }
   var e = ext && ext.core ? find(ext, pkgName) : null
   if (!e) return d
-  // ponytail: a source's settings open Browse's settings panel, which still
-  // talks to Suwayomi until #378 moves Browse; until then none shows as
-  // configurable on core.
-  var sources = (e.sources || []).map(function(n) { return { id: String(n.id), name: String(n.displayName || n.id), lang: String(n.lang || ""), configurable: false } })
+  // core: true sends the settings panel to core's routes (Widgets.loadPayload).
+  var sources = (e.sources || []).map(function(n) { return { id: String(n.id), name: String(n.displayName || n.id), lang: String(n.lang || ""), configurable: n.isConfigurable === true, core: true } })
   sources.sort(function(a, b) { return a.name.localeCompare(b.name) })
   return copy(d, { state: "ok", sources: sources })
 }

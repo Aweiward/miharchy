@@ -194,7 +194,9 @@ var CORE = {
 
 // A request sent to the wrong server fails at once, so a view half moved to
 // core can never reach Suwayomi, nor the other way round.
+// Logged too: some sends drop their reply, and a drive greps the log for it.
 function wrongBackend(core, done) {
+  console.warn("miharchy: refused a " + (core ? "GraphQL request on miharchy-core" : "miharchy-core request on Suwayomi"))
   done({ state: "error", message: core ? "This request is GraphQL, but this view talks to miharchy-core." : "This request is for miharchy-core, but this view talks to Suwayomi.", data: null, kind: "internal" })
   return { abort: function() {} }
 }

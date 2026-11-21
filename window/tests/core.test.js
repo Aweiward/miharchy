@@ -5,6 +5,9 @@ const assert = require("node:assert/strict");
 const load = require("./load");
 const M = load("Model.js");
 const E = load("Extensions.js");
+const B = load("Browse.js");
+const W = load("Widgets.js");
+const P = load("Prefs.js");
 
 const core = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
 const suwayomi = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
@@ -186,13 +189,125 @@ test("on core, action replies update the row, and a null uninstall drops it", ()
   assert.equal(failed.errors[MANGADEX.pkgName], "not signed with its repo's key");
 });
 
-test("on core, details come from the list with no request, and settings wait for #378", () => {
+test("on core, details come from the list with no request, and settings open on core", () => {
   const s = loaded();
   const d = E.details(MANGADEX.pkgName, s);
   assert.equal(d.state, "ok");
   assert.equal(E.detailsPayload(d), null);
   assert.deepEqual(d.sources.map((x) => x.name), ["MangaDex (EN)", "MangaDex (JA)"]);
-  assert.ok(d.sources.every((x) => x.configurable === false));
-  assert.equal(E.detailsAction(s, d, "extension.settings"), null);
+  const opened = E.detailsAction(s, d, "extension.settings").settings;
+  assert.deepEqual(opened, { id: "1", name: "MangaDex (EN)", lang: "en", configurable: true, core: true });
+  assert.deepEqual(W.loadPayload(W.panel("preferences", opened)), { route: "source.settings", body: { source: "1" } });
   assert.ok(E.detailsPayload(E.details(MANGADEX.pkgName)).query, "Suwayomi still asks");
+});
+
+// --- Browse on core ---
+
+const SOURCES = [
+  { id: "2499283573021220255", displayName: "MangaDex (EN)", name: "MangaDex", lang: "en", iconUrl: "https://raw.githubusercontent.com/k/icon.png", contentWarning: "MIXED", supportsLatest: true, isConfigurable: true },
+  { id: "77", displayName: "Raw (JA)", name: "Raw", lang: "ja", iconUrl: null, contentWarning: "SAFE", supportsLatest: false, isConfigurable: false }
+];
+
+test("on core, the sources come from source.list and carry core", () => {
+  assert.deepEqual(B.sourcesPayload(true), { route: "source.list" });
+  assert.ok(B.sourcesPayload(false).query, "Suwayomi still asks GraphQL");
+  const s = B.sources(ok({ sources: SOURCES }), core, false, true);
+  assert.equal(s.state, "ok");
+  assert.deepEqual(s.sources[0], { id: "2499283573021220255", name: "MangaDex (EN)", lang: "en", icon: "https://raw.githubusercontent.com/k/icon.png", warning: "MIXED", supportsLatest: true, configurable: true, core: true });
+  assert.equal(B.sources(ok({ sources: SOURCES }), core, false, false).sources.length, 1, "the language rule holds");
+});
+
+test("on core, a listing pages through source routes and reads core's reply", () => {
+  const src = B.sources(ok({ sources: SOURCES }), core, false, true).sources;
+  let l = B.listing(src[0], "popular", "");
+  assert.deepEqual(B.listingPayload(l), { route: "source.popular", body: { source: "2499283573021220255", page: 1 } });
+  l = B.reduceListing(B.reduceListing(l, { type: "request" }), { type: "reply", config: core, reply: ok({ hasNextPage: true, mangas: [{ id: 5, title: "A", thumbnailUrl: "/api/cover/5", inLibrary: false }] }) });
+  assert.deepEqual(l.items, [{ id: 5, title: "A", cover: "http://127.0.0.1:4591/api/cover/5", inLibrary: false }]);
+  assert.deepEqual(B.listingPayload(l).body.page, 2);
+  // A source without latest falls back to popular, as on Suwayomi.
+  assert.equal(B.listingPayload(B.listing(src[1], "latest", "")).route, "source.popular");
+  const states = [{ state: 1 }];
+  assert.equal(B.listing(src[0], "search", "x", [{}, { state: 1 }], 1).filterCount, 1, "the count is the changed filters, not the states sent");
+  assert.deepEqual(B.listingPayload(B.listing(src[0], "search", "one piece", states)), { route: "source.search", body: { source: "2499283573021220255", page: 1, query: "one piece", filters: states } });
+  assert.deepEqual(B.listingPayload(B.listing(src[0], "search", "x", [])).body, { source: "2499283573021220255", page: 1, query: "x" }, "no filters changed, none sent");
+  // Core's error kind marks a Cloudflare page.
+  const cf = B.reduceListing(B.listing(src[0], "popular", ""), { type: "reply", config: core, reply: M.coreReply(502, '{"error":{"kind":"cloudflare","message":"https://x shows a Cloudflare challenge."}}') });
+  assert.equal(cf.flare, true);
+  assert.equal(cf.message, "https://x shows a Cloudflare challenge.");
+});
+
+const FILTERS = [
+  { name: "Search by", type: "header" },
+  { name: "Sort", type: "sort", values: ["Latest", "Title"], state: { index: 0, ascending: false } },
+  { name: "Status", type: "select", values: ["Any", "Ongoing"], state: 0 },
+  { name: "", type: "separator" },
+  { name: "Genres", type: "group", filters: [{ name: "Action", type: "tristate", state: 0 }, { name: "Safe", type: "checkbox", state: true }] },
+  { name: "Author", type: "text", state: "" }
+];
+
+test("on core, filters parse from the host's JSON and go back as every state", () => {
+  const src = { id: "9", name: "S", core: true };
+  let p = W.panel("filters", src);
+  assert.deepEqual(W.loadPayload(p), { route: "source.filters", body: { source: "9" } });
+  p = W.reducePanel(p, { type: "reply", reply: ok({ filters: FILTERS }) });
+  assert.equal(p.state, "ok");
+  assert.deepEqual(p.widgets.map((w) => w.kind), ["header", "sort", "choice", "separator", "group", "text"]);
+  assert.deepEqual(p.widgets[4].children.map((w) => [w.kind, w.value]), [["tristate", "IGNORE"], ["bool", true]]);
+  assert.deepEqual(W.filterChanges(p.widgets, true), [], "nothing changed, nothing sent");
+
+  const rows = W.rows(p.widgets, { "4": true });
+  const action = rows.find((r) => r.label === "Action");
+  let w = W.activate(p.widgets, action).widgets;
+  w = W.activate(w, W.rows(w, { "2": true }).find((r) => r.label === "Ongoing")).widgets;
+  w = W.setText(w, [5], "Oda");
+  assert.equal(W.changedCount(w), 3);
+  assert.deepEqual(W.filterChanges(w, true), [
+    {}, { state: { index: 0, ascending: false } }, { state: 1 }, {},
+    { filters: [{ state: 1 }, { state: true }] }, { state: "Oda" }
+  ]);
+  assert.deepEqual(W.filterChanges(W.reset(w), true), []);
+});
+
+const SETTINGS = [
+  { key: "q", type: "list", title: "Quality", summary: "%s", enabled: true, entries: ["Data", "Data saver"], values: ["data", "data-saver"], value: "data" },
+  { key: "nsfw", type: "switch", title: "Show NSFW", summary: "", enabled: true, value: false, summaryOn: "Shown", summaryOff: "Hidden" },
+  { key: "langs", type: "multi", title: "Languages", summary: "", enabled: true, entries: ["English", "French"], values: ["en", "fr"], value: ["en"] },
+  { key: "x", type: "text", title: "Blocked groups", summary: "", enabled: false, value: "" },
+  { key: "about", type: "info", title: "About", summary: "Restart after a change.", enabled: true }
+];
+
+test("on core, settings parse from the host's JSON and save one by key", () => {
+  const src = { id: "9", name: "S", core: true };
+  let p = W.reducePanel(W.panel("preferences", src), { type: "reply", reply: ok({ settings: SETTINGS }) });
+  assert.deepEqual(p.widgets.map((w) => [w.kind, w.value]), [["choice", 0], ["bool", false], ["multi", ["en"]], ["text", ""], ["header", null]]);
+  const rows = W.rows(p.widgets, {});
+  assert.equal(rows[0].summary, "Data");
+  assert.equal(rows[1].summary, "Hidden");
+  assert.equal(rows[3].enabled, false);
+  assert.deepEqual([rows[4].label, rows[4].summary, rows[4].mark], ["About", "Restart after a change.", ""]);
+  assert.deepEqual(W.activate(p.widgets, rows[4]), {}, "an info row takes no edit");
+
+  const before = p.widgets;
+  const quality = W.activate(p.widgets, W.rows(p.widgets, { "0": true })[2]).widgets;
+  p = W.reducePanel(p, { type: "edit", widgets: quality });
+  assert.deepEqual(W.savePayload(p, [0]), { route: "source.setSetting", body: { source: "9", key: "q", value: "data-saver" } });
+  const on = W.activate(p.widgets, rows[1]).widgets;
+  assert.deepEqual(W.savePayload(Object.assign({}, p, { widgets: on }), [1]).body, { source: "9", key: "nsfw", value: true });
+
+  const saved = W.reducePanel(p, { type: "reply", before, reply: ok({ accepted: true, settings: SETTINGS.map((s) => s.key === "q" ? Object.assign({}, s, { value: "data-saver" }) : s) }) });
+  assert.equal(saved.saved, true);
+  assert.equal(saved.widgets[0].value, 1);
+  // The extension refused it: the server's values show, with a reason.
+  const refused = W.reducePanel(p, { type: "reply", before, reply: ok({ accepted: false, settings: SETTINGS }) });
+  assert.equal(refused.widgets[0].value, 0);
+  assert.equal(refused.error, "The extension did not take that value.");
+  assert.equal(refused.saved, false);
+});
+
+test("on core, global choices live in core's global metas", () => {
+  const table = [{ key: "pinnedSources", default: "[]" }];
+  assert.deepEqual(P.loadPayload(table, undefined, true), { route: "meta.get", body: { scope: "global", keys: ["miharchy.pinnedSources"] } });
+  assert.deepEqual(P.savePayload("pinnedSources", '["9"]', undefined, true), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.pinnedSources", value: '["9"]' }] } });
+  assert.deepEqual(P.read(table, { metas: [{ scope: "global", owner: 0, key: "miharchy.pinnedSources", value: '["9"]' }] }, P.defaults(table)), { pinnedSources: '["9"]' });
+  assert.ok(P.loadPayload(table).query, "Suwayomi still asks GraphQL");
 });

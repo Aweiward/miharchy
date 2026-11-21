@@ -73,14 +73,14 @@ Item {
           { mode: "popular", key: "p", label: "p popular" },
           { mode: "latest", key: "n", label: "n latest" },
           { mode: "search", key: "/", label: view.listing && view.listing.mode === "search" ? "/ " + (view.listing.query || "search") : "/ search" },
-          { mode: "filters", key: "F", label: view.listing && view.listing.filters.length ? "F " + view.listing.filters.length + " filters" : "F filter" }
+          { mode: "filters", key: "F", label: view.listing && view.listing.filterCount ? "F " + view.listing.filterCount + " filters" : "F filter" }
         ]
 
         Text {
           id: modeLabel
           textFormat: Text.PlainText
           required property var modelData
-          readonly property bool on: view.listing !== null && (modelData.mode === "filters" ? view.listing.filters.length > 0 : view.listing.mode === modelData.mode)
+          readonly property bool on: view.listing !== null && (modelData.mode === "filters" ? view.listing.filterCount > 0 : view.listing.mode === modelData.mode)
           visible: modelData.mode !== "latest" || (view.listing && view.listing.source.supportsLatest)
           text: modelData.label
           color: on ? view.theme.accent : view.theme.muted

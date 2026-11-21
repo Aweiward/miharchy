@@ -24,6 +24,13 @@ var CATEGORY_MUTATION = "mutation($id: Int!, $add: [Int!]!, $remove: [Int!]!) {"
   + " updateMangaCategories(input: { id: $id, patch: { addToCategories: $add, removeFromCategories: $remove } }) { manga { id categories { nodes { id } } } } }"
 
 var TYPES = { popular: "POPULAR", latest: "LATEST", search: "SEARCH" }
+
+// The sources request. On core (ADR 0010) each source then carries
+// core: true, so its listings, global search and filter and settings
+// panels take core's routes with no flag of their own.
+function sourcesPayload(core) {
+  return core ? { route: "source.list" } : { query: SOURCES_QUERY }
+}
 var LOCAL_SOURCE = "0"
 
 function copy(o, changes) {
@@ -39,7 +46,7 @@ function needsFlareSolverr(message) {
 }
 
 function failed(reply) {
-  return { state: reply.state, message: reply.message, flare: needsFlareSolverr(reply.message) }
+  return { state: reply.state, message: reply.message, flare: reply.kind === "cloudflare" || needsFlareSolverr(reply.message) }
 }
 
 // A sources reply -> { state, message, sources: [{ id, name, lang, icon,
@@ -50,13 +57,14 @@ function failed(reply) {
 // under Other and never as a Migrate target, as in Mihon.
 function sources(reply, config, showNsfw, allLanguages) {
   if (reply.state !== "ok") return { state: reply.state, message: reply.message, sources: [] }
-  var nodes = (reply.data.sources && reply.data.sources.nodes) || []
+  var core = !!config && config.backend === "core"
+  var nodes = (core ? reply.data.sources : reply.data.sources && reply.data.sources.nodes) || []
   var list = nodes
     .filter(function(n) {
       return (showNsfw || n.contentWarning !== "NSFW") && (allLanguages || n.lang === "en" || n.lang === "all")
     })
     .map(function(n) {
-      return {
+      var s = {
         id: String(n.id),
         name: String(n.displayName || n.id),
         lang: String(n.id) === LOCAL_SOURCE ? "other" : String(n.lang || ""),
@@ -65,6 +73,8 @@ function sources(reply, config, showNsfw, allLanguages) {
         supportsLatest: n.supportsLatest === true,
         configurable: n.isConfigurable === true
       }
+      if (core) s.core = true
+      return s
     })
   list.sort(function(a, b) { return a.name.localeCompare(b.name) })
   return { state: "ok", message: "", sources: list }
@@ -197,14 +207,17 @@ function rowIndex(rows, id) {
 // page: the last page loaded. flare: the failure is Cloudflare without
 // FlareSolverr. filters: Widgets.filterChanges of the applied filters;
 // Suwayomi hands them to the source only in a search, so only a search
-// keeps them.
-function listing(source, mode, query, filters) {
+// keeps them. filterCount: how many filters differ from their defaults,
+// filters.length unless given (core sends every state).
+function listing(source, mode, query, filters, filterCount) {
   mode = mode === "latest" && !source.supportsLatest ? "popular" : mode
+  var applied = mode === "search" ? filters || [] : []
   return {
     source: source,
     mode: mode,
     query: query || "",
-    filters: mode === "search" ? filters || [] : [],
+    filters: applied,
+    filterCount: !applied.length ? 0 : filterCount === undefined ? applied.length : filterCount,
     page: 0,
     items: [],
     hasNext: true,
@@ -218,6 +231,14 @@ function listing(source, mode, query, filters) {
 // the last page, or after a failure (r retries).
 function listingPayload(l) {
   if (l.state === "loading" || !l.hasNext || (l.state !== "idle" && l.state !== "ok")) return null
+  if (l.source.core) {
+    var body = { source: l.source.id, page: l.page + 1 }
+    if (l.mode === "search") {
+      body.query = l.query
+      if (l.filters.length) body.filters = l.filters
+    }
+    return { route: "source." + l.mode, body: body }
+  }
   return {
     query: LISTING_MUTATION,
     variables: { source: l.source.id, type: TYPES[l.mode], page: l.page + 1, query: l.mode === "search" ? l.query : null, filters: l.mode === "search" ? l.filters : null }
@@ -234,7 +255,7 @@ function reduceListing(l, event) {
       return copy(l, { state: "idle", message: "", flare: false })
     case "reply":
       if (event.reply.state !== "ok") return copy(l, failed(event.reply))
-      var r = event.reply.data.fetchSourceManga || {}
+      var r = (l.source.core ? event.reply.data : event.reply.data.fetchSourceManga) || {}
       var seen = {}
       l.items.forEach(function(m) { seen[m.id] = true })
       var fresh = (r.mangas || []).filter(function(m) { return !seen[m.id] }).map(function(m) {
@@ -485,6 +506,7 @@ if (typeof module !== "undefined") {
     nearEnd: nearEnd,
     loadAgain: loadAgain,
     SOURCES_QUERY: SOURCES_QUERY,
+    sourcesPayload: sourcesPayload,
     sources: sources,
     PREFS: PREFS,
     pinned: pinned,
