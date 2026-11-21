@@ -116,6 +116,8 @@ Item {
 
   // then: runs once the sources have loaded.
   function loadSources(then) {
+    // Without core.json nothing else says so: the status bar is Suwayomi's.
+    if (!config && core) src = { state: "no-config", message: "", sources: [] }
     if (!config) return
     var seq = ++sourcesSeq
     var cfg = config

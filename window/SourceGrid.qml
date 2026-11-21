@@ -73,7 +73,7 @@ Item {
           { mode: "popular", key: "p", label: "p popular" },
           { mode: "latest", key: "n", label: "n latest" },
           { mode: "search", key: "/", label: view.listing && view.listing.mode === "search" ? "/ " + (view.listing.query || "search") : "/ search" },
-          { mode: "filters", key: "F", label: view.listing && view.listing.filterCount ? "F " + view.listing.filterCount + (view.listing.filterCount === 1 ? " filter" : " filters") : "F filter" }
+          { mode: "filters", key: "F", label: view.listing && view.listing.filterCount ? "F " + view.listing.filterCount + " filters" : "F filter" }
         ]
 
         Text {

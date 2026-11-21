@@ -908,7 +908,8 @@ ShellRoot {
           categories: root.connection.categories
           onCategorized: if (root.config) root.fetchLibrary()
           onLibraryChanged: function(mangaId, inLibrary) {
-            browseView.markInLibrary(mangaId, inLibrary)
+            // A Suwayomi id would mark the core row with the same number.
+            if (!root.coreBackend) browseView.markInLibrary(mangaId, inLibrary)
             if (inLibrary) root.addedToLibrary(mangaId)
             else if (root.config) root.fetchLibrary()
           }
