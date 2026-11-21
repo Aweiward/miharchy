@@ -211,6 +211,11 @@ class Host {
             }
             "settings" -> settingsOf(source())
             "setSetting" -> setSetting(source(), str("key"), req["value"] ?: JsonNull)
+            // miharchy-core: removes an extension's sources, on uninstall and for ids an update dropped.
+            "unload" -> {
+                req["sources"]!!.jsonArray.forEach { sources.remove(it.jsonPrimitive.content) }
+                JsonPrimitive(true)
+            }
             "cookies" -> JsonArray(Injekt.get<NetworkHelper>().cookieJar.loadForRequest(str("url").toHttpUrl()).map { JsonPrimitive("${it.name}=${it.value}") })
             else -> throw IllegalArgumentException("unknown op")
         }
@@ -258,6 +263,7 @@ private fun Source.toJson() = buildJsonObject {
     put("lang", (this@toJson as? CatalogueSource)?.lang ?: "")
     put("supportsLatest", supportsLatest)
     (this@toJson as? HttpSource)?.let { put("baseUrl", it.baseUrl) }
+    put("configurable", this@toJson is eu.kanade.tachiyomi.source.ConfigurableSource)
 }
 
 private fun MangasPage.toJson() = buildJsonObject {

@@ -46,11 +46,11 @@ class FilesTest {
     fun migrationsRunOnce() = runBlocking {
         val file = dir.resolve("core.db")
         Database(file).use { db ->
-            assertEquals(1, db.schema)
+            assertEquals(Database.MIGRATIONS.size, db.schema)
             db.run { it.createStatement().execute("INSERT INTO metas VALUES ('global', 0, 'k', 'v')") }
         }
         Database(file).use { db ->
-            assertEquals(1, db.schema)
+            assertEquals(Database.MIGRATIONS.size, db.schema)
             assertEquals("v", db.run { c -> c.createStatement().executeQuery("SELECT value FROM metas").use { it.getString(1) } })
         }
     }
@@ -60,6 +60,6 @@ class FilesTest {
         val file = dir.resolve("broken.db")
         val thrown = runCatching { Database(file, listOf("0001-metas.sql", "missing.sql")) }
         assertTrue(thrown.isFailure)
-        Database(file).use { assertEquals(1, it.schema) }
+        Database(file, listOf("0001-metas.sql")).use { assertEquals(1, it.schema) }
     }
 }

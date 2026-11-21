@@ -47,7 +47,7 @@ class ApiTest {
         val (status, body) = client.call("health")
         assertEquals(200, status)
         assertEquals("true", body["ok"].toString())
-        assertEquals("1", body["schema"].toString())
+        assertEquals(Database.MIGRATIONS.size.toString(), body["schema"].toString())
     }
 
     @Test
