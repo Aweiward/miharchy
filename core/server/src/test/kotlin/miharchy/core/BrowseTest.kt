@@ -140,6 +140,11 @@ class BrowseTest {
                     val pages = r.call("chapter.pages", buildJsonObject { put("id", read) })
                     assertEquals("[\"/api/page/$read/0\",\"/api/page/$read/1\"]", pages["pages"].toString())
                     assertEquals("4", pages["chapter"]!!.jsonObject["lastPageRead"].toString())
+                    val detail = r.call("manga.get", buildJsonObject { put("id", id) })["manga"]!!.jsonObject
+                    assertEquals("2", detail["chapters"]!!.jsonArray.single { it.jsonObject["id"]!!.jsonPrimitive.long == read }.jsonObject["pageCount"].toString())
+                    assertEquals("[]", detail["categories"].toString())
+                    assertEquals("[]", detail["meta"].toString())
+                    assertEquals("0", detail["inLibraryAt"].toString())
                     // After a restart the page list is gone from memory, and a page image fetches it again.
                     browse = Browse(db, TestHost.host, extensions, work.resolve("covers"))
                     val image = browse.images.getValue("page")(listOf(read.toString(), "1"))
