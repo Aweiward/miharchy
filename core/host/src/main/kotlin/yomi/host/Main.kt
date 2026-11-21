@@ -56,6 +56,7 @@ import java.util.jar.JarFile
 
 /** Extension host. One JSON request per line on stdin, one reply per line on stdout, in any order. */
 fun main(args: Array<String>) {
+    installCryptoProviders()
     Protocol.out = PrintStream(FileOutputStream(FileDescriptor.out), true, Charsets.UTF_8)
     System.setOut(System.err) // anything an extension prints must not corrupt the protocol
 
@@ -112,6 +113,11 @@ fun main(args: Array<String>) {
         }
     }
     kotlin.system.exitProcess(0)
+}
+
+/** Adds the providers Android has and the JDK lacks. */
+fun installCryptoProviders() {
+    if (java.security.Security.getProvider("BC") == null) java.security.Security.addProvider(org.bouncycastle.jce.provider.BouncyCastleProvider())
 }
 
 class Host {

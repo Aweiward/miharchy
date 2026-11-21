@@ -21,6 +21,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp-brotli:5.4.0")
     implementation("com.squareup.okhttp3:okhttp-zstd:5.4.0")
     implementation("org.jsoup:jsoup:1.22.2")
+    // Android ships BouncyCastle, and some extensions use its ciphers (Mangago: AES/CBC/ZEROBYTEPADDING).
+    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
     // Android ships org.json and extensions use it (Comix calls JSONObject.quote).
     implementation("org.json:json:20250517")
     implementation("com.github.mihonapp:injekt:91edab2317")
