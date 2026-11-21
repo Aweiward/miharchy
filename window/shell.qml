@@ -817,14 +817,17 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "browse" && (screen !== "extensions" || panel !== null)
           theme: theme
-          config: root.config
-          configPath: root.configPath
+          config: root.coreBackend ? root.coreConfig : root.config
+          configPath: root.coreBackend ? root.coreConfigPath : root.configPath
+          backend: root.coreBackend ? "core" : ""
           active: root.view === "browse"
           showNsfw: root.settingsState.values.showNsfw
           localFolder: Storage.localFolder({ HOME: Quickshell.env("HOME"), MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT") }, root.settingsState.values.localSourcePath)
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, true) }
+          // ponytail: on core a manga's detail waits for its move (#378's
+          // second part); the shared detail still talks to Suwayomi.
+          onOpenManga: function(mangaId) { if (!root.coreBackend) mangaDetail.openManga(mangaId, true) }
         }
 
         HistoryView {

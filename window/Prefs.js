@@ -30,7 +30,9 @@ function keys(table) {
   return table.map(function(c) { return PREFIX + c.key })
 }
 
-function loadPayload(table, mangaId) {
+// core: the payloads take miharchy-core's meta routes (ADR 0010).
+function loadPayload(table, mangaId, core) {
+  if (core) return coreOnly(mangaId, { route: "meta.get", body: { scope: "global", keys: keys(table) } })
   if (mangaId === undefined) {
     return {
       query: "query($keys: [String!]) { metas(filter: { key: { in: $keys } }) { nodes { key value } } }",
@@ -43,7 +45,15 @@ function loadPayload(table, mangaId) {
   }
 }
 
-function savePayload(key, value, mangaId) {
+// ponytail: global choices only on core; a manga's own choices come with
+// the manga detail's move (#378).
+function coreOnly(mangaId, payload) {
+  if (mangaId !== undefined) throw new Error("A manga's own choices are not on miharchy-core yet.")
+  return payload
+}
+
+function savePayload(key, value, mangaId, core) {
+  if (core) return coreOnly(mangaId, { route: "meta.set", body: { metas: [{ scope: "global", key: PREFIX + key, value: String(value) }] } })
   if (mangaId === undefined) return { query: SAVE_MUTATION, variables: { key: PREFIX + key, value: String(value) } }
   return { query: MANGA_SAVE_MUTATION, variables: { id: mangaId, key: PREFIX + key, value: String(value) } }
 }
@@ -57,7 +67,8 @@ function resetPayload(table, mangaIds) {
 // each valid choice the reply carries; a manga's own meta wins.
 function read(table, data, values) {
   var stored = {}
-  var nodes = (data.metas && data.metas.nodes) || (data.setGlobalMeta ? [data.setGlobalMeta.meta] : [])
+  // Core answers with the metas themselves, Suwayomi with a connection.
+  var nodes = Array.isArray(data.metas) ? data.metas : (data.metas && data.metas.nodes) || (data.setGlobalMeta ? [data.setGlobalMeta.meta] : [])
   nodes.concat((data.manga && data.manga.meta) || []).forEach(function(m) { if (m) stored[m.key] = m.value })
   var next = {}
   for (var k in values) next[k] = values[k]

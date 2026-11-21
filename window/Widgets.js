@@ -78,6 +78,60 @@ function fromFilters(nodes) {
   return (nodes || []).map(filter)
 }
 
+// Core (ADR 0010) sends the host's filters: { type, name, state, values?,
+// filters? }, each state as the source holds it, so a fresh list's states
+// are its defaults.
+var TRISTATES = ["IGNORE", "INCLUDE", "EXCLUDE"]
+
+function coreFilter(n, i) {
+  var options = { options: (n.values || []).map(String) }
+  switch (n.type) {
+    case "checkbox": return widget("bool", i, n.name, n.state === true)
+    case "tristate": return widget("tristate", i, n.name, TRISTATES[n.state] || "IGNORE")
+    case "select": return widget("choice", i, n.name, typeof n.state === "number" ? n.state : -1, options)
+    case "sort": return widget("sort", i, n.name, n.state ? { index: n.state.index, ascending: n.state.ascending === true } : null, options)
+    case "text": return widget("text", i, n.name, String(n.state || ""))
+    case "group": return widget("group", i, n.name, null, { children: (n.filters || []).map(coreFilter) })
+    case "header": return widget("header", i, n.name, null)
+  }
+  return widget("separator", i, n.name, null)
+}
+
+// The host's settings: { key, type, title, summary, enabled, value,
+// entries?, values?, summaryOn?, summaryOff? }. type "info" is text the
+// extension shows with no value. A setting saves by key, so key is kept;
+// the host gives no default, so the value stands in.
+function coreSetting(n, i) {
+  var more = { type: n.type, key: String(n.key), summary: String(n.summary || ""), enabled: n.enabled !== false }
+  switch (n.type) {
+    case "switch":
+      var on = n.value === true
+      var summary = on ? n.summaryOn : n.summaryOff
+      return widget("bool", i, n.title, on, copy(more, { summary: String(summary === undefined ? n.summary || "" : summary) }))
+    case "list":
+      var values = (n.values || []).map(String)
+      return widget("choice", i, n.title, values.indexOf(String(n.value)), copy(more, { options: (n.entries || []).map(String), values: values }))
+    case "multi":
+      return widget("multi", i, n.title, (n.value || []).map(String), copy(more, { options: (n.entries || []).map(String), values: (n.values || []).map(String) }))
+    case "text":
+      return widget("text", i, n.title, String(n.value || ""), more)
+  }
+  return widget("header", i, n.title, null, more)
+}
+
+// The states core's listing takes: one per filter, in the source's order,
+// which the host copies over a fresh list by position.
+function coreStates(widgets) {
+  return widgets.map(function(w) {
+    switch (w.kind) {
+      case "group": return { filters: coreStates(w.children) }
+      case "tristate": return { state: TRISTATES.indexOf(w.value) }
+      case "header": case "separator": return {}
+    }
+    return { state: w.value }
+  })
+}
+
 function preference(n, i) {
   var more = { type: n.__typename, summary: String(n.summary || ""), visible: n.visible !== false, enabled: n.enabled !== false }
   var w
@@ -229,7 +283,9 @@ function filterChange(w) {
 // fetchSourceManga's filters: one FilterChange per widget off its default.
 // The server starts from the source's default list, so the rest need not
 // go. A group's child goes as its own change under the group's position.
-function filterChanges(widgets) {
+// core: every state, as coreStates gives them, or [] when none changed.
+function filterChanges(widgets, core) {
+  if (core) return changedCount(widgets) ? coreStates(widgets) : []
   var out = []
   widgets.forEach(function(w) {
     if (w.kind === "group") {
@@ -261,10 +317,15 @@ function panel(kind, source) {
 }
 
 function loadPayload(p) {
+  if (p.source.core) return { route: p.kind === "filters" ? "source.filters" : "source.settings", body: { source: p.source.id } }
   return { query: p.kind === "filters" ? FILTERS_QUERY : PREFERENCES_QUERY, variables: { id: p.source.id } }
 }
 
 function savePayload(p, path) {
+  if (p.source.core) {
+    var w = at(p.widgets, path)
+    return { route: "source.setSetting", body: { source: p.source.id, key: w.key, value: w.kind === "choice" ? w.values[w.value] : w.value } }
+  }
   return { query: PREFERENCE_MUTATION, variables: { source: p.source.id, change: preferenceChange(p.widgets, path) } }
 }
 
@@ -283,6 +344,12 @@ function reducePanel(p, event) {
         return copy(p, { state: r.state, message: r.message })
       }
       var d = r.data
+      if (p.source.core) {
+        var saved = d.accepted !== undefined
+        var next = copy(p, { state: "ok", message: "", error: "", widgets: (p.kind === "filters" ? d.filters : d.settings).map(p.kind === "filters" ? coreFilter : coreSetting), saved: p.saved || d.accepted === true })
+        // The extension's change listener may refuse a value, as on Android.
+        return clamp(saved && d.accepted === false ? copy(next, { error: "The extension did not take that value." }) : next)
+      }
       var widgets = d.updateSourcePreference ? fromPreferences(d.updateSourcePreference.preferences)
         : p.kind === "filters" ? fromFilters(d.source.filters) : fromPreferences(d.source.preferences)
       return clamp(copy(p, { state: "ok", message: "", error: "", widgets: widgets, saved: p.saved || !!d.updateSourcePreference }))

@@ -21,6 +21,9 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
+  // "core" with MIHARCHY_BACKEND=core (shell.qml), so a missing core.json words itself.
+  property string backend: ""
+  readonly property bool core: backend === "core"
   property bool active: false
   property bool showNsfw: false
   // Where the local source reads, for its empty how-to.
@@ -117,7 +120,7 @@ Item {
     var seq = ++sourcesSeq
     var cfg = config
     src = { state: "loading", message: "", sources: src.sources }
-    send({ query: Browse.SOURCES_QUERY }, function(reply) {
+    send(Browse.sourcesPayload(core), function(reply) {
       if (seq !== view.sourcesSeq) return
       view.src = Browse.sources(reply, cfg, view.showNsfw, true)
       view.sourceCursor = Math.min(view.sourceCursor, Math.max(0, view.sourceRows.length - 1))
@@ -141,10 +144,10 @@ Item {
     else loadSources(function() { if (view.screen === "global") view.startGlobal(query) })
   }
 
-  function openListing(mode, query, filters) {
+  function openListing(mode, query, filters, filterCount) {
     // Drops a page still due for the old listing.
     listingSeq++
-    listing = Browse.listing(listing.source, mode, query, filters)
+    listing = Browse.listing(listing.source, mode, query, filters, filterCount)
     gridCursor = 0
     moreManga()
   }
@@ -250,7 +253,7 @@ Item {
     var stale = panel.kind === "preferences" && panel.saved && screen === "source"
     panelSeq++
     panel = null
-    if (stale) openListing(listing.mode, listing.query, listing.filters)
+    if (stale) openListing(listing.mode, listing.query, listing.filters, listing.filterCount)
   }
 
   function run(id) {
@@ -338,7 +341,7 @@ Item {
         closeSearch()
         // As Mihon: a search from a search keeps its filters; from
         // popular or latest it starts without them.
-        if (q) openListing("search", q, listing.mode === "search" ? listing.filters : [])
+        if (q) openListing("search", q, listing.mode === "search" ? listing.filters : [], listing.mode === "search" ? listing.filterCount : 0)
         break
       case "source.filters":
         openPanel("filters", listing.source)
@@ -382,9 +385,10 @@ Item {
         if (panel.state !== "ok") break
         // Filters reach a source only in a search, so applying searches,
         // with the query of a search already showing.
-        var applied = Widgets.filterChanges(panel.widgets)
+        var applied = Widgets.filterChanges(panel.widgets, panel.source.core)
+        var count = Widgets.changedCount(panel.widgets)
         closePanel()
-        openListing("search", listing.mode === "search" ? listing.query : "", applied)
+        openListing("search", listing.mode === "search" ? listing.query : "", applied, count)
         break
       case "panel.closeFilters":
       case "panel.closeSettings":
@@ -468,7 +472,7 @@ Item {
       anchors.margins: view.theme.fontSize * 2
       visible: text !== ""
       wrapMode: Text.Wrap
-      text: { var p = Model.problem(view.src, view.configPath); return p ? p.title + ". " + p.detail : "" }
+      text: { var p = Model.problem(view.src, view.configPath, view.backend); return p ? p.title + ". " + p.detail : "" }
       color: view.theme.urgent
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSize
@@ -558,7 +562,7 @@ Item {
     Text {
       textFormat: Text.PlainText
       anchors.centerIn: sourceList
-      visible: view.sourceRows.length === 0 && Model.problem(view.src, view.configPath) === null
+      visible: view.sourceRows.length === 0 && Model.problem(view.src, view.configPath, view.backend) === null
       text: view.src.state !== "ok" ? "Loading sources" : view.src.sources.length ? "No source in the languages shown. Press l to pick them." : "No source yet. Press tab, then install an extension."
       color: view.theme.muted
       font.family: view.theme.fontFamily
@@ -645,7 +649,7 @@ Item {
     problem: {
       if (!view.panel) return ""
       if (view.panel.state === "loading") return "Loading"
-      var p = Model.problem(view.panel, view.configPath)
+      var p = Model.problem(view.panel, view.configPath, view.backend)
       if (p) return p.title + ". " + p.detail
       if (view.panel.error) return "Not saved: " + view.panel.error
       return view.panel.state === "ok" && view.panelRows.length === 0 ? (view.panel.kind === "filters" ? "This source has no filters." : "This source has no settings.") : ""

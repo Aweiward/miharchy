@@ -44,8 +44,7 @@ Item {
   readonly property var detailsExtension: details ? Extensions.find(ext, details.pkgName) : null
   readonly property bool updatable: ext.extensions.some(function(e) { return e.installed && e.hasUpdate })
   readonly property string hint: !details ? "j k move   enter install/details   u update   " + (updatable ? "U update all   " : "") + "x remove   a add repo   / filter   l languages   "
-    // On core no source settings open until #378, so the hint leaves them out.
-    : "j k move   " + (core ? "" : "enter settings   ") + (detailsExtension && detailsExtension.hasUpdate ? "u update   " : "") + "x uninstall   esc back   "
+    : "j k move   enter settings   " + (detailsExtension && detailsExtension.hasUpdate ? "u update   " : "") + "x uninstall   esc back   "
 
   signal key(var event)
   signal editEnded()
