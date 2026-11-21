@@ -122,8 +122,10 @@ class ExtensionsTest {
             ext.start()
             assertTrue(loaded(4242))
             ext.call("extension.list")
-            val removed = ext.call("extension.remove", install)["extension"]!!.jsonObject
-            assertEquals("false", removed["isInstalled"].toString())
+            // With its repo gone, no repo offers it: the reply is null, and the view drops the row.
+            ext.call("extensionRepo.remove", url(base))
+            assertEquals("true", ext.call("extension.list")["extensions"]!!.jsonArray.single().jsonObject["isObsolete"].toString())
+            assertEquals(kotlinx.serialization.json.JsonNull, ext.call("extension.remove", install)["extension"])
             assertFalse(loaded(4242))
             assertEquals(listOf(), Files.list(dir).use { s -> s.map { it.fileName.toString() }.toList() })
         }

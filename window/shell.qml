@@ -33,6 +33,12 @@ ShellRoot {
   settings.watchFiles: false
 
   readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
+  // The developer switch (ADR 0010): with MIHARCHY_BACKEND=core the views
+  // moved so far (Extensions) talk to miharchy-core through core.json, and
+  // the rest stay on Suwayomi. Users never set it; #373 flips the default.
+  readonly property bool coreBackend: Quickshell.env("MIHARCHY_BACKEND") === "core"
+  readonly property string coreConfigPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
+  property var coreConfig: null
 
   // The launcher's open-updates starts a window on Updates.
   property string view: Quickshell.env("MIHARCHY_OPEN_VIEW") === "updates" ? "updates" : "library"
@@ -131,6 +137,28 @@ ShellRoot {
     // An editor's save can truncate before it writes; reading at once would
     // see an empty file, drop the config and reset every view.
     onFileChanged: configReload.restart()
+  }
+
+  FileView {
+    id: coreConfigFile
+    path: root.coreBackend ? root.coreConfigPath : ""
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.applyCoreConfig(text())
+    onLoadFailed: root.applyCoreConfig("")
+    onFileChanged: coreConfigReload.restart()
+  }
+
+  Timer {
+    id: coreConfigReload
+    interval: 300
+    onTriggered: coreConfigFile.reload()
+  }
+
+  function applyCoreConfig(text) {
+    var next = Model.parseCoreConfig(text)
+    if (next && coreConfig && JSON.stringify(next) === JSON.stringify(coreConfig)) return
+    coreConfig = next
   }
 
   Timer {
@@ -773,8 +801,9 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "browse" && browseView.screen === "extensions"
           theme: theme
-          config: root.config
-          configPath: root.configPath
+          config: root.coreBackend ? root.coreConfig : root.config
+          configPath: root.coreBackend ? root.coreConfigPath : root.configPath
+          backend: root.coreBackend ? "core" : ""
           active: visible
           showNsfw: root.settingsState.values.showNsfw
           onKey: function(event) { event.accepted = root.handleKey(event) }
