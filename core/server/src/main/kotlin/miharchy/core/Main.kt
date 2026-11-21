@@ -3,6 +3,7 @@ package miharchy.core
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import yomi.host.startHost
+import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 
 /**
@@ -19,8 +20,12 @@ fun main() {
     val config = loadOrCreateConfig(configFile, asked ?: 4591)
     val port = java.net.URI(config.url).port
     require(asked == null || asked == port) { "MIHARCHY_CORE_PORT is $asked, but $configFile says ${config.url}" }
-    startHost(data.resolve("host").toFile())
-    val core = Core(config.secret, Database(data.resolve("core.db")))
+    val db = Database(data.resolve("core.db"))
+    // One host per JVM: every slice gets this one, because each Host has its own source map.
+    val host = startHost(data.resolve("host").toFile())
+    val extensions = Extensions(db, host, data.resolve("extensions"))
+    runBlocking { extensions.start() }
+    val core = Core(config.secret, db, routes = extensions.routes)
     System.err.println("miharchy-core: listening on 127.0.0.1:$port")
     embeddedServer(CIO, host = "127.0.0.1", port = port) { api(core) }.start(wait = true)
 }
