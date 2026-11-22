@@ -302,7 +302,7 @@ function parseSyncthing(text) {
   return f
 }
 
-// coreConfigPath: core.json under the switch, else "" (no core facts).
+// configPath: Suwayomi's server.json. coreConfigPath: core.json, or "" (no core facts).
 function probeCommand(configPath, syncDir, windowDir, skipAur, coreConfigPath) {
   var repo = windowDir.replace(/\/window$/, "")
   return job("probe", PROBE, [configPath, syncDir, desktopEntry(windowDir), repo + "/server/miharchy-server.service", skipAur ? "1" : "", coreConfigPath ? repo : "", coreConfigPath || ""])

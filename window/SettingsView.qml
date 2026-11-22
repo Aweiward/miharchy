@@ -23,7 +23,7 @@ Item {
   // Settings' server is miharchy-core (#385): every row, the trackers,
   // storage and the backup talk to core.
   property var config: null
-  property string configPath: "server.json"
+  property string configPath: ""
   // Rows core stores but does not act on yet (settings.get's unapplied).
   property var unapplied: []
   // A save core refused: { key, message }.
