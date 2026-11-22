@@ -147,10 +147,19 @@ class Settings(private val db: Database, private val covers: Path) {
         put("unapplied", JsonArray(SETTINGS.filterNot { it.applied }.map { JsonPrimitive(it.key) }))
     }
 
-    /** Deletes the cached covers and answers the bytes freed. A cover being written (`.part`) stays. */
-    private suspend fun clearCovers(): Long = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        if (!covers.isDirectory()) return@withContext 0L
-        Files.list(covers).use { s -> s.filter { it.isRegularFile() && !it.name.endsWith(".part") }.toList() }
+    /**
+     * Deletes the cached covers of manga outside the library and answers the bytes freed. The library's covers stay, as
+     * Suwayomi's clear keeps its downloaded thumbnails, and so does a cover being written (`.part`).
+     */
+    private suspend fun clearCovers(): Long {
+        val library = db.run { c -> c.query("SELECT id FROM manga WHERE user_favorite_at IS NOT NULL") { it.getLong(1).toString() }.toSet() }
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { clearOutside(library) }
+    }
+
+    private fun clearOutside(library: Set<String>): Long {
+        if (!covers.isDirectory()) return 0L
+        // A cover file is `<manga id>-<hash of its URL>`.
+        return Files.list(covers).use { s -> s.filter { it.isRegularFile() && !it.name.endsWith(".part") && it.name.substringBefore('-') !in library }.toList() }
             .sumOf { f -> runCatching { Files.size(f).also { Files.delete(f) } }.getOrDefault(0L) }
     }
 }

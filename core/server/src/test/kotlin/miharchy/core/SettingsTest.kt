@@ -130,14 +130,18 @@ class SettingsTest {
         }
     }
 
-    @Test fun `clearing the cache deletes cached covers and keeps one being written`() = runBlocking {
+    @Test fun `clearing the cache deletes covers outside the library and keeps the library's and one being written`() = runBlocking {
         Database(work.resolve("core.db")).use { db ->
+            db.run { c ->
+                c.update("INSERT INTO manga (id, source_id, remote_url, remote_title, user_favorite_at) VALUES (1, 1, '/a', 'A', 1), (2, 1, '/b', 'B', NULL), (3, 1, '/c', 'C', NULL)")
+            }
             val covers = Files.createDirectories(work.resolve("covers"))
             covers.resolve("1-abc").writeBytes(ByteArray(300))
             covers.resolve("2-def").writeBytes(ByteArray(200))
+            covers.resolve("3-ghi").writeBytes(ByteArray(100))
             covers.resolve("3.part").writeBytes(ByteArray(50))
-            assertEquals(500, Settings(db, covers).routes.call("cache.clear").getValue("freed").jsonPrimitive.int)
-            assertEquals(listOf("3.part"), covers.listDirectoryEntries().map { it.name })
+            assertEquals(300, Settings(db, covers).routes.call("cache.clear").getValue("freed").jsonPrimitive.int)
+            assertEquals(listOf("1-abc", "3.part"), covers.listDirectoryEntries().map { it.name }.sorted())
             assertEquals(0, Settings(db, work.resolve("none")).routes.call("cache.clear").getValue("freed").jsonPrimitive.int)
         }
     }
