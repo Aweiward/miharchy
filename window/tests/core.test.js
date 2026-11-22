@@ -761,8 +761,6 @@ test("on core, Settings lists the trackers and logs in by callback and by passwo
   const none = T.reduce(T.initial(true), { type: "no-config" });
   assert.equal(none.state, "no-config");
   assert.equal(M.problem(none, "/x/core.json", "core").title, "No miharchy-core config");
-
-  // Suwayomi's state still builds GraphQL.
 });
 
 test("on core, the tracking panel loads, searches, binds, updates and unbinds on core's routes", async () => {

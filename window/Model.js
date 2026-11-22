@@ -179,7 +179,7 @@ function fromResponse(r, config) {
         genre: n.genre || [],
         status: String(n.status || ""),
         total: total,
-        // Suwayomi has no read count; Mihon's "started" means one is read.
+        // The read count is what is not unread; Mihon's "started" means one is read.
         read: Math.max(0, total - unread),
         downloads: n.downloadCount || 0,
         bookmarks: n.bookmarkCount || 0,
