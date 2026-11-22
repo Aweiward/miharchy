@@ -138,12 +138,15 @@ test("the core steps wait in order, and FlareSolverr is unavailable on core", ()
   assert.equal(S.status(finish(S.initial(true), "probe", READY.replace("config\n", "") + CORE_UP), "move").state, "unavailable");
 });
 
+const IDLE = core(200, { state: "idle", step: null, report: null, error: null });
+
 test("the move runs on core, holds the other steps, and Enter on a done move only checks", () => {
   let s = finish(S.initial(true), "probe", READY + CORE_UP);
+  assert.equal(S.status(s, "move").state, "checking", "nothing to offer before core says where the move stands");
+  s = S.reduce(s, { type: "move", reply: IDLE });
   assert.equal(S.action(s, "move"), "confirm");
   s = S.reduce(s, { type: "start", id: "move" });
   s = S.reduce(s, { type: "move", reply: core(200, { state: "running", step: "library", report: null, error: null }) });
-  assert.equal(s.job, "move");
   assert.equal(S.status(s, "move").state, "running");
   assert.equal(S.status(s, "move").detail, "Moving: library.");
   assert.equal(S.action(s, "coreBuild"), null);
@@ -153,16 +156,21 @@ test("the move runs on core, holds the other steps, and Enter on a done move onl
   assert.equal(S.status(s, "move").state, "done");
   assert.equal(S.status(s, "move").detail, "Moved 3 manga, 2 extensions, 5 settings, 4 preferences and 6 downloads. Skipped: Setting x: y");
   assert.equal(S.action(s, "move"), "check");
-  // A failed move, or core going away, ends the run and offers it again.
-  s = S.reduce(S.reduce(s, { type: "start", id: "move" }), { type: "move", reply: core(0, "") });
-  assert.equal(s.job, null);
-  assert.equal(S.status(s, "move").state, "todo");
-  s = S.reduce(s, { type: "move", reply: core(200, { state: "failed", step: "extensions", report: null, error: { kind: "network", message: "Suwayomi did not answer." } }) });
+  // A core that does not answer (yet) leaves a done move unknown: Enter only checks.
+  s = S.reduce(s, { type: "move", reply: core(0, "") });
+  assert.equal(S.status(s, "move").state, "waiting");
+  assert.equal(S.action(s, "move"), "check");
+  assert.deepEqual(S.offers(S.reduce(s, { type: "server", reply: core(200, { metas: [] }) })).filter((k) => k.startsWith("move")), []);
+  // core's error is a failed move, offered again.
+  s = S.reduce(S.reduce(s, { type: "start", id: "move" }), { type: "move", reply: core(200, { state: "failed", step: "extensions", report: null, error: { kind: "network", message: "Suwayomi did not answer." } }) });
   // Core's status then carries error, which Model.coreReply reads as the reply's error.
   assert.equal(S.status(s, "move").detail, "The move stopped: Suwayomi did not answer. Press Enter to try again.");
-  // Read on open: a move still running holds the jobs.
-  s = S.reduce(finish(S.initial(true), "probe", READY + CORE_UP), { type: "move", reply: core(200, { state: "running", step: "metas" }) });
-  assert.equal(s.job, "move");
+  assert.equal(s.job, null);
+  // Read on open: a move still running holds every step, even with another job's slot taken.
+  s = S.reduce(S.reduce(finish(S.initial(true), "probe", READY + CORE_UP), { type: "start", id: "phones" }), { type: "move", reply: core(200, { state: "running", step: "metas" }) });
+  assert.equal(S.status(s, "move").state, "running");
+  s = finish(s, "phones", "");
+  assert.equal(S.action(s, "launcher"), null);
 });
 
 test("on core the reads and writes are core routes, with the real paths for the move", () => {
@@ -174,7 +182,7 @@ test("on core the reads and writes are core routes, with the real paths for the 
   });
   assert.deepEqual(S.savePayload("syncFolder", { code: 0 }, "/s", true), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.syncFolder", value: "/s" }] } });
   assert.equal(S.savePayload("flaresolverr", { code: 0 }, "", true), null);
-  let s = finish(S.initial(true), "probe", READY + CORE_UP);
+  let s = S.reduce(finish(S.initial(true), "probe", READY + CORE_UP), { type: "move", reply: IDLE });
   s = S.reduce(s, { type: "server", reply: core(200, { metas: [] }) });
   assert.deepEqual(S.offers(s), ["move:todo", "syncFolder:todo", "helper:todo", "launcher:todo", "peekKey:todo"]);
   assert.deepEqual(S.offerPayload(s), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.setupOffered", value: S.offers(s).join(",") }] } });

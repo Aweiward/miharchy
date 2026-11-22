@@ -92,15 +92,20 @@ Item {
   }
 
   function readMove() {
+    if (!config) return
     post(Setup.MOVE_STATUS, function(reply) {
       var was = view.setup.move && view.setup.move.state
       view.setup = Setup.reduce(view.setup, { type: "move", reply: reply })
-      if (was === "running" && view.setup.move.state === "done") view.moved()
+      if (was !== "running" || view.setup.move.state === "running") return
+      // The move wrote core's metas (the sync folder too) and library.
+      if (view.setup.move.state === "done") view.moved()
+      view.check()
     })
   }
 
   function startMove() {
     setup = Setup.reduce(setup, { type: "start", id: "move" })
+    if (!config) return setup = Setup.reduce(setup, { type: "move", reply: { state: "no-config", message: "" } })
     post(Setup.movePayload({
       serverConfig: configPath,
       serverRoot: Storage.root({ HOME: home, MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT") }),
@@ -114,8 +119,16 @@ Item {
   Timer {
     interval: 1000
     repeat: true
-    running: view.core && view.setup.job === "move"
+    running: view.core && !!view.setup.move && view.setup.move.state === "running"
     onTriggered: view.readMove()
+  }
+
+  // Core does not answer yet, as right after its unit starts: read again.
+  Timer {
+    interval: 3000
+    repeat: true
+    running: view.core && view.visible && !!view.setup.move && view.setup.move.state === "unknown"
+    onTriggered: view.readServer()
   }
 
   // The sync folder lives in server meta, so the phone check follows the
@@ -384,7 +397,8 @@ Item {
       Text {
         textFormat: Text.PlainText
         width: parent.width
-        visible: view.currentStatus.state === "running" && text !== ""
+        // The running shell job's output; core runs the move, so it has none here.
+        visible: view.currentStatus.state === "running" && view.current.id === proc.job && proc.running && text !== ""
         text: output.text.replace(/\s+$/, "").split("\n").slice(-12).join("\n")
         color: view.theme.muted
         font.family: view.theme.fontFamily

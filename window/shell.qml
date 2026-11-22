@@ -1191,7 +1191,8 @@ ShellRoot {
           // Styled for that color; the states and Settings.modes are constant text.
           textFormat: Text.StyledText
           text: [({ loading: "connecting", ok: "connected", "no-config": "no server config", down: "server down", unauthorized: "unauthorized", error: "server error" })[(root.coreBackend ? root.coreConnection : root.connection).state]].concat(Settings.modes(root.settingsState.values).map(function(m) { return "<font color='" + theme.accent + "'>" + m + "</font>" })).join("&nbsp;&nbsp;&nbsp;")
-          color: root.connection.state === "ok" || root.connection.state === "loading" ? theme.muted : theme.urgent
+          readonly property string barState: (root.coreBackend ? root.coreConnection : root.connection).state
+          color: barState === "ok" || barState === "loading" ? theme.muted : theme.urgent
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
         }

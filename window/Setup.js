@@ -56,7 +56,7 @@ var STEPS = [
 var CORE_STEPS = STEPS.slice(0, 2).concat([
   { id: "coreBuild", title: "miharchy-core", kind: "run", required: true, prompt: "Build miharchy-core now? It takes a few minutes." },
   { id: "coreService", title: "miharchy-core service", kind: "run", required: true, prompt: "Install and start the miharchy-core user service?" },
-  { id: "move", title: "Move from Suwayomi (optional)", kind: "run", prompt: "Copy the library, settings, extensions and downloads from Suwayomi into miharchy-core? Suwayomi stays as it is." }
+  { id: "move", title: "Move from Suwayomi (optional)", kind: "run", prompt: "Copy the library, extensions and downloads from Suwayomi into miharchy-core, and replace core's settings and preferences with Suwayomi's? Suwayomi stays as it is." }
 ], STEPS.slice(2))
 
 // The steps this window shows.
@@ -526,9 +526,10 @@ function reduce(s, event) {
       return copy(s, { confirm: null })
     case "move":
       var m = event.reply
-      var move = m.state === "ok" ? m.data : { state: "failed", step: null, report: null, error: { message: m.message || m.state } }
-      // A move core runs holds the jobs, so nothing else starts meanwhile.
-      if (move.state === "running") return copy(s, { move: move, job: s.job || "move" })
+      // Only core's error is a failed move. A core that does not answer
+      // (yet) leaves the move unknown, never "to do": a second move would
+      // write Suwayomi's values over core's.
+      var move = m.state === "ok" ? m.data : m.state === "error" ? { state: "failed", step: null, report: null, error: { message: m.message } } : { state: "unknown" }
       return copy(s, { move: move, job: s.job === "move" ? null : s.job })
   }
   return s
@@ -589,7 +590,8 @@ function installing(s) {
 // or label, the short word its row shows in place of the state's.
 function status(s, id) {
   var is = function(state, detail) { return { state: state, detail: detail } }
-  if (s.job === id) return is("running", id === "move" && s.move && s.move.step ? "Moving: " + s.move.step + "." : "")
+  if (id === "move" && s.move && s.move.state === "running") return is("running", s.move.step ? "Moving: " + s.move.step + "." : "")
+  if (s.job === id) return is("running", "")
   if (!s.probe) return is("checking", "")
   var p = s.probe
   switch (id) {
@@ -626,8 +628,10 @@ function status(s, id) {
       if (!p.config) return { state: "unavailable", label: "nothing to move", detail: "No Suwayomi install to move: there is no server.json." }
       if (status(s, "coreService").state !== "done") return is("waiting", "Needs miharchy-core running first.")
       var mv = s.move
-      if (mv && mv.state === "done") return is("done", moveDetail(mv.report))
-      if (mv && mv.state === "failed") return is("todo", "The move stopped" + (mv.step ? " at " + mv.step : "") + ": " + (mv.error ? mv.error.message : "") + " Press Enter to try again.")
+      if (!mv) return is("checking", "")
+      if (mv.state === "unknown") return is("waiting", "miharchy-core does not answer yet. Setup checks again on its own.")
+      if (mv.state === "done") return is("done", moveDetail(mv.report))
+      if (mv.state === "failed") return is("todo", "The move stopped" + (mv.step ? " at " + mv.step : "") + ": " + (mv.error ? mv.error.message : "") + " Press Enter to try again.")
       return is("todo", "Press Enter to copy your Suwayomi library into miharchy-core. Suwayomi must be running; the move only reads it.")
     case "flaresolverr":
       if (s.core) return { state: "unavailable", label: "not on core", detail: "miharchy-core does not use FlareSolverr yet (#361)." }
@@ -711,7 +715,8 @@ function pairing(s) {
 // What Enter does on a step: "check" runs the probe again, "confirm" asks
 // before a run, "edit" opens the folder field, null does nothing.
 function action(s, id) {
-  if (s.job) return null
+  // A move core runs holds every step, as a job does.
+  if (s.job || (s.move && s.move.state === "running")) return null
   var st = status(s, id).state
   if (st === "checking") return null
   var kind = step(id).kind
