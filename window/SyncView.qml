@@ -24,7 +24,6 @@ Rectangle {
   property string backend: ""
   property var config: null
   readonly property bool core: backend === "core"
-  property bool coreSyncing: false
   property bool coreHealthBusy: false
   readonly property var report: healthMode ? (health.state === "ready" ? [Sync.healthSummary(health.health, Date.now())] : [])
     : sync.state === "done" || sync.state === "held" ? Sync.report(sync) : []
@@ -81,12 +80,10 @@ Rectangle {
   function coreSync(apply) {
     // A missing core.json leaves config null: say so, never "Syncing" for ever.
     if (!config) return finishSync({ state: "no-config" })
-    coreSyncing = true
     Session.send(config, Sync.corePayload(apply), finishSync)
   }
 
   function finishSync(reply) {
-    coreSyncing = false
     sync = Sync.reduce(sync, { type: "reply", reply: reply })
     if (sync.state === "done") synced()
     refreshHealth()
