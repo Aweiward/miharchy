@@ -6,9 +6,9 @@ The Updates view (key `2`): chapters fetched after the manga joined the library 
 - List grouped by fetch day; `Enter` opens the chapter in the reader. A read update shows dimmed.
 - Downloaded only (see `library.md`) forces the Downloaded filter on (`Prefs.force`), over the stored choice, as in Mihon.
 - `F` opens the filters (Mihon's `UpdatesFilterDialog`, `Updates.PREFS` in global meta `miharchy.updates*`): Unread, Downloaded, Started, Bookmarked (each off, `[+]` include, `[-]` exclude), Hide excluded scanlators (each manga's `miharchy.excludedScanlators`), and with categories, Default (no category) and each category, off, include or exclude. Unread starts on include, so the list starts as the mark's; Mihon starts with every filter off. `j`/`k` move, `Enter`/`Space` change, `Esc`/`F` close; a click moves the cursor, a double click changes the row.
-- `u` starts a library update; progress comes live through the `libraryUpdateStatusChanged` subscription while the view shows (see the SKILL's live updates section); the header names skip reasons from the Settings filters. It skips manga in a category excluded from updates (see `library.md`).
-- `C` stops a running update (`updateStop`, Mihon's cancel on the update notification); the hint shows `C stop` in place of `u check` while one runs. The server zeroes `jobsInfo` on a stop, so the window keeps the counts: the progress line says `Stopped checking for new chapters at 6 / 23` until the next run starts. To have time to stop one, turn the Settings skip filters off and have 20+ manga in the library (`seed.sh --library 20`): 23 MangaDex manga take about 8 s.
-- The bar mark counts unread updates only (`Updates.listPayload`, `Updates.rows` without prefs), whatever the view's filters.
+- `u` starts a library update; progress comes live through core's `updates` topic while the view shows (see the SKILL's live updates section); the header names skip reasons from the Settings filters. It skips manga in a category excluded from updates (see `library.md`).
+- `C` stops a running update (`update.stop`, Mihon's cancel on the update notification); the hint shows `C stop` in place of `u check` while one runs. The progress line says `Stopped checking for new chapters at 6 / 23` until the next run starts; `update.status` then reads `stopped` true. To have time to stop one, turn the Settings skip filters off and have 20+ manga in the library (`source.popular` page 1, `manga.update` with `inLibrary` on 20 ids). Not yet timed on core.
+- The bar mark counts unread updates only (`Mark.load`, `Updates.count`), whatever the view's filters.
 - Actions (Mihon's `UpdatesScreen` bottom bar): `Space` selects or deselects the update under the cursor, `A` selects all, `I` inverts, `Esc` clears the selection (with none, it quits). `R` read, `U` unread (not `u`: it checks here), `b` bookmark toggle, `d` download, `x` delete downloads; `x` asks first and the second `x` deletes (Mihon's `UpdatesDeleteConfirmationDialog`), any other key keeps them. Each acts on the selection, or on the cursor's update when nothing is selected, then ends the selection, as Mihon does.
 - With the default Unread filter, `R` takes rows out of the list and the mark's count, and `U` changes only an update with a page read (back to page 1).
 - A row shows `★` for a bookmark and the download marker (`queued`, `42%`, `downloaded`) from the queue, as the manga detail does.
@@ -24,9 +24,13 @@ Press `2`.
   [30000, function() { log("after-check", updatesView.updates.rows.length); grab("updates-after"); done() }]
 ]
 ```
-Read back: compare the row count with `node -e` over `window/Updates.js` `updates(data, Date.now())` applied to `UPDATES_QUERY`'s reply.
+Read back: count the unread updates with the window's own load, run from node against the scratch core (one command, from the worktree root):
+```sh
+node -e 'const U=require("./window/tests/load.js")("Updates.js"),x=require("child_process").execFileSync;U.load((p,cb)=>cb({state:"ok",data:JSON.parse(x(".claude/skills/verify-miharchy/scripts/core.sh",["api",p.route,JSON.stringify(p.body||{})]))}),Date.now(),r=>console.log("updates",U.count(r.data,Date.now())))'
+```
+It prints `updates <n>`, the mark's count; with the default Unread filter it equals `updatesView.rows.length` in the drive log. For the mark's own load, load `plugin/Mark.js` the same way (`require("./window/tests/load.js")("../plugin/Mark.js")`) and print `U.count` of its reply's data.
 
-The actions, after the seed recipe in Gotchas. Give the 20th row's chapter a page read first (`fetchChapterPages`, then `updateChapter(patch: {lastPageRead: 3})`, as in `manga.md`) so `U` has a reset to do. Rows 0-4 are one manga, 5-18 another, 19 on a third:
+The actions, after the seed recipe in Gotchas. Give the 20th row's chapter a page read first (`core.sh api chapter.update '{"ids":[<id>],"lastPageRead":3}'`, as in `manga.md`) so `U` has a reset to do. Rows 0-4 are one manga, 5-18 another, 19 on a third:
 ```js
 (function() {
   function rows() { return updatesView.rows.map(function(r) { return [r.id, r.mangaId, r.lastPage, r.bookmarked, r.downloaded] }) }
@@ -49,10 +53,9 @@ The actions, after the seed recipe in Gotchas. Give the 20th row's chapter a pag
   ]
 })()
 ```
-Read back: `.claude/skills/verify-miharchy/scripts/gql.sh '{ chapters(filter:{id:{in:[...]}}){ nodes{ id isRead isBookmarked isDownloaded lastPageRead } } }'`, and the mark's count as in Gotchas.
+Read back: `.claude/skills/verify-miharchy/scripts/core.sh api chapter.list '{"ids":[...]}' | jq -c '[.chapters[] | [.id, .isRead, .isBookmarked, .isDownloaded, .lastPageRead]]'`, and the mark's count as above.
 
 ## Gotchas
-- Chapters fetched when a manga joins the library are backlog, not updates; to create updates, add a manga to the library before fetching its chapters, or remove chapter rows (see past PRs). `seed.sh --updates N` does it: it adds N MangaDex LATEST manga (recent uploads pass the 3-month rule) to the library, waits 2 s, then fetches their chapters. The row count depends on the manga: three gave 29 updates, two gave 7.
-- To prove the mark's count after an action, run `UPDATES_QUERY` through `gql.sh` and pass the reply to `Updates.count` in node (`window/tests/load.js` loads it); it must equal `updatesView.rows.length` in the drive log.
-- Server filters (`excludeUnreadChapters`, `excludeNotStarted`, `excludeCompleted`) default on and skip most manga on a fresh server.
-- `updateMangas` (Settings "Refresh metadata during library updates", default off) makes the library update also fetch each manga's title, cover and description.
+- Chapters fetched when a manga joins the library are backlog, not updates. To create updates, add a manga to the library before fetching its chapters: the core seed in SKILL.md does it (`manga.update` with `inLibrary`, wait 2 s, `manga.refresh`). A fetch in the same second as the add makes no rows. Only chapters uploaded in the last 3 months count, so pick manga with recent uploads (`source.latest` lists them). The row count depends on the manga: Berserk of Gluttony gave 4 on 2026-11-22.
+- The skip filters (`excludeUnreadChapters`, `excludeNotStarted`, `excludeCompleted`) default on and skip most manga on a fresh core; turn them off with `settings.set` (SKILL.md, Live updates).
+- `updateMangas` (Settings "Refresh metadata during library updates", default off) is stored only on core: a core refresh always fetches the details.

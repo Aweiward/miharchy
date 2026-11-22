@@ -62,7 +62,7 @@ _Avoid_: service, site, list
 
 **Track**:
 The link between a manga and its entry on one tracker, with that entry's status, chapters read and score.
-_Avoid_: sync (Suwayomi's API names, bind and track record, stay in code)
+_Avoid_: sync (the API names, bind and track record, stay in code)
 
 **Library check**:
 The screen that lists the problems in the library and leads to their fix. It is not one of the views.
@@ -131,7 +131,7 @@ A mode in which reading leaves no trace: no read state, no history entry, no tra
 _Avoid_: private mode
 
 **Backup folder**:
-The folder that holds the backups made by hand and Suwayomi's automatic backups. It never is the sync folder.
+The folder that holds the backups made by hand and core's automatic backups. It never is the sync folder.
 _Avoid_: export folder
 
 ### Surfaces
@@ -225,7 +225,7 @@ _Avoid_: interstitial, chapter break
 - Mihon calls a manga an "entry" in places. Resolved: Miharchy says **manga**.
 - "Sync" can mean live sync, as in SyncYomi. Resolved: in v1 **sync** means the backup exchange only, started by the user or by a new phone backup.
 - "Page" means one image of a chapter. Resolved: a screen of the window is a **view**, never a page.
-- "Default" is a category in Suwayomi (id 0) and in Mihon's UI. Resolved: Default means a manga is in no **category**; it is never a user category, and the Library shows it only once user categories exist.
+- "Default" is a category in core (id 0) and in Mihon's UI. Resolved: Default means a manga is in no **category**; it is never a user category, and the Library shows it only once user categories exist.
 - "Base" first meant one backup shared by both sides. Resolved: each side has its own **baseline**, because the phone may never restore what the desktop wrote.
 - "Stale" was proposed for a phone that ignores desktop backups. Resolved: the phone is **behind**; nothing on it is out of date by its own rules.
 - "Health" was proposed for the library check. Resolved: **sync health** keeps "health"; the screen is the **library check**, and what it finds are **problems**.

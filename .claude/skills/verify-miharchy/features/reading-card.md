@@ -13,12 +13,13 @@ An overlay over History: chapters read in the last 7 days, manga in progress, th
 `c` on History (`3`), or `:` → "Reading card".
 
 ## Seeding reads across days
-Suwayomi stamps `lastReadAt` with its own clock on a `lastPageRead` save. A restored backup's `BackupHistory` keeps its own time, so `scripts/history.py` builds a minimal `.tachibk` (each named chapter read, with a history entry at its local time) and restores it through `restoreBackup`, then prints each chapter's `lastReadAt` read back with `ok`:
+Core stamps `lastReadAt` with its own clock on a `lastPageRead` save, and no route sets another time. So mark the chapters read with a page save, then move each read time into the past in `$RUN/core/data/core.db` (SKILL.md, miharchy-core). On the core seed with three or four library manga:
 ```sh
-.claude/skills/verify-miharchy/scripts/seed.sh --library 4
-.claude/skills/verify-miharchy/scripts/history.py 1=2026-10-09T21:00 2=2026-10-08T20:00 3=2026-10-03T12:00 7=2026-10-08T09:00 8=2026-10-07T23:50 9=2026-10-07T23:55 12=2026-10-06T00:05 4=2026-10-04T18:00 13=2026-09-19T10:00 5=2026-08-30T10:00
+.claude/skills/verify-miharchy/scripts/core.sh api chapter.update '{"ids":[<ids>],"isRead":true,"lastPageRead":0}'
+sqlite3 <RUN>/core/data/core.db "UPDATE history SET read_at = CAST(strftime('%s', '2026-11-20 21:00', 'utc') AS INTEGER) * 1000 WHERE chapter_id = <id>; UPDATE history SET read_at = ... WHERE chapter_id = <id>"
+.claude/skills/verify-miharchy/scripts/core.sh api history.list '{"readOnly":true}' | jq -c '[.chapters[] | [.manga.id, .id, (.lastReadAt | strflocaltime("%Y-%m-%dT%H:%M"))]]'
 ```
-Seed before any drive reads those chapters: a restore never lowers a newer `lastReadAt`, and `history.py` prints `WANTED <time>` instead of `ok` for such a chapter. Take the chapter ids from `gql.sh '{ mangas(condition: { inLibrary: true }) { nodes { id chapters { nodes { id } } } } }'` and pick times before now. Work the expected numbers out by hand before the drive. With the seed above on 2026-10-09 at 22:30 (manga 1 has chapters 1 to 3, all read): chapters 8, in progress 3 (manga 1 has nothing unread), streak 4 (Oct 9 to Oct 6, a gap on Oct 5), covers of manga 1, 3, 4.
+Give each chapter its own `UPDATE`, at a local time before now. The last command reads back each chapter with its read time; it must match what you wrote. Take the chapter ids from `chapter.list '{"mangaIds":[<ids>]}'`. Work the expected chapters, manga in progress, streak and covers out by hand before the drive, by the rules in `docs/agents/library.md`. Recipe that ran on 2026-11-22: chapters 1 and 2 of the seeded Berserk manga written at 2026-11-20 21:00 and 2026-11-19 20:00 read back as `"2026-11-20T21:00"` and `"2026-11-19T20:00"`.
 
 ## Driving it with drive.sh
 Copy a theme into the run home first (SKILL.md, Drive), and put a logging `wl-copy` stub first on `PATH` (`PATH=<stubs>:/usr/bin:/bin drive.sh ...`).
@@ -35,4 +36,4 @@ Copy a theme into the run home first (SKILL.md, Drive), and put a logging `wl-co
   [300, function() { done() }]
 ]
 ```
-Proof: the logged numbers match the hand count; `file $RUN/home/Pictures/Miharchy/reading-card-*.png` says 2400 x 1350 (read the PNG too: covers drawn, not blank); the stub logged `--type image/png` and its stdin is the same PNG; `gql.sh '{ metas(filter: { key: { startsWith: "miharchy.readingCard" } }) { nodes { key value } } }'` reads `hidden`, and a second drive that opens the card with `root.run("readingCard.open")` logs `coversShown` false.
+Proof: the logged numbers match the hand count; `file $RUN/home/Pictures/Miharchy/reading-card-*.png` says 2400 x 1350 (read the PNG too: covers drawn, not blank); the stub logged `--type image/png` and its stdin is the same PNG; `core.sh api meta.get '{"scope":"global","keys":["miharchy.readingCardCovers"]}'` reads `hidden`, and a second drive that opens the card with `root.run("readingCard.open")` logs `coversShown` false.
