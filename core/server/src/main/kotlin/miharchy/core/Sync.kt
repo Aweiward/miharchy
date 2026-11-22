@@ -33,6 +33,7 @@ import miharchy.sync.MangaState
 import miharchy.sync.MarkRead
 import miharchy.sync.MarkUnread
 import miharchy.sync.NOTES_KEY
+import miharchy.sync.OWN_BACKUP_PREFIX
 import miharchy.sync.RemoveBookmark
 import miharchy.sync.RemoveFromLibrary
 import miharchy.sync.SOURCE_NAMES_KEY
@@ -61,6 +62,7 @@ import miharchy.sync.toLibrary
 import miharchy.sync.writeBackup
 import miharchy.sync.writeExport
 import miharchy.sync.writePrivately
+import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
 import java.time.Instant
@@ -89,6 +91,8 @@ class Sync(
     private val trackerIds: Set<Int>,
     /** Installed sources' names by id, for an export's `backupSources`. It reads the loaded list only. */
     private val installedSources: suspend () -> Map<Long, String> = { emptyMap() },
+    /** Where backups go when Settings' backup folder is blank: `backups` beside the state folder, in core's data folder. */
+    private val backups: Path = stateDir.resolveSibling("backups"),
 ) {
     // One at a time, as the helper's sync.lock: an import never runs into a sync's read of the library.
     private val lock = Mutex()
@@ -161,18 +165,39 @@ class Sync(
         return summary(Summary(server, folder.toString(), phoneFile?.toString(), false, outcome.changes, outcome.export.toString(), gap?.byHand.orEmpty()))
     }
 
-    /** `{ folder, categories?, chapters?, tracking?, history? }` -> `{ file }`: a backup made by hand, never into the sync folder. */
+    /**
+     * `{ folder?, categories?, chapters?, tracking?, history? }` -> `{ file }`: a backup made by hand, never into the sync
+     * folder. Without them, the folder and the parts are Settings' backup rows.
+     */
     private suspend fun exportTo(input: JsonObject): JsonElement {
-        val folder = input.text("folder") ?: throw ApiError(Kind.invalid, "The request needs folder, a folder's path.")
-        val dir = Path.of(folder)
-        if (!dir.isDirectory()) throw ApiError(Kind.invalid, "$folder is not a folder.")
-        val parts = Parts(input.flag("categories", true), input.flag("chapters", true), input.flag("tracking", true), input.flag("history", true))
+        val (dir, parts) = db.run { c ->
+            val defaults = backupParts(c)
+            (input.text("folder")?.let(Path::of) ?: backupFolder(c, backups).also { if (it == backups) Files.createDirectories(it) }) to Parts(
+                input.flag("categories", defaults.categories), input.flag("chapters", defaults.chapters),
+                input.flag("tracking", defaults.tracking), input.flag("history", defaults.history),
+            )
+        }
+        return buildJsonObject { put("file", backupInto(dir, parts, backupName(Instant.now())).toString()) }
+    }
+
+    /** An automatic backup (#375), or null while a sync, an import or a backup runs: the timer tries again. Throws a refusal. */
+    suspend fun autoBackup(dir: Path, parts: Parts, now: Instant): Path? {
+        if (!lock.tryLock()) return null
+        try {
+            return backupInto(dir, parts, AUTO_BACKUP_PREFIX + backupName(now).removePrefix("${OWN_BACKUP_PREFIX}backup-"))
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    private suspend fun backupInto(dir: Path, parts: Parts, name: String): Path {
+        if (!dir.isDirectory()) throw ApiError(Kind.invalid, "$dir is not a folder.")
         val sources = installedSources()
         val bytes = db.run { c ->
-            backupRefusal(folder, globalMeta(c, SYNC_FOLDER_KEY))?.let { throw ApiError(Kind.invalid, it) }
+            backupRefusal(dir.toString(), globalMeta(c, SYNC_FOLDER_KEY)?.takeIf { it.isNotBlank() })?.let { throw ApiError(Kind.invalid, it) }
             encodeBackup(export(c, parts, sources))
         }
-        return buildJsonObject { put("file", writeBackup(dir, backupName(Instant.now()), bytes).toString()) }
+        return writeBackup(dir, name, bytes)
     }
 
     /** `{ file }` -> `{ manga }`: restores a Mihon or Suwayomi backup the way Mihon does, with no source contacted. */

@@ -35,8 +35,7 @@ import kotlinx.serialization.json.put
  * `{ isRunning, stopped, finishedJobs, totalJobs, skippedMangasCount, lastUpdateTimestamp (ms), failed: [{ mangaId, kind, message }] }`,
  * and the `updates` topic sends it on each change. Unlike Suwayomi, a stop keeps the counts until the next run.
  *
- * The choices are the window's global metas (`miharchy.<Settings key>`), with `Settings.js`'s defaults, until Settings
- * moves to core (#385): the three skip filters and `globalUpdateInterval` in hours, 0 for off. [hour] and [tick] are
+ * The choices are core's settings (#375, `Settings.kt`): the three skip filters and `globalUpdateInterval` in hours, 0 for off. [hour] and [tick] are
  * there for tests. ponytail: no auto-download of new chapters and no `updateMangas` (a refresh always fetches details).
  */
 class Updates(private val db: Database, private val refresh: suspend (Long) -> Unit, private val hour: Long = 3_600_000, tick: Long = 60_000) : AutoCloseable {
@@ -90,7 +89,7 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
     override fun close() = scope.cancel()
 
     private suspend fun scheduled() {
-        val hours = setting("miharchy.globalUpdateInterval")?.toDoubleOrNull() ?: 12.0
+        val hours = db.run { c -> setting(c, "globalUpdateInterval").content.toDouble() }
         if (hours > 0 && System.currentTimeMillis() - (if (last > 0) last else born) >= hours * hour) start(null)
     }
 
@@ -183,7 +182,7 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
         val chapters: Int, val unread: Int, val lastReadAt: Long,
     )
 
-    private suspend fun flag(key: String) = setting("miharchy.$key")?.let { it == "true" } ?: true
+    private suspend fun flag(key: String) = db.run { c -> setting(c, key).content == "true" }
 
     private suspend fun setting(key: String): String? = db.run { c ->
         c.query("SELECT value FROM metas WHERE scope = 'global' AND owner = 0 AND key = ?", key) { it.getString(1) }.firstOrNull()

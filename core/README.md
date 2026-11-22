@@ -78,6 +78,16 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 - Notes are manga meta `miharchy.notes`, as the window writes them. `manga.user_notes` stays unused.
 - One run of the three routes at a time; another answers `invalid` "A sync is already running."
 
+## Settings and automatic backups (#375)
+
+- The server settings are the rows `window/Settings.js` stores on Suwayomi with `setSettings`. Core keeps each one as global meta `miharchy.<key>`, a string such as `"true"` or `"12"`, beside the window's own Settings rows. `Settings.kt`'s `SETTINGS` table lists each key with its default, its rule and whether core acts on it. A missing value, or one the rule refuses (`meta.set` writes anything), reads as the default.
+- `settings.get` gives `{ settings: { key: value }, unapplied: [key] }`, values typed as `Settings.js` holds them. `settings.set { settings: { key: value } }` checks every key and value first, stores none on a refusal (`invalid`), and gives the same reply. A backup folder must exist and must not be the sync folder.
+- `unapplied` names the keys core stores but does not act on yet: FlareSolverr (#361), KCEF (the host has no WebView), `updateMangas`, the auto-download rows, `downloadsPath` (downloads stay in `<core data>/downloads`), `downloadAsCbz` (core always writes `.cbz`) and `localSourcePath` (#374).
+- `cache.clear` deletes the cached covers of manga outside the library, core's only cache, and gives `{ freed }` in bytes. Library covers stay, as Suwayomi keeps its downloaded thumbnails, and so does a cover being written.
+- Automatic backups (`Backups.kt`) run in core, so they run while the window is closed. They follow `backupInterval` (days, 0 off) at `backupTime`, local time, as Suwayomi's schedule. A slot missed while core was off runs on the next minute's tick and counts as that slot. The time the timer first saw backups on is kept in meta `miharchy.autoBackupSince`, so a machine that is off at every slot still gets its first backup. The last run is meta `miharchy.lastAutoBackup`, written only once the file exists.
+- They go to `backupPath`, or `<core data>/backups` when it is blank, as `miharchy-auto-<UTC>.tachibk`, with the parts the `autoBackupInclude*` rows choose. After each, core deletes `miharchy-auto-*` files older than `backupTTL` days (0 keeps all), by file time. It never touches another file. A run that a sync holds up waits for the next tick. A refusal (the sync folder, a missing folder) logs once until it changes.
+- `backup.export` without `folder` uses the same folder, and without parts the same include rows.
+
 ## Known limits
 
 - On JDK 26 and later, Keiyoushi's library sets a `final` field by reflection, and the JVM warns that a future release blocks it unless `--enable-final-field-mutation=ALL-UNNAMED` is set. JDK 21 refuses that flag, so the launcher cannot pass it to every JDK yet.
