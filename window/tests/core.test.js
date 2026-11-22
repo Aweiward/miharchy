@@ -472,3 +472,46 @@ test("on core, the detail's category toggle sends manga.update and reads core's 
   d = B.reduceDetail(d, { type: "categories-reply", reply: { state: "ok", data: { mangas: [{ id: 1, categories: [2, 3] }] } } });
   assert.deepEqual(d.manga.categories, [2, 3]);
 });
+
+const U = load("UpNext.js");
+const RC = load("ReadingCard.js");
+
+test("on core, Up next loads the library, its chapters and the global chapter prefs, and lists as on Suwayomi", () => {
+  const sent = [];
+  const replies = {
+    "library.list": { mangas: [{ id: 1, title: "A", inLibraryAt: 100, source: { id: "7" }, meta: [] }, { id: 2, title: "B", inLibraryAt: 100, source: { id: "7" }, meta: [] }], categories: [] },
+    "chapter.list": { chapters: [
+      { id: 10, mangaId: 1, name: "Ch. 1", chapterNumber: 1, sourceOrder: 0, isRead: true, isBookmarked: false, lastPageRead: 0, pageCount: 5, lastReadAt: 200, fetchedAt: 50, uploadDate: 0, scanlator: null, isDownloaded: false },
+      { id: 11, mangaId: 1, name: "Ch. 2", chapterNumber: 2, sourceOrder: 1, isRead: false, isBookmarked: false, lastPageRead: 3, pageCount: 9, lastReadAt: 300, fetchedAt: 50, uploadDate: 0, scanlator: null, isDownloaded: false },
+      { id: 20, mangaId: 2, name: "Ch. 1", chapterNumber: 1, sourceOrder: 0, isRead: false, isBookmarked: false, lastPageRead: 0, pageCount: 0, lastReadAt: 0, fetchedAt: 50, uploadDate: 0, scanlator: null, isDownloaded: false }
+    ] },
+    "meta.get": { metas: [] }
+  };
+  let out;
+  U.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, true, (r) => { out = r; });
+  assert.deepEqual(sent.map((p) => p.route), ["library.list", "chapter.list", "meta.get"]);
+  assert.deepEqual(sent[1].body, { mangaIds: [1, 2] });
+  assert.equal(sent[2].body.scope, "global");
+  const list = U.list(out.data, false, 1e6 * 1000);
+  assert.deepEqual(list.map((e) => [e.mangaId, e.chapterId, e.tier, e.page, e.pages]), [[1, 11, 1, 3, 9]]);
+  let failed;
+  U.load((p, done) => done(p.route === "chapter.list" ? { state: "down", message: "x" } : { state: "ok", data: replies[p.route] }), true, (r) => { failed = r; });
+  assert.equal(failed.state, "down");
+  const empty = [];
+  let none;
+  U.load((p, done) => { empty.push(p.route); done({ state: "ok", data: { mangas: [], categories: [] } }); }, true, (r) => { none = r; });
+  assert.deepEqual(empty, ["library.list"]);
+  assert.deepEqual(U.list(none.data, false, 1e6 * 1000), []);
+  U.load((p, done) => { sent.push(p); done({ state: "ok", data: {} }); }, false, () => {});
+  assert.equal(typeof sent[sent.length - 1].query, "string");
+});
+
+test("on core, the reading card pages core's read history by offset", () => {
+  assert.deepEqual(RC.payload(null, true), { route: "history.list", body: { readOnly: true, limit: 200, offset: 0 } });
+  assert.deepEqual(RC.payload(200, true).body.offset, 200);
+  const data = { chapters: [{ id: 1, isRead: true, lastReadAt: 500, manga: { id: 3, thumbnailUrl: "/api/cover/3", inLibrary: true, unreadCount: 2 } }], hasNextPage: true };
+  assert.deepEqual(RC.rows(data), [{ at: 500, mangaId: 3, thumbnailUrl: "/api/cover/3", inLibrary: true, unread: 2 }]);
+  assert.deepEqual(RC.pageInfo(data, 200), { hasNextPage: true, endCursor: 400 });
+  assert.deepEqual(RC.pageInfo({ chapters: { pageInfo: { hasNextPage: false, endCursor: "c" }, nodes: [] } }), { hasNextPage: false, endCursor: "c" });
+  assert.equal(RC.card(RC.rows(data), 600, core).covers[0], "http://127.0.0.1:4591/api/cover/3");
+});

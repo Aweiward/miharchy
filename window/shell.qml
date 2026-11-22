@@ -44,6 +44,7 @@ ShellRoot {
   // Updates, Settings, Migrate and the status bar stay on connection.
   property var coreConnection: Model.initial()
   property int coreRequestSeq: 0
+  property int coreOpenSeq: 0
 
   // The launcher's open-updates starts a window on Updates.
   property string view: Quickshell.env("MIHARCHY_OPEN_VIEW") === "updates" ? "updates" : "library"
@@ -167,6 +168,8 @@ ShellRoot {
     if (coreConfig) {
       fetchLibrary(true)
       libraryView.reload()
+      // A launcher peek that came before core.json; a peek-open's row is Suwayomi's (#386).
+      if (pendingPeek && !Model.chapterTarget(pendingPeek)) peek(pendingPeek === "next")
       return
     }
     coreRequestSeq++
@@ -242,7 +245,7 @@ ShellRoot {
   // manga after the reader's in Up next (UpNext.after).
   function peek(next) {
     pendingPeek = next ? "next" : "1"
-    if (!config) return
+    if (!upNextConfig()) return
     pendingPeek = ""
     var library = function(reply) {
       root.closeOverlays()
@@ -250,13 +253,42 @@ ShellRoot {
       if (reply && reply.state !== "ok") libraryView.report(reply)
       else libraryView.openSearch()
     }
-    send(UpNext.payload(), function(reply) {
+    var core = coreBackend
+    loadUpNext(function(reply) {
       if (reply.state !== "ok") return library(reply)
-      var list = UpNext.list(reply.data, root.downloadedOnly, Date.now())
+      var list = UpNext.list(reply.data, root.downloadedOnly && !core, Date.now())
       if (!next) root.upNextOrder = list.map(function(e) { return e.mangaId })
-      var target = next ? root.nextInOrder(list, reader.open && !reader.onCore ? reader.reader.mangaId : null) : list[0]
-      if (target) root.openChapter(target, true)
-      else library()
+      var target = next ? root.nextInOrder(list, reader.open && reader.onCore === core ? reader.reader.mangaId : null) : list[0]
+      if (!target) library()
+      else if (core) root.openOnCore(target, true)
+      else root.openChapter(target, true)
+    })
+  }
+
+  // Up next comes from the Library's server: core's with the switch on.
+  function upNextConfig() {
+    return coreBackend ? coreConfig : config
+  }
+
+  function loadUpNext(done) {
+    var cfg = upNextConfig()
+    UpNext.load(function(payload, d) { Session.send(cfg, payload, d) }, coreBackend, done)
+  }
+
+  // A chapter of core's Up next in the reader, as Updates opens one on Suwayomi.
+  function openOnCore(target, peek) {
+    var cfg = coreConfig
+    var seq = ++coreOpenSeq
+    var d = Browse.detail(target.mangaId, false, true)
+    Session.send(cfg, Browse.detailPayload(d), function(reply) {
+      if (seq !== root.coreOpenSeq) return
+      d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
+      root.closeOverlays()
+      if (!d.manga) {
+        root.view = "library"
+        return libraryView.fail(Browse.notice(d, root.coreConfigPath).title)
+      }
+      reader.start(d.manga, d.chapters, target.chapterId, root.settingsState.values.defaultReadingMode, peek === true, true)
     })
   }
 
@@ -278,11 +310,13 @@ ShellRoot {
   // A Catch-up stop names the manga the next key would open; n then runs
   // the next key (peek(true)). Itself again, or none, is nothing to offer.
   function lookUpNext(mangaId) {
-    send(UpNext.payload(), function(reply) {
-      if (!reader.open || reader.onCore || reader.reader.mangaId !== mangaId) return
-      var next = reply.state === "ok" ? root.nextInOrder(UpNext.list(reply.data, root.downloadedOnly, Date.now()), mangaId) : null
+    var core = coreBackend
+    if (!upNextConfig()) return
+    loadUpNext(function(reply) {
+      if (!reader.open || reader.onCore !== core || reader.reader.mangaId !== mangaId) return
+      var next = reply.state === "ok" ? root.nextInOrder(UpNext.list(reply.data, root.downloadedOnly && !core, Date.now()), mangaId) : null
       if (next && next.mangaId === mangaId) next = null
-      var manga = next ? (root.connection.manga || []).filter(function(m) { return m.id === next.mangaId })[0] : null
+      var manga = next ? ((core ? root.coreConnection : root.connection).manga || []).filter(function(m) { return m.id === next.mangaId })[0] : null
       reader.upNext = next ? { target: next, title: manga ? manga.title : "Manga " + next.mangaId } : null
     })
   }
@@ -1092,7 +1126,8 @@ ShellRoot {
         }
         onDeleted: mangaDetail.reload()
         // ponytail: Up next reads Suwayomi's library until #379 moves it.
-        onCaughtUpOn: function(mangaId) { if (!reader.onCore) root.lookUpNext(mangaId) }
+        // Up next is the Library's server's: a reader on the other one gets no offer.
+        onCaughtUpOn: function(mangaId) { if (reader.onCore === root.coreBackend) root.lookUpNext(mangaId) }
         onNextManga: root.peek(true)
       }
 
@@ -1148,8 +1183,9 @@ ShellRoot {
         id: readingCard
         anchors.fill: parent
         theme: theme
-        config: root.config
-        configPath: root.configPath
+        config: root.coreBackend ? root.coreConfig : root.config
+        configPath: root.coreBackend ? root.coreConfigPath : root.configPath
+        backend: root.coreBackend ? "core" : ""
         folder: root.settingsState.values.pageFolder || ""
         onKey: function(event) { root.handleKey(event) }
       }
