@@ -116,10 +116,15 @@ class TrackersTest {
             assertEquals("Found x", routes.getValue("track.search")(obj("trackerId" to 99, "query" to "x")).o()["results"]!!.jsonArray[0].jsonObject["title"]!!.jsonPrimitive.content)
 
             // A new entry: reading, at the highest read chapter, started when chapter 1 was read.
-            val bound = routes.getValue("track.bind")(obj("mangaId" to m, "trackerId" to 99, "remoteId" to 500)).o().track()
+            // The window sends remote ids and dates as strings (Suwayomi's LongString).
+            val bound = routes.getValue("track.bind")(obj("mangaId" to m, "trackerId" to 99, "remoteId" to "500")).o().track()
             assertEquals(listOf(1.0, 3.0, 1_700_000_000_000.0, 10.0), listOf(bound.n("status"), bound.n("lastChapterRead"), bound.n("startDate"), bound.n("totalChapters")))
             assertEquals(3.0, fake.remote.getValue(500).last_chapter_read)
             val record = bound["id"]!!.jsonPrimitive.long
+
+            val dated = routes.getValue("track.update")(obj("recordId" to record, "startDate" to "1769817600000", "finishDate" to "0")).o().track()
+            assert(dated.n("startDate") == 1_769_817_600_000.0 && dated.n("finishDate") == 0.0) { dated.toString() }
+            assertEquals(0.0, routes.getValue("track.update")(obj("recordId" to record, "startDate" to "0")).o().track().n("startDate"))
 
             // A score from the tracker's list; the last chapter completes it.
             routes.getValue("track.update")(obj("recordId" to record, "scoreString" to "7"))
