@@ -42,8 +42,8 @@ ShellRoot {
   readonly property string coreConfigPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
   property var coreConfig: null
   // The library and categories on miharchy-core, beside connection's on
-  // Suwayomi: Library and Categories show it with the switch on, while
-  // Updates, Settings, Migrate and the status bar stay on connection.
+  // Suwayomi: Library, Categories and Updates show it with the switch on,
+  // while Settings, Migrate and the status bar stay on connection.
   property var coreConnection: Model.initial()
   property int coreRequestSeq: 0
   property int coreOpenSeq: 0

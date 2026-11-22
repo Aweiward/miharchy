@@ -85,7 +85,12 @@ Item {
   }
 
   function load() {
-    if (!config || !active) return
+    if (!active) return
+    // No core.json: core's no-config problem, not "Loading" for ever.
+    if (!config) {
+      if (core) updates = Updates.reduce(Updates.initial(), { type: "list", reply: { state: "no-config", message: "" } })
+      return
+    }
     var seq = ++listSeq
     var cfg = config
     updates = Updates.reduce(updates, { type: "request" })

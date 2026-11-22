@@ -77,9 +77,10 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
         "update.start" to { input -> start((input["categories"] as? JsonArray)?.let { input.longs("categories") }?.takeIf { it.isNotEmpty() }) },
         "update.stop" to { _ ->
             ops.withLock {
-                val was = job?.isActive == true
+                // Before the cancel: the run's last status already says stopped.
+                if (job?.isActive == true) synchronized(lock) { stopped = true }
                 job?.cancelAndJoin()
-                synchronized(lock) { running = false; if (was) stopped = true }
+                synchronized(lock) { running = false }
             }
             publish()
             statusJson()
