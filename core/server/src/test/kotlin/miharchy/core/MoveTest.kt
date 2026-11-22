@@ -34,10 +34,12 @@ import kotlin.test.assertTrue
  */
 private class FakeSuwayomi(val backup: ByteArray, val settings: String, val metas: String, val categories: String, val mangas: String, val downloads: String) : AutoCloseable {
     val queries = mutableListOf<String>()
+    val variables = mutableListOf<JsonObject>()
     private val site = Site { ex ->
         if (ex.requestMethod == "GET") return@Site if (ex.getRequestHeader("Authorization") == "Bearer t0k3n" && ex.requestURI.path == "/api/graphql/files/backup/b.tachibk") backup else null
-        val query = Json.parseToJsonElement(ex.requestBody.readAllBytes().decodeToString()).jsonObject["query"]!!.jsonPrimitive.content
-        synchronized(queries) { queries += query }
+        val body = Json.parseToJsonElement(ex.requestBody.readAllBytes().decodeToString()).jsonObject
+        val query = body["query"]!!.jsonPrimitive.content
+        synchronized(queries) { queries += query; variables += (body["variables"] as? JsonObject ?: JsonObject(emptyMap())) }
         val data = when {
             "login(" in query -> """{"login":{"accessToken":"t0k3n"}}"""
             ex.getRequestHeader("Authorization") != "Bearer t0k3n" -> return@Site """{"errors":[{"message":"x : Unauthorized"}]}""".toByteArray()
@@ -63,6 +65,7 @@ class MoveTest {
     private val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 9, 9)
 
     @AfterTest fun clean() {
+        work.toFile().walkTopDown().forEach { it.setReadable(true) }
         work.toFile().deleteRecursively()
     }
 
@@ -103,17 +106,19 @@ class MoveTest {
                 ))
                 val root = work.resolve("suwayomi")
                 val mangaDir = root.resolve("downloads/mangas/Fixture Downloads (EN)/Manga_ 1_2")
-                // Chapter 1 as a folder of pages, Chapter 2 as a .cbz, both with Suwayomi's ComicInfo.xml; Chapter 3's files are gone.
+                // Chapter 1 as a folder of pages, Chapter 2 as a .cbz, both with Suwayomi's ComicInfo.xml; Chapter 3 a folder core cannot read.
                 mangaDir.resolve("Chapter 1").createDirectories().also { d ->
                     d.resolve("002.png").writeBytes(png); d.resolve("001.png").writeBytes(png); d.resolve("ComicInfo.xml").writeText("<ComicInfo/>")
                 }
+                mangaDir.resolve("Chapter 3").createDirectories().also { it.toFile().setReadable(false) }
                 ZipOutputStream(Files.newOutputStream(mangaDir.resolve("Chapter 2.cbz"))).use { z ->
                     listOf("001.png", "ComicInfo.xml").forEach { z.putNextEntry(ZipEntry(it)); z.write(png); z.closeEntry() }
                 }
                 val settings = """{"extensionRepos":["${repo.base}"],"downloadsPath":"","globalUpdateInterval":24.0,"backupTTL":5,"excludeCompleted":false,"backupTime":"21:30"}"""
                 val metas = """[{"key":"miharchy.defaultCategory","value":"7"},{"key":"miharchy.syncFolder","value":"/phone"},{"key":"miharchy.lastAutoBackup","value":"5"}]"""
                 val categories = """[{"id":0,"name":"Default","includeInUpdate":"UNSET","includeInDownload":"UNSET","meta":[]},
-                    {"id":7,"name":"Action","includeInUpdate":"EXCLUDE","includeInDownload":"INCLUDE","meta":[{"key":"miharchy.keepDownloads","value":"true"}]}]"""
+                    {"id":7,"name":"Action","includeInUpdate":"EXCLUDE","includeInDownload":"INCLUDE","meta":[{"key":"miharchy.keepDownloads","value":"true"}]},
+                    {"id":9,"name":"Gone","includeInUpdate":"UNSET","includeInDownload":"UNSET","meta":[]}]"""
                 val mangas = """[{"sourceId":"$sid","url":"/m/1","meta":[{"key":"miharchy.readingMode","value":"webtoon"}]},
                     {"sourceId":"$sid","url":"/m/gone","meta":[{"key":"miharchy.readingMode","value":"paged-ltr"}]}]"""
                 fun download(url: String, name: String) = """{"url":"$url","name":"$name","scanlator":null,"manga":{"sourceId":"$sid","url":"/m/1","title":"Manga: 1/2","source":{"displayName":"Fixture Downloads (EN)"}}}"""
@@ -148,10 +153,12 @@ class MoveTest {
                             assertEquals(1, report["manga"]!!.jsonPrimitive.content.toInt())
                             assertEquals(2, report["downloads"]!!.jsonPrimitive.content.toInt())
                             val skipped = report["skipped"]!!.jsonArray.map { it.jsonPrimitive.content }
-                            assertEquals(3, skipped.size, skipped.toString())
+                            assertEquals(4, skipped.size, skipped.toString())
+                            assertTrue(skipped.any { it.startsWith("Category Gone:") })
                             assertTrue(skipped.any { it.startsWith("Setting backupTTL:") })
                             assertTrue(skipped.any { it.startsWith("1 manga metas") })
-                            assertTrue(skipped.any { it.startsWith("Download Manga: 1/2 Chapter 3: no file") })
+                            // An unreadable folder skips its chapter only; the move goes on.
+                            assertTrue(skipped.any { it.startsWith("Download Manga: 1/2 Chapter 3:") })
 
                             // Ids made core's, core's own meta kept, the float interval taken as whole hours.
                             fun meta(scope: String, owner: Long, key: String) = runBlocking {
@@ -186,8 +193,12 @@ class MoveTest {
                             assertEquals("phone", Files.readString(data.resolve("sync/phone-baseline.tachibk")))
                             assertEquals("core's own", Files.readString(data.resolve("sync/desktop-baseline.tachibk")))
                             // Every part of the library, whatever Suwayomi's backup rows say, and never its server settings.
-                            val flags = suwayomi.queries.single { "createBackup" in it }
-                            assertTrue("PartialBackupFlagsInput" in flags)
+                            val flags = suwayomi.variables[suwayomi.queries.indexOfFirst { "createBackup" in it }]["flags"]!!.jsonObject
+                            assertEquals(
+                                mapOf("includeManga" to true, "includeCategories" to true, "includeChapters" to true, "includeTracking" to true,
+                                    "includeHistory" to true, "includeClientData" to false, "includeServerSettings" to false),
+                                flags.mapValues { it.value.jsonPrimitive.content.toBoolean() },
+                            )
 
                             val before = dump(db)
                             val again = moved()

@@ -96,7 +96,9 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 - Each setting goes through `settings.set` on its own, so a value core refuses skips that row only. Suwayomi's `globalUpdateInterval` is a float of hours; core takes it as whole hours.
 - A downloaded chapter is found at Suwayomi's path (`DirName.kt` at v2.4.2366): `<downloadsPath or root/downloads>/mangas/<source>/<manga>/<scanlator>_<chapter>`, a `.cbz` or a folder of pages, with Mihon's filename rules. A `.cbz` is hard-linked into core's downloads folder (copied across disks); a folder is zipped. Pages are image entries only, so Suwayomi's `ComicInfo.xml` is no page.
 - The helper's `phone-baseline.tachibk`, `desktop-baseline.tachibk` and `pending-since` are copied only where core has none, so the first core sync is not a first sync.
-- What cannot move (a repo that fails, a refused setting, a download with no file, metas of manga outside the library) goes into `report.skipped`, and the rest goes on. A run again gives the same database.
+- What cannot move (a repo that fails, a refused setting, an unreadable download, metas of manga outside the library, a category id core cannot map, which makes `miharchy.defaultCategory` "ask") goes into `report.skipped`, and the rest goes on.
+- A run again is safe. The library merges as `backup.import` does and never loses read state. Metas, settings and category choices take Suwayomi's values again, and chapters core already has downloaded stay. With Suwayomi unchanged, a second run gives the same database.
+- A sync running at the same time makes `backup.import` refuse, and the move fails with that message; start it again after the sync.
 - A Suwayomi backup holds the library only: History of manga outside the library does not move.
 
 ## Known limits

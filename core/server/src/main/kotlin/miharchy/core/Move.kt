@@ -181,15 +181,18 @@ class Move(
                 fun coreCategory(suwayomiId: String): Long? =
                     if (suwayomiId == "0") 0L else categories.firstOrNull { it.raw("id") == suwayomiId }?.text("name")?.let(categoryIds::get)
                 for (cat in categories) {
-                    val id = coreCategory(cat.raw("id")!!) ?: continue
+                    val id = coreCategory(cat.raw("id")!!)
+                    if (id == null) { report.skipped += "Category ${cat.text("name")}: the backup did not carry it."; continue }
                     c.update("UPDATE category SET include_in_update = ?, include_in_download = ? WHERE id = ?", cat.text("includeInUpdate"), cat.text("includeInDownload"), id)
                     cat["meta"]!!.jsonArray.forEach { report.metas += c.putMeta("category", id, it.jsonObject) }
                 }
                 for (meta in data.nodes("metas")) {
                     val key = meta.text("key")!!
                     if (key in CORE_OWN_METAS) continue
-                    // A category id; "ask", or a category core lacks, stays as it is: the window then asks.
-                    val value = if (key == DEFAULT_CATEGORY_KEY) meta.text("value")?.let { v -> coreCategory(v)?.toString() ?: v } else meta.text("value")
+                    // A category id, or "ask". An id core cannot map becomes "ask", never a Suwayomi id that is another category on core.
+                    val value = if (key == DEFAULT_CATEGORY_KEY) meta.text("value")?.let { v ->
+                        if (v.toLongOrNull() == null) v else coreCategory(v)?.toString() ?: "ask".also { report.skipped += "Default category $v: core has no such category, so the window asks." }
+                    } else meta.text("value")
                     report.metas += c.putMeta("global", 0, buildJsonObject { put("key", key); put("value", value) })
                 }
                 val mangaIds = c.query("SELECT source_id, remote_url, id FROM manga") { (it.getLong(1).toString() to it.getString(2)) to it.getLong(3) }.toMap()
@@ -251,8 +254,10 @@ class Move(
                     else -> { report.skipped += "Download $label: no file at $dir."; continue }
                 }
                 if (moved) report.downloads++
-            } catch (e: ApiError) {
-                report.skipped += "Download $label: ${e.message}"
+            } catch (e: Exception) {
+                // One unreadable file or a full disk skips that chapter only.
+                if (e !is ApiError && e !is IOException) throw e
+                report.skipped += "Download $label: ${e.message ?: e.toString()}"
             }
         }
     }
