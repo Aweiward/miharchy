@@ -38,12 +38,12 @@ ShellRoot {
   // the rest stay on Suwayomi. Users never set it; #373 flips the default.
   readonly property bool coreBackend: Quickshell.env("MIHARCHY_BACKEND") === "core"
   // A view on the server the Downloads view does not show says this.
-  readonly property string downloadsElsewhere: "Downloads from Updates move to miharchy-core with #382"
+  readonly property string downloadsElsewhere: "Downloads for chapters opened from the bar move to miharchy-core with #386"
   readonly property string coreConfigPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
   property var coreConfig: null
   // The library and categories on miharchy-core, beside connection's on
-  // Suwayomi: Library and Categories show it with the switch on, while
-  // Updates, Settings, Migrate and the status bar stay on connection.
+  // Suwayomi: Library, Categories and Updates show it with the switch on,
+  // while Settings, Migrate and the status bar stay on connection.
   property var coreConnection: Model.initial()
   property int coreRequestSeq: 0
   property int coreOpenSeq: 0
@@ -232,7 +232,9 @@ ShellRoot {
     pendingChapter = null
     closeOverlays()
     view = "updates"
-    updatesView.openChapter(target.mangaId, target.chapterId, peek === true)
+    // The bar's rows hold Suwayomi's ids until it moves (#386).
+    if (updatesView.core) openOn(target, peek, false)
+    else updatesView.openChapter(target.mangaId, target.chapterId, peek === true)
   }
 
   // The mark's new-chapter notification lands here, through the
@@ -277,20 +279,25 @@ ShellRoot {
     UpNext.load(function(payload, d) { Session.send(cfg, payload, d) }, coreBackend, done)
   }
 
-  // A chapter of core's Up next in the reader, as Updates opens one on Suwayomi.
+  // A chapter in the reader, as Updates opens one: core's Up next, or the
+  // bar's rows on Suwayomi while Updates is core's.
   function openOnCore(target, peek) {
-    var cfg = coreConfig
+    openOn(target, peek, true)
+  }
+
+  function openOn(target, peek, core) {
+    var cfg = core ? coreConfig : config
     var seq = ++coreOpenSeq
-    var d = Browse.detail(target.mangaId, false, true)
+    var d = Browse.detail(target.mangaId, false, core)
     Session.send(cfg, Browse.detailPayload(d), function(reply) {
       if (seq !== root.coreOpenSeq) return
       d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
       root.closeOverlays()
       if (!d.manga) {
         root.view = "library"
-        return libraryView.fail(Browse.notice(d, root.coreConfigPath).title)
+        return libraryView.fail(Browse.notice(d, core ? root.coreConfigPath : root.configPath).title)
       }
-      reader.start(d.manga, d.chapters, target.chapterId, root.settingsState.values.defaultReadingMode, peek === true, true)
+      reader.start(d.manga, d.chapters, target.chapterId, root.settingsState.values.defaultReadingMode, peek === true, core)
     })
   }
 
@@ -435,6 +442,7 @@ ShellRoot {
       function refresh() {
         if (mangaDetail.open && mangaDetail.onCore && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
         root.fetchLibrary(true)
+        if (updatesView.core) updatesView.load()
       }
     })
   }
@@ -733,13 +741,14 @@ ShellRoot {
         if (coreBackend) {
           fetchLibrary(true)
           libraryView.reload()
+          updatesView.load()
         }
         if (config) {
           fetchLibrary()
           sendSettings(Settings.loadPayload())
           if (!coreBackend) libraryView.reload()
           settingsView.loadTrackers()
-          updatesView.load()
+          if (!coreBackend) updatesView.load()
           if (view === "check") checkView.load()
         }
         configFile.reload()
@@ -957,16 +966,15 @@ ShellRoot {
           visible: root.view === "updates"
           downloadedOnly: root.downloadedOnly
           theme: theme
-          config: root.config
-          configPath: root.configPath
+          config: root.coreBackend ? root.coreConfig : root.config
+          configPath: root.coreBackend ? root.coreConfigPath : root.configPath
+          backend: root.coreBackend ? "core" : ""
           active: visible
-          // Updates is Suwayomi's until #382; the Downloads view follows the switch.
-          queue: root.coreBackend ? [] : downloadsView.queue.items
-          downloadsGate: root.coreBackend ? root.downloadsElsewhere : ""
-          categories: root.connection.categories
-          onRead: function(manga, chapters, chapterId, peek) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, peek) }
-          onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
-          onDownloads: function(reply) { if (!root.coreBackend) downloadsView.apply(reply) }
+          queue: downloadsView.queue.items
+          categories: (root.coreBackend ? root.coreConnection : root.connection).categories
+          onRead: function(manga, chapters, chapterId, peek) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, peek, updatesView.core) }
+          onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds, updatesView.core) }
+          onDownloads: function(reply) { downloadsView.apply(reply) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
         }
 
@@ -1138,8 +1146,8 @@ ShellRoot {
         onClosed: function(chapterId) {
           // A chapter id means something only to the server it came from.
           if (mangaDetail.onCore === reader.onCore) mangaDetail.reread(chapterId)
+          if (updatesView.core === reader.onCore) updatesView.load()
           if (reader.onCore) return root.fetchLibrary(true)
-          updatesView.load()
           if (root.config) root.fetchLibrary()
         }
         onDeleted: mangaDetail.reload()

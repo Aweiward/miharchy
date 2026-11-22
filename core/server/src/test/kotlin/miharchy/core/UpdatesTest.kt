@@ -129,6 +129,7 @@ class UpdatesTest {
 
                 val stopped = u.routes.call("update.stop")
                 assertEquals(listOf(false, 2, 3), listOf(stopped.running(), stopped.n("finishedJobs"), stopped.n("totalJobs")))
+                assertEquals("true", stopped["stopped"].toString(), "a client tells a stop from an end")
                 assertEquals(1, stopped["failed"]!!.jsonArray.size, "a stop keeps the run's counts and reasons")
                 assertEquals(stopped, u.routes.call("update.status"))
                 val at = stopped["lastUpdateTimestamp"]!!.jsonPrimitive.long
@@ -137,7 +138,8 @@ class UpdatesTest {
                 // A new run starts the counts again.
                 gate.complete(Unit)
                 assertEquals("true", u.routes.call("update.start")["started"].toString())
-                assertEquals(3, u.idle().n("finishedJobs"))
+                val ended = u.idle()
+                assertEquals(listOf("3", "false"), listOf(ended["finishedJobs"].toString(), ended["stopped"].toString()))
             }
             // The last run's time survives a restart.
             Updates(db, { }, tick = 3_600_000).use { u -> assertTrue(u.routes.call("update.status")["lastUpdateTimestamp"]!!.jsonPrimitive.long > 0) }

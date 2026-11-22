@@ -20,6 +20,9 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
+  // "core" with MIHARCHY_BACKEND=core (shell.qml): config is miharchy-core's.
+  property string backend: ""
+  readonly property bool core: backend === "core"
   // The view shows, so it loads and follows the library update live.
   property bool active: false
   property var updates: Updates.initial()
@@ -35,9 +38,6 @@ Item {
   property bool armed: false
   // The download queue's items, for each update's marker.
   property var queue: []
-  // Why downloads stay off here, or "": with MIHARCHY_BACKEND=core the
-  // Downloads view shows miharchy-core's queue, and Updates is Suwayomi's (#382).
-  property string downloadsGate: ""
   // The user's categories (Model's), for the category filters.
   property var categories: []
   property bool filterOpen: false
@@ -50,7 +50,7 @@ Item {
 
   readonly property var rows: updates.rows
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.id === view.cursorId }))
-  readonly property var notice: Updates.notice(updates, configPath)
+  readonly property var notice: Updates.notice(updates, configPath, backend)
   readonly property var targets: Updates.chosen(rows, selected, cursor)
   readonly property string hint: armed ? "x again to delete the downloads, any other key keeps them   "
     : (selected.length ? selected.length + " selected   space select   A all   I invert   " : "j k move   enter read   space select   A all   ")
@@ -63,6 +63,10 @@ Item {
   signal downloads(var reply)
   // A double click sends Enter, as typed.
   signal key(var event)
+
+  function problem(reply) {
+    return reply.message || Model.problem(reply, configPath, backend).title
+  }
 
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
   onActiveChanged: load()
@@ -81,11 +85,16 @@ Item {
   }
 
   function load() {
-    if (!config || !active) return
+    if (!active) return
+    // No core.json: core's no-config problem, not "Loading" for ever.
+    if (!config) {
+      if (core) updates = Updates.reduce(Updates.initial(), { type: "list", reply: { state: "no-config", message: "" } })
+      return
+    }
     var seq = ++listSeq
     var cfg = config
     updates = Updates.reduce(updates, { type: "request" })
-    send(Updates.viewPayload(Date.now()), function(reply) {
+    Updates.load(send, core, Date.now(), function(reply) {
       if (seq !== view.listSeq) return
       view.updates = Updates.reduce(view.updates, { type: "list", reply: reply, config: cfg, now: Date.now(), prefs: view.prefs })
     })
@@ -104,19 +113,23 @@ Item {
     if (!config || updates.running || updates.checking) return false
     updates = Updates.reduce(updates, { type: "checking" })
     error = ""
-    send(Updates.checkPayload(categories), function(reply) {
-      if (reply.state === "ok") return
+    send(Updates.checkPayload(categories, core), function(reply) {
+      // Core's reply is the run's status.
+      if (reply.state === "ok") {
+        if (reply.data && reply.data.isRunning !== undefined) view.follow(reply.data)
+        return
+      }
       view.updates = Updates.reduce(view.updates, { type: "failed" })
-      view.error = reply.message || Model.problem(reply, view.configPath).title
+      view.error = view.problem(reply)
     })
     return true
   }
 
   function stop() {
     if (!config || !(updates.running || updates.checking)) return
-    send(Updates.stopPayload(), function(reply) {
+    send(Updates.stopPayload(core), function(reply) {
       if (reply.state !== "ok") {
-        view.error = reply.message || Model.problem(reply, view.configPath).title
+        view.error = view.problem(reply)
         return
       }
       var before = view.updates
@@ -138,7 +151,7 @@ Item {
     if (!config) return
     var seq = ++openSeq
     var cfg = config
-    var d = Browse.detail(mangaId, false)
+    var d = Browse.detail(mangaId, false, core)
     error = ""
     send(Browse.detailPayload(d), function(reply) {
       if (seq !== view.openSeq) return
@@ -165,7 +178,7 @@ Item {
   }
 
   function deleteDownloads() {
-    var payload = Downloads.removePayload(targets, queue)
+    var payload = Downloads.removePayload(targets, queue, core)
     if (!payload) return
     if (!armed) {
       armed = true
@@ -176,10 +189,6 @@ Item {
   }
 
   function run(id) {
-    if (downloadsGate && (id === "updates.download" || id === "updates.deleteDownload")) {
-      error = downloadsGate
-      return
-    }
     switch (id) {
       case "updates.up":
       case "updates.down":
@@ -214,7 +223,7 @@ Item {
         act("bookmark")
         break
       case "updates.download":
-        sendDownloads(Downloads.enqueuePayload(targets))
+        sendDownloads(Downloads.enqueuePayload(targets, core))
         break
       case "updates.deleteDownload":
         deleteDownloads()
@@ -240,12 +249,13 @@ Item {
     config: view.config
     table: Updates.PREFS
     onConfigChanged: load()
-    onFailed: function(reply) { view.error = reply.message || Model.problem(reply, view.configPath).title }
+    onFailed: function(reply) { view.error = view.problem(reply) }
   }
 
   LiveSocket {
     config: view.config
     query: Updates.LIVE_QUERY
+    topic: "updates"
     running: view.active && view.config !== null
     onResult: function(data) { view.follow(data) }
   }
