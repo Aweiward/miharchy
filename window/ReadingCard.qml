@@ -39,7 +39,7 @@ Rectangle {
   property int seq: 0
 
   readonly property bool coversShown: prefs.values.readingCardCovers !== "hidden"
-  readonly property var problem: Model.problem({ state: phase, message: message }, configPath)
+  readonly property var problem: Model.problem({ state: phase, message: message }, configPath, backend)
   readonly property string hint: "S save   Y copy   h " + (coversShown ? "hide" : "show") + " covers   esc close"
 
   // A click on a key in the hint sends that key, as typed.

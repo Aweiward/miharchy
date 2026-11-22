@@ -32,6 +32,7 @@ function load(send, core, done) {
   send({ route: "library.list" }, function(lib) {
     if (lib.state !== "ok") return done(lib)
     var ids = lib.data.mangas.map(function(m) { return m.id })
+    if (!ids.length) return done({ state: "ok", data: fromCore(lib.data, { chapters: [] }, { metas: [] }) })
     send({ route: "chapter.list", body: { mangaIds: ids } }, function(ch) {
       if (ch.state !== "ok") return done(ch)
       send({ route: "meta.get", body: { scope: "global", keys: payload().variables.keys } }, function(meta) {

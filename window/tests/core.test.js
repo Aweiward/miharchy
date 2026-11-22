@@ -497,6 +497,11 @@ test("on core, Up next loads the library, its chapters and the global chapter pr
   let failed;
   U.load((p, done) => done(p.route === "chapter.list" ? { state: "down", message: "x" } : { state: "ok", data: replies[p.route] }), true, (r) => { failed = r; });
   assert.equal(failed.state, "down");
+  const empty = [];
+  let none;
+  U.load((p, done) => { empty.push(p.route); done({ state: "ok", data: { mangas: [], categories: [] } }); }, true, (r) => { none = r; });
+  assert.deepEqual(empty, ["library.list"]);
+  assert.deepEqual(U.list(none.data, false, 1e6 * 1000), []);
   U.load((p, done) => { sent.push(p); done({ state: "ok", data: {} }); }, false, () => {});
   assert.equal(typeof sent[sent.length - 1].query, "string");
 });

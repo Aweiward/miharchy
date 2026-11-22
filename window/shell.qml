@@ -44,6 +44,7 @@ ShellRoot {
   // Updates, Settings, Migrate and the status bar stay on connection.
   property var coreConnection: Model.initial()
   property int coreRequestSeq: 0
+  property int coreOpenSeq: 0
 
   // The launcher's open-updates starts a window on Updates.
   property string view: Quickshell.env("MIHARCHY_OPEN_VIEW") === "updates" ? "updates" : "library"
@@ -277,8 +278,10 @@ ShellRoot {
   // A chapter of core's Up next in the reader, as Updates opens one on Suwayomi.
   function openOnCore(target, peek) {
     var cfg = coreConfig
+    var seq = ++coreOpenSeq
     var d = Browse.detail(target.mangaId, false, true)
     Session.send(cfg, Browse.detailPayload(d), function(reply) {
+      if (seq !== root.coreOpenSeq) return
       d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
       root.closeOverlays()
       if (!d.manga) {
