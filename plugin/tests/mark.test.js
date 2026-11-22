@@ -4,12 +4,14 @@ const load = require("../../window/tests/load");
 const Mark = load("../plugin/Mark.js");
 const M = load("Model.js");
 
-const config = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
+const config = { url: "http://127.0.0.1:4591", secret: "s", backend: "core" };
+// A core reply as Session.send gives it, from { data }.
+const ok = (body) => ({ state: "ok", message: "", data: body.data, kind: "" });
 const now = new Date(2026, 9, 4, 15).getTime();
 const sec = (h) => String(Math.floor(new Date(2026, 9, 4, h).getTime() / 1000));
 const manga = { id: 7, title: "Maid to Skate", thumbnailUrl: null, inLibraryAt: sec(1) };
 const chapter = (id, h) => ({ id, name: "Ch." + id, uploadDate: String(now), fetchedAt: sec(h), sourceOrder: id, isRead: false, manga });
-const reply = (nodes) => M.reply(200, JSON.stringify({ data: { chapters: { nodes } } }));
+const reply = (nodes) => ok({ data: { chapters: { nodes } } });
 const after = (r) => Mark.reduce(Mark.initial(), { type: "reply", reply: r, config, now });
 
 test("the mark shows the unread update count, the popup the newest few", () => {
@@ -38,7 +40,7 @@ test("no updates: the mark shows no count", () => {
 
 test("a server that does not answer shows the dot, never a stale count", () => {
   const up = after(reply([chapter(1, 3)]));
-  const m = Mark.reduce(up, { type: "reply", reply: M.reply(0, ""), config, now });
+  const m = Mark.reduce(up, { type: "reply", reply: M.coreReply(0, ""), config, now });
   assert.equal(Mark.down(m), true);
   assert.equal(Mark.label(m), "");
   assert.deepEqual(m.rows, []);
@@ -50,14 +52,14 @@ test("any failure to reach the updates is the dot; loading is not", () => {
   assert.equal(Mark.down(Mark.initial()), false);
   assert.equal(Mark.label(Mark.initial()), "");
   assert.equal(Mark.down(Mark.reduce(Mark.initial(), { type: "config-missing" })), true);
-  assert.equal(Mark.down(after(M.reply(401, ""))), true);
-  const broken = after(M.reply(500, ""));
+  assert.equal(Mark.down(after(M.coreReply(401, '{"error":{"kind":"unauthorized","message":"x"}}'))), true);
+  const broken = after(M.coreReply(500, ""));
   assert.equal(Mark.down(broken), true);
   assert.match(Mark.notice(broken, "/c").detail, /HTTP 500/);
 });
 
 const other = { id: 8, title: "Normal Girl", thumbnailUrl: null, inLibraryAt: sec(1) };
-const withNotify = (nodes, value) => M.reply(200, JSON.stringify({ data: { chapters: { nodes }, notify: { nodes: value === undefined ? [] : [{ value }] } } }));
+const withNotify = (nodes, value) => ok({ data: { chapters: { nodes }, notify: { nodes: value === undefined ? [] : [{ value }] } } });
 const poll = (m, r) => Mark.reduce(m, { type: "reply", reply: r, config, now });
 
 test("the first poll after a start notifies nothing, however many updates wait", () => {
@@ -83,7 +85,7 @@ test("a chapter marked unread again, or one back after a failed poll, is no new 
   const seen = poll(Mark.initial(), withNotify([chapter(3, 3), chapter(9, 4)]));
   const readThen = poll(seen, withNotify([chapter(9, 4)]));
   assert.equal(Mark.notification(poll(readThen, withNotify([chapter(3, 3), chapter(9, 4)]))), null, "3 is below the top");
-  const down = poll(seen, M.reply(0, ""));
+  const down = poll(seen, M.coreReply(0, ""));
   assert.equal(down.top, 9, "a failure keeps the top");
   assert.equal(Mark.notification(poll(down, withNotify([chapter(3, 3), chapter(9, 4)]))), null);
   assert.equal(Mark.notification(poll(down, withNotify([chapter(9, 4), chapter(10, 5)]))).title, "1 new chapter");
@@ -149,11 +151,11 @@ test("the notification fails closed: no XDG_RUNTIME_DIR, or a symlink at its fol
   assert.deepEqual(fs.readdirSync(target), ["notified-1"], "nothing written or deleted through the symlink");
 });
 
-const withSync = (autoSync, syncFolder) => M.reply(200, JSON.stringify({ data: {
+const withSync = (autoSync, syncFolder) => ok({ data: {
   chapters: { nodes: [] },
   autoSync: { nodes: autoSync === undefined ? [] : [{ value: autoSync }] },
   syncFolder: { nodes: syncFolder === undefined ? [] : [{ value: syncFolder }] }
-} }));
+} });
 
 test("the poll reads the sync Settings rows; a failure keeps them", () => {
   const on = poll(Mark.initial(), withSync("true", "/home/u/Sync"));
@@ -164,7 +166,7 @@ test("the poll reads the sync Settings rows; a failure keeps them", () => {
   assert.equal(unset.autoSync, false, "off unless set");
   assert.equal(unset.syncFolder, "");
   assert.deepEqual([Mark.initial().autoSync, Mark.initial().syncFolder], [false, ""]);
-  const down = poll(on, M.reply(0, ""));
+  const down = poll(on, M.coreReply(0, ""));
   assert.deepEqual([down.autoSync, down.syncFolder], [true, "/home/u/Sync"]);
   const missing = Mark.reduce(on, { type: "config-missing" });
   assert.deepEqual([missing.autoSync, missing.syncFolder], [true, "/home/u/Sync"]);
@@ -248,7 +250,7 @@ const upChapter = (id, o) => Object.assign({ id, name: "Ch. " + id, chapterNumbe
   pageCount: 0, isDownloaded: false, scanlator: "", sourceOrder: id, lastReadAt: "0", fetchedAt: String(NOWS - 100 * DAYS) }, o);
 const readAt = (days) => ({ isRead: true, lastReadAt: String(NOWS - days * DAYS) });
 const upManga = (id, title, chapters) => ({ id, title, inLibraryAt: String(NOWS - 200 * DAYS), source: { id: "1" }, meta: [], chapters: { nodes: chapters } });
-const upReply = (mangas, metas) => M.reply(200, JSON.stringify({ data: { metas: { nodes: metas || [] }, mangas: { nodes: mangas } } }));
+const upReply = (mangas, metas) => ok({ data: { metas: { nodes: metas || [] }, mangas: { nodes: mangas } } });
 const partly = upManga(1, "Partly", [upChapter(11, readAt(1)), upChapter(12, { lastPageRead: 3, pageCount: 20, lastReadAt: String(NOWS - DAYS) })]);
 const close = upManga(2, "Close", [upChapter(21, readAt(2)), upChapter(22), upChapter(23), upChapter(24)]);
 const fresh = upManga(3, "Fresh", [upChapter(31, { fetchedAt: String(NOWS - 2 * DAYS) })]);
@@ -277,7 +279,7 @@ test("Up next still loading, failed or empty shows no section, and the popup lis
   const rows = after(reply([chapter(9, 3)])).rows;
   const today = [{ section: "", title: "Maid to Skate", chapter: "Ch.9", side: "2026-10-04", open: ["open-chapter", "7", "9"] }];
   assert.deepEqual(Mark.upNext(null, now), [], "loading");
-  assert.deepEqual(Mark.upNext(M.reply(0, ""), now), [], "failed");
+  assert.deepEqual(Mark.upNext(M.coreReply(0, ""), now), [], "failed");
   assert.deepEqual(Mark.upNext(upReply([]), now), [], "empty");
   assert.deepEqual(Mark.entries(Mark.upNext(null, now), rows), today);
 });

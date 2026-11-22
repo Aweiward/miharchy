@@ -12,8 +12,6 @@ Item {
 
   property var config: null
   property string topic: ""
-  // Unused. DownloadsView.qml still binds it; remove with that binding.
-  property string query: ""
   property bool running: false
   // A result has come since the socket opened: the stream carries every
   // change from here on.

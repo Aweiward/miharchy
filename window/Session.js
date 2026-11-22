@@ -69,15 +69,9 @@ function image(config, url, done) {
   return call(config, url, null, IMAGE, done)
 }
 
-// ponytail: pass 1 of #373's slice 2 keeps this until LiveSocket stops calling it.
-function token(config, stale, back) {
-  back({ state: "error", message: "miharchy-core's live socket takes the secret, not a token.", data: null }, "")
-}
-
 if (typeof module !== "undefined") {
   module.exports = {
     send: send,
-    image: image,
-    token: token
+    image: image
   }
 }

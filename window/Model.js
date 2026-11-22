@@ -21,10 +21,8 @@ function libraryPayload(core) {
   return { route: "library.list" }
 }
 
-var LIBRARY_MUTATION = "mutation($id: Int!, $inLibrary: Boolean!) { updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) { manga { id inLibrary } } }"
-
-// Suwayomi's built-in "Default" category holds the manga in no category, as
-// in Mihon. It is never a user category, the same rule as the sync helper.
+// Category 0, "Default", holds the manga in no category, as in Mihon. It is
+// never a user category.
 var DEFAULT_CATEGORY = 0
 var ALL = -1
 
@@ -39,12 +37,6 @@ function parseCoreConfig(text) {
   }
   if (!c || typeof c.url !== "string" || typeof c.secret !== "string" || !c.url || !c.secret) return null
   return { url: c.url.replace(/\/+$/, ""), secret: c.secret, backend: "core" }
-}
-
-// Puts a manga in the library or takes it out. Its chapters, read state
-// and downloads stay, as in Mihon.
-function inLibraryPayload(mangaId, inLibrary) {
-  return { query: LIBRARY_MUTATION, variables: { id: mangaId, inLibrary: inLibrary } }
 }
 
 // "http://host:port/path" -> { origin: "http://host:port", rest: "/path" },
@@ -118,29 +110,9 @@ function reduce(connection, event) {
   return connection
 }
 
-// Any GraphQL answer -> { state, message, data } with state "ok" (and the
-// reply's data), "down", "unauthorized" or "error" (and a message).
-function reply(status, body) {
-  var fail = function(state, message) { return { state: state, message: message || "", data: null } }
-  if (status === 0) return fail("down")
-  if (status === 401) return fail("unauthorized")
-  if (status !== 200) return fail("error", "The server answered HTTP " + status + ".")
-  var json
-  try {
-    json = JSON.parse(body)
-  } catch (e) {
-    return fail("error", "The server sent a reply that is not JSON.")
-  }
-  if (json.errors && json.errors.length) {
-    var message = errorText(json.errors[0].message)
-    // ui_login answers a missing or expired access token this way, with 200.
-    return message === "Unauthorized" ? fail("unauthorized") : fail("error", message)
-  }
-  return { state: "ok", message: "", data: json.data || {} }
-}
-
-// miharchy-core's answer -> the same { state, message, data } as reply(),
-// plus kind on a failure: core's error kind (ADR 0010), so a view can tell
+// miharchy-core's answer -> { state, message, data, kind }: state "ok"
+// (and the route's object), "down", "unauthorized" or "error" (and a
+// message), plus kind on a failure: core's error kind (ADR 0010), so a view can tell
 // a Cloudflare challenge or a WebView source from other errors. Core answers
 // a failure with a non-200 status and { error: { kind, message } }, and
 // success with the route's object itself.
@@ -159,13 +131,6 @@ function coreReply(status, body) {
   }
   if (status !== 200 || !json || typeof json !== "object") return fail("error", "miharchy-core answered HTTP " + status + ".")
   return { state: "ok", message: "", data: json, kind: "" }
-}
-
-// Suwayomi wraps an exception as "Exception while fetching data (/path) :
-// message" followed by its stack trace; only the message is for people.
-function errorText(message) {
-  var first = String(message || "GraphQL error").split(/\r?\n/)[0]
-  return first.replace(/^Exception while fetching data \([^)]*\) : /, "").trim() || "GraphQL error"
 }
 
 // Reply data with the SOURCE_NAMES_META node -> { sourceId: name }.
@@ -434,10 +399,7 @@ if (typeof module !== "undefined") {
     libraryPayload: libraryPayload,
     parseNames: parseNames,
     sourceLabel: sourceLabel,
-    inLibraryPayload: inLibraryPayload,
     placeholder: placeholder,
-    reply: reply,
-    errorText: errorText,
     coverUrl: coverUrl,
     serverImageUrl: serverImageUrl,
     initial: initial,

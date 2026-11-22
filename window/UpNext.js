@@ -14,15 +14,9 @@
 var CLOSE_UNREAD = 5
 var FRESH_DAYS = 7
 
-// load() takes its meta keys from here; plugin/Mark.js builds its own
-// payload from the query.
-function payload() {
-  return {
-    query: "query($keys: [String!]) { metas(filter: { key: { in: $keys } }) { nodes { key value } }"
-      + " mangas(condition: { inLibrary: true }) { nodes { id title inLibraryAt source { id } meta { key value }"
-      + " chapters { nodes { id name chapterNumber uploadDate isRead isBookmarked lastPageRead pageCount isDownloaded scanlator sourceOrder lastReadAt fetchedAt } } } } }",
-    variables: { keys: Prefs.keys(Library.CHAPTER_PREFS).concat([History.CLEARED_KEY]) }
-  }
+// The global metas load() reads: the chapter prefs and History's cutoff.
+function metaKeys() {
+  return Prefs.keys(Library.CHAPTER_PREFS).concat([History.CLEARED_KEY])
 }
 
 // Up next's data: send(payload, done) is Session.send on core's config.
@@ -36,7 +30,7 @@ function load(send, core, done) {
     if (!ids.length) return done({ state: "ok", data: fromCore(lib.data, { chapters: [] }, { metas: [] }) })
     send({ route: "chapter.list", body: { mangaIds: ids } }, function(ch) {
       if (ch.state !== "ok") return done(ch)
-      send({ route: "meta.get", body: { scope: "global", keys: payload().variables.keys } }, function(meta) {
+      send({ route: "meta.get", body: { scope: "global", keys: metaKeys() } }, function(meta) {
         if (meta.state !== "ok") return done(meta)
         done({ state: "ok", data: fromCore(lib.data, ch.data, meta.data) })
       })
@@ -119,7 +113,7 @@ function after(list, order, mangaId) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    payload: payload,
+    metaKeys: metaKeys,
     load: load,
     list: list,
     after: after

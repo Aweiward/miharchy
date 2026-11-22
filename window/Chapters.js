@@ -50,18 +50,6 @@ function afterMarkRead(setting) {
   return { always: "push", ask: "check" }[setting] || null
 }
 
-// Kept only for shell.qml's markChapters, which still calls it to tell
-// whether any manga was marked; trackCheckLoad does not use it.
-function trackCheckPayload(mangaIds) {
-  if (!mangaIds.length) return null
-  var fields = unique(mangaIds).map(function(id) {
-    var n = Number(id)
-    return "m" + n + ": manga(id: " + n + ") { id trackRecords { nodes { lastChapterRead tracker { isLoggedIn } } } }"
-      + " r" + n + ": chapters(condition: { mangaId: " + n + ", isRead: true }, order: [{ by: CHAPTER_NUMBER, byType: DESC }], first: 1) { nodes { chapterNumber } }"
-  })
-  return { query: "query { " + fields.join(" ") + " }" }
-}
-
 // The data trackAsk reads, as done(reply). Core answers in three routes,
 // put together here in the shape trackAsk reads.
 function trackCheckLoad(send, core, mangaIds, done) {
@@ -91,7 +79,7 @@ function trackCheckLoad(send, core, mangaIds, done) {
   })
 }
 
-// trackCheckPayload's data -> { mangaIds, chapter } to ask about, or null.
+// trackCheckLoad's data -> { mangaIds, chapter } to ask about, or null.
 // As Mihon: ask only when a logged-in tracker sits below the chapter the
 // push would send. chapter: that number when one manga is asked about.
 function trackAsk(data) {
@@ -321,7 +309,6 @@ if (typeof module !== "undefined") {
     bookmarkPayload: bookmarkPayload,
     trackPayload: trackPayload,
     afterMarkRead: afterMarkRead,
-    trackCheckPayload: trackCheckPayload,
     trackCheckLoad: trackCheckLoad,
     trackAsk: trackAsk,
     trackAskText: trackAskText,

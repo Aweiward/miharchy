@@ -273,12 +273,7 @@ function savePayload(row, value, core) {
   s[row.key] = value
   if (value === true && row.whenOn) for (var k in row.whenOn) s[k] = row.whenOn[k]
   // Core refuses an unknown key.
-  if (core) return { route: "settings.set", body: { settings: s } }
-  // ponytail: kept only for Setup.js's two calls without core; goes with its Suwayomi branch.
-  return {
-    query: "mutation($s: PartialSettingsTypeInput!) { setSettings(input: { settings: $s }) { settings { " + row.key + " } } }",
-    variables: { s: s }
-  }
+  return { route: "settings.set", body: { settings: s } }
 }
 
 function fromMeta(row, text) {

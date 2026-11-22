@@ -92,12 +92,6 @@ test("a cover shows the placeholder when it has no URL or fails to load", () => 
   assert.equal(M.placeholder("http://x/1.jpg", false), false);
 });
 
-test("the library payload sets inLibrary and nothing else", () => {
-  const p = M.inLibraryPayload(7, false);
-  assert.match(p.query, /updateManga\(input: \{ id: \$id, patch: \{ inLibrary: \$inLibrary \} \}\)/);
-  assert.deepEqual(p.variables, { id: 7, inLibrary: false });
-});
-
 const hostile = [
   "http://127.0.0.1:4590.evil.com/x",
   "http://127.0.0.1:45901/x",

@@ -196,7 +196,7 @@ test("turns wait while pages load", () => {
 });
 
 test("a failed page fetch shows the problem and r fetches again", () => {
-  const r = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "pages", reply: M.reply(0, ""), config });
+  const r = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "pages", reply: M.coreReply(0, ""), config });
   assert.equal(r.state, "down");
   assert.equal(R.pagesPayload(r), null);
   assert.deepEqual(R.pagesPayload(R.reduce(r, { type: "retry" })).body, { id: 12 });
@@ -207,11 +207,11 @@ test("a retry that ends in the same failure says when it failed again", () => {
   const at = (h, m, s) => new Date(2026, 9, 6, h, m, s).getTime();
   const retry = (r, reply, now) => R.reduce(R.reduce(r, { type: "retry" }), { type: "pages", reply, config, now });
   const notice = (r) => M.again(M.problem(r, "/c"), r).detail;
-  let r = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "pages", reply: M.reply(0, ""), config, now: at(15, 0, 50) });
+  let r = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "pages", reply: M.coreReply(0, ""), config, now: at(15, 0, 50) });
   assert.doesNotMatch(notice(r), /again/, "the first failure is not 'again'");
-  r = retry(r, M.reply(0, ""), at(15, 0, 57));
+  r = retry(r, M.coreReply(0, ""), at(15, 0, 57));
   assert.match(notice(r), / Failed again at 15:00:57\.$/);
-  r = retry(r, M.reply(0, ""), at(15, 1, 4));
+  r = retry(r, M.coreReply(0, ""), at(15, 1, 4));
   assert.match(notice(r), / Failed again at 15:01:04\.$/, "each retry moves the time");
   r = retry(r, pages(12, 0), at(15, 1, 10));
   assert.equal(notice(r), "This chapter has no pages. Press r to retry.", "another failure is news of its own");
@@ -447,7 +447,7 @@ test("] and [ open the next and previous chapter where each was left", () => {
   assert.equal(R.reduce(back, { type: "pages", reply: pages(11, 8, { lastPageRead: 2 }), config }).page, 2, "not at its end, unlike turning back");
   assert.equal(R.reduce(loaded(13, 3), { type: "chapter", delta: 1 }).edge, "last");
   assert.equal(R.reduce(loaded(11, 3), { type: "chapter", delta: -1 }).edge, "first");
-  const broken = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "pages", reply: M.reply(0, ""), config });
+  const broken = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "pages", reply: M.coreReply(0, ""), config });
   assert.equal(R.chapterName(R.reduce(broken, { type: "chapter", delta: 1 })), "Ch. 3", "a broken chapter can be skipped");
 });
 

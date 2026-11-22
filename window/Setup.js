@@ -436,7 +436,7 @@ function copy(s, changes) {
 // event.type:
 //   "start"    { id } a job started
 //   "finish"   { id, text } a job's collected output
-//   "server"   { reply } with reply from Model.reply()
+//   "server"   { reply } with reply from Model.coreReply()
 //   "confirm"  { id } the user asked to run a step
 //   "cancel"   the user declined
 //   "move"     { reply } from core's move.start or move.status

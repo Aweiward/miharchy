@@ -16,14 +16,6 @@ var SKIP_FILTERS = [
   ["excludeNotStarted", "not started"],
   ["excludeCompleted", "completed"]
 ]
-var STATUS_FIELDS = "libraryUpdateStatus { jobsInfo { isRunning finishedJobs totalJobs skippedMangasCount } } lastUpdateTimestamp { timestamp }"
-  + " settings { " + SKIP_FILTERS.map(function(f) { return f[0] }).join(" ") + " }"
-// ponytail: no page limit; the client-side fetchedAt cut must see every
-// unread chapter, so a limit waits for a library big enough to need one.
-// plugin/Mark.js still builds its bar-mark payload from this query.
-var UPDATES_QUERY = "{ chapters(filter: { inLibrary: { equalTo: true }, isRead: { equalTo: false } }) {"
-  + " nodes { id name uploadDate fetchedAt sourceOrder isRead lastPageRead isBookmarked isDownloaded manga { id title thumbnailUrl inLibraryAt } } } " + STATUS_FIELDS + " }"
-
 function copy(o, changes) {
   var c = {}
   for (var k in o) c[k] = o[k]
@@ -84,7 +76,7 @@ function recent(data, now) {
     .sort(function(a, b) { return Number(b.fetchedAt) - Number(a.fetchedAt) || b.sourceOrder - a.sourceOrder })
 }
 
-// The unread updates: the bar mark's list, from UPDATES_QUERY.
+// The unread updates: the bar mark's list.
 function updates(data, now) {
   return recent(data, now).filter(function(c) { return !c.isRead })
 }
@@ -172,11 +164,6 @@ function initial() {
   return { state: "loading", message: "", rows: [], data: null, found: 0, running: false, checking: false, finished: 0, total: 0, skipped: 0, skipReasons: [], checkedAt: 0, stopped: null }
 }
 
-// The bar mark's list: unread updates only. plugin/Mark.js builds its
-// payload from this.
-function listPayload() {
-  return { query: UPDATES_QUERY }
-}
 
 // The view's list, from library.list, chapter.list, update.status and the
 // skip filters' metas.
@@ -394,7 +381,6 @@ if (typeof module !== "undefined") {
   module.exports = {
     since: since,
     fromCore: fromCore,
-    UPDATES_QUERY: UPDATES_QUERY,
     PREFS: PREFS,
     updates: updates,
     load: load,
@@ -403,7 +389,6 @@ if (typeof module !== "undefined") {
     count: count,
     initial: initial,
     rows: rows,
-    listPayload: listPayload,
     checkPayload: checkPayload,
     stopPayload: stopPayload,
     reduce: reduce,
