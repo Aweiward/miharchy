@@ -180,8 +180,8 @@ function rowIndex(rows, id) {
 }
 
 // listing.state: "idle" | "loading" | "ok" | a failed connection state.
-// page: the last page loaded. flare: the failure is Cloudflare without
-// FlareSolverr. filters: Widgets.filterChanges of the applied filters;
+// page: the last page loaded. flare: the failure is a Cloudflare page.
+// filters: Widgets.filterChanges of the applied filters;
 // only a search sends them, so only a search keeps them. filterCount: how
 // many filters differ from their defaults, filters.length unless given.
 function listing(source, mode, query, filters, filterCount) {

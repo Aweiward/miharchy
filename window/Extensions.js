@@ -121,7 +121,7 @@ function parseRepoUrl(text) {
 //   "update-all"      { pkgNames } went out, updateAll()'s
 //   "update-all-reply" { pkgNames, reply, config }
 //   "repo-reply"      { reply, removed? } for an add, or a removal of removed
-// reply is Model.reply()'s. A failure keeps what is shown.
+// reply is Model.coreReply()'s. A failure keeps what is shown.
 function reduce(ext, event) {
   var r = event.reply
   switch (event.type) {
