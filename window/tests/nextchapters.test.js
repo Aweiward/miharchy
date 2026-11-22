@@ -87,21 +87,10 @@ test("each menu remembers its last row in its own global meta key", () => {
   assert.deepEqual(N.MENU_PREFS[1].options, Ch.DOWNLOADS.map(N.rowKey));
 });
 
-test("the refresh and the read ask the server for one manga and for the set", () => {
-  assert.match(N.refreshPayload(9).query, /fetchChapters\(input: \{ mangaId: \$id \}\)/);
-  assert.deepEqual(N.refreshPayload(9).variables, { id: 9 });
-  const read = N.readPayload([1, 2]);
-  assert.deepEqual(read.variables.ids, [1, 2]);
-  assert.ok(read.variables.keys.includes("miharchy.excludedScanlators"));
-  assert.match(read.query, /mangas\(filter: \{ id: \{ in: \$ids \} \}\)/);
-});
-
-// The run in the download queue: queue items and live updates as Downloads.js
-// holds them.
+// The run in the download queue: queue items as Downloads.js holds them.
 const q = (id, state) => ({ chapterId: id, state });
-const up = (type, id) => ({ type, download: { chapter: { id } } });
 const done = (failures) => Object.assign(N.queued(N.start(N.librarySet(shown, []), row("next", 2), 2), [11, 12, 13, 14]), failures ? { failures } : {});
-const follow = (run, steps) => steps.reduce((marks, [items, updates]) => N.track(marks, run, items, updates || []), {});
+const follow = (run, steps) => steps.reduce((marks, [items]) => N.track(marks, run, items, []), {});
 
 test("a run chapter is queued until the queue has shown it, on disk once it leaves, failed while it is in ERROR", () => {
   const run = done();
@@ -109,7 +98,7 @@ test("a run chapter is queued until the queue has shown it, on disk once it leav
   let marks = follow(run, [[items]]);
   assert.deepEqual(N.tally(run, items, marks), { onDisk: 0, queued: 3, failed: [13] }, "99 is not the run's");
   const later = [q(13, "ERROR"), q(99, "QUEUED")];
-  marks = N.track(marks, run, later, [up("FINISHED", 11), up("FINISHED", 12), up("FINISHED", 14)]);
+  marks = N.track(marks, run, later, []);
   assert.deepEqual(N.tally(run, later, marks), { onDisk: 3, queued: 0, failed: [13] });
   assert.deepEqual(N.tally(run, [], {}), { onDisk: 0, queued: 4, failed: [] }, "a chapter the queue has not shown yet is still to come");
 });
@@ -117,11 +106,12 @@ test("a run chapter is queued until the queue has shown it, on disk once it leav
 test("a run chapter taken out of the queue counts nowhere, unless it comes back", () => {
   const run = done();
   const items = [q(11, "QUEUED"), q(12, "QUEUED"), q(13, "ERROR"), q(14, "QUEUED")];
-  let marks = follow(run, [[items], [[q(13, "ERROR")], [up("DEQUEUED", 11), up("DEQUEUED", 12), up("DEQUEUED", 14)]]]);
+  let marks = follow(run, [[items]]);
+  marks = N.goneMarks(marks, [11, 12, 14].map((id) => ({ id, isDownloaded: false })));
   assert.deepEqual(N.tally(run, [q(13, "ERROR")], marks), { onDisk: 0, queued: 0, failed: [13] });
   const retried = [q(13, "QUEUED")];
-  marks = N.track(marks, run, retried, [up("DEQUEUED", 13), up("QUEUED", 13)]);
-  assert.deepEqual(N.tally(run, retried, marks), { onDisk: 0, queued: 1, failed: [] }, "a retry dequeues and queues again in one result");
+  marks = N.track(marks, run, retried, []);
+  assert.deepEqual(N.tally(run, retried, marks), { onDisk: 0, queued: 1, failed: [] }, "a retry puts it back in the queue");
 });
 
 test("the run ends when none of its chapters is queued or downloading; failed ones stay behind", () => {
@@ -157,8 +147,6 @@ test("the run looks over once none of its chapters is queued or downloading in t
   assert.equal(N.looksOver(run, [q(13, "ERROR"), q(99, "QUEUED")]), true);
   assert.equal(N.looksOver(run, []), true, "even with chapters never seen: the server settles them");
   assert.equal(N.looksOver(N.start(N.upNextSet([]), row("next", 2), 2), []), false, "not while it fetches chapters");
-  assert.deepEqual(N.settlePayload(run).variables, { ids: [11, 12, 13, 14] });
-  assert.match(N.settlePayload(run).query, /downloadStatus \{ queue \{ chapter \{ id \} \} \}.*chapters\(filter: \{ id: \{ in: \$ids \} \}\) \{ nodes \{ id isDownloaded \} \}/);
 });
 
 test("the server settles what the live queue missed: on disk, still in its queue, or taken out", () => {

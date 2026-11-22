@@ -20,21 +20,9 @@ var STATUS_FIELDS = "libraryUpdateStatus { jobsInfo { isRunning finishedJobs tot
   + " settings { " + SKIP_FILTERS.map(function(f) { return f[0] }).join(" ") + " }"
 // ponytail: no page limit; the client-side fetchedAt cut must see every
 // unread chapter, so a limit waits for a library big enough to need one.
+// plugin/Mark.js still builds its bar-mark payload from this query.
 var UPDATES_QUERY = "{ chapters(filter: { inLibrary: { equalTo: true }, isRead: { equalTo: false } }) {"
   + " nodes { id name uploadDate fetchedAt sourceOrder isRead lastPageRead isBookmarked isDownloaded manga { id title thumbnailUrl inLibraryAt } } } " + STATUS_FIELDS + " }"
-// Each result holds the run's counts, the first one too; the last-checked
-// time and the skip filters come with the list, which reloads after a run.
-var LIVE_QUERY = "subscription { libraryUpdateStatusChanged(input: {}) { jobsInfo { isRunning finishedJobs totalJobs skippedMangasCount } } }"
-// The view's list: read updates too, and what the filters test. The
-// 3-month cut runs on the server here, since read chapters are most of a
-// library.
-var VIEW_QUERY = "query($since: LongString!) { chapters(filter: { inLibrary: { equalTo: true }, uploadDate: { greaterThan: $since } }) {"
-  + " nodes { id name uploadDate fetchedAt sourceOrder isRead lastPageRead isBookmarked isDownloaded scanlator"
-  + " manga { id title thumbnailUrl inLibraryAt categories { nodes { id } } meta { key value } } } } " + STATUS_FIELDS + " }"
-// The run's progress comes through LIVE_QUERY. With no categories the server skips the excluded ones (Categories.js);
-// with categories it updates every manga in them, as Mihon's per-category
-// update does.
-var CHECK_MUTATION = "mutation($categories: [Int!]) { updateLibrary(input: { categories: $categories }) { clientMutationId } }"
 
 function copy(o, changes) {
   var c = {}
@@ -184,19 +172,15 @@ function initial() {
   return { state: "loading", message: "", rows: [], data: null, found: 0, running: false, checking: false, finished: 0, total: 0, skipped: 0, skipReasons: [], checkedAt: 0, stopped: null }
 }
 
-// The bar mark's list: unread updates only.
+// The bar mark's list: unread updates only. plugin/Mark.js builds its
+// payload from this.
 function listPayload() {
   return { query: UPDATES_QUERY }
 }
 
-function viewPayload(now) {
-  return { query: VIEW_QUERY, variables: { since: String(since(now)) } }
-}
-
-// The view's list: viewPayload()'s reply, or on core the same data from
-// library.list, chapter.list, update.status and the skip filters' metas.
+// The view's list, from library.list, chapter.list, update.status and the
+// skip filters' metas.
 function load(send, core, now, done) {
-  if (!core) return send(viewPayload(now), done)
   send({ route: "library.list" }, function(lib) {
     if (lib.state !== "ok") return done(lib)
     var ids = lib.data.mangas.map(function(m) { return m.id })
@@ -218,7 +202,7 @@ function load(send, core, now, done) {
   })
 }
 
-// Core's replies -> VIEW_QUERY's reply data. The skip filters are on unless
+// Core's replies -> the reply data the filters and rows read. The skip filters are on unless
 // a meta turns them off, as core reads them.
 function fromCore(lib, ch, st, meta, now) {
   var manga = {}
@@ -238,17 +222,15 @@ function fromCore(lib, ch, st, meta, now) {
   }
 }
 
-// categories: ids to update, or none for the whole library. On core the
-// reply's started says whether this call began the run.
+// categories: ids to update, or none for the whole library. The reply's
+// started says whether this call began the run.
 function checkPayload(categories, core) {
-  if (core) return { route: "update.start", body: categories ? { categories: categories } : {} }
-  return { query: CHECK_MUTATION, variables: { categories: categories || null } }
+  return { route: "update.start", body: categories ? { categories: categories } : {} }
 }
 
 // Mihon's cancel on the update notification.
 function stopPayload(core) {
-  if (core) return { route: "update.stop" }
-  return { query: "mutation { updateStop(input: {}) { clientMutationId } }" }
+  return { route: "update.stop" }
 }
 
 function dayLabel(ms, now) {
@@ -303,12 +285,12 @@ function status(data) {
 
 // event.type:
 //   "request"   a list load went out
-//   "list"      { reply, config, now, prefs } for viewPayload()
+//   "list"      { reply, config, now, prefs } for load()
 //   "filter"    { config, now, prefs }: the filters changed
 //   "checking"  checkPayload() went out
 //   "failed"    checkPayload() failed
 //   "stopped"   stopPayload() succeeded
-//   "live"      { data } for a LIVE_QUERY result
+//   "live"      { data } for the updates topic's status
 function reduce(u, event) {
   switch (event.type) {
     case "request":
@@ -330,15 +312,9 @@ function reduce(u, event) {
     case "live":
       // Core sends its status flat, never an all-zero opening result, and
       // says whether a stop ended the run, so it may come before the stop's reply.
-      var flat = event.data.isRunning !== undefined
-      var l = flat ? { jobsInfo: event.data } : event.data.libraryUpdateStatusChanged
-      if (!l) return u
-      var s = jobs(l.jobsInfo || {})
-      if (flat) return copy(copy(u, s), { checking: false, stopped: event.data.stopped === true ? stoppedAt(s) : null })
-      // A run opens with a result of all zeros, before it counts the
-      // library; u's check waits past it. ponytail: a library with no
-      // manga sends nothing more, so its check shows until C stops it.
-      return copy(withStatus(u, s), { checking: u.checking && !(s.running || s.total || s.skipped) })
+      if (event.data.isRunning === undefined) return u
+      var s = jobs(event.data)
+      return copy(copy(u, s), { checking: false, stopped: event.data.stopped === true ? stoppedAt(s) : null })
   }
   return u
 }
@@ -349,8 +325,7 @@ function stoppedAt(u) {
 
 // The server forgets a stopped run's counts, so the stop stays in u until
 // a run starts. A run that ends on its own keeps its counts; one that ends
-// with all zeros was stopped, and its result can come before the stop's
-// reply.
+// with all zeros was stopped.
 function withStatus(u, s) {
   var stopped = u.running && !s.running && !s.total ? stoppedAt(u) : u.stopped
   return copy(copy(u, s), { stopped: s.running ? null : stopped })
@@ -420,10 +395,8 @@ if (typeof module !== "undefined") {
     since: since,
     fromCore: fromCore,
     UPDATES_QUERY: UPDATES_QUERY,
-    VIEW_QUERY: VIEW_QUERY,
     PREFS: PREFS,
     updates: updates,
-    viewPayload: viewPayload,
     load: load,
     filterRows: filterRows,
     choose: choose,
@@ -431,7 +404,6 @@ if (typeof module !== "undefined") {
     initial: initial,
     rows: rows,
     listPayload: listPayload,
-    LIVE_QUERY: LIVE_QUERY,
     checkPayload: checkPayload,
     stopPayload: stopPayload,
     reduce: reduce,

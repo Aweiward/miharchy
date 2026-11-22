@@ -2,7 +2,7 @@ import QtQuick
 import "Session.js" as Session
 import "Prefs.js" as Prefs
 
-// One view's choices (a Prefs.js table) as the server keeps them, global or
+// One view's choices (a Prefs.js table) as core keeps them, global or
 // for one manga. A choice shows at once and saves in the background, one
 // save at a time; a choice not yet saved wins over a load.
 QtObject {
@@ -22,12 +22,6 @@ QtObject {
   readonly property var target: mangaId < 0 ? undefined : mangaId
 
   signal failed(var reply)
-
-  // A function, not a binding: onConfigChanged's load runs before a binding
-  // on config would update.
-  function core() {
-    return !!config && config.backend === "core"
-  }
 
   onConfigChanged: pump()
 
@@ -49,7 +43,7 @@ QtObject {
     if (!config) return
     var seq = ++loadSeq
     var scope = Prefs.scope(target)
-    send(Prefs.loadPayload(table, target, core()), function(reply) {
+    send(Prefs.loadPayload(table, target, true), function(reply) {
       if (seq !== store.loadSeq || reply.state !== "ok") return
       var waiting = store.queue.concat(store.sending ? [store.sending] : []).some(function(e) { return e.scope === scope })
       if (!waiting) store.values = Prefs.read(store.table, reply.data, Prefs.defaults(store.table))
@@ -62,7 +56,7 @@ QtObject {
     for (var k in values) next[k] = values[k]
     changes.forEach(function(c) {
       next[c.key] = c.value
-      store.save(Prefs.scope(store.target), c.key, Prefs.savePayload(c.key, c.value, store.target, store.core()))
+      store.save(Prefs.scope(store.target), c.key, Prefs.savePayload(c.key, c.value, store.target, true))
     })
     values = next
     pump()
@@ -71,8 +65,8 @@ QtObject {
   // The current choices become the global default; with mangaIds, those
   // manga drop their own choices to follow it.
   function saveDefault(mangaIds) {
-    table.forEach(function(c) { store.save("global", c.key, Prefs.savePayload(c.key, store.values[c.key], undefined, store.core())) })
-    var reset = Prefs.resetPayload(table, mangaIds || [], core())
+    table.forEach(function(c) { store.save("global", c.key, Prefs.savePayload(c.key, store.values[c.key], undefined, true)) })
+    var reset = Prefs.resetPayload(table, mangaIds || [], true)
     if (reset) save("global", "reset", reset)
     pump()
   }
