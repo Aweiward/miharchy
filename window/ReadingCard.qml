@@ -19,7 +19,7 @@ Rectangle {
 
   required property Theme theme
   property var config: null
-  // "core" with MIHARCHY_BACKEND=core (shell.qml): the card reads core's history.
+  // Set by shell.qml; the card reads core's history.
   property string backend: ""
   property string configPath: ""
   // The "Save pages to" setting; empty for ~/Pictures/Miharchy.
@@ -100,7 +100,7 @@ Rectangle {
   }
 
   function page(after, s) {
-    Session.send(config, ReadingCard.payload(after, backend === "core"), function(reply) {
+    Session.send(config, ReadingCard.payload(after, true), function(reply) {
       if (s !== view.seq) return
       if (reply.state !== "ok") {
         view.message = reply.message || ""

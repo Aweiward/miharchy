@@ -3,14 +3,14 @@ const assert = require("node:assert/strict");
 const H = require("./load")("History.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
-const ok = (data) => M.reply(200, JSON.stringify({ data }));
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const ok = (data) => M.coreReply(200, JSON.stringify(data));
 const sec = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi).getTime() / 1000;
 
 const manga = (id, hiddenAt) => ({
   id,
   title: "Manga " + id,
-  thumbnailUrl: "/api/v1/manga/" + id + "/thumbnail",
+  thumbnailUrl: "/api/cover/" + id,
   meta: hiddenAt === undefined ? [{ key: "miharchy.readingMode", value: "webtoon" }] : [{ key: "miharchy.historyHiddenAt", value: String(hiddenAt) }]
 });
 const chapter = (id, mangaId, at, o) => Object.assign(
@@ -23,13 +23,6 @@ const reply = (nodes, clearedAt) => ok({
 });
 const loaded = (nodes, clearedAt) => H.reduce(H.initial(), { type: "reply", reply: reply(nodes, clearedAt), config });
 
-test("the query asks for chapters someone opened, newest first", () => {
-  const q = H.QUERY;
-  assert.match(q, /lastReadAt: \{ greaterThan: "0" \}/);
-  assert.match(q, /by: LAST_READ_AT, byType: DESC/);
-  assert.match(q, /miharchy\.historyClearedAt/);
-});
-
 test("one entry per manga, its most recent chapter, in the server's order", () => {
   const h = loaded([chapter(31, 3, 300), chapter(12, 1, 250), chapter(30, 3, 200), chapter(11, 1, 100)]);
   assert.equal(h.state, "ok");
@@ -37,7 +30,7 @@ test("one entry per manga, its most recent chapter, in the server's order", () =
   const e = h.entries[0];
   assert.equal(e.title, "Manga 3");
   assert.equal(e.chapter, "Ch. 31");
-  assert.equal(e.cover, "http://127.0.0.1:4590/api/v1/manga/3/thumbnail");
+  assert.equal(e.cover, "http://127.0.0.1:4591/api/cover/3");
   assert.equal(e.page, 4);
   assert.equal(e.pages, 20);
   assert.equal(e.read, false);
@@ -58,21 +51,10 @@ test("clearing hides everything opened up to then; what opens later shows", () =
 
 test("a failed reply keeps the shown entries and reports the problem", () => {
   const h = loaded([chapter(31, 3, 300)]);
-  const down = H.reduce(h, { type: "reply", reply: M.reply(0, ""), config });
+  const down = H.reduce(h, { type: "reply", reply: M.coreReply(0, ""), config });
   assert.equal(down.state, "down");
   assert.equal(down.entries.length, 1);
   assert.equal(H.reduce(down, { type: "request" }).state, "loading");
-});
-
-test("remove stamps the manga's meta with the entry's own time; clear stamps the newest", () => {
-  const h = loaded([chapter(21, 2, 400), chapter(31, 3, 300)]);
-  const r = H.removePayload(h.entries[1]);
-  assert.match(r.query, /setMangaMeta/);
-  assert.deepEqual(r.variables, { meta: { mangaId: 3, key: "miharchy.historyHiddenAt", value: "300" } });
-  const c = H.clearPayload(h.entries);
-  assert.match(c.query, /setGlobalMeta/);
-  assert.deepEqual(c.variables, { key: "miharchy.historyClearedAt", value: "400" });
-  assert.equal(H.clearPayload([]), null);
 });
 
 test("progress shows the page reached, or read", () => {
@@ -90,11 +72,11 @@ test("entries group by day: today, yesterday, then the date; each shows its time
 });
 
 test("a notice for an empty or failed history, none while entries show", () => {
-  assert.equal(H.notice(H.initial(), "server.json").title, "Loading the history");
-  assert.equal(H.notice(H.reduce(loaded([chapter(31, 3, 300)]), { type: "config-missing" }), "server.json").title, "No server config");
-  assert.equal(H.notice(loaded([]), "server.json").title, "No history yet");
-  assert.equal(H.notice(loaded([chapter(31, 3, 300)]), "server.json"), null);
-  assert.equal(H.notice(H.reduce(H.initial(), { type: "reply", reply: M.reply(401, ""), config }), "server.json").title, "The server rejected the credentials");
+  assert.equal(H.notice(H.initial(), "core.json", "", "core").title, "Loading the history");
+  assert.equal(H.notice(H.reduce(loaded([chapter(31, 3, 300)]), { type: "config-missing" }), "core.json", "", "core").title, "No miharchy-core config");
+  assert.equal(H.notice(loaded([]), "core.json", "", "core").title, "No history yet");
+  assert.equal(H.notice(loaded([chapter(31, 3, 300)]), "core.json", "", "core"), null);
+  assert.equal(H.notice(H.reduce(H.initial(), { type: "reply", reply: M.coreReply(401, JSON.stringify({ error: { kind: "unauthorized", message: "secret" } })), config }), "core.json", "", "core").title, "miharchy-core rejected the secret");
 });
 
 test("the search keeps the entries whose manga title holds it, ignoring case", () => {
@@ -102,7 +84,7 @@ test("the search keeps the entries whose manga title holds it, ignoring case", (
   assert.deepEqual(H.search(h.entries, "manga 1").map((e) => e.mangaId), [12]);
   assert.deepEqual(H.search(h.entries, "  MANGA ").map((e) => e.mangaId), [3, 12, 5], "trimmed, any case");
   assert.deepEqual(H.search(h.entries, ""), h.entries, "no search, every entry");
-  assert.equal(H.notice(h, "server.json", "manga 3"), null);
-  assert.deepEqual(H.notice(h, "server.json", "nothing "), { title: "No history matches \"nothing\"", detail: "Esc clears the search." });
-  assert.equal(H.notice(loaded([]), "server.json", "x").title, "No history yet", "an empty history says so, search or not");
+  assert.equal(H.notice(h, "core.json", "manga 3", "core"), null);
+  assert.deepEqual(H.notice(h, "core.json", "nothing ", "core"), { title: "No history matches \"nothing\"", detail: "Esc clears the search." });
+  assert.equal(H.notice(loaded([]), "core.json", "x", "core").title, "No history yet", "an empty history says so, search or not");
 });

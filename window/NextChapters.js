@@ -44,27 +44,15 @@ function brief(m) {
   return { id: m.id, title: m.title }
 }
 
-// core (the last argument of the payloads and loads here): miharchy-core's
-// routes (ADR 0010). A load's send(payload, done) is Session.send on that
-// server's config.
+// The payloads and loads here are miharchy-core's routes (ADR 0010). A
+// load's send(payload, done) is Session.send on core's config.
 function refreshPayload(mangaId, core) {
-  if (core) return { route: "manga.refresh", body: { id: mangaId } }
-  return { query: "mutation($id: Int!) { fetchChapters(input: { mangaId: $id }) { chapters { id } } }", variables: { id: mangaId } }
+  return { route: "manga.refresh", body: { id: mangaId } }
 }
 
-function readPayload(mangaIds) {
-  return {
-    query: "query($keys: [String!], $ids: [Int!]) { metas(filter: { key: { in: $keys } }) { nodes { key value } }"
-      + " mangas(filter: { id: { in: $ids } }) { nodes { id meta { key value }"
-      + " chapters { nodes { id name chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder } } } } }",
-    variables: { keys: Prefs.keys(Library.CHAPTER_PREFS), ids: mangaIds }
-  }
-}
-
-// readPayload()'s reply from either server. Core: the manga's chapters, then
-// the global and the manga's own chapter prefs in one meta.get.
+// The chapters of the set and their prefs: the manga's chapters, then the
+// global and the manga's own chapter prefs in one meta.get.
 function readLoad(send, core, mangaIds, done) {
-  if (!core) return send(readPayload(mangaIds), done)
   send({ route: "chapter.list", body: { mangaIds: mangaIds } }, function(ch) {
     if (ch.state !== "ok") return done(ch)
     var keys = Prefs.keys(Library.CHAPTER_PREFS)
@@ -81,7 +69,7 @@ function readLoad(send, core, mangaIds, done) {
   })
 }
 
-// data: readPayload()'s reply. The chapters to queue: not on disk and not
+// data: readLoad()'s reply. The chapters to queue: not on disk and not
 // in the queue (items: Downloads queue items). "next" tops up: the next
 // count unread chapters by the manga's own filters and excluded scanlators,
 // Downloaded only and the downloaded filter off, so chapters already on
@@ -115,16 +103,11 @@ function queued(run, chapterIds) {
 
 // The run in the download queue. A finished download leaves the queue as a
 // dequeued one does, so the queue view keeps marks, { chapterId: "seen" |
-// "out" | "disk" }: a run chapter the queue has shown, one a DEQUEUED
-// update took out, or what settle() read from the server. Updates first,
-// then the items, so a retry (dequeued and queued again in one result)
-// stays seen. items: Downloads queue items; updates: a live result's
-// updates, [] for any other.
+// "out" | "disk" }: a run chapter the queue has shown, or what settle() or
+// goneMarks() read from the server. items: Downloads queue items. updates
+// stays for the callers' sake; core sends none.
 function track(marks, run, items, updates) {
   var next = Object.assign({}, marks)
-  updates.forEach(function(u) {
-    if (u.type === "DEQUEUED" && run.queued.indexOf(u.download.chapter.id) !== -1) next[u.download.chapter.id] = "out"
-  })
   items.forEach(function(i) {
     if (run.queued.indexOf(i.chapterId) !== -1) next[i.chapterId] = "seen"
   })
@@ -135,26 +118,16 @@ function inRun(run, items) {
   return items.filter(function(i) { return run.queued.indexOf(i.chapterId) !== -1 })
 }
 
-// The live queue alone cannot end a run: a result past maxUpdates leaves
-// changes out, and a dequeue before the subscription runs has no type. So
-// once the window's queue holds none of the run's chapters queued or
-// downloading, the view reads settlePayload and settle() decides.
+// The live queue alone cannot end a run. So once the window's queue holds
+// none of the run's chapters queued or downloading, the view reads
+// settleLoad and settle() decides.
 function looksOver(run, items) {
   return run.state === "done" && run.queued.length > 0
     && !inRun(run, items).some(function(i) { return i.state === "QUEUED" || i.state === "DOWNLOADING" })
 }
 
-function settlePayload(run) {
-  return {
-    query: "query($ids: [Int!]) { downloadStatus { queue { chapter { id } } } chapters(filter: { id: { in: $ids } }) { nodes { id isDownloaded } } }",
-    variables: { ids: run.queued }
-  }
-}
-
-// settlePayload()'s reply from either server. Core: the queue, then the
-// run's chapters by id.
+// The queue, then the run's chapters by id.
 function settleLoad(send, core, run, done) {
-  if (!core) return send(settlePayload(run), done)
   send({ route: "download.queue" }, function(q) {
     if (q.state !== "ok") return done(q)
     send({ route: "chapter.list", body: { ids: run.queued } }, function(ch) {
@@ -164,7 +137,7 @@ function settleLoad(send, core, run, done) {
   })
 }
 
-// data: settlePayload()'s reply. Each run chapter outside the window's
+// data: settleLoad()'s reply. Each run chapter outside the window's
 // queue is "disk" when the server has it on disk, taken out ("out") when
 // its queue no longer holds it either, else unchanged: the live queue
 // lags, so it still waits.
@@ -179,9 +152,8 @@ function settle(marks, run, items, data) {
   return next
 }
 
-// The run's chapters among items, which left the queue: core sends no
-// DEQUEUED, so each is "disk" or "out" by chapter.list's isDownloaded
-// (chapters) once that reply is in.
+// The run's chapters among items, which left the queue: each is "disk" or
+// "out" by chapter.list's isDownloaded (chapters) once that reply is in.
 function goneIds(run, items) {
   return run ? items.map(function(i) { return i.chapterId }).filter(function(id) { return run.queued.indexOf(id) !== -1 }) : []
 }
@@ -247,7 +219,6 @@ if (typeof module !== "undefined") {
     librarySet: librarySet,
     upNextSet: upNextSet,
     refreshPayload: refreshPayload,
-    readPayload: readPayload,
     readLoad: readLoad,
     settleLoad: settleLoad,
     goneIds: goneIds,
@@ -258,7 +229,6 @@ if (typeof module !== "undefined") {
     queued: queued,
     track: track,
     looksOver: looksOver,
-    settlePayload: settlePayload,
     settle: settle,
     tally: tally,
     ended: ended,
