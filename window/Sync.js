@@ -106,9 +106,8 @@ function reduce(s, event) {
   return s
 }
 
-// --- miharchy-core (#384), behind MIHARCHY_BACKEND=core: the same sync, health,
-// restore and backup through core's routes, never the helper. Core reads its
-// own sync folder meta, so no payload names a folder.
+// --- miharchy-core (#384): the sync, health, restore and backup through
+// core's routes. Core reads its own sync folder meta, so no payload names a folder.
 
 function corePayload(apply) {
   return { route: "sync.run", body: apply ? { apply: true } : {} }

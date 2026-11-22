@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "Commands.js" as Commands
-import Quickshell
 import Quickshell.Io
 import "Backup.js" as Backup
 import "Model.js" as Model
@@ -21,17 +20,16 @@ Item {
   id: view
 
   required property Theme theme
-  // Settings' server: miharchy-core's with MIHARCHY_BACKEND=core (#385), so
-  // every row, the trackers, storage and the backup talk to core.
+  // Settings' server is miharchy-core (#385): every row, the trackers,
+  // storage and the backup talk to core.
   property var config: null
   property string configPath: "server.json"
-  property string backend: ""
-  readonly property bool core: backend === "core"
+  property string backend: "core"
   // Rows core stores but does not act on yet (settings.get's unapplied).
   property var unapplied: []
   // A save core refused: { key, message }.
   property var refusal: ({ key: "", message: "" })
-  property var trackers: Trackers.initial()
+  property var trackers: Trackers.initial(true)
   readonly property bool loginEditing: Trackers.editing(trackers)
   readonly property string loginStep: loginEditing ? trackers.login.step : ""
   property var values: ({})
@@ -46,23 +44,16 @@ Item {
   property string editStart: ""
   property string editValue: ""
 
-  // Bytes from Storage.sizes(), null until du answers; the note is the
+  // Bytes from core's storage.get, null until it answers; the note is the
   // last clear's outcome.
   property var storage: null
   property string storageNote: ""
   property bool clearing: false
   property bool measuring: false
-  // Taken when the clear starts, so freed is what it removed.
-  property var storageBefore: null
   // A string, so a settings load that keeps the folder measures nothing.
   readonly property string downloadsPath: values.downloadsPath || ""
-  readonly property var storageDirs: Storage.dirs({
-    HOME: Quickshell.env("HOME"),
-    MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT"),
-    MIHARCHY_SERVER_TMPDIR: Quickshell.env("MIHARCHY_SERVER_TMPDIR")
-  }, downloadsPath)
 
-  // Create a backup: the helper job and its outcome, which the action row
+  // Create a backup: the job and its outcome, which the action row
   // shows as its value.
   property var backup: Backup.initial()
   // Sync health, which SyncView reads; healthWanted asks it to read again.
@@ -74,7 +65,6 @@ Item {
     syncHealth: health.state === "ready" ? Sync.healthSummary(health.health, Date.now()) : health.state === "failed" ? health.message : "",
     libraryCheck: checkCount
   })
-  readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
 
   signal key(var event)
   signal editEnded()
@@ -98,7 +88,7 @@ Item {
   }
   onDownloadsPathChanged: if (visible) measure()
   onConfigChanged: {
-    trackers = Trackers.initial(core)
+    trackers = Trackers.initial(true)
     loadTrackers()
   }
 
@@ -110,14 +100,12 @@ Item {
   // link, and the old one the browser holds stops working.
   function loadTrackers() {
     if (!visible || trackers.login) return
-    // The state names its server, so its payloads match the one it talks to.
-    if (trackers.core !== core) trackers = Trackers.initial(core)
     if (!config) {
-      if (core) trackers = Trackers.reduce(trackers, { type: "no-config" })
+      trackers = Trackers.reduce(trackers, { type: "no-config" })
       return
     }
     trackers = Trackers.reduce(trackers, { type: "request" })
-    send(Trackers.listPayload(core), function(reply) {
+    send(Trackers.listPayload(true), function(reply) {
       view.trackers = Trackers.reduce(view.trackers, { type: "list", reply: reply })
     })
   }
@@ -151,13 +139,6 @@ Item {
   }
 
   function measure() {
-    if (core) return measureOnCore()
-    if (du.running) return
-    du.command = Storage.command(storageDirs)
-    du.running = true
-  }
-
-  function measureOnCore() {
     if (measuring) return
     if (!config) {
       storageNote = Model.problem({ state: "no-config" }, configPath, backend).title
@@ -171,7 +152,8 @@ Item {
     })
   }
 
-  function clearOnCore() {
+  function clearCache() {
+    if (!config || clearing || measuring || !storage) return
     clearing = true
     storageNote = ""
     send(Storage.CORE_CLEAR_PAYLOAD, function(reply) {
@@ -181,62 +163,12 @@ Item {
     })
   }
 
-  function clearCache() {
-    if (core) {
-      if (config && !clearing && !measuring && storage) clearOnCore()
-      return
-    }
-    if (!config || clearing || du.running || !storage) return
-    clearing = true
-    storageBefore = storage
-    storageNote = ""
-    send(Storage.clearPayload(), function(reply) {
-      if (reply.state !== "ok" || !Storage.cleared(reply.data)) {
-        view.clearing = false
-        view.storageNote = reply.state !== "ok" ? reply.message || Model.problem(reply, view.configPath).title : "The server could not empty the cache."
-        return
-      }
-      view.measure()
-    })
-  }
-
   function createBackup() {
-    if (backupJob.running || backup.state === "running") return
+    if (backup.state === "running") return
     backup = Backup.reduce(backup, { type: "start" })
-    // Core takes its own backup folder and parts rows.
-    if (core) return backupOnCore()
-    backupJob.command = Backup.command(devHelper, Backup.folder(values.backupPath, {
-      HOME: Quickshell.env("HOME"),
-      MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT")
-    }))
-    backupJob.running = true
-  }
-
-  function backupOnCore() {
     var done = function(reply) { view.backup = Backup.reduce(view.backup, { type: "reply", reply: reply }) }
     if (!config) return done({ state: "no-config" })
     send(Backup.PAYLOAD, done)
-  }
-
-  Process {
-    id: backupJob
-    stdout: StdioCollector {
-      onStreamFinished: view.backup = Backup.reduce(view.backup, { type: "finish", text: text })
-    }
-  }
-
-  // du's exit code is 1 when a folder is missing; sizes() reads what it
-  // listed.
-  Process {
-    id: du
-    stdout: StdioCollector {
-      onStreamFinished: {
-        view.storage = Storage.sizes(view.storageDirs, text)
-        if (!view.clearing) return
-        view.clearing = false
-        if (view.storage) view.storageNote = "Freed " + Storage.format(Math.max(0, (view.storageBefore ? view.storageBefore.cache : 0) - view.storage.cache))
-      }
-    }
   }
 
   function run(id) {
