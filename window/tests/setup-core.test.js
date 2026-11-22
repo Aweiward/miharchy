@@ -191,7 +191,7 @@ test("on core the reads and writes are core routes, with the real paths for the 
 
 // #373: a fresh Omarchy gets no Suwayomi; an upgrade stops it only after the move.
 test("on core the packages leave out Suwayomi-Server, and the probe skips the AUR query", () => {
-  const p = S.parseProbe("java openjdk version \"21.0.2\"\nwebsockets\n");
+  const p = S.parseProbe("java openjdk version \"21.0.2\"\nwebsockets\njavac\n");
   assert.deepEqual(S.missingPackages(p, true), []);
   assert.deepEqual(S.missingPackages(p).map((m) => m.pkg), ["suwayomi-server-bin"]);
   const s = Object.assign(S.initial(true), { probe: p });
@@ -208,4 +208,13 @@ test("Suwayomi's service stops only after the move, or with nothing to move; wit
   assert.equal(at(core + "config\nunit enabled active\n", { state: "done", report: null }).state, "todo");
   assert.equal(at(core + "unit enabled active\n", null).state, "todo", "no server.json: nothing to move");
   assert.deepEqual(S.stepCommand("suwayomiOff", {}).slice(-2, -1)[0].includes("systemctl --user disable --now miharchy-server.service"), true);
+});
+
+test("a fresh Omarchy on core installs a JDK and Qt WebSockets through Omarchy, and no Suwayomi or AUR package", () => {
+  for (const probe of ["", "java openjdk version \"21.0.2\"\n"]) {
+    const s = Object.assign(S.initial(true), { probe: S.parseProbe(probe) });
+    const st = S.status(s, "packages");
+    assert.equal(st.command, "omarchy-pkg-add jdk-openjdk qt6-websockets", JSON.stringify(probe) + ": a JRE without javac still needs the JDK");
+    assert.doesNotMatch(st.command + st.prompt + st.detail, /suwayomi|aur|yay/i);
+  }
 });

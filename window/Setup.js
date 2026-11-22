@@ -565,7 +565,8 @@ function flareDone(s) {
 // core: no Suwayomi (#373).
 function missingPackages(p, core) {
   var m = []
-  if (p.java < 21) m.push({ pkg: "jdk-openjdk", label: "jdk-openjdk (Java 21 or newer)" })
+  // Core builds from source (coreBuild), so it needs javac, not only Java.
+  if (p.java < 21 || (core && !p.javac)) m.push({ pkg: "jdk-openjdk", label: "jdk-openjdk (Java 21 or newer" + (core ? ", with javac)" : ")") })
   if (!p.websockets) m.push({ pkg: "qt6-websockets", label: "qt6-websockets" })
   if (!p.suwayomi && !core) m.push({ pkg: "suwayomi-server-bin", label: "suwayomi-server-bin", aur: true })
   return m
