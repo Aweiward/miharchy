@@ -228,6 +228,28 @@ class Downloads(private val db: Database, private val browse: Browse, private va
         }
     }
 
+    /**
+     * A chapter a v1.1.1 install downloaded (#372): [write] writes its `.cbz` to the path it gets, and the file lands
+     * under Mihon's names as a download does. A chapter core already has downloaded stays as it is, and this is false.
+     */
+    suspend fun adopt(id: Long, write: (Path) -> Unit): Boolean = ops.withLock {
+        if (db.run { c -> c.query("SELECT 1 FROM chapter WHERE id = ? AND download_path IS NOT NULL", id) { 1 }.isNotEmpty() }) return@withLock false
+        val (_, rel) = target(id)
+        val file = inside(root, rel)
+        val part = file.resolveSibling(file.name + ".part")
+        withContext(NonCancellable + Dispatchers.IO) {
+            try {
+                Files.createDirectories(file.parent)
+                write(part)
+                Files.move(part, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } finally {
+                Files.deleteIfExists(part)
+            }
+            db.run { c -> c.update("UPDATE chapter SET download_path = ? WHERE id = ?", rel, id) }
+        }
+        true
+    }
+
     /** The source's name and the chapter's path under [root], Mihon's names; a second chapter with the same name gets Mihon's hash suffix. */
     private suspend fun target(id: Long): Pair<String, String> {
         val sources = extensions.sources().associate { it["id"]!!.jsonPrimitive.content to it["displayName"]!!.jsonPrimitive.content }
@@ -285,11 +307,16 @@ fun inside(root: Path, rel: String): Path {
     return p
 }
 
-/** The page entries of a .cbz, in order. */
-fun cbzPages(file: Path): List<String> = ZipFile(file.toFile()).use { z -> z.entries().asSequence().filter { !it.isDirectory }.map { it.name }.sorted().toList() }
+/** The page entries of a .cbz, in order: images only, so Mihon's and Suwayomi's `ComicInfo.xml` is no page. */
+fun cbzPages(file: Path): List<String> = ZipFile(file.toFile()).use { z -> pageEntries(z) }
+
+private fun pageEntries(z: ZipFile) = z.entries().asSequence().filter { !it.isDirectory && isPageName(it.name) }.map { it.name }.sorted().toList()
+
+/** An image by its extension, as Mihon's `ImageUtil.isImage` reads a file name. */
+fun isPageName(name: String) = name.substringAfterLast('.', "").lowercase() in setOf("jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "heif", "jxl", "bmp")
 
 fun cbzPage(file: Path, index: Int): ByteArray? = ZipFile(file.toFile()).use { z ->
-    val name = z.entries().asSequence().filter { !it.isDirectory }.map { it.name }.sorted().elementAtOrNull(index) ?: return null
+    val name = pageEntries(z).elementAtOrNull(index) ?: return null
     z.getInputStream(z.getEntry(name)).use { it.readBytes() }
 }
 

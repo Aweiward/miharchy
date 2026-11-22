@@ -51,9 +51,13 @@ fun main() {
     val settings = Settings(db, data.resolve("covers"))
     Backups(db, sync, data.resolve("backups"))
     val slices = listOf(extensions.routes, browse.routes, library.routes, downloads.routes, updates.routes, trackers.routes, sync.routes, settings.routes)
+    val others = slices.reduce { a, b -> a + b }
+    // The move calls the other slices' routes, so its parts pass their checks.
+    val move = Move(db, downloads, data, data.resolve("sync")) { route, body -> others.getValue(route)(body) }
+    val all = slices + listOf(move.routes)
     // A + B silently keeps one of two routes with the same name.
-    check(slices.sumOf { it.size } == slices.flatMap { it.keys }.toSet().size) { "two slices define the same route" }
-    val core = Core(config.secret, db, routes = slices.reduce { a, b -> a + b }, topics = mapOf("downloads" to downloads.status, "updates" to updates.status), images = browse.images)
+    check(all.sumOf { it.size } == all.flatMap { it.keys }.toSet().size) { "two slices define the same route" }
+    val core = Core(config.secret, db, routes = others + move.routes, topics = mapOf("downloads" to downloads.status, "updates" to updates.status), images = browse.images)
     System.err.println("miharchy-core: listening on 127.0.0.1:$port")
     embeddedServer(CIO, host = "127.0.0.1", port = port) { api(core) }.start(wait = true)
 }

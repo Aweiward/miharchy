@@ -88,6 +88,17 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 - They go to `backupPath`, or `<core data>/backups` when it is blank, as `miharchy-auto-<UTC>.tachibk`, with the parts the `autoBackupInclude*` rows choose. After each, core deletes `miharchy-auto-*` files older than `backupTTL` days (0 keeps all), by file time. It never touches another file. A run that a sync holds up waits for the next tick. A refusal (the sync folder, a missing folder) logs once until it changes.
 - `backup.export` without `folder` uses the same folder, and without parts the same include rows.
 
+## Move from Suwayomi (#372)
+
+- `move.start { serverConfig, serverRoot, helperSync? }` moves a v1.1.1 install into core as a job, and `move.status` follows it: `{ state: "idle" | "running" | "done" | "failed", step, report, error }`. `serverConfig` is the path of Suwayomi's `server.json`, `serverRoot` Suwayomi's root folder (`~/.local/share/miharchy/suwayomi`), and `helperSync` the sync helper's state (`~/.local/share/miharchy/sync`). The paths have no defaults, so a test or a scratch core never reads the real install. Setup's step that calls it comes in #385.
+- The move only reads Suwayomi; Suwayomi stays the live server until #373. In order: the extension repos and installed extensions; the library from a Suwayomi backup with every part on and no server settings (`backup.import`); the categories' update and download choices, which a backup does not carry; every global, manga and category meta; the server settings; the downloads; the helper's baselines.
+- Ids become core's: a manga by source and URL, a category by name (Default is 0 on both). The global meta `miharchy.defaultCategory` holds a category id, so it is mapped too. Core's own metas (`miharchy.lastAutoBackup`, `miharchy.autoBackupSince`, `miharchy.lastUpdateTimestamp`) are never overwritten.
+- Each setting goes through `settings.set` on its own, so a value core refuses skips that row only. Suwayomi's `globalUpdateInterval` is a float of hours; core takes it as whole hours.
+- A downloaded chapter is found at Suwayomi's path (`DirName.kt` at v2.4.2366): `<downloadsPath or root/downloads>/mangas/<source>/<manga>/<scanlator>_<chapter>`, a `.cbz` or a folder of pages, with Mihon's filename rules. A `.cbz` is hard-linked into core's downloads folder (copied across disks); a folder is zipped. Pages are image entries only, so Suwayomi's `ComicInfo.xml` is no page.
+- The helper's `phone-baseline.tachibk`, `desktop-baseline.tachibk` and `pending-since` are copied only where core has none, so the first core sync is not a first sync.
+- What cannot move (a repo that fails, a refused setting, a download with no file, metas of manga outside the library) goes into `report.skipped`, and the rest goes on. A run again gives the same database.
+- A Suwayomi backup holds the library only: History of manga outside the library does not move.
+
 ## Known limits
 
 - On JDK 26 and later, Keiyoushi's library sets a `final` field by reflection, and the JVM warns that a future release blocks it unless `--enable-final-field-mutation=ALL-UNNAMED` is set. JDK 21 refuses that flag, so the launcher cannot pass it to every JDK yet.
