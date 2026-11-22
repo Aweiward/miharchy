@@ -21,9 +21,9 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // "core" with MIHARCHY_BACKEND=core (shell.qml), so a missing core.json words itself.
+  // shell.qml sets backend to "core". The view always runs on core.
   property string backend: ""
-  readonly property bool core: backend === "core"
+  readonly property bool core: true
   property bool active: false
   property bool showNsfw: false
   // Where the local source reads, for its empty how-to.
@@ -116,9 +116,11 @@ Item {
 
   // then: runs once the sources have loaded.
   function loadSources(then) {
-    // Without core.json nothing else says so: the status bar is Suwayomi's.
-    if (!config && core) src = { state: "no-config", message: "", sources: [] }
-    if (!config) return
+    // Without core.json nothing else says so.
+    if (!config) {
+      src = { state: "no-config", message: "", sources: [] }
+      return
+    }
     var seq = ++sourcesSeq
     var cfg = config
     src = { state: "loading", message: "", sources: src.sources }
@@ -387,7 +389,7 @@ Item {
         if (panel.state !== "ok") break
         // Filters reach a source only in a search, so applying searches,
         // with the query of a search already showing.
-        var applied = Widgets.filterChanges(panel.widgets, panel.source.core)
+        var applied = Widgets.filterChanges(panel.widgets, true)
         var count = Widgets.changedCount(panel.widgets)
         closePanel()
         openListing("search", listing.mode === "search" ? listing.query : "", applied, count)
@@ -474,7 +476,7 @@ Item {
       anchors.margins: view.theme.fontSize * 2
       visible: text !== ""
       wrapMode: Text.Wrap
-      text: { var p = Model.problem(view.src, view.configPath, view.backend); return p ? p.title + ". " + p.detail : "" }
+      text: { var p = Model.problem(view.src, view.configPath, "core"); return p ? p.title + ". " + p.detail : "" }
       color: view.theme.urgent
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSize
@@ -564,7 +566,7 @@ Item {
     Text {
       textFormat: Text.PlainText
       anchors.centerIn: sourceList
-      visible: view.sourceRows.length === 0 && Model.problem(view.src, view.configPath, view.backend) === null
+      visible: view.sourceRows.length === 0 && Model.problem(view.src, view.configPath, "core") === null
       text: view.src.state !== "ok" ? "Loading sources" : view.src.sources.length ? "No source in the languages shown. Press l to pick them." : "No source yet. Press tab, then install an extension."
       color: view.theme.muted
       font.family: view.theme.fontFamily
@@ -651,7 +653,7 @@ Item {
     problem: {
       if (!view.panel) return ""
       if (view.panel.state === "loading") return "Loading"
-      var p = Model.problem(view.panel, view.configPath, view.backend)
+      var p = Model.problem(view.panel, view.configPath, "core")
       if (p) return p.title + ". " + p.detail
       if (view.panel.error) return "Not saved: " + view.panel.error
       return view.panel.state === "ok" && view.panelRows.length === 0 ? (view.panel.kind === "filters" ? "This source has no filters." : "This source has no settings.") : ""

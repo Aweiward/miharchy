@@ -33,14 +33,13 @@ Item {
   // An installed extension's details (Extensions.details) over the list,
   // or null.
   property var details: null
-  property int detailsSeq: 0
 
   readonly property var rows: Extensions.rows(ext, { query: query, allLanguages: allLanguages, showNsfw: showNsfw })
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.key === view.cursorKey }))
-  // "core" with MIHARCHY_BACKEND=core (shell.qml), so a missing core.json words itself.
+  // shell.qml sets backend to "core". The view always runs on core.
   property string backend: ""
-  readonly property bool core: backend === "core"
-  readonly property var problem: Model.problem(ext, configPath, backend)
+  readonly property bool core: true
+  readonly property var problem: Model.problem(ext, configPath, "core")
   readonly property var detailsExtension: details ? Extensions.find(ext, details.pkgName) : null
   readonly property bool updatable: ext.extensions.some(function(e) { return e.installed && e.hasUpdate })
   readonly property string hint: !details ? "j k move   enter install/details   u update   " + (updatable ? "U update all   " : "") + "x remove   a add repo   / filter   l languages   "
@@ -78,9 +77,11 @@ Item {
   }
 
   function load() {
-    // Without core.json nothing else says so: the status bar is Suwayomi's.
-    if (!config && core) ext = Extensions.reduce(Extensions.initial(), { type: "config-missing" })
-    if (!config) return
+    // Without core.json nothing else says so.
+    if (!config) {
+      ext = Extensions.reduce(Extensions.initial(), { type: "config-missing" })
+      return
+    }
     ext = Extensions.reduce(ext, { type: "load" })
     advance()
   }
@@ -99,16 +100,9 @@ Item {
 
   function showDetails(pkgName) {
     details = Extensions.details(pkgName, ext)
-    var seq = ++detailsSeq
-    var payload = Extensions.detailsPayload(details)
-    if (!payload) return
-    send(payload, function(reply) {
-      if (seq === view.detailsSeq && view.details) view.details = Extensions.reduceDetails(view.details, { type: "reply", reply: reply })
-    })
   }
 
   function closeDetails() {
-    detailsSeq++
     details = null
   }
 

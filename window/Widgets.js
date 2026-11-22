@@ -11,42 +11,14 @@
 // options, values, children, visible, enabled }.
 //   kind: "bool" | "tristate" | "choice" | "sort" | "multi" | "text"
 //         | "group" | "header" | "separator"
-//   position: the index in the server's list, headers and hidden
-//         preferences included, which is what Suwayomi's changes address.
+//   position: the index in the source's list, headers included.
 //   value: bool; "IGNORE" | "INCLUDE" | "EXCLUDE"; choice: an index into
 //         options (-1 for none); sort: { index, ascending } or null;
 //         multi: the chosen entry values; text: a string.
 //   options: the labels a choice, sort or multi offers; values: a
 //         preference's entry values beside them.
-//   type: the server's type name, for a preference's change field.
+//   type: core's setting type.
 
-// Aliased: the same field has a different type in each fragment.
-var FILTER_FIELDS = "__typename ... on CheckBoxFilter { name checkBox: default } ... on TriStateFilter { name triState: default }"
-  + " ... on SelectFilter { name values select: default } ... on SortFilter { name values sort: default { index ascending } }"
-  + " ... on TextFilter { name text: default } ... on HeaderFilter { name } ... on SeparatorFilter { name }"
-var FILTERS_QUERY = "query($id: LongString!) { source(id: $id) { filters { " + FILTER_FIELDS
-  + " ... on GroupFilter { name filters { " + FILTER_FIELDS + " } } } } }"
-
-var PREFERENCE_FIELDS = "__typename"
-  + " ... on SwitchPreference { key title summary visible enabled switchValue: currentValue switchDefault: default }"
-  + " ... on CheckBoxPreference { key title summary visible enabled checkValue: currentValue checkDefault: default }"
-  + " ... on ListPreference { key title summary visible enabled listValue: currentValue listDefault: default entries entryValues }"
-  + " ... on MultiSelectListPreference { key title summary visible enabled multiValue: currentValue multiDefault: default entries entryValues }"
-  + " ... on EditTextPreference { key title summary visible enabled textValue: currentValue textDefault: default }"
-var PREFERENCES_QUERY = "query($id: LongString!) { source(id: $id) { preferences { " + PREFERENCE_FIELDS + " } } }"
-var PREFERENCE_MUTATION = "mutation($source: LongString!, $change: SourcePreferenceChangeInput!) {"
-  + " updateSourcePreference(input: { source: $source, change: $change }) { preferences { " + PREFERENCE_FIELDS + " } } }"
-
-// The FilterChangeInput field for each filter kind.
-var FILTER_STATE = { bool: "checkBoxState", tristate: "triState", choice: "selectState", text: "textState", sort: "sortState" }
-// The SourcePreferenceChangeInput field for each preference type.
-var PREFERENCE_STATE = {
-  SwitchPreference: "switchState",
-  CheckBoxPreference: "checkBoxState",
-  ListPreference: "listState",
-  MultiSelectListPreference: "multiSelectState",
-  EditTextPreference: "editTextState"
-}
 var EXPANDS = { group: true, choice: true, sort: true, multi: true }
 var TRISTATE_NEXT = { IGNORE: "INCLUDE", INCLUDE: "EXCLUDE", EXCLUDE: "IGNORE" }
 
@@ -59,23 +31,6 @@ function copy(o, changes) {
 
 function widget(kind, position, label, value, more) {
   return copy({ kind: kind, position: position, label: String(label || ""), summary: "", type: "", value: value, default: value, options: [], values: [], children: [], visible: true, enabled: true }, more)
-}
-
-function filter(n, i) {
-  switch (n.__typename) {
-    case "CheckBoxFilter": return widget("bool", i, n.name, n.checkBox === true)
-    case "TriStateFilter": return widget("tristate", i, n.name, n.triState || "IGNORE")
-    case "SelectFilter": return widget("choice", i, n.name, n.select, { options: (n.values || []).map(String) })
-    case "SortFilter": return widget("sort", i, n.name, n.sort ? { index: n.sort.index, ascending: n.sort.ascending === true } : null, { options: (n.values || []).map(String) })
-    case "TextFilter": return widget("text", i, n.name, String(n.text || ""))
-    case "GroupFilter": return widget("group", i, n.name, null, { children: (n.filters || []).map(filter) })
-    case "HeaderFilter": return widget("header", i, n.name, null)
-  }
-  return widget("separator", i, n.name, null)
-}
-
-function fromFilters(nodes) {
-  return (nodes || []).map(filter)
 }
 
 // Core (ADR 0010) sends the host's filters: { type, name, state, values?,
@@ -130,33 +85,6 @@ function coreStates(widgets) {
     }
     return { state: w.value }
   })
-}
-
-function preference(n, i) {
-  var more = { type: n.__typename, summary: String(n.summary || ""), visible: n.visible !== false, enabled: n.enabled !== false }
-  var w
-  switch (n.__typename) {
-    case "SwitchPreference":
-      w = widget("bool", i, n.title, n.switchValue === null || n.switchValue === undefined ? n.switchDefault === true : n.switchValue === true, more)
-      return copy(w, { default: n.switchDefault === true })
-    case "CheckBoxPreference":
-      w = widget("bool", i, n.title, n.checkValue === null || n.checkValue === undefined ? n.checkDefault === true : n.checkValue === true, more)
-      return copy(w, { default: n.checkDefault === true })
-    case "ListPreference":
-      var values = (n.entryValues || []).map(String)
-      var current = n.listValue === null || n.listValue === undefined ? n.listDefault : n.listValue
-      w = widget("choice", i, n.title, values.indexOf(String(current)), copy(more, { options: (n.entries || []).map(String), values: values }))
-      return copy(w, { default: values.indexOf(String(n.listDefault)) })
-    case "MultiSelectListPreference":
-      w = widget("multi", i, n.title, (n.multiValue || n.multiDefault || []).map(String), copy(more, { options: (n.entries || []).map(String), values: (n.entryValues || []).map(String) }))
-      return copy(w, { default: (n.multiDefault || []).map(String) })
-  }
-  w = widget("text", i, n.title, String(n.textValue === null || n.textValue === undefined ? n.textDefault || "" : n.textValue), more)
-  return copy(w, { default: String(n.textDefault || "") })
-}
-
-function fromPreferences(nodes) {
-  return (nodes || []).map(preference)
 }
 
 function at(widgets, path) {
@@ -274,37 +202,11 @@ function setText(widgets, path, text) {
   return update(widgets, path, String(text))
 }
 
-function filterChange(w) {
-  var c = { position: w.position }
-  c[FILTER_STATE[w.kind]] = w.kind === "sort" ? { index: w.value.index, ascending: w.value.ascending } : w.value
-  return c
-}
-
-// fetchSourceManga's filters: one FilterChange per widget off its default.
-// The server starts from the source's default list, so the rest need not
-// go. A group's child goes as its own change under the group's position.
-// core: every state, as coreStates gives them, or [] when none changed.
+// The filters a search sends: every state, as coreStates gives them, or []
+// when none changed. The host copies them over the source's fresh list by
+// position.
 function filterChanges(widgets, core) {
-  if (core) return changedCount(widgets) ? coreStates(widgets) : []
-  var out = []
-  widgets.forEach(function(w) {
-    if (w.kind === "group") {
-      w.children.forEach(function(c) {
-        if (FILTER_STATE[c.kind] && changed(c)) out.push({ position: w.position, groupChange: filterChange(c) })
-      })
-    } else if (FILTER_STATE[w.kind] && changed(w) && w.value !== null) {
-      out.push(filterChange(w))
-    }
-  })
-  return out
-}
-
-// updateSourcePreference's change for the preference at path.
-function preferenceChange(widgets, path) {
-  var w = at(widgets, path)
-  var c = { position: w.position }
-  c[PREFERENCE_STATE[w.type]] = w.kind === "choice" ? w.values[w.value] : w.value
-  return c
+  return changedCount(widgets) ? coreStates(widgets) : []
 }
 
 // panel.kind: "filters" | "preferences". state: "loading" | "ok" | a
@@ -317,16 +219,12 @@ function panel(kind, source) {
 }
 
 function loadPayload(p) {
-  if (p.source.core) return { route: p.kind === "filters" ? "source.filters" : "source.settings", body: { source: p.source.id } }
-  return { query: p.kind === "filters" ? FILTERS_QUERY : PREFERENCES_QUERY, variables: { id: p.source.id } }
+  return { route: p.kind === "filters" ? "source.filters" : "source.settings", body: { source: p.source.id } }
 }
 
 function savePayload(p, path) {
-  if (p.source.core) {
-    var w = at(p.widgets, path)
-    return { route: "source.setSetting", body: { source: p.source.id, key: w.key, value: w.kind === "choice" ? w.values[w.value] : w.value } }
-  }
-  return { query: PREFERENCE_MUTATION, variables: { source: p.source.id, change: preferenceChange(p.widgets, path) } }
+  var w = at(p.widgets, path)
+  return { route: "source.setSetting", body: { source: p.source.id, key: w.key, value: w.kind === "choice" ? w.values[w.value] : w.value } }
 }
 
 function clamp(p) {
@@ -344,15 +242,10 @@ function reducePanel(p, event) {
         return copy(p, { state: r.state, message: r.message })
       }
       var d = r.data
-      if (p.source.core) {
-        var saved = d.accepted !== undefined
-        var next = copy(p, { state: "ok", message: "", error: "", widgets: (p.kind === "filters" ? d.filters : d.settings).map(p.kind === "filters" ? coreFilter : coreSetting), saved: p.saved || d.accepted === true })
-        // The extension's change listener may refuse a value, as on Android.
-        return clamp(saved && d.accepted === false ? copy(next, { error: "The extension did not take that value." }) : next)
-      }
-      var widgets = d.updateSourcePreference ? fromPreferences(d.updateSourcePreference.preferences)
-        : p.kind === "filters" ? fromFilters(d.source.filters) : fromPreferences(d.source.preferences)
-      return clamp(copy(p, { state: "ok", message: "", error: "", widgets: widgets, saved: p.saved || !!d.updateSourcePreference }))
+      var saved = d.accepted !== undefined
+      var next = copy(p, { state: "ok", message: "", error: "", widgets: (p.kind === "filters" ? d.filters : d.settings).map(p.kind === "filters" ? coreFilter : coreSetting), saved: p.saved || d.accepted === true })
+      // The extension's change listener may refuse a value, as on Android.
+      return clamp(saved && d.accepted === false ? copy(next, { error: "The extension did not take that value." }) : next)
     case "move":
       return clamp(copy(p, { cursor: p.cursor + event.delta }))
     case "toggle":
@@ -368,18 +261,12 @@ function reducePanel(p, event) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    FILTERS_QUERY: FILTERS_QUERY,
-    PREFERENCES_QUERY: PREFERENCES_QUERY,
-    PREFERENCE_MUTATION: PREFERENCE_MUTATION,
-    fromFilters: fromFilters,
-    fromPreferences: fromPreferences,
     rows: rows,
     activate: activate,
     setText: setText,
     reset: reset,
     changedCount: changedCount,
     filterChanges: filterChanges,
-    preferenceChange: preferenceChange,
     panel: panel,
     loadPayload: loadPayload,
     savePayload: savePayload,
