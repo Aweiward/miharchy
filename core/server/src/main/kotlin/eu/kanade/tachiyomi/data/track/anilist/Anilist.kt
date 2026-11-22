@@ -1,7 +1,8 @@
 // Ported from mihonapp/mihon@f8e30a86086020aaee1e89a9d015373b1a4ff026
 // app/src/main/java/eu/kanade/tachiyomi/data/track/anilist/Anilist.kt
 // Licensed under Apache-2.0. Changes: English status names instead of string resources; the score type is a
-// tracker pref; authUrl and authCallback carry the token login of Mihon's TrackLoginActivity.
+// tracker pref; authUrl and authCallback carry the token login of Mihon's TrackLoginActivity;
+// a failed login logs out and rethrows, so core can tell a refusal from a network failure.
 
 package eu.kanade.tachiyomi.data.track.anilist
 
@@ -11,6 +12,7 @@ import eu.kanade.tachiyomi.data.track.TrackerPrefs
 import eu.kanade.tachiyomi.data.track.model.Track
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.network.trackJson
+import kotlinx.coroutines.CancellationException
 import okhttp3.OkHttpClient
 
 class Anilist(client: OkHttpClient, prefs: TrackerPrefs) :
@@ -223,8 +225,13 @@ class Anilist(client: OkHttpClient, prefs: TrackerPrefs) :
             trackPreferences[SCORE_TYPE] = currentUser.scoreFormat
             saveDisplayUsername(currentUser.name)
             saveCredentials(currentUser.id.toString(), oauth.accessToken)
-        } catch (_: Throwable) {
+        } catch (e: CancellationException) {
             logout()
+            throw e
+        } catch (e: Throwable) {
+            // Core's route tells a refused token from a network failure.
+            logout()
+            throw e
         }
     }
 

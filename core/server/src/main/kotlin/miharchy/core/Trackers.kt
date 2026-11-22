@@ -9,6 +9,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -110,8 +111,14 @@ class Trackers(private val db: Database, trackers: List<BaseTracker>) {
         throw ApiError(Kind.network, "${t.name} answered HTTP ${e.code}.")
     } catch (e: IOException) {
         throw ApiError(Kind.network, "${t.name}: ${e.message ?: e::class.java.simpleName}")
+    } catch (e: SerializationException) {
+        // Its message quotes the reply, which can be a token.
+        throw ApiError(Kind.source, "${t.name} sent an unexpected reply.")
     } catch (e: Exception) {
         throw ApiError(Kind.source, "${t.name}: ${e.message ?: e::class.java.simpleName}")
+    } catch (e: NotImplementedError) {
+        // The ports throw it for a status or score they do not know.
+        throw ApiError(Kind.source, "${t.name}: ${e.message}")
     }
 
     private fun trackerJson(t: BaseTracker) = buildJsonObject {
@@ -147,6 +154,8 @@ class Trackers(private val db: Database, trackers: List<BaseTracker>) {
             } catch (e: IOException) {
                 throw ApiError(Kind.network, "${t.name}: ${e.message ?: e::class.java.simpleName}")
             } catch (e: Exception) {
+                if (t.isLoggedIn) t.logout()
+            } catch (e: NotImplementedError) {
                 if (t.isLoggedIn) t.logout()
             }
         }

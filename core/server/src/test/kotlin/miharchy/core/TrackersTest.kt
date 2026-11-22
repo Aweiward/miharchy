@@ -210,6 +210,11 @@ class TrackersTest {
                 suspend fun call(name: String, input: JsonObject) = routes.getValue(name)(input).also { replies += it.toString() }
                 suspend fun refused(name: String, input: JsonObject) = routes.fails(name, input).also { replies += "${it.kind} ${it.message}" }
 
+                // A login that cannot reach AniList is a network failure, not a refusal.
+                val dead = OkHttpClient.Builder().addInterceptor { throw java.io.IOException("offline") }.build()
+                val offline = Trackers(db, listOf(Anilist(dead, TrackerStore(db).of(2)))).routes
+                assertEquals(Kind.network, offline.fails("tracker.login", obj("trackerId" to 2, "callbackUrl" to "https://suwayomi.org/tracker-oauth#access_token=$token")).kind)
+
                 val authUrl = call("tracker.list", JsonObject(emptyMap())).o()["trackers"]!!.jsonArray[0].jsonObject["authUrl"]!!.jsonPrimitive.content
                 assertTrue(authUrl.startsWith("https://anilist.co/api/v2/oauth/authorize?client_id=16186"), authUrl)
                 assertEquals(Kind.invalid, refused("tracker.login", obj("trackerId" to 2, "callbackUrl" to "https://suwayomi.org/tracker-oauth#access_token=wrong-$token")).kind)
