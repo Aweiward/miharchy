@@ -40,7 +40,7 @@ import kotlin.io.path.name
  * (`DownloadProvider`, `DiskUtil.buildValidFilename` at mihonapp/mihon@1ed58f5e). Every route answers with the
  * status, `{ state: "STARTED" | "STOPPED", queue }`, and the `downloads` topic sends it on each change.
  *
- * ponytail: one chapter at a time, and the folder is `<data>/downloads` until Settings moves to core (#385).
+ * ponytail: one chapter at a time, and the folder is `<data>/downloads`: the `downloadsPath` setting is stored only.
  */
 class Downloads(private val db: Database, private val browse: Browse, private val extensions: Extensions, private val root: Path) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

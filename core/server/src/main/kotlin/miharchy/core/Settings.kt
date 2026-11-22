@@ -68,7 +68,8 @@ val SETTINGS: List<Setting> = listOf(
     bool("excludeCompleted", true, applied = true),
     // A refresh always fetches the details.
     bool("updateMangas", false, applied = false),
-    // ponytail: stored only; the download queue writes to <core data>/downloads until Settings moves (#385).
+    // ponytail: stored only; the download queue writes to <core data>/downloads. A live folder first needs the queue's
+    // start-up sweep of *.part files kept to core's own files, and a plan for download_path marks under the old root.
     path("downloadsPath", applied = false),
     // Core always writes .cbz files.
     bool("downloadAsCbz", false, applied = false),

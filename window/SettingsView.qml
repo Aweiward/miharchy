@@ -142,6 +142,14 @@ Item {
     })
   }
 
+  // r: the trackers and the storage rows read their server again.
+  function reload() {
+    loadTrackers()
+    if (!visible) return
+    storageNote = ""
+    measure()
+  }
+
   function measure() {
     if (core) return measureOnCore()
     if (du.running) return
@@ -150,7 +158,11 @@ Item {
   }
 
   function measureOnCore() {
-    if (!config || measuring) return
+    if (measuring) return
+    if (!config) {
+      storageNote = Model.problem({ state: "no-config" }, configPath, backend).title
+      return
+    }
     measuring = true
     send(Storage.SIZES_PAYLOAD, function(reply) {
       view.measuring = false
@@ -392,7 +404,7 @@ Item {
           textFormat: Text.PlainText
           leftPadding: view.theme.fontSize * 0.75
           bottomPadding: view.theme.fontSize * 0.5
-          text: "Storage   downloads " + (view.storage ? Storage.format(view.storage.downloads) : "measuring")
+          text: "Storage   downloads " + (view.storage ? Storage.format(view.storage.downloads) : view.storageNote ? "not measured" : "measuring")
           color: view.theme.accent
           font.family: view.theme.fontFamily
           font.pixelSize: view.theme.fontSmall
@@ -428,7 +440,7 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
-            text: view.clearing ? "clearing" : (view.storageNote ? view.storageNote + "   " : "") + (view.storage ? Storage.format(view.storage.cache) : "measuring")
+            text: view.clearing ? "clearing" : (view.storageNote ? view.storageNote + "   " : "") + (view.storage ? Storage.format(view.storage.cache) : view.storageNote ? "not measured" : "measuring")
             color: parent.current ? view.theme.selectedText : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize

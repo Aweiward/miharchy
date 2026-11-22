@@ -180,6 +180,8 @@ ShellRoot {
     }
     coreRequestSeq++
     coreConnection = Model.reduce(coreConnection, { type: "config-missing" })
+    // Without the switch Settings is Suwayomi's, and this file's empty path reads as missing.
+    if (!coreBackend) return
     settingsSeq++
     settingsState = Settings.reduce(settingsState, { type: "config-missing" })
   }
@@ -812,10 +814,10 @@ ShellRoot {
           updatesView.load()
         }
         loadSettings()
+        settingsView.reload()
         if (config) {
           fetchLibrary()
           if (!coreBackend) libraryView.reload()
-          settingsView.loadTrackers()
           if (!coreBackend) updatesView.load()
           if (view === "check") checkView.load()
         }

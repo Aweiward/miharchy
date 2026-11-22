@@ -5,8 +5,9 @@
 // it; shell.qml sends the payloads built here and feeds replies back.
 //
 // A row: { key, label, type: "bool" | "choice" | "text" | "folder" | "category", default, store }.
-//   store "server": a Suwayomi server setting named key (settings/setSettings).
-//   store "meta":   a Miharchy preference in Suwayomi global meta under
+//   store "server": a Suwayomi server setting named key (settings/setSettings),
+//                   or on miharchy-core core's setting (settings.get/settings.set).
+//   store "meta":   a Miharchy preference in the server's global meta under
 //                   META_PREFIX + key, stored as a string.
 //   choice rows add options: [{ value, label }]; text rows add pattern and
 //   hint for validation, and may add blank, the text an empty value shows;
