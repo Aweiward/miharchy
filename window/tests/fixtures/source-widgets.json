@@ -1,508 +1,481 @@
 {
-  "mangadexFilters": [
+ "mangadexFilters": [
+  {
+   "name": "Has available chapters",
+   "type": "checkbox",
+   "state": false
+  },
+  {
+   "name": "Original language",
+   "type": "group",
+   "filters": [
     {
-      "__typename": "CheckBoxFilter",
-      "name": "Has available chapters",
-      "checkBox": false
+     "name": "Japanese (Manga)",
+     "type": "checkbox",
+     "state": false
     },
     {
-      "__typename": "GroupFilter",
-      "name": "Original language",
-      "filters": [
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Japanese (Manga)",
-          "checkBox": false
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Chinese (Manhua)",
-          "checkBox": false
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Korean (Manhwa)",
-          "checkBox": false
-        }
-      ]
+     "name": "Chinese (Manhua)",
+     "type": "checkbox",
+     "state": false
     },
     {
-      "__typename": "GroupFilter",
-      "name": "Content rating",
-      "filters": [
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Safe",
-          "checkBox": true
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Suggestive",
-          "checkBox": true
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Erotica",
-          "checkBox": false
-        }
-      ]
-    },
-    {
-      "__typename": "GroupFilter",
-      "name": "Publication demographic",
-      "filters": [
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "None",
-          "checkBox": false
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Shounen",
-          "checkBox": false
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Shoujo",
-          "checkBox": false
-        }
-      ]
-    },
-    {
-      "__typename": "GroupFilter",
-      "name": "Status",
-      "filters": [
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Ongoing",
-          "checkBox": false
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Completed",
-          "checkBox": false
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Hiatus",
-          "checkBox": false
-        }
-      ]
-    },
-    {
-      "__typename": "SortFilter",
-      "name": "Sort",
-      "values": [
-        "Alphabetic",
-        "Chapter uploaded at",
-        "Number of follows",
-        "Content created at",
-        "Content info updated at",
-        "Relevance",
-        "Year",
-        "Rating"
-      ],
-      "sort": {
-        "index": 5,
-        "ascending": false
-      }
-    },
-    {
-      "__typename": "SelectFilter",
-      "name": "Created within last",
-      "values": [
-        "Any",
-        "Day",
-        "Week",
-        "Month",
-        "Year"
-      ],
-      "select": 0
-    },
-    {
-      "__typename": "GroupFilter",
-      "name": "Tags mode",
-      "filters": [
-        {
-          "__typename": "SelectFilter",
-          "name": "Included tags mode",
-          "values": [
-            "And",
-            "Or"
-          ],
-          "select": 0
-        },
-        {
-          "__typename": "SelectFilter",
-          "name": "Excluded tags mode",
-          "values": [
-            "And",
-            "Or"
-          ],
-          "select": 1
-        }
-      ]
-    },
-    {
-      "__typename": "GroupFilter",
-      "name": "Content",
-      "filters": [
-        {
-          "__typename": "TriStateFilter",
-          "name": "Gore",
-          "triState": "IGNORE"
-        },
-        {
-          "__typename": "TriStateFilter",
-          "name": "Sexual violence",
-          "triState": "IGNORE"
-        }
-      ]
-    },
-    {
-      "__typename": "GroupFilter",
-      "name": "Format",
-      "filters": [
-        {
-          "__typename": "TriStateFilter",
-          "name": "4-Koma",
-          "triState": "IGNORE"
-        },
-        {
-          "__typename": "TriStateFilter",
-          "name": "Adaptation",
-          "triState": "IGNORE"
-        },
-        {
-          "__typename": "TriStateFilter",
-          "name": "Anthology",
-          "triState": "IGNORE"
-        }
-      ]
-    },
-    {
-      "__typename": "GroupFilter",
-      "name": "Genre",
-      "filters": [
-        {
-          "__typename": "TriStateFilter",
-          "name": "Action",
-          "triState": "IGNORE"
-        },
-        {
-          "__typename": "TriStateFilter",
-          "name": "Adventure",
-          "triState": "IGNORE"
-        },
-        {
-          "__typename": "TriStateFilter",
-          "name": "Boy's Love",
-          "triState": "IGNORE"
-        }
-      ]
-    },
-    {
-      "__typename": "GroupFilter",
-      "name": "Theme",
-      "filters": [
-        {
-          "__typename": "TriStateFilter",
-          "name": "Aliens",
-          "triState": "IGNORE"
-        },
-        {
-          "__typename": "TriStateFilter",
-          "name": "Animals",
-          "triState": "IGNORE"
-        },
-        {
-          "__typename": "TriStateFilter",
-          "name": "Cooking",
-          "triState": "IGNORE"
-        }
-      ]
+     "name": "Korean (Manhwa)",
+     "type": "checkbox",
+     "state": false
     }
-  ],
-  "mangadexPreferences": [
+   ]
+  },
+  {
+   "name": "Content rating",
+   "type": "group",
+   "filters": [
     {
-      "__typename": "ListPreference",
-      "key": "thumbnailQuality_en",
-      "title": "Cover quality",
-      "summary": "%s",
-      "visible": true,
-      "enabled": true,
-      "listValue": "",
-      "listDefault": "",
-      "entries": [
-        "Original",
-        "Medium",
-        "Low"
-      ],
-      "entryValues": [
-        "",
-        ".512.jpg",
-        ".256.jpg"
-      ]
+     "name": "Safe",
+     "type": "checkbox",
+     "state": true
     },
     {
-      "__typename": "SwitchPreference",
-      "key": "tryUsingFirstVolumeCover_en",
-      "title": "Attempt to use the first volume cover as cover",
-      "summary": "May need to manually refresh entries already in library. Otherwise, clear database to have new covers to show up.",
-      "visible": true,
-      "enabled": true,
-      "switchValue": false,
-      "switchDefault": false
+     "name": "Suggestive",
+     "type": "checkbox",
+     "state": true
     },
     {
-      "__typename": "SwitchPreference",
-      "key": "dataSaverV5_en",
-      "title": "Data saver",
-      "summary": "Enables smaller, more compressed images",
-      "visible": true,
-      "enabled": true,
-      "switchValue": false,
-      "switchDefault": false
-    },
-    {
-      "__typename": "SwitchPreference",
-      "key": "usePort443_en",
-      "title": "Use HTTPS port 443 only",
-      "summary": "Enable to only request image servers that use port 443. This allows users with stricter firewall restrictions to access MangaDex images",
-      "visible": true,
-      "enabled": true,
-      "switchValue": false,
-      "switchDefault": false
-    },
-    {
-      "__typename": "SwitchPreference",
-      "key": "altTitlesInDesc_en",
-      "title": "Alternative titles in description",
-      "summary": "Include a manga's alternative titles at the end of its description",
-      "visible": true,
-      "enabled": true,
-      "switchValue": false,
-      "switchDefault": false
-    },
-    {
-      "__typename": "SwitchPreference",
-      "key": "preferExtensionLangTitle_en",
-      "title": "Use alternative titles",
-      "summary": "If there is an alternative title available which matches the extension language, it will be used",
-      "visible": true,
-      "enabled": true,
-      "switchValue": true,
-      "switchDefault": true
-    },
-    {
-      "__typename": "SwitchPreference",
-      "key": "finalChapterInDesc_en",
-      "title": "Final chapter in description",
-      "summary": "Include a manga's final chapter number at the end of its description",
-      "visible": true,
-      "enabled": true,
-      "switchValue": true,
-      "switchDefault": true
-    },
-    {
-      "__typename": "SwitchPreference",
-      "key": "includeUnavailable_en",
-      "title": "Show unavailable chapters",
-      "summary": "Include chapters that have been marked as unavailable by the source in the chapter list",
-      "visible": true,
-      "enabled": true,
-      "switchValue": false,
-      "switchDefault": false
-    },
-    {
-      "__typename": "MultiSelectListPreference",
-      "key": "contentRating_en",
-      "title": "Default content rating",
-      "summary": "Show content with the selected ratings by default",
-      "visible": true,
-      "enabled": true,
-      "multiValue": [
-        "safe",
-        "suggestive"
-      ],
-      "multiDefault": [
-        "safe",
-        "suggestive"
-      ],
-      "entries": [
-        "Safe",
-        "Suggestive",
-        "Erotica",
-        "Pornographic"
-      ],
-      "entryValues": [
-        "safe",
-        "suggestive",
-        "erotica",
-        "pornographic"
-      ]
-    },
-    {
-      "__typename": "MultiSelectListPreference",
-      "key": "originalLanguage_en",
-      "title": "Filter original languages",
-      "summary": "Only show content that was originally published in the selected languages in both latest and browse",
-      "visible": true,
-      "enabled": true,
-      "multiValue": [],
-      "multiDefault": [],
-      "entries": [
-        "Japanese",
-        "Chinese",
-        "Korean"
-      ],
-      "entryValues": [
-        "ja",
-        "zh",
-        "ko"
-      ]
-    },
-    {
-      "__typename": "EditTextPreference",
-      "key": "blockedGroups_en",
-      "title": "Block groups by UUID",
-      "summary": "Chapters from blocked groups will not show up in Latest or Manga feed. Enter as a Comma-separated list of group UUIDs",
-      "visible": true,
-      "enabled": true,
-      "textValue": "",
-      "textDefault": null
-    },
-    {
-      "__typename": "EditTextPreference",
-      "key": "blockedUploader_en",
-      "title": "Block uploader by UUID",
-      "summary": "Chapters from blocked uploaders will not show up in Latest or Manga feed. Enter as a Comma-separated list of uploader UUIDs",
-      "visible": true,
-      "enabled": true,
-      "textValue": "",
-      "textDefault": null
+     "name": "Erotica",
+     "type": "checkbox",
+     "state": false
     }
-  ],
-  "weebCentralFilters": [
+   ]
+  },
+  {
+   "name": "Publication demographic",
+   "type": "group",
+   "filters": [
     {
-      "__typename": "SelectFilter",
-      "name": "Sort",
-      "values": [
-        "Best Match",
-        "Alphabet",
-        "Popularity",
-        "Subscribers",
-        "Recently Added",
-        "Latest Updates"
-      ],
-      "select": 0
+     "name": "None",
+     "type": "checkbox",
+     "state": false
     },
     {
-      "__typename": "SelectFilter",
-      "name": "Sort Order",
-      "values": [
-        "Descending",
-        "Ascending"
-      ],
-      "select": 0
+     "name": "Shounen",
+     "type": "checkbox",
+     "state": false
     },
     {
-      "__typename": "SelectFilter",
-      "name": "Official Translation",
-      "values": [
-        "Any",
-        "True",
-        "False"
-      ],
-      "select": 0
-    },
-    {
-      "__typename": "SelectFilter",
-      "name": "Anime Adaptation",
-      "values": [
-        "Any",
-        "True",
-        "False"
-      ],
-      "select": 0
-    },
-    {
-      "__typename": "SelectFilter",
-      "name": "Adult Content",
-      "values": [
-        "Any",
-        "True",
-        "False"
-      ],
-      "select": 0
-    },
-    {
-      "__typename": "TextFilter",
-      "name": "Author (Case-sensitive)",
-      "text": ""
-    },
-    {
-      "__typename": "GroupFilter",
-      "name": "Series Status",
-      "filters": [
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Ongoing",
-          "checkBox": false
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Complete",
-          "checkBox": false
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Hiatus",
-          "checkBox": false
-        }
-      ]
-    },
-    {
-      "__typename": "GroupFilter",
-      "name": "Series Type",
-      "filters": [
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Manga",
-          "checkBox": false
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Manhwa",
-          "checkBox": false
-        },
-        {
-          "__typename": "CheckBoxFilter",
-          "name": "Manhua",
-          "checkBox": false
-        }
-      ]
-    },
-    {
-      "__typename": "GroupFilter",
-      "name": "Tags",
-      "filters": [
-        {
-          "__typename": "TriStateFilter",
-          "name": "Action",
-          "triState": "IGNORE"
-        },
-        {
-          "__typename": "TriStateFilter",
-          "name": "Adult",
-          "triState": "IGNORE"
-        },
-        {
-          "__typename": "TriStateFilter",
-          "name": "Adventure",
-          "triState": "IGNORE"
-        }
-      ]
+     "name": "Shoujo",
+     "type": "checkbox",
+     "state": false
     }
-  ]
+   ]
+  },
+  {
+   "name": "Status",
+   "type": "group",
+   "filters": [
+    {
+     "name": "Ongoing",
+     "type": "checkbox",
+     "state": false
+    },
+    {
+     "name": "Completed",
+     "type": "checkbox",
+     "state": false
+    },
+    {
+     "name": "Hiatus",
+     "type": "checkbox",
+     "state": false
+    }
+   ]
+  },
+  {
+   "name": "Sort",
+   "type": "sort",
+   "values": [
+    "Alphabetic",
+    "Chapter uploaded at",
+    "Number of follows",
+    "Content created at",
+    "Content info updated at",
+    "Relevance",
+    "Year",
+    "Rating"
+   ],
+   "state": {
+    "index": 5,
+    "ascending": false
+   }
+  },
+  {
+   "name": "Created within last",
+   "type": "select",
+   "values": [
+    "Any",
+    "Day",
+    "Week",
+    "Month",
+    "Year"
+   ],
+   "state": 0
+  },
+  {
+   "name": "Tags mode",
+   "type": "group",
+   "filters": [
+    {
+     "name": "Included tags mode",
+     "type": "select",
+     "values": [
+      "And",
+      "Or"
+     ],
+     "state": 0
+    },
+    {
+     "name": "Excluded tags mode",
+     "type": "select",
+     "values": [
+      "And",
+      "Or"
+     ],
+     "state": 1
+    }
+   ]
+  },
+  {
+   "name": "Content",
+   "type": "group",
+   "filters": [
+    {
+     "name": "Gore",
+     "type": "tristate",
+     "state": 0
+    },
+    {
+     "name": "Sexual violence",
+     "type": "tristate",
+     "state": 0
+    }
+   ]
+  },
+  {
+   "name": "Format",
+   "type": "group",
+   "filters": [
+    {
+     "name": "4-Koma",
+     "type": "tristate",
+     "state": 0
+    },
+    {
+     "name": "Adaptation",
+     "type": "tristate",
+     "state": 0
+    },
+    {
+     "name": "Anthology",
+     "type": "tristate",
+     "state": 0
+    }
+   ]
+  },
+  {
+   "name": "Genre",
+   "type": "group",
+   "filters": [
+    {
+     "name": "Action",
+     "type": "tristate",
+     "state": 0
+    },
+    {
+     "name": "Adventure",
+     "type": "tristate",
+     "state": 0
+    },
+    {
+     "name": "Boy's Love",
+     "type": "tristate",
+     "state": 0
+    }
+   ]
+  },
+  {
+   "name": "Theme",
+   "type": "group",
+   "filters": [
+    {
+     "name": "Aliens",
+     "type": "tristate",
+     "state": 0
+    },
+    {
+     "name": "Animals",
+     "type": "tristate",
+     "state": 0
+    },
+    {
+     "name": "Cooking",
+     "type": "tristate",
+     "state": 0
+    }
+   ]
+  }
+ ],
+ "mangadexSettings": [
+  {
+   "key": "thumbnailQuality_en",
+   "title": "Cover quality",
+   "summary": "%s",
+   "enabled": true,
+   "type": "list",
+   "entries": [
+    "Original",
+    "Medium",
+    "Low"
+   ],
+   "values": [
+    "",
+    ".512.jpg",
+    ".256.jpg"
+   ],
+   "value": ""
+  },
+  {
+   "key": "tryUsingFirstVolumeCover_en",
+   "title": "Attempt to use the first volume cover as cover",
+   "summary": "May need to manually refresh entries already in library. Otherwise, clear database to have new covers to show up.",
+   "enabled": true,
+   "type": "switch",
+   "value": false
+  },
+  {
+   "key": "dataSaverV5_en",
+   "title": "Data saver",
+   "summary": "Enables smaller, more compressed images",
+   "enabled": true,
+   "type": "switch",
+   "value": false
+  },
+  {
+   "key": "usePort443_en",
+   "title": "Use HTTPS port 443 only",
+   "summary": "Enable to only request image servers that use port 443. This allows users with stricter firewall restrictions to access MangaDex images",
+   "enabled": true,
+   "type": "switch",
+   "value": false
+  },
+  {
+   "key": "altTitlesInDesc_en",
+   "title": "Alternative titles in description",
+   "summary": "Include a manga's alternative titles at the end of its description",
+   "enabled": true,
+   "type": "switch",
+   "value": false
+  },
+  {
+   "key": "preferExtensionLangTitle_en",
+   "title": "Use alternative titles",
+   "summary": "If there is an alternative title available which matches the extension language, it will be used",
+   "enabled": true,
+   "type": "switch",
+   "value": true
+  },
+  {
+   "key": "finalChapterInDesc_en",
+   "title": "Final chapter in description",
+   "summary": "Include a manga's final chapter number at the end of its description",
+   "enabled": true,
+   "type": "switch",
+   "value": true
+  },
+  {
+   "key": "includeUnavailable_en",
+   "title": "Show unavailable chapters",
+   "summary": "Include chapters that have been marked as unavailable by the source in the chapter list",
+   "enabled": true,
+   "type": "switch",
+   "value": false
+  },
+  {
+   "key": "contentRating_en",
+   "title": "Default content rating",
+   "summary": "Show content with the selected ratings by default",
+   "enabled": true,
+   "type": "multi",
+   "entries": [
+    "Safe",
+    "Suggestive",
+    "Erotica",
+    "Pornographic"
+   ],
+   "values": [
+    "safe",
+    "suggestive",
+    "erotica",
+    "pornographic"
+   ],
+   "value": [
+    "safe",
+    "suggestive"
+   ]
+  },
+  {
+   "key": "originalLanguage_en",
+   "title": "Filter original languages",
+   "summary": "Only show content that was originally published in the selected languages in both latest and browse",
+   "enabled": true,
+   "type": "multi",
+   "entries": [
+    "Japanese",
+    "Chinese",
+    "Korean"
+   ],
+   "values": [
+    "ja",
+    "zh",
+    "ko"
+   ],
+   "value": []
+  },
+  {
+   "key": "blockedGroups_en",
+   "title": "Block groups by UUID",
+   "summary": "Chapters from blocked groups will not show up in Latest or Manga feed. Enter as a Comma-separated list of group UUIDs",
+   "enabled": true,
+   "type": "text",
+   "value": ""
+  },
+  {
+   "key": "blockedUploader_en",
+   "title": "Block uploader by UUID",
+   "summary": "Chapters from blocked uploaders will not show up in Latest or Manga feed. Enter as a Comma-separated list of uploader UUIDs",
+   "enabled": true,
+   "type": "text",
+   "value": ""
+  }
+ ],
+ "weebCentralFilters": [
+  {
+   "name": "Sort",
+   "type": "select",
+   "values": [
+    "Best Match",
+    "Alphabet",
+    "Popularity",
+    "Subscribers",
+    "Recently Added",
+    "Latest Updates"
+   ],
+   "state": 0
+  },
+  {
+   "name": "Sort Order",
+   "type": "select",
+   "values": [
+    "Descending",
+    "Ascending"
+   ],
+   "state": 0
+  },
+  {
+   "name": "Official Translation",
+   "type": "select",
+   "values": [
+    "Any",
+    "True",
+    "False"
+   ],
+   "state": 0
+  },
+  {
+   "name": "Anime Adaptation",
+   "type": "select",
+   "values": [
+    "Any",
+    "True",
+    "False"
+   ],
+   "state": 0
+  },
+  {
+   "name": "Adult Content",
+   "type": "select",
+   "values": [
+    "Any",
+    "True",
+    "False"
+   ],
+   "state": 0
+  },
+  {
+   "name": "Author (Case-sensitive)",
+   "type": "text",
+   "state": ""
+  },
+  {
+   "name": "Series Status",
+   "type": "group",
+   "filters": [
+    {
+     "name": "Ongoing",
+     "type": "checkbox",
+     "state": false
+    },
+    {
+     "name": "Complete",
+     "type": "checkbox",
+     "state": false
+    },
+    {
+     "name": "Hiatus",
+     "type": "checkbox",
+     "state": false
+    }
+   ]
+  },
+  {
+   "name": "Series Type",
+   "type": "group",
+   "filters": [
+    {
+     "name": "Manga",
+     "type": "checkbox",
+     "state": false
+    },
+    {
+     "name": "Manhwa",
+     "type": "checkbox",
+     "state": false
+    },
+    {
+     "name": "Manhua",
+     "type": "checkbox",
+     "state": false
+    }
+   ]
+  },
+  {
+   "name": "Tags",
+   "type": "group",
+   "filters": [
+    {
+     "name": "Action",
+     "type": "tristate",
+     "state": 0
+    },
+    {
+     "name": "Adult",
+     "type": "tristate",
+     "state": 0
+    },
+    {
+     "name": "Adventure",
+     "type": "tristate",
+     "state": 0
+    }
+   ]
+  }
+ ]
 }

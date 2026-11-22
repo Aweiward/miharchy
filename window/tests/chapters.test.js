@@ -10,31 +10,15 @@ const chapters = [
   { id: 11, read: true, lastPage: 19 }
 ];
 
-test("marking read sends isRead to the unread chapters only, and leaves lastPageRead alone", () => {
-  const p = Ch.markPayload(chapters, true);
-  assert.match(p.query, /updateChapters/);
-  assert.deepEqual(p.variables, { ids: [14, 13], started: [], read: true });
-});
-
-test("marking unread sends isRead false and resets lastPageRead only where a page was read", () => {
-  const p = Ch.markPayload(chapters, false);
-  assert.match(p.query, /ids: \$started, patch: \{ isRead: false, lastPageRead: 0 \}/);
-  assert.deepEqual(p.variables, { ids: [12], started: [13, 11], read: false }, "a started unread chapter goes back to page 1, as in Mihon");
-});
-
 test("nothing to change sends nothing", () => {
   assert.equal(Ch.markPayload([chapters[2], chapters[3]], true), null);
   assert.equal(Ch.markPayload([chapters[0]], false), null);
   assert.equal(Ch.markPayload([], true), null);
 });
 
-test("the tracker push asks for each manga's progress once", () => {
-  const one = Ch.trackPayload([5]);
-  assert.match(one.query, /trackProgress\(input: \{ mangaId: 5 \}\)/);
-  const two = Ch.trackPayload([5, 9, 5]);
-  assert.equal(two.query.match(/trackProgress/g).length, 2);
-  assert.match(two.query, /m9: trackProgress\(input: \{ mangaId: 9 \}\)/);
-  assert.equal(Ch.trackPayload([]), null, "no manga, no empty mutation");
+test("the tracker push asks for each manga's progress once; no manga, no push", () => {
+  assert.deepEqual(Ch.trackPayload([5, 9, 5], true), { route: "track.progress", body: { mangaIds: [5, 9] } });
+  assert.equal(Ch.trackPayload([], true), null);
 });
 
 test("a manual mark read pushes, asks or leaves the trackers, by the setting", () => {
@@ -44,11 +28,6 @@ test("a manual mark read pushes, asks or leaves the trackers, by the setting", (
 });
 
 test("ask only when a logged-in tracker is behind the highest read chapter", () => {
-  const p = Ch.trackCheckPayload([5, 9, 5]);
-  assert.equal(p.query.match(/manga\(id: /g).length, 2, "each manga once");
-  assert.match(p.query, /r9: chapters\(condition: \{ mangaId: 9, isRead: true \}, order: \[\{ by: CHAPTER_NUMBER, byType: DESC \}\], first: 1\)/);
-  assert.equal(Ch.trackCheckPayload([]), null);
-
   const track = (read, on) => ({ lastChapterRead: read, tracker: { isLoggedIn: on } });
   const manga = (id, tracks) => ({ id, trackRecords: { nodes: tracks } });
   const top = (n) => ({ nodes: n === null ? [] : [{ chapterNumber: n }] });
@@ -147,11 +126,9 @@ test("the resume label says Start until any chapter is read, then names the next
 });
 
 test("a bookmark sets every chapter when any is unset, else clears them all, and skips those already there", () => {
-  const on = Ch.bookmarkPayload([list[0], list[1]]);
-  assert.match(on.query, /updateChapters\(input: \{ ids: \$ids, patch: \{ isBookmarked: \$bookmarked \} \}\)/);
-  assert.deepEqual(on.variables, { ids: [4], bookmarked: true });
-  assert.deepEqual(Ch.bookmarkPayload([list[1], list[3]]).variables, { ids: [3, 1], bookmarked: false });
-  assert.equal(Ch.bookmarkPayload([]), null);
+  assert.deepEqual(Ch.bookmarkPayload([list[0], list[1]], true), { route: "chapter.update", body: { ids: [4], isBookmarked: true } });
+  assert.deepEqual(Ch.bookmarkPayload([list[1], list[3]], true).body, { ids: [3, 1], isBookmarked: false });
+  assert.equal(Ch.bookmarkPayload([], true), null);
 });
 
 const noSkip = { read: false, filtered: false, dupe: false };

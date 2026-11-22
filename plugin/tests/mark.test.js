@@ -4,12 +4,14 @@ const load = require("../../window/tests/load");
 const Mark = load("../plugin/Mark.js");
 const M = load("Model.js");
 
-const config = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
+const config = { url: "http://127.0.0.1:4591", secret: "s", backend: "core" };
+// A core reply as Session.send gives it, from { data }.
+const ok = (body) => ({ state: "ok", message: "", data: body.data, kind: "" });
 const now = new Date(2026, 9, 4, 15).getTime();
 const sec = (h) => String(Math.floor(new Date(2026, 9, 4, h).getTime() / 1000));
 const manga = { id: 7, title: "Maid to Skate", thumbnailUrl: null, inLibraryAt: sec(1) };
 const chapter = (id, h) => ({ id, name: "Ch." + id, uploadDate: String(now), fetchedAt: sec(h), sourceOrder: id, isRead: false, manga });
-const reply = (nodes) => M.reply(200, JSON.stringify({ data: { chapters: { nodes } } }));
+const reply = (nodes) => ok({ data: { chapters: { nodes } } });
 const after = (r) => Mark.reduce(Mark.initial(), { type: "reply", reply: r, config, now });
 
 test("the mark shows the unread update count, the popup the newest few", () => {
@@ -38,56 +40,27 @@ test("no updates: the mark shows no count", () => {
 
 test("a server that does not answer shows the dot, never a stale count", () => {
   const up = after(reply([chapter(1, 3)]));
-  const m = Mark.reduce(up, { type: "reply", reply: M.reply(0, ""), config, now });
+  const m = Mark.reduce(up, { type: "reply", reply: M.coreReply(0, ""), config, now });
   assert.equal(Mark.down(m), true);
   assert.equal(Mark.label(m), "");
   assert.deepEqual(m.rows, []);
-  assert.equal(Mark.tooltip(m), "Miharchy: The server is not running");
-  assert.equal(Mark.notice(m, "/c").title, "The server is not running");
+  assert.equal(Mark.tooltip(m), "Miharchy: miharchy-core is not running");
+  assert.equal(Mark.notice(m, "/c").title, "miharchy-core is not running");
 });
 
 test("any failure to reach the updates is the dot; loading is not", () => {
   assert.equal(Mark.down(Mark.initial()), false);
   assert.equal(Mark.label(Mark.initial()), "");
   assert.equal(Mark.down(Mark.reduce(Mark.initial(), { type: "config-missing" })), true);
-  assert.equal(Mark.down(after(M.reply(401, ""))), true);
-  const broken = after(M.reply(500, ""));
+  assert.equal(Mark.down(after(M.coreReply(401, '{"error":{"kind":"unauthorized","message":"x"}}'))), true);
+  const broken = after(M.coreReply(500, ""));
   assert.equal(Mark.down(broken), true);
   assert.match(Mark.notice(broken, "/c").detail, /HTTP 500/);
 });
 
 const other = { id: 8, title: "Normal Girl", thumbnailUrl: null, inLibraryAt: sec(1) };
-const withNotify = (nodes, value) => M.reply(200, JSON.stringify({ data: { chapters: { nodes }, notify: { nodes: value === undefined ? [] : [{ value }] } } }));
+const withNotify = (nodes, value) => ok({ data: { chapters: { nodes }, notify: { nodes: value === undefined ? [] : [{ value }] } } });
 const poll = (m, r) => Mark.reduce(m, { type: "reply", reply: r, config, now });
-
-test("the poll asks for the notification and sync settings and the server's version in the same query", () => {
-  const q = Mark.listPayload().query;
-  assert.match(q, /chapters\(filter:/);
-  assert.match(q, /notify: metas\(condition: \{ key: "miharchy.notifyNewChapters" \}\) \{ nodes \{ value \} \} /);
-  assert.match(q, /autoSync: metas\(condition: \{ key: "miharchy.autoSync" \}\) \{ nodes \{ value \} \} /);
-  assert.match(q, /syncFolder: metas\(condition: \{ key: "miharchy.syncFolder" \}\) \{ nodes \{ value \} \} aboutServer \{ version \} \}$/);
-  assert.equal(q.split("{").length, q.split("}").length, "braces balance");
-});
-
-const withVersion = (version) => M.reply(200, JSON.stringify({ data: { chapters: { nodes: [chapter(1, 3)] }, aboutServer: { version } } }));
-
-test("a server newer than the checked version adds a warning, and the mark keeps working", () => {
-  const m = poll(Mark.initial(), withVersion("v2.4.2400"));
-  assert.equal(Mark.warning(m), "Suwayomi-Server v2.4.2400 is newer than the version Miharchy has checked (v2.4.2366). It should work, but report problems.");
-  assert.equal(Mark.tooltip(m), "Miharchy: 1 new chapter\n" + Mark.warning(m));
-  assert.equal(Mark.down(m), false);
-  assert.equal(Mark.label(m), "1");
-  assert.equal(m.rows.length, 1);
-});
-
-test("an older or equal server, or none answering, shows no warning", () => {
-  for (const v of ["v2.3.2243", "v2.4.2366"]) {
-    const m = poll(Mark.initial(), withVersion(v));
-    assert.equal(Mark.warning(m), "", v);
-    assert.equal(Mark.tooltip(m), "Miharchy: 1 new chapter", v);
-  }
-  assert.equal(Mark.warning(poll(poll(Mark.initial(), withVersion("v9.0.0")), M.reply(0, ""))), "");
-});
 
 test("the first poll after a start notifies nothing, however many updates wait", () => {
   const first = poll(Mark.initial(), withNotify([chapter(1, 3), chapter(2, 4)]));
@@ -112,7 +85,7 @@ test("a chapter marked unread again, or one back after a failed poll, is no new 
   const seen = poll(Mark.initial(), withNotify([chapter(3, 3), chapter(9, 4)]));
   const readThen = poll(seen, withNotify([chapter(9, 4)]));
   assert.equal(Mark.notification(poll(readThen, withNotify([chapter(3, 3), chapter(9, 4)]))), null, "3 is below the top");
-  const down = poll(seen, M.reply(0, ""));
+  const down = poll(seen, M.coreReply(0, ""));
   assert.equal(down.top, 9, "a failure keeps the top");
   assert.equal(Mark.notification(poll(down, withNotify([chapter(3, 3), chapter(9, 4)]))), null);
   assert.equal(Mark.notification(poll(down, withNotify([chapter(9, 4), chapter(10, 5)]))).title, "1 new chapter");
@@ -178,11 +151,11 @@ test("the notification fails closed: no XDG_RUNTIME_DIR, or a symlink at its fol
   assert.deepEqual(fs.readdirSync(target), ["notified-1"], "nothing written or deleted through the symlink");
 });
 
-const withSync = (autoSync, syncFolder) => M.reply(200, JSON.stringify({ data: {
+const withSync = (autoSync, syncFolder) => ok({ data: {
   chapters: { nodes: [] },
   autoSync: { nodes: autoSync === undefined ? [] : [{ value: autoSync }] },
   syncFolder: { nodes: syncFolder === undefined ? [] : [{ value: syncFolder }] }
-} }));
+} });
 
 test("the poll reads the sync Settings rows; a failure keeps them", () => {
   const on = poll(Mark.initial(), withSync("true", "/home/u/Sync"));
@@ -193,7 +166,7 @@ test("the poll reads the sync Settings rows; a failure keeps them", () => {
   assert.equal(unset.autoSync, false, "off unless set");
   assert.equal(unset.syncFolder, "");
   assert.deepEqual([Mark.initial().autoSync, Mark.initial().syncFolder], [false, ""]);
-  const down = poll(on, M.reply(0, ""));
+  const down = poll(on, M.coreReply(0, ""));
   assert.deepEqual([down.autoSync, down.syncFolder], [true, "/home/u/Sync"]);
   const missing = Mark.reduce(on, { type: "config-missing" });
   assert.deepEqual([missing.autoSync, missing.syncFolder], [true, "/home/u/Sync"]);
@@ -277,7 +250,7 @@ const upChapter = (id, o) => Object.assign({ id, name: "Ch. " + id, chapterNumbe
   pageCount: 0, isDownloaded: false, scanlator: "", sourceOrder: id, lastReadAt: "0", fetchedAt: String(NOWS - 100 * DAYS) }, o);
 const readAt = (days) => ({ isRead: true, lastReadAt: String(NOWS - days * DAYS) });
 const upManga = (id, title, chapters) => ({ id, title, inLibraryAt: String(NOWS - 200 * DAYS), source: { id: "1" }, meta: [], chapters: { nodes: chapters } });
-const upReply = (mangas, metas) => M.reply(200, JSON.stringify({ data: { metas: { nodes: metas || [] }, mangas: { nodes: mangas } } }));
+const upReply = (mangas, metas) => ok({ data: { metas: { nodes: metas || [] }, mangas: { nodes: mangas } } });
 const partly = upManga(1, "Partly", [upChapter(11, readAt(1)), upChapter(12, { lastPageRead: 3, pageCount: 20, lastReadAt: String(NOWS - DAYS) })]);
 const close = upManga(2, "Close", [upChapter(21, readAt(2)), upChapter(22), upChapter(23), upChapter(24)]);
 const fresh = upManga(3, "Fresh", [upChapter(31, { fetchedAt: String(NOWS - 2 * DAYS) })]);
@@ -297,9 +270,8 @@ test("a reason without a page count shows the page alone; an update under a day 
   assert.deepEqual(Mark.upNext(upReply([noCount, hours]), now).map((r) => r.side), ["p. 7", "new 5h"]);
 });
 
-test("the popup's Up next follows Downloaded only, which it asks the server for", () => {
+test("the popup's Up next follows Downloaded only", () => {
   const disk = upManga(5, "Disk", [upChapter(51, readAt(1)), upChapter(52, { isDownloaded: true })]);
-  assert.ok(Mark.upNextPayload().variables.keys.includes("miharchy.downloadedOnly"));
   assert.deepEqual(Mark.upNext(upReply([close, disk], [{ key: "miharchy.downloadedOnly", value: "true" }]), now).map((r) => r.title), ["Disk"]);
 });
 
@@ -307,7 +279,7 @@ test("Up next still loading, failed or empty shows no section, and the popup lis
   const rows = after(reply([chapter(9, 3)])).rows;
   const today = [{ section: "", title: "Maid to Skate", chapter: "Ch.9", side: "2026-10-04", open: ["open-chapter", "7", "9"] }];
   assert.deepEqual(Mark.upNext(null, now), [], "loading");
-  assert.deepEqual(Mark.upNext(M.reply(0, ""), now), [], "failed");
+  assert.deepEqual(Mark.upNext(M.coreReply(0, ""), now), [], "failed");
   assert.deepEqual(Mark.upNext(upReply([]), now), [], "empty");
   assert.deepEqual(Mark.entries(Mark.upNext(null, now), rows), today);
 });

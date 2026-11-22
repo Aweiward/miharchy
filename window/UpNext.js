@@ -7,35 +7,30 @@
 
 // Up next (GLOSSARY.md): the library manga a peek offers, each with its
 // next chapter, in tiers. Derived from read state each time; nothing is
-// stored. Pure, so tests/upnext.test.js pins it; shell.qml peek() sends
-// payload() and opens the head of list(), or for the next key after().
+// stored. Pure, so tests/upnext.test.js pins it; shell.qml peek() runs
+// load() and opens the head of list(), or for the next key after().
 
 // ponytail: fixed; Settings rows if they turn out wrong.
 var CLOSE_UNREAD = 5
 var FRESH_DAYS = 7
 
-function payload() {
-  return {
-    query: "query($keys: [String!]) { metas(filter: { key: { in: $keys } }) { nodes { key value } }"
-      + " mangas(condition: { inLibrary: true }) { nodes { id title inLibraryAt source { id } meta { key value }"
-      + " chapters { nodes { id name chapterNumber uploadDate isRead isBookmarked lastPageRead pageCount isDownloaded scanlator sourceOrder lastReadAt fetchedAt } } } } }",
-    variables: { keys: Prefs.keys(Library.CHAPTER_PREFS).concat([History.CLEARED_KEY]) }
-  }
+// The global metas load() reads: the chapter prefs and History's cutoff.
+function metaKeys() {
+  return Prefs.keys(Library.CHAPTER_PREFS).concat([History.CLEARED_KEY])
 }
 
-// Up next's data from either server, as payload()'s reply: send(payload,
-// done) is Session.send on that server's config. Core (ADR 0010) takes three
-// routes: library.list, then each library manga's chapters and the global
-// chapter prefs. done gets { state, message?, data }.
+// Up next's data: send(payload, done) is Session.send on core's config.
+// Core (ADR 0010) takes three routes: library.list, then each library
+// manga's chapters and the global chapter prefs. done gets { state,
+// message?, data }.
 function load(send, core, done) {
-  if (!core) return send(payload(), done)
   send({ route: "library.list" }, function(lib) {
     if (lib.state !== "ok") return done(lib)
     var ids = lib.data.mangas.map(function(m) { return m.id })
     if (!ids.length) return done({ state: "ok", data: fromCore(lib.data, { chapters: [] }, { metas: [] }) })
     send({ route: "chapter.list", body: { mangaIds: ids } }, function(ch) {
       if (ch.state !== "ok") return done(ch)
-      send({ route: "meta.get", body: { scope: "global", keys: payload().variables.keys } }, function(meta) {
+      send({ route: "meta.get", body: { scope: "global", keys: metaKeys() } }, function(meta) {
         if (meta.state !== "ok") return done(meta)
         done({ state: "ok", data: fromCore(lib.data, ch.data, meta.data) })
       })
@@ -43,7 +38,7 @@ function load(send, core, done) {
   })
 }
 
-// Core's three replies -> payload()'s reply data.
+// Core's three replies -> the data list() reads.
 function fromCore(lib, ch, meta) {
   var byManga = {}
   ch.chapters.forEach(function(c) { (byManga[c.mangaId] = byManga[c.mangaId] || []).push(c) })
@@ -55,7 +50,7 @@ function fromCore(lib, ch, meta) {
   }
 }
 
-// data: payload()'s reply. -> [{ mangaId, chapterId, tier, title, chapter,
+// data: load()'s reply. -> [{ mangaId, chapterId, tier, title, chapter,
 // page, pages, unread, update }], the head first. tier: 1 partly read, 2
 // close to caught up, 3 a fresh update. page: the next chapter's
 // lastPageRead, pages its page count (0 when the server has none yet);
@@ -118,7 +113,7 @@ function after(list, order, mangaId) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    payload: payload,
+    metaKeys: metaKeys,
     load: load,
     list: list,
     after: after

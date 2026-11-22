@@ -6,7 +6,7 @@
 // tests/history.test.js pins it; HistoryView.qml sends the payloads and
 // feeds replies back through reduce().
 //
-// Suwayomi has no way to delete history: lastReadAt changes only when
+// The server has no way to delete history: lastReadAt changes only when
 // lastPageRead is saved, which is read state. So removing hides instead.
 // An entry hides while its lastReadAt is at or below a cutoff in meta: the
 // manga's for one entry, the global one for all. Opening a chapter again
@@ -16,19 +16,11 @@ var HIDDEN_KEY = "miharchy.historyHiddenAt"
 var CLEARED_KEY = "miharchy.historyClearedAt"
 
 // ponytail: one page of the newest chapters; a manga whose last open lies
-// past it does not show. Page with `after` if that bites.
-var QUERY = "{ metas(condition: { key: \"" + CLEARED_KEY + "\" }) { nodes { value } }"
-  + " chapters(filter: { lastReadAt: { greaterThan: \"0\" } }, order: [{ by: LAST_READ_AT, byType: DESC }], first: 500) {"
-  + " nodes { id name lastReadAt lastPageRead pageCount isRead manga { id title thumbnailUrl meta { key value } } } } }"
-
-var REMOVE_MUTATION = "mutation($meta: MangaMetaTypeInput!) { setMangaMeta(input: { meta: $meta }) { meta { key value } } }"
-var CLEAR_MUTATION = "mutation($key: String!, $value: String!) { setGlobalMeta(input: { meta: { key: $key, value: $value } }) { meta { key value } } }"
-
-// The history from either server, as QUERY's reply: send(payload, done) is
-// Session.send on that server's config. Core (ADR 0010) takes the cleared
-// cutoff from meta.get, then history.list's newest 500.
+// past it does not show. Page with `offset` if that bites.
+// The history: send(payload, done) is Session.send on core's config. Core
+// (ADR 0010) takes the cleared cutoff from meta.get, then history.list's
+// newest 500.
 function load(send, core, done) {
-  if (!core) return send({ query: QUERY }, done)
   send({ route: "meta.get", body: { scope: "global", keys: [CLEARED_KEY] } }, function(meta) {
     if (meta.state !== "ok") return done(meta)
     send({ route: "history.list", body: { limit: 500 } }, function(list) {
@@ -96,15 +88,13 @@ function reduce(h, event) {
 
 // The cutoffs are the server's own lastReadAt, so the local clock never
 // decides what hides.
-// core: miharchy-core's meta.set (ADR 0010).
+// Both payloads are miharchy-core's meta.set (ADR 0010).
 function removePayload(entry, core) {
-  if (core) return { route: "meta.set", body: { metas: [{ scope: "manga", owner: entry.mangaId, key: HIDDEN_KEY, value: String(entry.at) }] } }
-  return { query: REMOVE_MUTATION, variables: { meta: { mangaId: entry.mangaId, key: HIDDEN_KEY, value: String(entry.at) } } }
+  return { route: "meta.set", body: { metas: [{ scope: "manga", owner: entry.mangaId, key: HIDDEN_KEY, value: String(entry.at) }] } }
 }
 
 function clearPayload(list, core) {
-  if (core) return list.length ? { route: "meta.set", body: { metas: [{ scope: "global", key: CLEARED_KEY, value: String(list[0].at) }] } } : null
-  return list.length ? { query: CLEAR_MUTATION, variables: { key: CLEARED_KEY, value: String(list[0].at) } } : null
+  return list.length ? { route: "meta.set", body: { metas: [{ scope: "global", key: CLEARED_KEY, value: String(list[0].at) }] } } : null
 }
 
 function progress(entry) {
@@ -152,7 +142,6 @@ if (typeof module !== "undefined") {
     HIDDEN_KEY: HIDDEN_KEY,
     CLEARED_KEY: CLEARED_KEY,
     metaValue: metaValue,
-    QUERY: QUERY,
     load: load,
     initial: initial,
     reduce: reduce,

@@ -9,7 +9,7 @@
 # miharchy peek-open <mangaId> <chapterId>: shows the peek on that chapter,
 # a new peek run; the popup's Up next rows.
 # A trailing "core" on open-chapter or peek-open names miharchy-core's ids
-# (the mark under MIHARCHY_BACKEND=core): both servers number from 1.
+# (the mark names them so); a target without it is core's too.
 dir="$(dirname "$(readlink -f "$0")")"
 
 # Every Quickshell window has class org.quickshell, so the pid of this config's

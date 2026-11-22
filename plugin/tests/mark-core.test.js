@@ -1,4 +1,4 @@
-// The mark under MIHARCHY_BACKEND=core (#386): miharchy-core's routes, ids and sync.
+// The mark on miharchy-core (#386): miharchy-core's routes, ids and sync.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -60,8 +60,6 @@ test("on core a poll reads the library's recent unread chapters and the three Se
   assert.equal(mark.notify, false);
   assert.equal(mark.autoSync, true);
   assert.equal(mark.syncFolder, "/phone");
-  assert.equal(mark.version, "", "core has no version, so no warning");
-  assert.equal(Mark.warning(mark), "");
 });
 
 test("on core an empty library asks for no chapters, and unset rows keep their defaults", () => {
@@ -117,7 +115,6 @@ test("on core the phone check reads core's baseline, not the helper's", () => {
   fs.mkdirSync(folder, { recursive: true });
   assert.equal(Mark.phoneBaseline({ HOME: home }, true), home + "/.local/share/miharchy/core/sync/phone-baseline.tachibk");
   assert.equal(Mark.phoneBaseline({ HOME: home, MIHARCHY_CORE_DATA: "/d" }, true), "/d/sync/phone-baseline.tachibk");
-  assert.equal(Mark.phoneBaseline({ HOME: home }, false), home + "/.local/share/miharchy/sync/phone-baseline.tachibk");
   const t = Math.floor(Date.now() / 1000);
   const file = (d, name, age) => {
     fs.mkdirSync(d, { recursive: true });

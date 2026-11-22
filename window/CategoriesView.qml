@@ -8,7 +8,7 @@ import "Categories.js" as Categories
 
 // The Library's categories screen: add, rename, reorder, delete, flag
 // for auto-download, include in or exclude from updates, and keep read
-// downloads. It sends the mutations itself; Categories.js decides. shell.qml forwards
+// downloads. It sends the changes itself; Categories.js decides. shell.qml forwards
 // every "categories." command to run() and reloads the library on
 // edited, which brings the new list back in categories.
 Item {
@@ -16,7 +16,7 @@ Item {
 
   required property Theme theme
   property var config: null
-  // "core" with MIHARCHY_BACKEND=core (shell.qml): config and categories are miharchy-core's.
+  // Set by shell.qml: config and categories are miharchy-core's.
   property string backend: ""
   readonly property bool core: backend === "core"
   property var categories: []
@@ -61,7 +61,7 @@ Item {
     error = ""
     send(payload, function(reply) {
       view.pending = false
-      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, core ? "core.json" : "server.json", backend).title
+      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, "core.json", backend).title
       else if (done) done(reply.data)
       view.edited()
     })

@@ -1,4 +1,4 @@
-// The MIHARCHY_BACKEND=core path (ADR 0010, #377): core.json, core's replies,
+// The miharchy-core path (ADR 0010, #377): core.json, core's replies,
 // Session's core requests, and the Extensions view on core's routes.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
@@ -52,7 +52,6 @@ test("core.json gives a core config, and anything else none", () => {
   for (const bad of ["", "{", '{"url":"x"}', '{"url":"","secret":"s"}', '{"url":"x","secret":""}', '{"url":"x","username":"u","password":"p"}']) {
     assert.equal(M.parseCoreConfig(bad), null, bad);
   }
-  assert.equal(M.parseConfig('{"url":"x","secret":"s"}'), null, "server.json's parser does not take core.json");
 });
 
 test("core's replies keep the connection states and carry the error kind", () => {
@@ -74,7 +73,6 @@ test("a core view words its own failures", () => {
   assert.match(M.problem({ state: "unauthorized" }, path, "core").detail, /secret in \/home\/u\/\.config\/miharchy\/core\.json/);
   assert.match(M.problem({ state: "no-config" }, path, "core").detail, /core\.json is missing/);
   assert.equal(M.problem({ state: "ok" }, path, "core"), null);
-  assert.equal(M.problem({ state: "down" }, "server.json").title, "The server is not running", "Suwayomi's wording stays");
 });
 
 test("a core request is one POST with the secret, and never a login", async () => {
@@ -98,14 +96,12 @@ test("a core request is one POST with the secret, and never a login", async () =
   assert.equal(requests[2].headers.Authorization, "Bearer c0ffee");
 });
 
-test("a request for the other server fails before it leaves", async () => {
+test("a GraphQL payload fails before it leaves", async () => {
   const requests = install({});
   const S = load("Session.js");
   const a = await new Promise((resolve) => S.send(core, { query: "{ mangas { totalCount } }" }, resolve));
   assert.equal(a.state, "error");
-  assert.match(a.message, /GraphQL, but this view talks to miharchy-core/);
-  const b = await new Promise((resolve) => S.send(suwayomi, { route: "extension.list" }, resolve));
-  assert.match(b.message, /for miharchy-core, but this view talks to Suwayomi/);
+  assert.match(a.message, /not a miharchy-core route/);
   assert.equal(requests.length, 0);
 });
 
@@ -198,7 +194,6 @@ test("on core, details come from the list with no request, and settings open on 
   const opened = E.detailsAction(s, d, "extension.settings").settings;
   assert.deepEqual(opened, { id: "1", name: "MangaDex (EN)", lang: "en", configurable: true, core: true });
   assert.deepEqual(W.loadPayload(W.panel("preferences", opened)), { route: "source.settings", body: { source: "1" } });
-  assert.ok(E.detailsPayload(E.details(MANGADEX.pkgName)).query, "Suwayomi still asks");
 });
 
 // --- Browse on core ---
@@ -210,7 +205,6 @@ const SOURCES = [
 
 test("on core, the sources come from source.list and carry core", () => {
   assert.deepEqual(B.sourcesPayload(true), { route: "source.list" });
-  assert.ok(B.sourcesPayload(false).query, "Suwayomi still asks GraphQL");
   const s = B.sources(ok({ sources: SOURCES }), core, false, true);
   assert.equal(s.state, "ok");
   assert.deepEqual(s.sources[0], { id: "2499283573021220255", name: "MangaDex (EN)", lang: "en", icon: "https://raw.githubusercontent.com/k/icon.png", warning: "MIXED", supportsLatest: true, configurable: true, core: true });
@@ -309,7 +303,6 @@ test("on core, global choices live in core's global metas", () => {
   assert.deepEqual(P.loadPayload(table, undefined, true), { route: "meta.get", body: { scope: "global", keys: ["miharchy.pinnedSources"] } });
   assert.deepEqual(P.savePayload("pinnedSources", '["9"]', undefined, true), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.pinnedSources", value: '["9"]' }] } });
   assert.deepEqual(P.read(table, { metas: [{ scope: "global", owner: 0, key: "miharchy.pinnedSources", value: '["9"]' }] }, P.defaults(table)), { pinnedSources: '["9"]' });
-  assert.ok(P.loadPayload(table).query, "Suwayomi still asks GraphQL");
 });
 
 // --- The manga detail and the reader on core ---
@@ -384,7 +377,6 @@ test("on core, a Cloudflare page says core cannot pass it yet", () => {
   const n = B.notice({ core: true, state: "error", message: "x", flare: true }, "core.json");
   assert.match(n.detail, /#361/);
   assert.equal(B.notice({ core: true, state: "down" }, "core.json").title, "miharchy-core is not running");
-  assert.equal(B.notice({ state: "error", message: "x", flare: true }, "server.json").title, "This source needs FlareSolverr");
 });
 
 test("on core, the reader loads pages, saves, bookmarks and keeps its mode on core, and pushes the trackers on core", () => {
@@ -409,8 +401,7 @@ test("on core, the reader loads pages, saves, bookmarks and keeps its mode on co
 const L = load("Library.js");
 const Cat = load("Categories.js");
 
-// One manga as core's library.list sends it (Library.kt), and as Suwayomi's
-// LIBRARY_QUERY sends the same manga.
+// One manga as core's library.list sends it (Library.kt).
 const coreManga = {
   id: 1, title: "Manga 1", author: "A", artist: "B", genre: ["Action"], status: "ONGOING",
   thumbnailUrl: "/api/cover/1", sourceId: "7", source: { id: "7", displayName: "MangaDex (EN)", lang: "en" },
@@ -418,24 +409,16 @@ const coreManga = {
   lastReadChapter: { lastReadAt: 1700000500 }, latestUploadedChapter: { uploadDate: 1690000000000 },
   latestFetchedChapter: { fetchedAt: 1700000100 }, categories: [2], meta: []
 };
-const suwayomiManga = Object.assign({}, coreManga, {
-  thumbnailUrl: "/api/v1/manga/1/thumbnail", chapters: { totalCount: 3 }, trackRecords: { totalCount: 0 }, categories: { nodes: [{ id: 2 }] }
-});
 const coreCategories = [
   { id: 0, name: "Default", includeInUpdate: "UNSET", includeInDownload: "UNSET", meta: [] },
   { id: 2, name: "Drama", includeInUpdate: "EXCLUDE", includeInDownload: "UNSET", meta: [{ key: "miharchy.keepDownloads", value: "true" }] }
 ];
 
-test("on core, the Library reads library.list into the same manga and categories as Suwayomi's reply", () => {
+test("on core, the Library reads library.list into manga and categories", () => {
   assert.deepEqual(M.libraryPayload(true), { route: "library.list" });
-  assert.equal(typeof M.libraryPayload(false).query, "string");
   const fromCore = M.reduce(M.initial(), { type: "response", config: core, reply: { state: "ok", data: { categories: coreCategories, mangas: [coreManga] } } });
-  const fromSuwayomi = M.reduce(M.initial(), { type: "response", config: suwayomi, reply: { state: "ok", data: {
-    categories: { nodes: coreCategories }, metas: { nodes: [] }, mangas: { nodes: [suwayomiManga] } } } });
   assert.equal(fromCore.state, "ok");
-  const strip = (m) => Object.assign({}, m, { cover: "" });
-  assert.deepEqual(fromCore.manga.map(strip), fromSuwayomi.manga.map(strip));
-  assert.deepEqual(fromCore.categories, fromSuwayomi.categories);
+  assert.deepEqual(fromCore.manga.map((m) => [m.id, m.title, m.categories, m.total, m.unread, m.tracks, m.source]), [[1, "Manga 1", [2], 3, 2, 0, "MangaDex (EN)"]]);
   assert.deepEqual(fromCore.categories, [{ id: 2, name: "Drama", download: "UNSET", update: "EXCLUDE", keep: true }]);
   assert.equal(fromCore.manga[0].cover, "http://127.0.0.1:4591/api/cover/1");
   assert.deepEqual([fromCore.manga[0].read, fromCore.manga[0].lastRead, fromCore.manga[0].latestUpload], [1, 1700000500, 1690000000000]);
@@ -446,17 +429,14 @@ test("on core, the Library reads library.list into the same manga and categories
 test("on core, the Library's and Categories' changes go to core's routes", () => {
   assert.deepEqual(L.chaptersPayload([1, 2], true), { route: "chapter.list", body: { mangaIds: [1, 2] } });
   assert.deepEqual(L.chapterNodes({ chapters: [{ id: 5 }] }), [{ id: 5 }]);
-  assert.deepEqual(L.chapterNodes({ chapters: { nodes: [{ id: 5 }] } }), [{ id: 5 }]);
   assert.deepEqual(L.removePayload([1], true), { route: "manga.update", body: { ids: [1], inLibrary: false } });
   assert.deepEqual(L.categoryPayload({ id: 2, state: "all" }, [1], true), { route: "manga.update", body: { ids: [1], removeFromCategories: [2] } });
   assert.deepEqual(L.categoryPayload({ id: 2, state: "some" }, [1], true), { route: "manga.update", body: { ids: [1], addToCategories: [2] } });
   assert.deepEqual(L.moveToPayload(1, 0, [{ id: 2 }], true), { route: "manga.update", body: { ids: [1], clearCategories: true, addToCategories: [] } });
-  assert.equal(typeof L.removePayload([1]).query, "string");
 
   const cats = [{ id: 2, name: "Drama", download: "UNSET", update: "UNSET", keep: false }, { id: 3, name: "Action", download: "UNSET", update: "UNSET", keep: false }];
   assert.deepEqual(Cat.createPayload("New", true), { route: "category.create", body: { name: "New" } });
   assert.equal(Cat.createdId({ category: { id: 9 } }), 9);
-  assert.equal(Cat.createdId({ createCategory: { category: { id: 9 } } }), 9);
   assert.deepEqual(Cat.renamePayload(2, "X", true), { route: "category.update", body: { id: 2, name: "X" } });
   assert.deepEqual(Cat.deletePayload(2, true), { route: "category.delete", body: { id: 2 } });
   assert.deepEqual(Cat.includePayload(cats, 2, "update", true), { route: "category.update", body: { id: 2, includeInUpdate: "INCLUDE" } });
@@ -502,8 +482,6 @@ test("on core, Up next loads the library, its chapters and the global chapter pr
   U.load((p, done) => { empty.push(p.route); done({ state: "ok", data: { mangas: [], categories: [] } }); }, true, (r) => { none = r; });
   assert.deepEqual(empty, ["library.list"]);
   assert.deepEqual(U.list(none.data, false, 1e6 * 1000), []);
-  U.load((p, done) => { sent.push(p); done({ state: "ok", data: {} }); }, false, () => {});
-  assert.equal(typeof sent[sent.length - 1].query, "string");
 });
 
 test("on core, the reading card pages core's read history by offset", () => {
@@ -512,7 +490,6 @@ test("on core, the reading card pages core's read history by offset", () => {
   const data = { chapters: [{ id: 1, isRead: true, lastReadAt: 500, manga: { id: 3, thumbnailUrl: "/api/cover/3", inLibrary: true, unreadCount: 2 } }], hasNextPage: true };
   assert.deepEqual(RC.rows(data), [{ at: 500, mangaId: 3, thumbnailUrl: "/api/cover/3", inLibrary: true, unread: 2 }]);
   assert.deepEqual(RC.pageInfo(data, 200), { hasNextPage: true, endCursor: 400 });
-  assert.deepEqual(RC.pageInfo({ chapters: { pageInfo: { hasNextPage: false, endCursor: "c" }, nodes: [] } }), { hasNextPage: false, endCursor: "c" });
   assert.equal(RC.card(RC.rows(data), 600, core).covers[0], "http://127.0.0.1:4591/api/cover/3");
 });
 
@@ -542,9 +519,6 @@ test("on core, History loads the cleared cutoff and history.list, hides and clea
   H.load((p, done) => done(p.route === "history.list" ? { state: "down" } : { state: "ok", data: replies[p.route] }), true, (r) => { failed = r; });
   assert.equal(failed.state, "down");
   assert.equal(H.notice(H.reduce(H.initial(), { type: "reply", reply: { state: "down" } }), "core.json", "", "core").title, "miharchy-core is not running");
-  const suwa = [];
-  H.load((p, done) => suwa.push(p), false, () => {});
-  assert.deepEqual(suwa, [{ query: H.QUERY }]);
 });
 
 const D = load("Downloads.js");
@@ -563,10 +537,8 @@ test("on core, the Downloads view reads the plain status from routes and the top
   const live = D.reduce(q, { type: "live", data: { state: "STOPPED", queue: [coreItem(2, "ERROR")] } });
   assert.equal(live.running, false);
   assert.deepEqual(live.items.map((i) => i.chapterId), [2]);
-  assert.equal(D.omitted({ state: "STOPPED", queue: [] }), false);
   // The reason comes with the item: nothing is probed.
   const f = D.failed(q.items, {}, true);
-  assert.deepEqual(f.probe, []);
   assert.deepEqual(f.reasons[2], { kind: "network", text: "No connection to the source" });
   assert.deepEqual(D.failed([D.reduce(D.initial(), { type: "reply", reply: { state: "ok", data: { state: "STOPPED", queue: [coreItem(5, "ERROR")] } } }).items[0]], {}, true).reasons[5], { kind: "other", text: "Unknown error" });
   // The delete reply carries the status too.
@@ -579,7 +551,6 @@ test("on core, every download payload is a route", () => {
   const chapters = [{ id: 1, downloaded: false }, { id: 2, downloaded: true }];
   const items = D.reduce(D.initial(), { type: "reply", reply: { state: "ok", data: { state: "STARTED", queue: [coreItem(1, "QUEUED"), coreItem(9, "QUEUED")] } } });
   assert.deepEqual(D.statusPayload(true), { route: "download.queue" });
-  assert.deepEqual(D.statusPayload(false), { query: D.STATUS_QUERY });
   assert.deepEqual(D.clearPayload(true), { route: "download.clear" });
   assert.deepEqual(D.enqueuePayload(chapters, true), { route: "download.enqueue", body: { ids: [1] } });
   assert.equal(D.enqueuePayload([chapters[1]], true), null);
@@ -591,7 +562,6 @@ test("on core, every download payload is a route", () => {
   assert.deepEqual(D.togglePayload({ running: false }, true), { route: "download.start" });
   assert.deepEqual(D.orderPayload(items, [9, 1], true), { route: "download.reorder", body: { order: [9, 1] } });
   assert.equal(D.orderPayload(items, [1, 9], true), null);
-  assert.ok(D.enqueuePayload(chapters).query, "Suwayomi keeps its mutation");
 });
 
 test("on core, delete after read loads chapters and the categories' metas, and deletes by route", () => {
@@ -613,9 +583,6 @@ test("on core, delete after read loads chapters and the categories' metas, and d
   let down;
   D.autoDeleteLoad((p, done) => done(p.route === "library.list" ? { state: "down" } : { state: "ok", data: replies[p.route] }), true, [1], (r) => { down = r; });
   assert.equal(down.state, "down");
-  const suwa = [];
-  D.autoDeleteLoad((p) => suwa.push(p), false, [1], () => {});
-  assert.deepEqual(suwa, [D.autoDeleteQuery([1])]);
 });
 
 test("on core, a next-chapters run refreshes, reads and settles through routes", () => {
@@ -685,7 +652,6 @@ test("on core, a check for new chapters is update.start, with categories only wh
   const U = load("Updates.js");
   assert.deepEqual(U.checkPayload(null, true), { route: "update.start", body: {} });
   assert.deepEqual(U.checkPayload([0, 4], true), { route: "update.start", body: { categories: [0, 4] } });
-  assert.match(U.checkPayload([4]).query, /updateLibrary/);
 });
 
 test("on core, Updates loads its list from library.list, chapter.list, update.status and the skip metas", () => {
@@ -795,9 +761,6 @@ test("on core, Settings lists the trackers and logs in by callback and by passwo
   const none = T.reduce(T.initial(true), { type: "no-config" });
   assert.equal(none.state, "no-config");
   assert.equal(M.problem(none, "/x/core.json", "core").title, "No miharchy-core config");
-
-  // Suwayomi's state still builds GraphQL.
-  assert.ok(T.loginPayload(T.begin(T.reduce(T.initial(), { type: "list", reply: ok({ trackers: { nodes: TRACKERS } }) }), 1)).query);
 });
 
 test("on core, the tracking panel loads, searches, binds, updates and unbinds on core's routes", async () => {
@@ -866,11 +829,9 @@ test("on core, a mark read pushes or asks the trackers through core's routes", a
   assert.notEqual(failed.state, "ok");
 });
 
-test("a core tracker request reaches core's route with the secret, and Suwayomi's GraphQL is refused", async () => {
+test("a core tracker request reaches core's route with the secret", async () => {
   const requests = install({ "tracker.list": () => ({ trackers: TRACKERS }) });
   const reply = await new Promise((resolve) => S2.send(core, T.listPayload(true), resolve));
   assert.equal(reply.data.trackers.length, 3);
   assert.equal(requests[0].url, "http://127.0.0.1:4591/api/tracker.list");
-  const wrong = await new Promise((resolve) => S2.send(core, T.listPayload(false), resolve));
-  assert.equal(wrong.state, "error");
 });

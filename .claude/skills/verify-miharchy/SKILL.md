@@ -1,11 +1,11 @@
 ---
 name: verify-miharchy
-description: Drive Miharchy's real window (Quickshell/QML) offscreen against a throwaway Suwayomi-Server, and read results back over GraphQL, to prove a window or sync change works. Use after changing anything in window/, sync/ or server/, before claiming a feature works, or to reproduce a bug. Never touches the user's real server (port 4590), desktop, or ~/.config/omarchy.
+description: Drive Miharchy's real window (Quickshell/QML) offscreen against a throwaway miharchy-core, and read results back through core's routes, to prove a window, plugin or core change works. Use after changing anything in window/, plugin/, core/, sync/ or server/, before claiming a feature works, or to reproduce a bug. Never touches the user's real servers (ports 4590 and 4591), desktop, or ~/.config/omarchy.
 ---
 
 # verify-miharchy
 
-Miharchy's user surface is the window (`window/`, Quickshell QML), backed by Suwayomi-Server over GraphQL, plus the sync helper CLI (`sync/`) and a bar plugin (`plugin/`). Proof means: drive the **real** window code through the same command path keys use (`root.handleKey`, command ids), then confirm the **server state** changed (GraphQL read-back), with captures of what the window showed.
+Miharchy's user surface is the window (`window/`, Quickshell QML), backed by miharchy-core (`core/`) over its routes, plus a bar plugin (`plugin/`). Proof means: drive the **real** window code through the same command path keys use (`root.handleKey`, command ids), then confirm the **server state** changed (a `core.sh api` read-back), with captures of what the window showed.
 
 Hard rules, from incidents on this project:
 - Never use the user's server: port 4590, `~/.config/miharchy/server.json`, `~/.local/share/miharchy`. Every run gets its own server on its own port and its own run dir.
@@ -20,6 +20,8 @@ Runs must never share a run dir: `stop` kills whatever server that dir recorded,
 
 ## Launch
 
+Start the scratch core first (see "miharchy-core" below: `core.sh start`, then `core.sh seed`). The scratch Suwayomi below is only for Setup's move, which reads a Suwayomi install, and for the `features/` recipes that #373 has not rewritten yet.
+
 ```sh
 .claude/skills/verify-miharchy/scripts/server.sh start     # ~30–60 s; prints "ready: Suwayomi v… on 127.0.0.1:<port> (pid N), run dir <RUN>"
 .claude/skills/verify-miharchy/scripts/seed.sh --library 2 # Keiyoushi repo + MangaDex, 2 popular manga in the library
@@ -30,13 +32,13 @@ Runs must never share a run dir: `stop` kills whatever server that dir recorded,
 
 The server is `/usr/bin/suwayomi-server` (AUR `suwayomi-server-bin`) with `-Dsuwayomi.tachidesk.config.server.rootDir=$RUN/server` and `-Djava.io.tmpdir=$RUN/server/tmp` (its page and cover cache; the default `/tmp/Tachidesk` is the user's server's too), `ui_login` with random credentials written to `$RUN/server.json`, as Miharchy runs its own server (ADR 0005). Ready = a login with those credentials succeeds and its access token reads `aboutServer{version}` and `mangas`. Access tokens last 5 minutes; `MIHARCHY_VERIFY_TOKEN_EXPIRY=30s` on `start` shortens them (`server.jwtTokenExpiry`), so a drive can outlive one and prove the refresh. `gql.sh` logs in on each call (`token` in `env.sh`). `start` returns then: the server runs detached (`setsid -f`, its own session, output in `$RUN/server.log`), so `server.sh start | tee` and a backgrounded `start` both end. A fresh server downloads JCEF (~250 MB) on first start into its root dir; that is normal.
 
-The sync helper builds once per checkout: `sync/gradlew -p sync installDist` → `sync/build/install/miharchy-sync/bin/miharchy-sync`. Run it against the scratch server through `scripts/qs.sh env sync/build/install/miharchy-sync/bin/miharchy-sync <args>`, which sets the run's `HOME`, `user.home` and `MIHARCHY_SERVER_JSON` together; the helper refuses to start when `HOME` and `user.home` disagree. For the window's sync, backup and restore, copy the build into `$RUN/home/.local/share/miharchy/helper/` (`cp -r sync/build/install/miharchy-sync/. $RUN/home/.local/share/miharchy/helper/`).
+The sync helper builds once per checkout: `sync/gradlew -p sync installDist` → `sync/build/install/miharchy-sync/bin/miharchy-sync`. Run it against the scratch server through `scripts/qs.sh env sync/build/install/miharchy-sync/bin/miharchy-sync <args>`, which sets the run's `HOME`, `user.home` and `MIHARCHY_SERVER_JSON` together; the helper refuses to start when `HOME` and `user.home` disagree. The window and the mark no longer run the helper: core runs the sync, backups and restores (`sync.run`, `backup.export`, `backup.import`).
 
 `server.sh restart` stops and starts the same instance: same port, credentials and library. Use it to prove the window reconnects after a server restart; `stop` then `start` wipes the library and changes the credentials.
 
 ## miharchy-core
 
-The window and the mark run on miharchy-core by default (#373). `MIHARCHY_BACKEND=suwayomi` in front of `drive.sh`, one more allowed `VAR=...` prefix, drives the Suwayomi path while its code remains; `MIHARCHY_BACKEND=core` from older recipes is the same as no prefix. `window_env` points the window at this run's `$RUN/core/core.json`, so no other variable is needed.
+The window and the mark run on miharchy-core only (#373). `MIHARCHY_BACKEND` in an older recipe does nothing now. `window_env` points the window at this run's `$RUN/core/core.json`, so no other variable is needed.
 
 ```
 .claude/skills/verify-miharchy/scripts/core.sh start    # builds core/ if needed; "ready: miharchy-core on 127.0.0.1:<port> …"
@@ -46,25 +48,35 @@ printf %s "$BODY" | .claude/skills/verify-miharchy/scripts/core.sh api tracker.l
 .claude/skills/verify-miharchy/scripts/core.sh stop     # keeps $RUN/core; start again resumes the same data
 ```
 
-Core never uses 4590 or 4591, and keeps its data under `$RUN/core`. Rebuild with `./gradlew :server:installDist` in `core/` after a core change: `start` builds only when no build exists. Both servers number manga, chapters and categories from 1, so a crossed id hits a real row: a drive that touches one server diffs the other before and after. `server.sh stop` then `start` wipes the Suwayomi library; use `server.sh restart` to keep a seeded one. A drive greps `$RUN/window.log` for `miharchy: refused`, which `Session.send` logs when a request goes to the wrong server; it must stay 0.
+`seed` leaves the library empty. To get a library with Updates rows, an Up next head and a reading history, run these after `seed` (MangaDex's search creates manga rows):
+
+```
+core.sh api source.list '{}'                                         # MangaDex (EN)'s id
+core.sh api source.search '{"source":"<id>","page":1,"query":"Berserk"}'
+core.sh api manga.update '{"ids":[2,3],"inLibrary":true}'            # add first ...
+core.sh api manga.refresh '{"id":2}'                                 # ... then fetch: chapters fetched after the add are Updates rows
+core.sh api chapter.update '{"ids":[<ch 1>],"isRead":true,"lastPageRead":5}'   # a read time puts the manga in Up next and History
+```
+
+In Browse, Tab switches between sources and extensions. Core never uses 4590 or 4591, and keeps its data under `$RUN/core`. Rebuild with `./gradlew :server:installDist` in `core/` after a core change: `start` builds only when no build exists. The scratch Suwayomi (`server.sh`) is only for Setup's move, which reads it. `server.sh stop` then `start` wipes the Suwayomi library; use `server.sh restart` to keep a seeded one. A drive greps `$RUN/window.log` for `miharchy: refused`, which `Session.send` logs for a payload with no core route; it must stay 0.
 
 ## Live updates
 
-The download queue and Updates follow GraphQL subscriptions over a WebSocket (`window/LiveSocket.qml`), which needs `qt6-websockets`. Without the module the window still runs, with nothing live, and logs "Live updates need qt6-websockets". When it is not installed, extract the Arch package into a scratch dir (`pacman -Sp qt6-websockets` gives the URL; check the `.sig` with `pacman-key --verify`) and run `drive.sh` with `QML_IMPORT_PATH=<dir>/usr/lib/qt6/qml LD_LIBRARY_PATH=<dir>/usr/lib` in front: one of the two places a `VAR=...` prefix belongs; the other is a start target (`MIHARCHY_PEEK=1`, `MIHARCHY_OPEN_VIEW=updates`, `MIHARCHY_OPEN_CHAPTER="<mangaId> <chapterId>"`), which `drive.sh` passes through to the window as the launcher would set it. Each drive overwrites `$RUN/evidence/drive.log`, so copy it to its own name before the next drive. To show that nothing polls, point the drive at a logging proxy: write a copy of `$RUN/server.json` whose `url` is the proxy's port over `$RUN/server.json` (`gql.sh` and `server.sh` use `$RUN/port`, not the url), and log each request and WebSocket upgrade. Start the server with `MIHARCHY_VERIFY_TOKEN_EXPIRY=40s` to keep a socket open past its token, and run `server.sh restart` while a drive runs in the background to prove the reconnect. A library update only shows progress when the seeded manga pass the skip filters: `setSettings` with `excludeUnreadChapters`, `excludeNotStarted` and `excludeCompleted` false.
+The download queue and Updates follow core's `downloads` and `updates` topics over a WebSocket to `/api/live` (`window/LiveSocket.qml`), which needs `qt6-websockets`. Without the module the window still runs, with nothing live, and logs "Live updates need qt6-websockets". When it is not installed, extract the Arch package into a scratch dir (`pacman -Sp qt6-websockets` gives the URL; check the `.sig` with `pacman-key --verify`) and run `drive.sh` with `QML_IMPORT_PATH=<dir>/usr/lib/qt6/qml LD_LIBRARY_PATH=<dir>/usr/lib` in front: one of the two places a `VAR=...` prefix belongs; the other is a start target (`MIHARCHY_PEEK=1`, `MIHARCHY_OPEN_VIEW=updates`, `MIHARCHY_OPEN_CHAPTER="<mangaId> <chapterId>"`), which `drive.sh` passes through to the window as the launcher would set it. Each drive overwrites `$RUN/evidence/drive.log`, so copy it to its own name before the next drive. To show that nothing polls, point the drive at a logging proxy: write a copy of `$RUN/server.json` whose `url` is the proxy's port over `$RUN/server.json` (`gql.sh` and `server.sh` use `$RUN/port`, not the url), and log each request and WebSocket upgrade. Start the server with `MIHARCHY_VERIFY_TOKEN_EXPIRY=40s` to keep a socket open past its token, and run `server.sh restart` while a drive runs in the background to prove the reconnect. A library update only shows progress when the seeded manga pass the skip filters: `setSettings` with `excludeUnreadChapters`, `excludeNotStarted` and `excludeCompleted` false.
 
 ## Doctor
 
 ```sh
 .claude/skills/verify-miharchy/scripts/server.sh doctor    # "ok: pid N owns <port>, Suwayomi v…, request without a token -> Unauthorized, run dir <RUN>"
 ```
-Run it first whenever anything looks off. It fails if the PID file is missing, the process is dead, another process owns the port, the login fails, or auth is not enforced.
+Run it first whenever the scratch Suwayomi looks off. For core, `core.sh api library.list '{}'` answers or fails. It fails if the PID file is missing, the process is dead, another process owns the port, the login fails, or auth is not enforced.
 
 ## Drive
 
 ```sh
 .claude/skills/verify-miharchy/scripts/drive.sh steps.js 90     # copies window/ (and server/, sync/, core/ without build output, for Setup) into $RUN/app, appends the driver, runs it offscreen for ≤ 90 s
 ```
-`drive.sh` patches the copy with `scripts/patch-window.py` (both Setup jumps off, `import QtTest`, the driver) and runs it through `window_env` in `env.sh`: `HOME=$RUN/home`, `JAVA_OPTS=-Duser.home=$RUN/home` and `XDG_RUNTIME_DIR=$RUN/runtime` (where the window writes server images and Quickshell keeps its IPC sockets and logs, so the real `/run/user/<uid>` stays untouched). Reach that window with `scripts/qs.sh`: `qs.sh ipc call miharchy openUpdates`, `qs.sh list`, `qs.sh log <id>`, and `qs.sh env <command>` for any command in the same environment. The window runs the sync helper from `$HOME/.local/share/miharchy/helper`, and this machine has a real one at `~/.local/share/miharchy/helper` whose baselines live in the real home; the run home keeps a drive that syncs, backs up or restores away from both. The run home has no Omarchy theme, so the window draws its default palette; for themed captures copy a theme in first: `mkdir -p $RUN/home/.local/state/omarchy/current && cp -r ${OMARCHY_PATH:-$HOME/.local/share/omarchy}/themes/tokyo-night $RUN/home/.local/state/omarchy/current/theme`. Do not source `site/tools/env.sh` in a verify run: it points `MIHARCHY_VERIFY_DIR` at the showcase run. `PATH` passes through: put logging stubs for `xdg-open`, `wl-copy` and `notify-send` first on it before any drive that opens a link, copies or notifies. Text reaches `wl-copy` as arguments (`wl-copy -- <text>`), and the reader's `Y` sends the page as `wl-copy --type <mime>` with the image on stdin; a `wl-copy` stub reads stdin only on that `--type` call, so a text call never waits on an open stdin. The offscreen window is 1280×800 and does not resize.
+`drive.sh` patches the copy with `scripts/patch-window.py` (both Setup jumps off, `import QtTest`, the driver) and runs it through `window_env` in `env.sh`: `HOME=$RUN/home`, `JAVA_OPTS=-Duser.home=$RUN/home` and `XDG_RUNTIME_DIR=$RUN/runtime` (where the window writes server images and Quickshell keeps its IPC sockets and logs, so the real `/run/user/<uid>` stays untouched). Reach that window with `scripts/qs.sh`: `qs.sh ipc call miharchy openUpdates`, `qs.sh list`, `qs.sh log <id>`, and `qs.sh env <command>` for any command in the same environment. The run home keeps a drive that syncs, backs up or restores away from the real home. The run home has no Omarchy theme, so the window draws its default palette; for themed captures copy a theme in first: `mkdir -p $RUN/home/.local/state/omarchy/current && cp -r ${OMARCHY_PATH:-$HOME/.local/share/omarchy}/themes/tokyo-night $RUN/home/.local/state/omarchy/current/theme`. Do not source `site/tools/env.sh` in a verify run: it points `MIHARCHY_VERIFY_DIR` at the showcase run. `PATH` passes through: put logging stubs for `xdg-open`, `wl-copy` and `notify-send` first on it before any drive that opens a link, copies or notifies. Text reaches `wl-copy` as arguments (`wl-copy -- <text>`), and the reader's `Y` sends the page as `wl-copy --type <mime>` with the image on stdin; a `wl-copy` stub reads stdin only on that `--type` call, so a text call never waits on an open stdin. The offscreen window is 1280×800 and does not resize.
 
 `steps.js` is a JS array of `[delayMs, function]` pairs, run in order inside the window (`delayMs` waits before that step). Helpers available in steps (see `scripts/driver.qml.part`):
 - `key("j")`, `key("Enter")`, `key("Esc")`, `key("Tab")`, `key("Backspace")`, `key(" ")` — go through `root.handleKey`, the window's one key path.
@@ -75,21 +87,21 @@ Run it first whenever anything looks off. It fails if the PID file is missing, t
 - `root.v` — scratch space a step leaves for a later one (`root.v.list = ...`).
 - `done()` — quit. Prefer `root.run("window.quit")` when the quit path itself matters (it flushes reader saves).
 
-Handles (ids in `window/shell.qml`): `root` (view, connection, settingsState), `libraryView` (the Library view: `shown`, `manga`, `cursor`, `query`, `selected`, `armed`, `scope`, `hint`; its whole state is `libraryView.library`), `browseView` (screen, src, listing, global), `mangaDetail` (open, detail, cursor), `reader` (open, reader.chapters/index/page/mode), `updatesView`, `historyView`, `settingsView`, `setupView`, `trackPanel`, `migrateView`, `downloadsView`, `syncView`, `palette`, `extensionsView`, `restoreView`, `checkView` (the library check), `nextChapters` (the next chapters menu), `readingCard`, `hintBar`, `codeHint`, `keyRoot` (grab target). `drive.sh` turns off both Setup jumps in the copy (the required-step jump and the one-time offer): Setup probes the *real* machine, so it would otherwise take over the window. To verify Setup itself, drive `root.run("view.setup")` and stub the commands its probe calls on PATH (see `window/tests/setup.test.js` for the stub pattern).
+Handles (ids in `window/shell.qml`): `root` (view, coreConnection, coreConfig, settingsState), `libraryView` (the Library view: `shown`, `manga`, `cursor`, `query`, `selected`, `armed`, `scope`, `hint`; its whole state is `libraryView.library`), `browseView` (screen, src, listing, global), `mangaDetail` (open, detail, cursor), `reader` (open, reader.chapters/index/page/mode), `updatesView`, `historyView`, `settingsView`, `setupView`, `trackPanel`, `migrateView`, `downloadsView`, `syncView`, `palette`, `extensionsView`, `restoreView`, `checkView` (the library check), `nextChapters` (the next chapters menu), `readingCard`, `hintBar`, `codeHint`, `keyRoot` (grab target). `drive.sh` turns off both Setup jumps in the copy (the required-step jump and the one-time offer): Setup probes the *real* machine, so it would otherwise take over the window. To verify Setup itself, drive `root.run("view.setup")` and stub the commands its probe calls on PATH (see `window/tests/setup.test.js` for the stub pattern).
 
 Text fields: the driver cannot type. Set the field's text, then send `key("Enter")` (e.g. the source search field is `browseView` → `SourceGrid.searchField`).
 
-Read-backs: `.claude/skills/verify-miharchy/scripts/gql.sh '<query>' ['{"var":1}']` against the scratch server, after the window exits.
+Read-backs: `.claude/skills/verify-miharchy/scripts/core.sh api <route> '<json body>'` against the scratch core, after the window exits. `gql.sh` reads the scratch Suwayomi, for a move's source only.
 
 ## Evidence
 
-Everything a proof needs lands in `$RUN/evidence/` and survives cleanup: `*.png` captures, `drive.log` (DRIVER lines). Also keep the GraphQL read-back output you rely on (`.claude/skills/verify-miharchy/scripts/gql.sh … | tee $RUN/evidence/readback.json`). Read the captures (the Read tool shows images) before claiming anything about the UI.
+Everything a proof needs lands in `$RUN/evidence/` and survives cleanup: `*.png` captures, `drive.log` (DRIVER lines). Also keep the read-back output you rely on (`.claude/skills/verify-miharchy/scripts/core.sh api … | tee $RUN/evidence/readback.json`). Read the captures (the Read tool shows images) before claiming anything about the UI.
 
 Proof standard:
 - Drive the real path (keys, mouse events or command ids), not internal setters, except to fill a text field.
 - Capture the action and the resulting state, not just the final screen.
 - Check the side effect on the server (read state, library flag, categories, settings, meta), not only what is drawn.
-- For sync: check the files written to the sync folder and the baselines in `$RUN/home/.local/share/miharchy/sync`.
+- For sync: check the files written to the sync folder and core's baselines in `$RUN/core/data/sync`.
 - `grabToImage` of `keyRoot` omits the window's own color, so the driver puts a `theme.background` fill under `keyRoot` (`vBackground` in `driver.qml.part`); captures show the background the window draws.
 - `grab()` captures after the step returns, so a key or click later in the same step shows in the capture. End the step with the `grab`, and quit (`done()`, `window.quit`) in a later step: a quit in the same step exits before the file is written.
 

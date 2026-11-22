@@ -20,9 +20,9 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // "core" with MIHARCHY_BACKEND=core (shell.qml): config is miharchy-core's.
+  // Set by shell.qml; config is miharchy-core's. shell.qml reads core.
   property string backend: ""
-  readonly property bool core: backend === "core"
+  readonly property bool core: true
   // The view shows, so it loads and follows the library update live.
   property bool active: false
   property var updates: Updates.initial()
@@ -59,7 +59,7 @@ Item {
   signal read(var manga, var chapters, int chapterId, bool peek)
   // action: "read", "unread" or "bookmark".
   signal mark(var chapters, string action, var mangaIds)
-  // A download mutation's reply, which carries the queue.
+  // A download request's reply, which carries the queue.
   signal downloads(var reply)
   // A double click sends Enter, as typed.
   signal key(var event)
@@ -88,13 +88,13 @@ Item {
     if (!active) return
     // No core.json: core's no-config problem, not "Loading" for ever.
     if (!config) {
-      if (core) updates = Updates.reduce(Updates.initial(), { type: "list", reply: { state: "no-config", message: "" } })
+      updates = Updates.reduce(Updates.initial(), { type: "list", reply: { state: "no-config", message: "" } })
       return
     }
     var seq = ++listSeq
     var cfg = config
     updates = Updates.reduce(updates, { type: "request" })
-    Updates.load(send, core, Date.now(), function(reply) {
+    Updates.load(send, true, Date.now(), function(reply) {
       if (seq !== view.listSeq) return
       view.updates = Updates.reduce(view.updates, { type: "list", reply: reply, config: cfg, now: Date.now(), prefs: view.prefs })
     })
@@ -113,7 +113,7 @@ Item {
     if (!config || updates.running || updates.checking) return false
     updates = Updates.reduce(updates, { type: "checking" })
     error = ""
-    send(Updates.checkPayload(categories, core), function(reply) {
+    send(Updates.checkPayload(categories, true), function(reply) {
       // Core's reply is the run's status.
       if (reply.state === "ok") {
         if (reply.data && reply.data.isRunning !== undefined) view.follow(reply.data)
@@ -127,7 +127,7 @@ Item {
 
   function stop() {
     if (!config || !(updates.running || updates.checking)) return
-    send(Updates.stopPayload(core), function(reply) {
+    send(Updates.stopPayload(true), function(reply) {
       if (reply.state !== "ok") {
         view.error = view.problem(reply)
         return
@@ -151,7 +151,7 @@ Item {
     if (!config) return
     var seq = ++openSeq
     var cfg = config
-    var d = Browse.detail(mangaId, false, core)
+    var d = Browse.detail(mangaId, false, true)
     error = ""
     send(Browse.detailPayload(d), function(reply) {
       if (seq !== view.openSeq) return
@@ -178,7 +178,7 @@ Item {
   }
 
   function deleteDownloads() {
-    var payload = Downloads.removePayload(targets, queue, core)
+    var payload = Downloads.removePayload(targets, queue, true)
     if (!payload) return
     if (!armed) {
       armed = true
@@ -223,7 +223,7 @@ Item {
         act("bookmark")
         break
       case "updates.download":
-        sendDownloads(Downloads.enqueuePayload(targets, core))
+        sendDownloads(Downloads.enqueuePayload(targets, true))
         break
       case "updates.deleteDownload":
         deleteDownloads()
@@ -254,7 +254,6 @@ Item {
 
   LiveSocket {
     config: view.config
-    query: Updates.LIVE_QUERY
     topic: "updates"
     running: view.active && view.config !== null
     onResult: function(data) { view.follow(data) }

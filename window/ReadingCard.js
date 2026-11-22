@@ -4,7 +4,7 @@
 // The reading card (GLOSSARY.md): chapters read in the last 7 days, manga in
 // progress, the streak and a few covers, from History's own source
 // (lastReadAt). Pure, so tests/readingcard.test.js pins it;
-// ReadingCard.qml pages the query and draws the card.
+// ReadingCard.qml pages history.list and draws the card.
 //
 // History's hidden and cleared cutoffs do not apply: hiding an entry takes
 // it off the list, not off what the user read.
@@ -16,28 +16,21 @@ var PAGE = 200
 
 var PREFS = [{ key: "readingCardCovers", default: "shown", options: ["shown", "hidden"] }]
 
-var QUERY = "query($after: Cursor) { chapters(filter: { isRead: { equalTo: true }, lastReadAt: { greaterThan: \"0\" } },"
-  + " order: [{ by: LAST_READ_AT, byType: DESC }], first: " + PAGE + ", after: $after) {"
-  + " pageInfo { hasNextPage endCursor } nodes { lastReadAt isRead manga { id thumbnailUrl inLibrary unreadCount } } } }"
-
-// after: Suwayomi's cursor, or core's offset (ADR 0010: history.list).
+// after: core's offset (ADR 0010: history.list).
 function payload(after, core) {
-  if (core) return { route: "history.list", body: { readOnly: true, limit: PAGE, offset: after || 0 } }
-  return { query: QUERY, variables: { after: after || null } }
+  return { route: "history.list", body: { readOnly: true, limit: PAGE, offset: after || 0 } }
 }
 
 // Reply data -> [{ at, mangaId, thumbnailUrl, inLibrary, unread }], at in
-// epoch seconds, newest first as the query orders them.
+// epoch seconds, newest first as history.list orders them.
 function rows(data) {
-  var chapters = Array.isArray(data.chapters) ? data.chapters : (data.chapters && data.chapters.nodes) || []
-  return chapters.filter(function(c) { return c.isRead === true }).map(function(c) {
+  return data.chapters.filter(function(c) { return c.isRead === true }).map(function(c) {
     return { at: Number(c.lastReadAt) || 0, mangaId: c.manga.id, thumbnailUrl: c.manga.thumbnailUrl || "", inLibrary: c.manga.inLibrary === true, unread: c.manga.unreadCount || 0 }
   })
 }
 
-// The reply's next page as Suwayomi's pageInfo; core's cursor is the offset.
+// The reply's next page as { hasNextPage, endCursor }; core's cursor is the offset.
 function pageInfo(data, after) {
-  if (!Array.isArray(data.chapters)) return data.chapters.pageInfo
   return { hasNextPage: data.hasNextPage === true, endCursor: (after || 0) + PAGE }
 }
 

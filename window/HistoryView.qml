@@ -16,9 +16,9 @@ Item {
 
   required property Theme theme
   property var config: null
-  // "core" with MIHARCHY_BACKEND=core (shell.qml): config is miharchy-core's.
+  // Set by shell.qml; config is miharchy-core's. shell.qml reads core.
   property string backend: ""
-  readonly property bool core: backend === "core"
+  readonly property bool core: true
   property string configPath: ""
   property bool active: false
 
@@ -52,7 +52,7 @@ Item {
   onActiveChanged: if (active) reload()
   onQueryChanged: cursor = 0
   // A missing core.json leaves config null from the start, so onConfigChanged never fires.
-  Component.onCompleted: if (core && !config) history = History.reduce(history, { type: "config-missing" })
+  Component.onCompleted: if (!config) history = History.reduce(history, { type: "config-missing" })
   onConfigChanged: {
     seq++
     opening = null
@@ -71,7 +71,7 @@ Item {
     var cfg = config
     opening = null
     history = History.reduce(history, { type: "request" })
-    History.load(function(payload, done) { Session.send(cfg, payload, done) }, core, function(reply) {
+    History.load(function(payload, done) { Session.send(cfg, payload, done) }, true, function(reply) {
       if (s !== view.seq) return
       view.now = Date.now() / 1000
       view.history = History.reduce(view.history, { type: "reply", reply: reply, config: cfg })
@@ -93,7 +93,7 @@ Item {
   function open(entry) {
     var s = ++seq
     var cfg = config
-    opening = Browse.detail(entry.mangaId, false, core)
+    opening = Browse.detail(entry.mangaId, false, true)
     var step = function() {
       var payload = Browse.detailPayload(view.opening)
       if (!payload) {
@@ -129,13 +129,13 @@ Item {
         break
       case "history.remove":
         if (!entry) break
-        if (wasArmed === String(entry.mangaId)) mutate(History.removePayload(entry, core))
+        if (wasArmed === String(entry.mangaId)) mutate(History.removePayload(entry, true))
         else armed = String(entry.mangaId)
         break
       // All of it, whatever the search shows: the cutoff is the newest entry.
       case "history.clear":
         if (!history.entries.length) break
-        if (wasArmed === "clear") mutate(History.clearPayload(history.entries, core))
+        if (wasArmed === "clear") mutate(History.clearPayload(history.entries, true))
         else armed = "clear"
         break
       case "history.search":

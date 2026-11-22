@@ -16,41 +16,18 @@ var VIEWS = [
 // The sync helper stores source names from phone backups here, id -> name.
 var SOURCE_NAMES_META = "miharchy.sourceNames"
 
-var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDownload includeInUpdate meta { key value } } }"
-  + " metas(condition: { key: \"" + SOURCE_NAMES_META + "\" }) { nodes { value } }"
-  + " mangas(condition: {inLibrary: true}) { nodes { id title author artist genre status thumbnailUrl sourceId source { id displayName lang } unreadCount downloadCount bookmarkCount inLibraryAt"
-  + " chapters { totalCount } lastReadChapter { lastReadAt } latestUploadedChapter { uploadDate } latestFetchedChapter { fetchedAt }"
-  + " trackRecords { totalCount } categories { nodes { id } } } } }"
-
-// The library request: Suwayomi's query, or core's library.list (ADR 0010).
+// The library request: core's library.list (ADR 0010).
 function libraryPayload(core) {
-  return core ? { route: "library.list" } : { query: LIBRARY_QUERY }
+  return { route: "library.list" }
 }
 
-var LIBRARY_MUTATION = "mutation($id: Int!, $inLibrary: Boolean!) { updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) { manga { id inLibrary } } }"
-
-// Suwayomi's built-in "Default" category holds the manga in no category, as
-// in Mihon. It is never a user category, the same rule as the sync helper.
+// Category 0, "Default", holds the manga in no category, as in Mihon. It is
+// never a user category.
 var DEFAULT_CATEGORY = 0
 var ALL = -1
 
-// server.json text -> { url, username, password } with the url's trailing
-// slash dropped, or null when the text is missing, not JSON, or lacks a key.
-function parseConfig(text) {
-  var c
-  try {
-    c = JSON.parse(text)
-  } catch (e) {
-    return null
-  }
-  if (!c || typeof c.url !== "string" || typeof c.username !== "string" || typeof c.password !== "string") return null
-  if (!c.url) return null
-  return { url: c.url.replace(/\/+$/, ""), username: c.username, password: c.password }
-}
-
 // miharchy-core's core.json (ADR 0010) -> { url, secret, backend: "core" },
-// or null. backend tells Session.send and Model.problem which server a
-// view talks to; a Suwayomi config has none.
+// or null.
 function parseCoreConfig(text) {
   var c
   try {
@@ -60,12 +37,6 @@ function parseCoreConfig(text) {
   }
   if (!c || typeof c.url !== "string" || typeof c.secret !== "string" || !c.url || !c.secret) return null
   return { url: c.url.replace(/\/+$/, ""), secret: c.secret, backend: "core" }
-}
-
-// Puts a manga in the library or takes it out. Its chapters, read state
-// and downloads stay, as in Mihon.
-function inLibraryPayload(mangaId, inLibrary) {
-  return { query: LIBRARY_MUTATION, variables: { id: mangaId, inLibrary: inLibrary } }
 }
 
 // "http://host:port/path" -> { origin: "http://host:port", rest: "/path" },
@@ -139,29 +110,9 @@ function reduce(connection, event) {
   return connection
 }
 
-// Any GraphQL answer -> { state, message, data } with state "ok" (and the
-// reply's data), "down", "unauthorized" or "error" (and a message).
-function reply(status, body) {
-  var fail = function(state, message) { return { state: state, message: message || "", data: null } }
-  if (status === 0) return fail("down")
-  if (status === 401) return fail("unauthorized")
-  if (status !== 200) return fail("error", "The server answered HTTP " + status + ".")
-  var json
-  try {
-    json = JSON.parse(body)
-  } catch (e) {
-    return fail("error", "The server sent a reply that is not JSON.")
-  }
-  if (json.errors && json.errors.length) {
-    var message = errorText(json.errors[0].message)
-    // ui_login answers a missing or expired access token this way, with 200.
-    return message === "Unauthorized" ? fail("unauthorized") : fail("error", message)
-  }
-  return { state: "ok", message: "", data: json.data || {} }
-}
-
-// miharchy-core's answer -> the same { state, message, data } as reply(),
-// plus kind on a failure: core's error kind (ADR 0010), so a view can tell
+// miharchy-core's answer -> { state, message, data, kind }: state "ok"
+// (and the route's object), "down", "unauthorized" or "error" (and a
+// message), plus kind on a failure: core's error kind (ADR 0010), so a view can tell
 // a Cloudflare challenge or a WebView source from other errors. Core answers
 // a failure with a non-200 status and { error: { kind, message } }, and
 // success with the route's object itself.
@@ -180,13 +131,6 @@ function coreReply(status, body) {
   }
   if (status !== 200 || !json || typeof json !== "object") return fail("error", "miharchy-core answered HTTP " + status + ".")
   return { state: "ok", message: "", data: json, kind: "" }
-}
-
-// Suwayomi wraps an exception as "Exception while fetching data (/path) :
-// message" followed by its stack trace; only the message is for people.
-function errorText(message) {
-  var first = String(message || "GraphQL error").split(/\r?\n/)[0]
-  return first.replace(/^Exception while fetching data \([^)]*\) : /, "").trim() || "GraphQL error"
 }
 
 // Reply data with the SOURCE_NAMES_META node -> { sourceId: name }.
@@ -210,7 +154,7 @@ function sourceLabel(n, names) {
 
 function fromResponse(r, config) {
   if (r.state !== "ok") return conn(r.state, { message: r.message })
-  var data = config && config.backend === "core" ? coreLibrary(r.data) : r.data
+  var data = coreLibrary(r.data)
   var nodes = data.mangas && data.mangas.nodes
   if (!Array.isArray(nodes)) return conn("error", { message: "The server's reply has no library." })
   var ids = function(list) { return ((list && list.nodes) || []).map(function(c) { return c.id }) }
@@ -235,7 +179,7 @@ function fromResponse(r, config) {
         genre: n.genre || [],
         status: String(n.status || ""),
         total: total,
-        // Suwayomi has no read count; Mihon's "started" means one is read.
+        // The read count is what is not unread; Mihon's "started" means one is read.
         read: Math.max(0, total - unread),
         downloads: n.downloadCount || 0,
         bookmarks: n.bookmarkCount || 0,
@@ -253,13 +197,14 @@ function fromResponse(r, config) {
   })
 }
 
-// Core's library.list as Suwayomi's reply: the same fields in plain
-// arrays, with chapterCount and trackCount for the connections'
-// totalCount, in the same units.
+// Core's library.list in the shape fromResponse reads: connections with
+// nodes and totalCount, from core's plain arrays, chapterCount and
+// trackCount.
 function coreLibrary(data) {
   if (!Array.isArray(data.mangas)) return {}
   return {
     categories: { nodes: data.categories || [] },
+    metas: data.metas,
     mangas: { nodes: data.mangas.map(function(n) {
       var m = {}
       for (var k in n) m[k] = n[k]
@@ -308,33 +253,16 @@ function notice(connection, configPath, shown, narrowed, backend) {
 
 // { title, detail } for a failed connection, null for "loading" and "ok".
 // Any { state, message } works, so other views reuse it.
-// backend: "core" for a view on miharchy-core, which words its own failures.
 function problem(connection, configPath, backend) {
-  if (backend === "core") {
-    switch (connection.state) {
-      case "no-config":
-        return { title: "No miharchy-core config", detail: configPath + " is missing or invalid. Open Miharchy: its Setup builds and starts miharchy-core, which creates it." }
-      case "down":
-        return { title: "miharchy-core is not running", detail: "Start it with: systemctl --user start miharchy-core. Press r to retry." }
-      case "unauthorized":
-        return { title: "miharchy-core rejected the secret", detail: "Check the secret in " + configPath + ". Press r to retry." }
-      case "error":
-        return { title: "miharchy-core sent an error", detail: connection.message + " Press r to retry." }
-    }
-    return null
-  }
   switch (connection.state) {
     case "no-config":
-      return { title: "No server config", detail: configPath + " is missing or invalid. Run Setup from the : palette to create it." }
+      return { title: "No miharchy-core config", detail: configPath + " is missing or invalid. Open Miharchy: its Setup builds and starts miharchy-core, which creates it." }
     case "down":
-      return { title: "The server is not running", detail: "Start it with: systemctl --user start miharchy-server. Press r to retry." }
+      return { title: "miharchy-core is not running", detail: "Start it with: systemctl --user start miharchy-core. Press r to retry." }
     case "unauthorized":
-      return { title: "The server rejected the credentials", detail: "Check username and password in " + configPath + ". Press r to retry." }
+      return { title: "miharchy-core rejected the secret", detail: "Check the secret in " + configPath + ". Press r to retry." }
     case "error":
-      // Suwayomi's answer to a source that runs part of its site in KCEF
-      // while the server setting kcefEnabled is off.
-      if (/^CEF is disabled/.test(connection.message)) return { title: "This source needs the server's WebView (KCEF), which is off", detail: "Turn it on in Settings." }
-      return { title: "The server sent an error", detail: connection.message + " Press r to retry." }
+      return { title: "miharchy-core sent an error", detail: connection.message + " Press r to retry." }
   }
   return null
 }
@@ -468,15 +396,10 @@ if (typeof module !== "undefined") {
     coreReply: coreReply,
     VIEWS: VIEWS,
     SOURCE_NAMES_META: SOURCE_NAMES_META,
-    LIBRARY_QUERY: LIBRARY_QUERY,
     libraryPayload: libraryPayload,
     parseNames: parseNames,
     sourceLabel: sourceLabel,
-    parseConfig: parseConfig,
-    inLibraryPayload: inLibraryPayload,
     placeholder: placeholder,
-    reply: reply,
-    errorText: errorText,
     coverUrl: coverUrl,
     serverImageUrl: serverImageUrl,
     initial: initial,

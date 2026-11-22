@@ -6,30 +6,13 @@
 // tests/browse.test.js pins it; BrowseView.qml sends the payloads built here
 // and feeds replies back through the reducers.
 
-var SOURCES_QUERY = "{ sources { nodes { id displayName lang iconUrl contentWarning supportsLatest isConfigurable } } }"
-
-var LISTING_MUTATION = "mutation($source: LongString!, $type: FetchSourceMangaType!, $page: Int!, $query: String, $filters: [FilterChangeInput!]) {"
-  + " fetchSourceManga(input: { source: $source, type: $type, page: $page, query: $query, filters: $filters }) {"
-  + " hasNextPage mangas { id title thumbnailUrl inLibrary } } }"
-
-var MANGA_FIELDS = "id title realUrl author artist description genre status thumbnailUrl inLibrary initialized sourceId source { displayName } categories { nodes { id } } meta { key value }"
-var CHAPTER_FIELDS = "id name realUrl chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder"
 var NOTES_META = "miharchy.notes"
-var DETAIL_QUERY = "query($id: Int!) { manga(id: $id) { " + MANGA_FIELDS + " chapters { nodes { " + CHAPTER_FIELDS + " } } }"
-  + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
-var EXTENSION_QUERY = "query($name: String!) { extensions(filter: { name: { equalTo: $name } }) { nodes { name isInstalled } } }"
-var FETCH_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: true }) {"
-  + " manga { " + MANGA_FIELDS + " } chapters { " + CHAPTER_FIELDS + " } } }"
-var CATEGORY_MUTATION = "mutation($id: Int!, $add: [Int!]!, $remove: [Int!]!) {"
-  + " updateMangaCategories(input: { id: $id, patch: { addToCategories: $add, removeFromCategories: $remove } }) { manga { id categories { nodes { id } } } } }"
 
-var TYPES = { popular: "POPULAR", latest: "LATEST", search: "SEARCH" }
-
-// The sources request. On core (ADR 0010) each source then carries
-// core: true, so its listings, global search and filter and settings
-// panels take core's routes with no flag of their own.
+// The sources request. Each source then carries core: true, so its
+// listings, global search and filter and settings panels take core's routes
+// with no flag of their own.
 function sourcesPayload(core) {
-  return core ? { route: "source.list" } : { query: SOURCES_QUERY }
+  return { route: "source.list" }
 }
 var LOCAL_SOURCE = "0"
 
@@ -40,41 +23,34 @@ function copy(o, changes) {
   return c
 }
 
-// Suwayomi's Cloudflare interceptor throws this when FlareSolverr is off.
-function needsFlareSolverr(message) {
-  return /Cloudflare bypass currently disabled/i.test(message || "")
-}
-
 function failed(reply) {
-  return { state: reply.state, message: reply.message, flare: reply.kind === "cloudflare" || needsFlareSolverr(reply.message) }
+  return { state: reply.state, message: reply.message, flare: reply.kind === "cloudflare" }
 }
 
 // A sources reply -> { state, message, sources: [{ id, name, lang, icon,
 // warning, supportsLatest, configurable }] }. NSFW sources hide unless
 // showNsfw, and only English and multi-language sources show unless
 // allLanguages, the same rules as their extensions. The local source gets
-// Mihon's language "other" (Suwayomi says "localsourcelang"), so it shows
+// Mihon's language "other" (the server says "localsourcelang"), so it shows
 // under Other and never as a Migrate target, as in Mihon.
 function sources(reply, config, showNsfw, allLanguages) {
   if (reply.state !== "ok") return { state: reply.state, message: reply.message, sources: [] }
-  var core = !!config && config.backend === "core"
-  var nodes = (core ? reply.data.sources : reply.data.sources && reply.data.sources.nodes) || []
+  var nodes = reply.data.sources || []
   var list = nodes
     .filter(function(n) {
       return (showNsfw || n.contentWarning !== "NSFW") && (allLanguages || n.lang === "en" || n.lang === "all")
     })
     .map(function(n) {
-      var s = {
+      return {
         id: String(n.id),
         name: String(n.displayName || n.id),
         lang: String(n.id) === LOCAL_SOURCE ? "other" : String(n.lang || ""),
         icon: Model.coverUrl(config, n.iconUrl),
         warning: String(n.contentWarning || "SAFE"),
         supportsLatest: n.supportsLatest === true,
-        configurable: n.isConfigurable === true
+        configurable: n.isConfigurable === true,
+        core: true
       }
-      if (core) s.core = true
-      return s
     })
   list.sort(function(a, b) { return a.name.localeCompare(b.name) })
   return { state: "ok", message: "", sources: list }
@@ -204,11 +180,10 @@ function rowIndex(rows, id) {
 }
 
 // listing.state: "idle" | "loading" | "ok" | a failed connection state.
-// page: the last page loaded. flare: the failure is Cloudflare without
-// FlareSolverr. filters: Widgets.filterChanges of the applied filters;
-// Suwayomi hands them to the source only in a search, so only a search
-// keeps them. filterCount: how many filters differ from their defaults,
-// filters.length unless given (core sends every state).
+// page: the last page loaded. flare: the failure is a Cloudflare page.
+// filters: Widgets.filterChanges of the applied filters;
+// only a search sends them, so only a search keeps them. filterCount: how
+// many filters differ from their defaults, filters.length unless given.
 function listing(source, mode, query, filters, filterCount) {
   mode = mode === "latest" && !source.supportsLatest ? "popular" : mode
   var applied = mode === "search" ? filters || [] : []
@@ -231,18 +206,12 @@ function listing(source, mode, query, filters, filterCount) {
 // the last page, or after a failure (r retries).
 function listingPayload(l) {
   if (l.state === "loading" || !l.hasNext || (l.state !== "idle" && l.state !== "ok")) return null
-  if (l.source.core) {
-    var body = { source: l.source.id, page: l.page + 1 }
-    if (l.mode === "search") {
-      body.query = l.query
-      if (l.filters.length) body.filters = l.filters
-    }
-    return { route: "source." + l.mode, body: body }
+  var body = { source: l.source.id, page: l.page + 1 }
+  if (l.mode === "search") {
+    body.query = l.query
+    if (l.filters.length) body.filters = l.filters
   }
-  return {
-    query: LISTING_MUTATION,
-    variables: { source: l.source.id, type: TYPES[l.mode], page: l.page + 1, query: l.mode === "search" ? l.query : null, filters: l.mode === "search" ? l.filters : null }
-  }
+  return { route: "source." + l.mode, body: body }
 }
 
 // event.type: "request" | "reply" { reply, config } | "retry"
@@ -255,7 +224,7 @@ function reduceListing(l, event) {
       return copy(l, { state: "idle", message: "", flare: false })
     case "reply":
       if (event.reply.state !== "ok") return copy(l, failed(event.reply))
-      var r = (l.source.core ? event.reply.data : event.reply.data.fetchSourceManga) || {}
+      var r = event.reply.data || {}
       var seen = {}
       l.items.forEach(function(m) { seen[m.id] = true })
       var fresh = (r.mangas || []).filter(function(m) { return !seen[m.id] }).map(function(m) {
@@ -267,24 +236,19 @@ function reduceListing(l, event) {
 }
 
 // detail.step: the request due next: "read" the cached manga, "fetch" it
-// from the source, look up the "extension" named like a missing source, or
-// null. extension: that extension as { installed }, or null. fetched: the
+// from the source, or null. extension: the extension named like a missing
+// source, as { installed }, or null (core looks none up). fetched: the
 // source fetch already ran, so a manga the source leaves empty is not
 // fetched in a loop. fromSource: opened
 // while browsing a source, where cached details can be stale, so it always
 // refreshes once after showing the cache. retried, failedAt: see
 // Model.failure().
-// core: the manga is miharchy-core's (ADR 0010).
 function detail(mangaId, fromSource, core) {
-  return { mangaId: mangaId, fromSource: fromSource === true, core: core === true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null, retried: "", failedAt: 0 }
+  return { mangaId: mangaId, fromSource: fromSource === true, core: true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null, retried: "", failedAt: 0 }
 }
 
 function detailPayload(d) {
-  if (d.core) return d.step === "read" ? { route: "manga.get", body: { id: d.mangaId } } : d.step === "fetch" ? { route: "manga.refresh", body: { id: d.mangaId } } : null
-  if (d.step === "read") return { query: DETAIL_QUERY, variables: { id: d.mangaId } }
-  if (d.step === "fetch") return { query: FETCH_MUTATION, variables: { id: d.mangaId } }
-  if (d.step === "extension") return { query: EXTENSION_QUERY, variables: { name: d.manga.sourceName } }
-  return null
+  return d.step === "read" ? { route: "manga.get", body: { id: d.mangaId } } : d.step === "fetch" ? { route: "manga.refresh", body: { id: d.mangaId } } : null
 }
 
 function titleCase(s) {
@@ -343,8 +307,7 @@ function toManga(config, n, names) {
     sourceName: n.source ? source : String(names[n.sourceId] || ""),
     inLibrary: n.inLibrary === true,
     initialized: n.initialized === true,
-    // Core lists the ids, Suwayomi a connection.
-    categories: Array.isArray(n.categories) ? n.categories : ((n.categories && n.categories.nodes) || []).map(function(c) { return c.id }),
+    categories: Array.isArray(n.categories) ? n.categories : [],
     longStrip: longStrip(n.genre || [], source),
     // "" until m picks one in the reader.
     readingMode: meta["miharchy.readingMode"] || "",
@@ -376,7 +339,7 @@ function toChapters(nodes) {
 // event.type: "reply" { reply, config, now } for the step in flight | "refresh"
 // | "reread" the cache, as after reading | "library-request"
 // | "library-reply" { reply } | "categories-reply" { reply }
-// | "downloads-reply" { reply } from any Downloads.js mutation
+// | "downloads-reply" { reply } from any Downloads.js request
 // | "mark-reply" { reply } from Chapters.markPayload
 function reduceDetail(d, event) {
   switch (event.type) {
@@ -385,22 +348,18 @@ function reduceDetail(d, event) {
     case "reread":
       return copy(d, { step: "read", fetched: true })
     case "reply":
-      if (d.step === "extension") {
-        var ext = event.reply.state === "ok" ? event.reply.data.extensions.nodes[0] : null
-        return copy(d, { step: null, extension: ext ? { installed: ext.isInstalled === true } : null })
-      }
       if (event.reply.state !== "ok") {
         var why = failed(event.reply)
         return copy(copy(d, why), { step: null, retried: "", failedAt: Model.failedAt(d.retried, why, event.now) })
       }
       if (d.step === "read") {
         var n = event.reply.data.manga
-        var names = Model.parseNames(event.reply.data)
+        // ponytail: core keeps no source names yet, so a missing source shows by id.
+        var names = {}
         var manga = toManga(event.config, n, names)
-        var chapters = toChapters(d.core ? n.chapters : n.chapters && n.chapters.nodes)
+        var chapters = toChapters(n.chapters)
         // A fetch goes through the source, so a missing one only fails.
-        // ponytail: core keeps no source names yet, so no extension lookup.
-        if (manga.missing) return copy(d, { manga: manga, chapters: chapters, sourceNames: names, step: manga.sourceName && !d.core ? "extension" : null, state: "ok" })
+        if (manga.missing) return copy(d, { manga: manga, chapters: chapters, sourceNames: names, step: null, state: "ok" })
         var stale = d.fromSource || !n.initialized || chapters.length === 0
         return copy(d, {
           manga: manga,
@@ -410,7 +369,7 @@ function reduceDetail(d, event) {
           state: stale && !d.fetched ? "loading" : "ok"
         })
       }
-      var f = d.core ? event.reply.data : event.reply.data.fetchMangaAndChapters
+      var f = event.reply.data
       return copy(d, { manga: toManga(event.config, f.manga, d.sourceNames), chapters: toChapters(f.chapters), step: null, state: "ok", fetched: true, retried: "" })
     case "library-request":
       return copy(d, { busy: true, libraryError: "" })
@@ -419,13 +378,12 @@ function reduceDetail(d, event) {
       return copy(d, { busy: false, manga: copy(d.manga, { inLibrary: libraryReply(event.reply) }) })
     case "categories-reply":
       if (event.reply.state !== "ok") return copy(d, { busy: false, libraryError: event.reply.message || event.reply.state })
-      var ids = d.core ? event.reply.data.mangas[0].categories : event.reply.data.updateMangaCategories.manga.categories.nodes.map(function(c) { return c.id })
-      return copy(d, { busy: false, manga: copy(d.manga, { categories: ids }) })
+      return copy(d, { busy: false, manga: copy(d.manga, { categories: event.reply.data.mangas[0].categories }) })
     case "mark-reply":
     case "downloads-reply":
       if (event.reply.state !== "ok") return copy(d, { libraryError: event.reply.message || event.reply.state })
       // Core's download.delete puts the chapters beside the status.
-      var deleted = event.reply.data.deleteDownloadedChapters || (event.reply.data.chapters ? event.reply.data : null)
+      var deleted = event.reply.data.chapters ? event.reply.data : null
       var onDisk = {}
       if (deleted) deleted.chapters.forEach(function(c) { onDisk[c.id] = c.isDownloaded === true })
       return copy(d, { libraryError: "", chapters: d.chapters.map(function(c) { return c.id in onDisk ? copy(c, { downloaded: onDisk[c.id] }) : c }) })
@@ -438,22 +396,19 @@ function reduceDetail(d, event) {
 function categoryPayload(d, categoryId) {
   if (!d.manga || !d.manga.inLibrary || d.busy) return null
   var member = d.manga.categories.indexOf(categoryId) !== -1
-  if (d.core) return { route: "manga.update", body: member ? { ids: [d.mangaId], removeFromCategories: [categoryId] } : { ids: [d.mangaId], addToCategories: [categoryId] } }
-  return { query: CATEGORY_MUTATION, variables: { id: d.mangaId, add: member ? [] : [categoryId], remove: member ? [categoryId] : [] } }
+  return { route: "manga.update", body: member ? { ids: [d.mangaId], removeFromCategories: [categoryId] } : { ids: [d.mangaId], addToCategories: [categoryId] } }
 }
 
 // The add/remove toggle, or null before the manga loads or while a toggle
 // is in flight.
 function libraryPayload(d) {
   if (!d.manga || d.busy) return null
-  if (d.core) return { route: "manga.update", body: { ids: [d.mangaId], inLibrary: !d.manga.inLibrary } }
-  return Model.inLibraryPayload(d.mangaId, !d.manga.inLibrary)
+  return { route: "manga.update", body: { ids: [d.mangaId], inLibrary: !d.manga.inLibrary } }
 }
 
 // Whether the manga is in the library after libraryPayload's ok reply.
 function libraryReply(reply) {
-  var m = reply.data.mangas ? reply.data.mangas[0] : reply.data.updateManga.manga
-  return m.inLibrary === true
+  return reply.data.mangas[0].inLibrary === true
 }
 
 // Mihon's GetDuplicateLibraryManga: the library manga, other than this
@@ -502,12 +457,9 @@ function gridChanges(shown, items) {
 // { title, detail } for a listing or detail that failed or came back empty,
 // else null. localFolder: where the local source reads, for its how-to.
 function notice(s, configPath, localFolder) {
-  // A detail or a listing of miharchy-core's.
-  var core = s.core === true || !!(s.source && s.source.core)
   // ponytail: core has no FlareSolverr fallback until #361.
-  var flare = core ? { title: "This source sits behind Cloudflare", detail: "miharchy-core cannot pass Cloudflare yet (#361)." }
-    : { title: "This source needs FlareSolverr", detail: "It sits behind Cloudflare. Turn FlareSolverr on in Setup or Settings, then press r." }
-  var p = Model.again(s.flare ? flare : Model.problem(s, configPath, core ? "core" : ""), s)
+  var flare = { title: "This source sits behind Cloudflare", detail: "miharchy-core cannot pass Cloudflare yet (#361)." }
+  var p = Model.again(s.flare ? flare : Model.problem(s, configPath, "core"), s)
   if (p) return p
   if (s.state === "ok" && s.items && s.items.length === 0 && s.mode !== "search" && s.source && s.source.id === LOCAL_SOURCE) {
     return { title: "No local manga", detail: "Put a folder per manga in " + localFolder + ", holding a folder of images or a .cbz per chapter. Then press p. Settings sets the folder." }
@@ -522,7 +474,6 @@ if (typeof module !== "undefined") {
     toChapters: toChapters,
     nearEnd: nearEnd,
     loadAgain: loadAgain,
-    SOURCES_QUERY: SOURCES_QUERY,
     sourcesPayload: sourcesPayload,
     libraryReply: libraryReply,
     sources: sources,

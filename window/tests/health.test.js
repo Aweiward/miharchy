@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const S = require("./load")("Sync.js");
 
-// One line of `miharchy-sync health`, as the helper prints it.
+// Core's sync.health object.
 const healthy = {
   phoneBackup: "/home/u/Sync/app.mihon_2026-10-09_05-31.tachibk",
   phoneBackupAt: "2026-10-09T09:31:00Z",
@@ -14,21 +14,6 @@ const healthy = {
   pendingSince: null,
   behind: false
 };
-// The job text Setup.parseJob reads: the output, then the exit status.
-const job = (output, code) => output + "\n" + code + "\n";
-
-test("health reads the helper's last line, after any JVM warning", () => {
-  const text = job("OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes\n" + JSON.stringify(healthy), 0);
-  assert.deepEqual(S.parseHealth(text), { state: "ready", health: healthy });
-});
-
-test("health fails with the helper's words, or says to build it", () => {
-  assert.deepEqual(S.parseHealth(job("No sync folder is set. Choose one in Setup or Settings.", 1)),
-    { state: "failed", message: "No sync folder is set. Choose one in Setup or Settings." });
-  assert.equal(S.parseHealth(job("", S.NOT_BUILT)).message, "The sync helper is not built. Build it in the window: press : and choose Setup.");
-  assert.equal(S.parseHealth(job("", 3)).message, "The sync helper stopped with status 3.");
-});
-
 const NOW = Date.parse("2026-10-09T15:31:00Z");
 const row = (change, manga, chapter) => ({ change: change, manga: manga, chapter: chapter || null, tracker: null });
 

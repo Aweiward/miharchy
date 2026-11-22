@@ -4,24 +4,15 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const C = require("./load")("ReadingCard.js");
 
-const config = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
 const sec = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi || 0).getTime() / 1000;
 // Friday 2026-10-09 22:00 in New York.
 const now = sec(2026, 10, 9, 22);
 
-const manga = (id, o) => Object.assign({ id, title: "Manga " + id, thumbnailUrl: "/api/v1/manga/" + id + "/thumbnail", inLibrary: true, unreadCount: 2 }, o);
+const manga = (id, o) => Object.assign({ id, title: "Manga " + id, thumbnailUrl: "/api/cover/" + id, inLibrary: true, unreadCount: 2 }, o);
 const chapter = (id, at, m, o) => Object.assign({ id, lastReadAt: String(at), isRead: true, manga: m || manga(1) }, o);
-const rows = (nodes) => C.rows({ chapters: { nodes } });
+const rows = (nodes) => C.rows({ chapters: nodes });
 const card = (nodes, at) => C.card(rows(nodes), at === undefined ? now : at, config);
-
-test("the query pages finished chapters, newest read first", () => {
-  const p = C.payload("abc");
-  assert.match(p.query, /isRead: \{ equalTo: true \}/);
-  assert.match(p.query, /by: LAST_READ_AT, byType: DESC/);
-  assert.match(p.query, /pageInfo \{ hasNextPage endCursor \}/);
-  assert.equal(p.variables.after, "abc");
-  assert.equal(C.payload().variables.after, null);
-});
 
 test("chapters counts finished chapters read in the last 7 days, rolling", () => {
   const c = card([
@@ -87,7 +78,7 @@ test("covers: the manga with the most chapters read in the last 7 days, ties to 
     chapter(8, now - 8 * 86400, manga(3)),
     chapter(9, now - 8 * 86400, manga(3))
   ]);
-  assert.deepEqual(c.covers, [2, 1, 3].map((id) => config.url + "/api/v1/manga/" + id + "/thumbnail"));
+  assert.deepEqual(c.covers, [2, 1, 3].map((id) => config.url + "/api/cover/" + id));
 });
 
 test("an empty week still makes a card, with a friendly line", () => {

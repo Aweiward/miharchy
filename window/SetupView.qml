@@ -17,7 +17,7 @@ Item {
   id: view
 
   required property Theme theme
-  // Setup's server reads and writes: core's config under MIHARCHY_BACKEND=core.
+  // Setup's server reads and writes: core's config.
   property var config: null
   // Suwayomi's server.json: the probe checks it, and the move reads it.
   property string configPath: ""
@@ -38,8 +38,6 @@ Item {
   // Setup.offersOnStart() for this window.
   property bool offers: true
   // The window runs from the repo's window/, beside server/ and sync/.
-  readonly property string serverScript: Quickshell.shellPath("../server/miharchy-server")
-  readonly property string syncDir: Quickshell.shellPath("../sync")
   readonly property var steps: Setup.steps(setup)
   readonly property var current: steps[cursor]
   readonly property var currentStatus: Setup.status(setup, current.id)
@@ -72,8 +70,7 @@ Item {
   }
 
   function check() {
-    // The AUR is asked once; a recheck while installing skips it.
-    if (!setup.job) start("probe", Setup.probeCommand(configPath, syncDir, Quickshell.shellDir, !!(setup.probe && setup.probe.aurSuwayomi), core ? coreConfigPath : ""))
+    if (!setup.job) start("probe", Setup.probeCommand(configPath, "", Quickshell.shellDir, false, coreConfigPath))
   }
 
   function post(payload, done) {
@@ -88,7 +85,7 @@ Item {
       view.offer()
     })
     // A move core runs goes on while the window is closed: read where it stands.
-    if (core) readMove()
+    readMove()
   }
 
   function readMove() {
@@ -119,7 +116,7 @@ Item {
   Timer {
     interval: 1000
     repeat: true
-    running: view.core && !!view.setup.move && view.setup.move.state === "running"
+    running: !!view.setup.move && view.setup.move.state === "running"
     onTriggered: view.readMove()
   }
 
@@ -127,7 +124,7 @@ Item {
   Timer {
     interval: 3000
     repeat: true
-    running: view.core && view.visible && !!view.setup.move && view.setup.move.state === "unknown"
+    running: view.visible && !!view.setup.move && view.setup.move.state === "unknown"
     onTriggered: view.readServer()
   }
 
@@ -196,7 +193,7 @@ Item {
         view.readServer()
       })
     }
-    if (id === "server" || id === "coreService") wrote()
+    if (id === "coreService") wrote()
     check()
   }
 
@@ -225,7 +222,7 @@ Item {
         break
       case "setup.confirm":
         if (setup.confirm === "move") return startMove()
-        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir, coreConfigPath: coreConfigPath, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup), install: Setup.status(setup, setup.confirm).command || "" }))
+        start(setup.confirm, Setup.runCommand(setup.confirm, { windowDir: Quickshell.shellDir, coreConfigPath: coreConfigPath, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup), install: Setup.status(setup, setup.confirm).command || "" }))
         break
       case "setup.cancel":
         if (editing) endEdit()
@@ -249,7 +246,7 @@ Item {
     property string job: ""
     stdout: StdioCollector {
       id: output
-      // Live text, so a long step such as the helper build shows progress.
+      // Live text, so a long step such as the core build shows progress.
       waitForEnd: false
       onStreamFinished: view.finished(proc.job, text)
     }
@@ -264,17 +261,6 @@ Item {
       textFormat: Text.PlainText
       text: "Miharchy needs these pieces. Nothing on the system changes until you confirm a step."
       color: view.theme.muted
-      font.family: view.theme.fontFamily
-      font.pixelSize: view.theme.fontSize
-    }
-
-    Text {
-      textFormat: Text.PlainText
-      width: Math.min(parent.width, view.theme.fontSize * 60)
-      visible: text !== ""
-      wrapMode: Text.Wrap
-      text: Setup.warning(view.setup)
-      color: view.theme.urgent
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSize
     }
