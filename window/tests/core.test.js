@@ -387,7 +387,7 @@ test("on core, a Cloudflare page says core cannot pass it yet", () => {
   assert.equal(B.notice({ state: "error", message: "x", flare: true }, "server.json").title, "This source needs FlareSolverr");
 });
 
-test("on core, the reader loads pages, saves, bookmarks and keeps its mode on core, and pushes no tracker", () => {
+test("on core, the reader loads pages, saves, bookmarks and keeps its mode on core, and pushes the trackers on core", () => {
   const ch = B.toChapters(MANGA.chapters);
   let r = R.open(1, ch, 12, "paged-rtl", false, "Fire Mage", false, true);
   assert.deepEqual(R.pagesPayload(r), { route: "chapter.pages", body: { id: 12 } });
@@ -398,7 +398,7 @@ test("on core, the reader loads pages, saves, bookmarks and keeps its mode on co
   assert.deepEqual(R.savePayload(r), { route: "chapter.update", body: { lastPageRead: 3, ids: [12] } });
   r = R.reduce(r, { type: "turn", delta: 1 });
   assert.deepEqual(R.savePayload(r), { route: "chapter.update", body: { lastPageRead: 4, isRead: true, ids: [12] } });
-  assert.equal(R.trackPayload(r), null);
+  assert.deepEqual(R.trackPayload(r), { route: "track.progress", body: { mangaIds: [1] } });
   assert.deepEqual(R.bookmarkPayload(r), { route: "chapter.update", body: { ids: [12], isBookmarked: true } });
   assert.deepEqual(R.modePayload(r), { route: "meta.set", body: { metas: [{ scope: "manga", owner: 1, key: "miharchy.readingMode", value: "paged-rtl" }] } });
   // Incognito saves nothing, on core too.
@@ -736,4 +736,141 @@ test("on core, Updates follows the flat run status and stops with update.stop", 
   // An instant run of nothing ends the check too.
   assert.equal(U.reduce(u, { type: "live", data: { isRunning: false, finishedJobs: 0, totalJobs: 0, skippedMangasCount: 0 } }).checking, false);
   assert.equal(U.notice({ state: "no-config", rows: [] }, "/x/core.json", "core").title, M.problem({ state: "no-config" }, "/x/core.json", "core").title);
+});
+
+// #383: tracker logins and the tracking panel on core's routes.
+const T = load("Trackers.js");
+const S2 = load("Session.js");
+const coreFail = (status, kind, message) => M.coreReply(status, JSON.stringify({ error: { kind, message } }));
+// A send that answers each route from a table and records what went out.
+function routeSend(routes, sent) {
+  return (payload, done) => {
+    sent.push(payload);
+    assert.equal(typeof payload.route, "string", "only core routes: " + JSON.stringify(payload));
+    const answer = routes[payload.route];
+    setImmediate(() => done(typeof answer === "function" ? answer(payload.body || {}) : answer));
+  };
+}
+const TRACKERS = [
+  { id: 1, name: "MyAnimeList", isLoggedIn: false, authUrl: "https://myanimelist.net/v1/oauth2/authorize?client_id=x&code_challenge=c&response_type=code", scores: ["0", "1"], statuses: [{ value: 1, name: "Reading" }], supportsReadingDates: true, supportsPrivateTracking: false },
+  { id: 2, name: "AniList", isLoggedIn: true, authUrl: null, scores: ["0", "7"], statuses: [{ value: 1, name: "Reading" }, { value: 3, name: "On hold" }], supportsReadingDates: true, supportsPrivateTracking: true },
+  { id: 7, name: "MangaUpdates", isLoggedIn: false, authUrl: null, scores: [], statuses: [], supportsReadingDates: false, supportsPrivateTracking: false }
+];
+
+test("on core, Settings lists the trackers and logs in by callback and by password on core's routes", () => {
+  let s = T.initial(true);
+  assert.deepEqual(T.listPayload(true), { route: "tracker.list" });
+  s = T.reduce(s, { type: "list", reply: ok({ trackers: TRACKERS }) });
+  assert.deepEqual(s.list.map((t) => [t.id, t.loggedIn, t.authUrl !== ""]), [[1, false, true], [2, true, false], [7, false, false]]);
+
+  // OAuth: the link is core's tracker list, then the pasted callback.
+  s = T.begin(s, 0);
+  assert.deepEqual(T.loginPayload(s), { route: "tracker.list" });
+  s = T.reduce(T.reduce(s, { type: "sent" }), { type: "link", reply: ok({ trackers: TRACKERS }) });
+  assert.equal(s.login.step, "paste");
+  assert.equal(s.login.url, TRACKERS[0].authUrl);
+  // The suwayomi.org page forwards nowhere: the note points at the address bar.
+  assert.match(T.note(s), /address bar/);
+  s = T.reduce(s, { type: "commit", text: "https://suwayomi.org/tracker-oauth?code=abc" });
+  assert.deepEqual(T.loginPayload(s), { route: "tracker.login", body: { trackerId: 1, callbackUrl: "https://suwayomi.org/tracker-oauth?code=abc" } });
+  // A refusal reads once, with core's own words, and asks for a fresh link.
+  const refused = T.reduce(T.reduce(s, { type: "sent" }), { type: "reply", reply: coreFail(400, "invalid", "MyAnimeList did not accept the login.") });
+  assert.equal(refused.login.error, "MyAnimeList did not accept the login. Press Esc, then Enter for a fresh link.");
+  const loggedIn = T.reduce(T.reduce(s, { type: "sent" }), { type: "reply", reply: ok({ tracker: Object.assign({}, TRACKERS[0], { isLoggedIn: true, authUrl: null }) }) });
+  assert.equal(loggedIn.login, null);
+  assert.equal(loggedIn.list[0].loggedIn, true);
+
+  // Username and password.
+  let u = T.begin(T.reduce(T.initial(true), { type: "list", reply: ok({ trackers: TRACKERS }) }), 2);
+  u = T.reduce(T.reduce(u, { type: "commit", text: "reader" }), { type: "commit", text: "pw" });
+  assert.deepEqual(T.loginPayload(u), { route: "tracker.login", body: { trackerId: 7, username: "reader", password: "pw" } });
+
+  // Logout.
+  let o = T.begin(T.reduce(T.initial(true), { type: "list", reply: ok({ trackers: TRACKERS }) }), 1);
+  assert.deepEqual(T.loginPayload(o), { route: "tracker.logout", body: { trackerId: 2 } });
+  o = T.reduce(T.reduce(o, { type: "sent" }), { type: "reply", reply: ok({ tracker: Object.assign({}, TRACKERS[1], { isLoggedIn: false }) }) });
+  assert.equal(o.list[1].loggedIn, false);
+
+  // No core.json: the section says so instead of loading for ever.
+  const none = T.reduce(T.initial(true), { type: "no-config" });
+  assert.equal(none.state, "no-config");
+  assert.equal(M.problem(none, "/x/core.json", "core").title, "No miharchy-core config");
+
+  // Suwayomi's state still builds GraphQL.
+  assert.ok(T.loginPayload(T.begin(T.reduce(T.initial(), { type: "list", reply: ok({ trackers: { nodes: TRACKERS } }) }), 1)).query);
+});
+
+test("on core, the tracking panel loads, searches, binds, updates and unbinds on core's routes", async () => {
+  const sent = [];
+  const record = { id: 9, mangaId: 5, trackerId: 2, remoteId: 118586, title: "Frieren", status: 1, displayScore: "0", lastChapterRead: 3, totalChapters: 0, remoteUrl: "https://anilist.co/manga/118586", startDate: 0, finishDate: 0, private: false };
+  const send = routeSend({
+    "tracker.list": ok({ trackers: TRACKERS }),
+    "track.list": (b) => { assert.deepEqual(b, { mangaIds: [5] }); return ok({ tracks: [record] }); }
+  }, sent);
+  let p = T.panel(5, "Frieren", true);
+  const reply = await new Promise((resolve) => T.panelLoad(send, p, resolve));
+  p = T.act(p, { type: "loaded", reply }).panel;
+  // Logged in, or holding a track: AniList only.
+  assert.deepEqual(p.rows.map((r) => [r.tracker.name, r.record && r.record.read]), [["AniList", 3]]);
+  assert.match(T.summary(p.rows[0]), /Reading   3 \/ \? chapters/);
+
+  let r = T.act(T.act(p, { type: "search" }).panel, { type: "query", text: "Frieren" });
+  assert.deepEqual(r.payload, { route: "track.search", body: { trackerId: 2, query: "Frieren" } });
+  p = T.act(r.panel, { type: "results", reply: ok({ results: [{ remoteId: 118586, title: "Sousou no Frieren", publishingType: "Manga", startDate: "2020-4-28", totalChapters: 0 }] }) }).panel;
+  assert.equal(p.pick.items[0].detail, "Manga   2020");
+  r = T.act(p, { type: "choose" });
+  assert.deepEqual(r.payload, { route: "track.bind", body: { mangaId: 5, trackerId: 2, remoteId: "118586" } });
+  p = T.act(r.panel, { type: "written", trackerId: 2, reply: ok({ track: Object.assign({}, record, { lastChapterRead: 10 }) }) }).panel;
+  assert.equal(p.rows[0].record.read, 10);
+
+  r = T.act(T.act(p, { type: "status" }).panel, { type: "move", delta: 1 });
+  r = T.act(r.panel, { type: "choose" });
+  assert.deepEqual(r.payload, { route: "track.update", body: { recordId: 9, status: 3 } });
+  r = T.act(T.act(r.panel, { type: "written", trackerId: 2, reply: ok({ track: record }) }).panel, { type: "chapters" });
+  assert.deepEqual(T.act(r.panel, { type: "progress", text: "12" }).payload, { route: "track.update", body: { recordId: 9, lastChapterRead: 12 } });
+  assert.deepEqual(T.act(T.act(p, { type: "start" }).panel, { type: "date", text: "2026-01-31" }).payload, { route: "track.update", body: { recordId: 9, startDate: String(Date.UTC(2026, 0, 31)) } });
+  assert.deepEqual(T.act(p, { type: "private" }).payload, { route: "track.update", body: { recordId: 9, private: true } });
+
+  r = T.act(p, { type: "unbind" });
+  assert.deepEqual(r.payload, { route: "track.unbind", body: { recordId: 9 } });
+  p = T.act(r.panel, { type: "written", trackerId: 2, reply: ok({ deleted: 9 }) }).panel;
+  assert.equal(p.rows[0].record, null);
+
+  // A failed load keeps core's connection state.
+  const down = await new Promise((resolve) => T.panelLoad(routeSend({ "tracker.list": M.coreReply(0, "") }, []), T.panel(5, "", true), resolve));
+  assert.equal(T.act(T.panel(5, "", true), { type: "loaded", reply: down }).panel.state, "down");
+});
+
+test("on core, a mark read pushes or asks the trackers through core's routes", async () => {
+  assert.deepEqual(C.trackPayload([5, 6, 5], true), { route: "track.progress", body: { mangaIds: [5, 6] } });
+  assert.equal(C.trackPayload([], true), null);
+  const sent = [];
+  const send = routeSend({
+    "tracker.list": ok({ trackers: TRACKERS }),
+    "track.list": ok({ tracks: [
+      { id: 1, mangaId: 5, trackerId: 2, lastChapterRead: 3 },
+      { id: 2, mangaId: 6, trackerId: 2, lastChapterRead: 10 },
+      // A logged-out tracker below the chapter asks nothing.
+      { id: 3, mangaId: 6, trackerId: 1, lastChapterRead: 0 }
+    ] }),
+    "chapter.list": ok({ chapters: [
+      { id: 50, mangaId: 5, chapterNumber: 4, isRead: true }, { id: 51, mangaId: 5, chapterNumber: 9, isRead: true }, { id: 52, mangaId: 5, chapterNumber: 12, isRead: false },
+      { id: 60, mangaId: 6, chapterNumber: 10, isRead: true }
+    ] })
+  }, sent);
+  const reply = await new Promise((resolve) => C.trackCheckLoad(send, true, [5, 6], resolve));
+  assert.equal(reply.state, "ok");
+  assert.deepEqual(C.trackAsk(reply.data), { mangaIds: [5], chapter: 9 });
+  assert.deepEqual(sent.map((x) => x.route), ["tracker.list", "track.list", "chapter.list"]);
+  const failed = await new Promise((resolve) => C.trackCheckLoad(routeSend({ "tracker.list": coreFail(500, "internal", "x") }, []), true, [5], resolve));
+  assert.notEqual(failed.state, "ok");
+});
+
+test("a core tracker request reaches core's route with the secret, and Suwayomi's GraphQL is refused", async () => {
+  const requests = install({ "tracker.list": () => ({ trackers: TRACKERS }) });
+  const reply = await new Promise((resolve) => S2.send(core, T.listPayload(true), resolve));
+  assert.equal(reply.data.trackers.length, 3);
+  assert.equal(requests[0].url, "http://127.0.0.1:4591/api/tracker.list");
+  const wrong = await new Promise((resolve) => S2.send(core, T.listPayload(false), resolve));
+  assert.equal(wrong.state, "error");
 });

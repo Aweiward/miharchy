@@ -405,8 +405,8 @@ ShellRoot {
   // The one path that marks chapters, from any view. action: "read",
   // "unread" or "bookmark" (a toggle). The trackers hear of a mark read, and
   // every view showing read state or bookmarks reloads.
-  // core: the chapters are miharchy-core's (the detail's on core): no
-  // trackers there yet, and no Suwayomi view to refresh.
+  // core: the chapters are miharchy-core's (the detail's on core): core's
+  // trackers hear of it, and no Suwayomi view refreshes.
   function markChapters(chapters, action, mangaIds, core) {
     if (core === true) return markOnCore(chapters, action, mangaIds)
     var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters) : Chapters.markPayload(chapters, action === "read")
@@ -419,7 +419,7 @@ ShellRoot {
       var after = read ? Chapters.afterMarkRead(root.settingsState.values.trackOnMarkRead) : null
       var check = after === "check" ? Chapters.trackCheckPayload(mangaIds) : null
       if (after === "push") root.pushTrackers(mangaIds)
-      if (check) root.send(check, function(r) { root.trackAsk = r.state === "ok" ? Chapters.trackAsk(r.data) : null })
+      if (check) root.askTrackers(mangaIds, false)
       if (read && root.settingsState.values.deleteAfterMarkRead) root.deleteRead(marked, refresh)
       else refresh()
       function refresh() {
@@ -431,13 +431,16 @@ ShellRoot {
     })
   }
 
-  // ponytail: no trackers on core until #371.
   function markOnCore(chapters, action, mangaIds) {
     var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters, true) : Chapters.markPayload(chapters, action === "read", true)
     if (!payload || !coreConfig) return
     var marked = chapters.filter(function(c) { return !c.read }).map(function(c) { return c.id })
     Session.send(coreConfig, payload, function(reply) {
-      if (reply.state === "ok" && action === "read" && root.settingsState.values.deleteAfterMarkRead) root.deleteRead(marked, refresh, true)
+      var read = reply.state === "ok" && action === "read"
+      var after = read ? Chapters.afterMarkRead(root.settingsState.values.trackOnMarkRead) : null
+      if (after === "push") root.pushTrackers(mangaIds, true)
+      if (after === "check") root.askTrackers(mangaIds, true)
+      if (read && root.settingsState.values.deleteAfterMarkRead) root.deleteRead(marked, refresh, true)
       else refresh()
       function refresh() {
         if (mangaDetail.open && mangaDetail.onCore && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
@@ -447,9 +450,22 @@ ShellRoot {
     })
   }
 
-  function pushTrackers(mangaIds) {
-    var track = Chapters.trackPayload(mangaIds)
-    if (track) send(track, function() {})
+  // core: the manga are miharchy-core's.
+  function pushTrackers(mangaIds, core) {
+    var track = Chapters.trackPayload(mangaIds, core === true)
+    var cfg = core === true ? coreConfig : config
+    if (track && cfg) Session.send(cfg, track, function() {})
+  }
+
+  // Mihon's question before a push: asked only when a logged-in tracker
+  // sits below the chapter the push would send.
+  function askTrackers(mangaIds, core) {
+    var cfg = core === true ? coreConfig : config
+    if (!cfg) return
+    Chapters.trackCheckLoad(function(payload, d) { Session.send(cfg, payload, d) }, core === true, mangaIds, function(r) {
+      var ask = r.state === "ok" ? Chapters.trackAsk(r.data) : null
+      root.trackAsk = ask ? Object.assign(ask, { core: core === true }) : null
+    })
   }
 
   // Deletes the downloads of the read chapters that Downloads.autoDeletePayload
@@ -558,7 +574,7 @@ ShellRoot {
       return
     }
     if (id === "trackAsk.yes" || id === "trackAsk.no") {
-      if (id === "trackAsk.yes") pushTrackers(trackAsk.mangaIds)
+      if (id === "trackAsk.yes") pushTrackers(trackAsk.mangaIds, trackAsk.core)
       trackAsk = null
       return
     }
@@ -568,7 +584,7 @@ ShellRoot {
       return
     }
     if (id === "manga.track") {
-      trackPanel.show(mangaDetail.manga)
+      trackPanel.show(mangaDetail.manga, mangaDetail.onCore)
       return
     }
     if (id.indexOf("track.") === 0) {
@@ -898,6 +914,9 @@ ShellRoot {
           visible: root.view === "settings"
           theme: theme
           config: root.config
+          trackerConfig: root.coreBackend ? root.coreConfig : root.config
+          trackerConfigPath: root.coreBackend ? root.coreConfigPath : "server.json"
+          trackersCore: root.coreBackend
           values: root.settingsState.values
           categories: root.connection.categories
           cursor: root.settingsCursor
@@ -1061,6 +1080,8 @@ ShellRoot {
           theme: theme
           config: root.config
           configPath: root.configPath
+          coreConfig: root.coreConfig
+          coreConfigPath: root.coreConfigPath
           active: mangaDetail.open
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()

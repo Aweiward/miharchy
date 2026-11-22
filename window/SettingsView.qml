@@ -22,6 +22,12 @@ Item {
 
   required property Theme theme
   property var config: null
+  // The trackers' server: miharchy-core under MIHARCHY_BACKEND=core, while
+  // the rest of Settings stays on Suwayomi until #385.
+  property var trackerConfig: config
+  property string trackerConfigPath: "server.json"
+  // Set by the switch, so a missing core.json says so instead of loading.
+  property bool trackersCore: false
   property var trackers: Trackers.initial()
   readonly property bool loginEditing: Trackers.editing(trackers)
   readonly property string loginStep: loginEditing ? trackers.login.step : ""
@@ -87,8 +93,8 @@ Item {
     measure()
   }
   onDownloadsPathChanged: if (visible) measure()
-  onConfigChanged: {
-    trackers = Trackers.initial()
+  onTrackerConfigChanged: {
+    trackers = Trackers.initial(trackersCore)
     loadTrackers()
   }
 
@@ -96,12 +102,22 @@ Item {
     return Session.send(config, payload, done)
   }
 
+  function sendTracker(payload, done) {
+    return Session.send(trackerConfig, payload, done)
+  }
+
   // Never during a login: reading the trackers makes a new MyAnimeList
   // link, and the old one the browser holds stops working.
   function loadTrackers() {
-    if (!config || !visible || trackers.login) return
+    if (!visible || trackers.login) return
+    // The state names its server, so its payloads match the one it talks to.
+    if (trackers.core !== trackersCore) trackers = Trackers.initial(trackersCore)
+    if (!trackerConfig) {
+      if (trackersCore) trackers = Trackers.reduce(trackers, { type: "no-config" })
+      return
+    }
     trackers = Trackers.reduce(trackers, { type: "request" })
-    send(Trackers.listPayload(), function(reply) {
+    sendTracker(Trackers.listPayload(trackersCore), function(reply) {
       view.trackers = Trackers.reduce(view.trackers, { type: "list", reply: reply })
     })
   }
@@ -116,7 +132,7 @@ Item {
     if (!payload) return
     var answer = trackers.login.step === "link" ? "link" : "reply"
     trackers = Trackers.reduce(trackers, { type: "sent" })
-    send(payload, function(reply) {
+    sendTracker(payload, function(reply) {
       view.trackers = Trackers.reduce(view.trackers, { type: answer, reply: reply })
       var l = view.trackers.login
       if (answer === "link" && l && l.step === "paste") {
@@ -488,7 +504,7 @@ Item {
           readOnly: true
           selectByMouse: true
           wrapMode: TextEdit.WrapAnywhere
-          text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, "server.json") || { title: "" }).title : Trackers.note(view.trackers)
+          text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, view.trackerConfigPath, view.trackersCore ? "core" : "") || { title: "" }).title : Trackers.note(view.trackers)
           color: view.trackers.error || (view.trackers.login && view.trackers.login.error) ? view.theme.urgent : view.theme.muted
           selectionColor: view.theme.accent
           font.family: view.theme.fontFamily
