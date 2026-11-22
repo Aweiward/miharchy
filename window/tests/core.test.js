@@ -433,17 +433,14 @@ test("on core, the Library reads library.list into manga and categories", () => 
 test("on core, the Library's and Categories' changes go to core's routes", () => {
   assert.deepEqual(L.chaptersPayload([1, 2], true), { route: "chapter.list", body: { mangaIds: [1, 2] } });
   assert.deepEqual(L.chapterNodes({ chapters: [{ id: 5 }] }), [{ id: 5 }]);
-  assert.deepEqual(L.chapterNodes({ chapters: { nodes: [{ id: 5 }] } }), [{ id: 5 }]);
   assert.deepEqual(L.removePayload([1], true), { route: "manga.update", body: { ids: [1], inLibrary: false } });
   assert.deepEqual(L.categoryPayload({ id: 2, state: "all" }, [1], true), { route: "manga.update", body: { ids: [1], removeFromCategories: [2] } });
   assert.deepEqual(L.categoryPayload({ id: 2, state: "some" }, [1], true), { route: "manga.update", body: { ids: [1], addToCategories: [2] } });
   assert.deepEqual(L.moveToPayload(1, 0, [{ id: 2 }], true), { route: "manga.update", body: { ids: [1], clearCategories: true, addToCategories: [] } });
-  assert.equal(typeof L.removePayload([1]).query, "string");
 
   const cats = [{ id: 2, name: "Drama", download: "UNSET", update: "UNSET", keep: false }, { id: 3, name: "Action", download: "UNSET", update: "UNSET", keep: false }];
   assert.deepEqual(Cat.createPayload("New", true), { route: "category.create", body: { name: "New" } });
   assert.equal(Cat.createdId({ category: { id: 9 } }), 9);
-  assert.equal(Cat.createdId({ createCategory: { category: { id: 9 } } }), 9);
   assert.deepEqual(Cat.renamePayload(2, "X", true), { route: "category.update", body: { id: 2, name: "X" } });
   assert.deepEqual(Cat.deletePayload(2, true), { route: "category.delete", body: { id: 2 } });
   assert.deepEqual(Cat.includePayload(cats, 2, "update", true), { route: "category.update", body: { id: 2, includeInUpdate: "INCLUDE" } });
@@ -550,10 +547,8 @@ test("on core, the Downloads view reads the plain status from routes and the top
   const live = D.reduce(q, { type: "live", data: { state: "STOPPED", queue: [coreItem(2, "ERROR")] } });
   assert.equal(live.running, false);
   assert.deepEqual(live.items.map((i) => i.chapterId), [2]);
-  assert.equal(D.omitted({ state: "STOPPED", queue: [] }), false);
   // The reason comes with the item: nothing is probed.
   const f = D.failed(q.items, {}, true);
-  assert.deepEqual(f.probe, []);
   assert.deepEqual(f.reasons[2], { kind: "network", text: "No connection to the source" });
   assert.deepEqual(D.failed([D.reduce(D.initial(), { type: "reply", reply: { state: "ok", data: { state: "STOPPED", queue: [coreItem(5, "ERROR")] } } }).items[0]], {}, true).reasons[5], { kind: "other", text: "Unknown error" });
   // The delete reply carries the status too.
@@ -566,7 +561,6 @@ test("on core, every download payload is a route", () => {
   const chapters = [{ id: 1, downloaded: false }, { id: 2, downloaded: true }];
   const items = D.reduce(D.initial(), { type: "reply", reply: { state: "ok", data: { state: "STARTED", queue: [coreItem(1, "QUEUED"), coreItem(9, "QUEUED")] } } });
   assert.deepEqual(D.statusPayload(true), { route: "download.queue" });
-  assert.deepEqual(D.statusPayload(false), { query: D.STATUS_QUERY });
   assert.deepEqual(D.clearPayload(true), { route: "download.clear" });
   assert.deepEqual(D.enqueuePayload(chapters, true), { route: "download.enqueue", body: { ids: [1] } });
   assert.equal(D.enqueuePayload([chapters[1]], true), null);
@@ -578,7 +572,6 @@ test("on core, every download payload is a route", () => {
   assert.deepEqual(D.togglePayload({ running: false }, true), { route: "download.start" });
   assert.deepEqual(D.orderPayload(items, [9, 1], true), { route: "download.reorder", body: { order: [9, 1] } });
   assert.equal(D.orderPayload(items, [1, 9], true), null);
-  assert.ok(D.enqueuePayload(chapters).query, "Suwayomi keeps its mutation");
 });
 
 test("on core, delete after read loads chapters and the categories' metas, and deletes by route", () => {
@@ -600,9 +593,6 @@ test("on core, delete after read loads chapters and the categories' metas, and d
   let down;
   D.autoDeleteLoad((p, done) => done(p.route === "library.list" ? { state: "down" } : { state: "ok", data: replies[p.route] }), true, [1], (r) => { down = r; });
   assert.equal(down.state, "down");
-  const suwa = [];
-  D.autoDeleteLoad((p) => suwa.push(p), false, [1], () => {});
-  assert.deepEqual(suwa, [D.autoDeleteQuery([1])]);
 });
 
 test("on core, a next-chapters run refreshes, reads and settles through routes", () => {

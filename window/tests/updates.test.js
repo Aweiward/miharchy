@@ -219,12 +219,12 @@ test("rows carry what the shared chapter actions need, across manga", () => {
     chapter(3, manga, at(2026, 10, 4, 12))
   ]).rows;
   assert.match(U.UPDATES_QUERY, /lastPageRead isBookmarked isDownloaded/);
-  assert.deepEqual(Ch.markPayload(rows, true).variables, { ids: [1, 2, 3], started: [], read: true });
-  assert.deepEqual(Ch.markPayload(rows, false).variables, { ids: [], started: [1], read: false }, "unread only sends a started update back to page 1");
-  assert.deepEqual(Ch.bookmarkPayload(rows).variables, { ids: [1, 3], bookmarked: true });
-  assert.deepEqual(Ch.bookmarkPayload([rows[1]]).variables, { ids: [2], bookmarked: false });
-  assert.deepEqual(D.enqueuePayload(rows).variables, { ids: [2, 3] });
-  assert.deepEqual(D.removePayload(rows, []).variables, { ids: [1] });
+  assert.deepEqual(Ch.markPayload(rows, true).body, { ids: [1, 2, 3], isRead: true });
+  assert.deepEqual(Ch.markPayload(rows, false).body, { ids: [1], isRead: false, lastPageRead: 0 }, "unread only sends a started update back to page 1");
+  assert.deepEqual(Ch.bookmarkPayload(rows).body, { ids: [1, 3], isBookmarked: true });
+  assert.deepEqual(Ch.bookmarkPayload([rows[1]]).body, { ids: [2], isBookmarked: false });
+  assert.deepEqual(D.enqueuePayload(rows).body, { ids: [2, 3] });
+  assert.deepEqual(D.removePayload(rows, []).body, { ids: [1] });
   assert.equal(D.removePayload([rows[1]], []), null, "nothing on disk, nothing to confirm");
 });
 
