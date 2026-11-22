@@ -68,6 +68,16 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 - Logins and tokens live in `tracker_pref` in core.db, in core's owner-only data folder. No reply, topic or error carries a token, a code or a password; a tracker's unreadable reply is reported as "an unexpected reply", because a decode error quotes it. Each tracker runs one call at a time, so a token refresh never races another.
 - ponytail: no rate limiters; a big `track.progress` can meet a tracker's limit, and each refused track shows in `failed`.
 
+## Sync and backups (#369)
+
+- `server/` uses `sync/`'s merge and Mihon backup classes through a Gradle composite build (`includeBuild("../sync")` in `settings.gradle.kts`, ADR 0010). `sync/` does not change, so the helper's fingerprint stays. `sync/`'s newer `kotlin-stdlib` stays out of core, so core runs on the host's. A build of `core/` needs `sync/` beside it.
+- `Sync` holds no extension host and no tracker client, so a sync or an import never contacts a source or a tracker. Merge rules: ADR 0002. Applying them: ADR 0004's "On miharchy-core".
+- `sync.run { folder?, dryRun?, apply? }` is the helper's `miharchy-sync sync --json`, and the reply is the helper's `Summary`. Without `folder`, it reads global meta `miharchy.syncFolder`. The merge, its apply and the export for the phone run in one transaction. The baselines, `pre-sync.tachibk` and `pending-since` move only after it commits. They live in `sync/` in core's data folder, apart from the Suwayomi helper's. A hold or a dry run writes nothing.
+- `backup.export { folder, categories?, chapters?, tracking?, history? }` writes `miharchy-backup-<UTC>.tachibk` and gives `{ file }`. Each part is on unless it is `false`. The sync folder is refused with the helper's message.
+- `backup.import { file }` restores a Mihon or Suwayomi backup as Mihon's restore does and gives `{ manga }`, the number of manga in the file. An unknown manga comes in whole. A known manga keeps its own data and gains read and bookmarked chapters (OR), higher last pages, newer history and the backup's tracks (chapters read never lower). A non-empty category list replaces the manga's categories, by name. Notes come in only on a manga core did not have. Source names merge into meta `miharchy.sourceNames`. Tracks on trackers core lacks stay out.
+- Notes are manga meta `miharchy.notes`, as the window writes them. `manga.user_notes` stays unused.
+- One run of the three routes at a time; another answers `invalid` "A sync is already running."
+
 ## Known limits
 
 - On JDK 26 and later, Keiyoushi's library sets a `final` field by reflection, and the JVM warns that a future release blocks it unless `--enable-final-field-mutation=ALL-UNNAMED` is set. JDK 21 refuses that flag, so the launcher cannot pass it to every JDK yet.
