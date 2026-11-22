@@ -417,6 +417,8 @@ function notice(u, configPath, backend) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+    since: since,
+    fromCore: fromCore,
     UPDATES_QUERY: UPDATES_QUERY,
     VIEW_QUERY: VIEW_QUERY,
     PREFS: PREFS,

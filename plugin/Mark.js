@@ -29,8 +29,35 @@ function initial() {
   return { state: "loading", message: "", count: 0, rows: [], top: null, fresh: [], notify: true, version: "", autoSync: false, syncFolder: "" }
 }
 
-// One poll: the window's updates, the notification and sync settings and
-// the server's version.
+// One poll's reply: the window's updates, the notification and sync
+// settings, and the server's version. On core (MIHARCHY_BACKEND=core, #386)
+// the same data from library.list, the library's recent unread chapters
+// (chapter.list's unread and since, so no read chapter crosses the wire
+// each minute) and one meta.get; core has no version.
+function load(send, core, now, done) {
+  if (!core) return send(listPayload(), done)
+  send({ route: "library.list" }, function(lib) {
+    if (lib.state !== "ok") return done(lib)
+    var ids = lib.data.mangas.map(function(m) { return m.id })
+    var chapters = function(next) {
+      if (!ids.length) return next({ state: "ok", data: { chapters: [] } })
+      send({ route: "chapter.list", body: { mangaIds: ids, unread: true, since: Updates.since(now) } }, next)
+    }
+    chapters(function(ch) {
+      if (ch.state !== "ok") return done(ch)
+      send({ route: "meta.get", body: { scope: "global", keys: [NOTIFY_KEY, AUTO_SYNC_KEY, SYNC_FOLDER_KEY] } }, function(meta) {
+        if (meta.state !== "ok") return done(meta)
+        var data = Updates.fromCore(lib.data, ch.data, {}, { metas: [] }, now)
+        var value = function(key) { return meta.data.metas.filter(function(m) { return m.key === key }).map(function(m) { return { value: m.value } }) }
+        data.notify = { nodes: value(NOTIFY_KEY) }
+        data.autoSync = { nodes: value(AUTO_SYNC_KEY) }
+        data.syncFolder = { nodes: value(SYNC_FOLDER_KEY) }
+        done({ state: "ok", message: "", data: data, kind: "" })
+      })
+    })
+  })
+}
+
 function listPayload() {
   return { query: Updates.listPayload().query.replace(/\}\s*$/, "notify: metas(condition: { key: \"" + NOTIFY_KEY + "\" }) { nodes { value } } "
     + "autoSync: metas(condition: { key: \"" + AUTO_SYNC_KEY + "\" }) { nodes { value } } "
@@ -105,15 +132,23 @@ function notifyCommand(n, launcher, icon) {
 // baseline, as "<mtime> <path>", or nothing. The miharchy-* files are the
 // desktop's exports; a file younger than 30 s may still be arriving. With
 // no baseline yet, any phone backup counts: the first sync.
-var PHONE_CHECK_SCRIPT = "base=\"$HOME/.local/share/miharchy/sync/phone-baseline.tachibk\"\n"
+var PHONE_CHECK_SCRIPT = "base=${2:-$HOME/.local/share/miharchy/sync/phone-baseline.tachibk}\n"
   + "dir=$1\n"
   + "set --\n"
   + "[ -e \"$base\" ] && set -- -newer \"$base\"\n"
   + "find \"$dir\" -maxdepth 1 -type f -name '*.tachibk' ! -name 'miharchy-*' -mmin +0.5 \"$@\" -printf '%T@ %p\\n' 2>/dev/null | sort -n | tail -n 1\n"
   + "exit 0"
 
-function phoneCheckCommand(folder) {
-  return Capped.command(["sh", "-c", PHONE_CHECK_SCRIPT, "sh", folder], FOUND_CAP, 30)
+// baseline: phoneBaseline()'s path; none is the helper's.
+function phoneCheckCommand(folder, baseline) {
+  return Capped.command(["sh", "-c", PHONE_CHECK_SCRIPT, "sh", folder].concat(baseline ? [baseline] : []), FOUND_CAP, 30)
+}
+
+// The phone baseline of whoever syncs: the helper's, or under the switch
+// core's, in its data folder. env: { HOME, MIHARCHY_CORE_DATA }.
+function phoneBaseline(env, core) {
+  if (!core) return env.HOME + "/.local/share/miharchy/sync/phone-baseline.tachibk"
+  return (env.MIHARCHY_CORE_DATA || env.HOME + "/.local/share/miharchy/core") + "/sync/phone-baseline.tachibk"
 }
 
 // The newest phone backup in the folder ("<mtime> <path>"), merged or not:
@@ -162,8 +197,9 @@ function warning(mark) {
   return mark.state === "ok" ? Session.versionWarning(mark.version) : ""
 }
 
-function tooltip(mark) {
-  if (down(mark)) return "Miharchy: " + Model.problem(mark, "").title
+// backend: "core" under the switch, so a failure names miharchy-core.
+function tooltip(mark, backend) {
+  if (down(mark)) return "Miharchy: " + Model.problem(mark, "", backend).title
   if (mark.state === "loading") return "Miharchy"
   var text = "Miharchy: " + (mark.count ? mark.count + " new chapter" + (mark.count === 1 ? "" : "s") : "no new chapters")
   return warning(mark) ? text + "\n" + warning(mark) : text
@@ -174,6 +210,20 @@ function tooltip(mark) {
 var UP_NEXT_LIMIT = 3
 // The Settings row "Downloaded only", which Up next follows.
 var DOWNLOADED_ONLY_KEY = "miharchy.downloadedOnly"
+
+// Up next's reply: upNextPayload()'s, or on core UpNext.load's plus the
+// Downloaded only meta, in the same shape.
+function loadUpNext(send, core, done) {
+  if (!core) return send(upNextPayload(), done)
+  UpNext.load(send, true, function(r) {
+    if (r.state !== "ok") return done(r)
+    send({ route: "meta.get", body: { scope: "global", keys: [DOWNLOADED_ONLY_KEY] } }, function(meta) {
+      if (meta.state !== "ok") return done(meta)
+      r.data.metas.nodes = r.data.metas.nodes.concat(meta.data.metas)
+      done(r)
+    })
+  })
+}
 
 function upNextPayload() {
   var p = UpNext.payload()
@@ -190,28 +240,36 @@ function reason(e, now) {
   return "new " + (hours < 24 ? hours + "h" : Math.floor(hours / 24) + "d")
 }
 
-// reply: upNextPayload()'s, null while it loads. -> the section's rows;
-// none while loading or after a failure, so the section hides.
-function upNext(reply, now) {
+// reply: loadUpNext()'s, null while it loads. -> the section's rows;
+// none while loading or after a failure, so the section hides. core: the
+// rows name core's ids, so the window opens them there (target()).
+function upNext(reply, now, core) {
   if (!reply || reply.state !== "ok") return []
   var metas = (reply.data.metas && reply.data.metas.nodes) || []
   var downloadedOnly = metas.some(function(m) { return m.key === DOWNLOADED_ONLY_KEY && m.value === "true" })
   return UpNext.list(reply.data, downloadedOnly, now).slice(0, UP_NEXT_LIMIT).map(function(e) {
-    return { title: e.title, chapter: e.chapter, side: reason(e, now), open: ["peek-open", String(e.mangaId), String(e.chapterId)] }
+    return { title: e.title, chapter: e.chapter, side: reason(e, now), open: target("peek-open", e.mangaId, e.chapterId, core) }
   })
 }
 
 // The popup's rows under one cursor: Up next, then the updates. section
 // heads the first row of each when Up next shows; without it the popup
 // looks as it did before Up next. open: the launcher's arguments.
-function entries(upNext, rows) {
+function entries(upNext, rows, core) {
   var updates = rows.map(function(row) {
-    return { section: "", title: row.title, chapter: row.chapter, side: row.date, open: ["open-chapter", String(row.mangaId), String(row.id)] }
+    return { section: "", title: row.title, chapter: row.chapter, side: row.date, open: target("open-chapter", row.mangaId, row.id, core) }
   })
   if (!upNext.length) return updates
   var up = upNext.map(function(e, i) { return Object.assign({ section: i === 0 ? "Up next" : "" }, e) })
   if (updates.length) updates[0].section = "Updates"
   return up.concat(updates)
+}
+
+// The launcher's arguments for a row. Both servers number from 1, so a
+// core row says so: the window then opens it on core whatever its own switch.
+function target(command, mangaId, chapterId, core) {
+  var args = [command, String(mangaId), String(chapterId)]
+  return core ? args.concat(["core"]) : args
 }
 
 function move(list, cursor, dy) {
@@ -229,9 +287,9 @@ function follow(before, after, cursor) {
 }
 
 // { title, detail } in place of the popup's list, or null.
-function notice(mark, configPath) {
+function notice(mark, configPath, backend) {
   if (mark.state === "ok" && !mark.rows.length) return { title: "No new chapters", detail: "" }
-  return Updates.notice(mark, configPath)
+  return Updates.notice(mark, configPath, backend)
 }
 
 if (typeof module !== "undefined") {
@@ -241,6 +299,9 @@ if (typeof module !== "undefined") {
     SYNC_FOLDER_KEY: SYNC_FOLDER_KEY,
     initial: initial,
     listPayload: listPayload,
+    load: load,
+    loadUpNext: loadUpNext,
+    phoneBaseline: phoneBaseline,
     reduce: reduce,
     notification: notification,
     notifyCommand: notifyCommand,

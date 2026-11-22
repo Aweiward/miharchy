@@ -229,6 +229,8 @@ test("a category a search or filter empties says nothing matches, not that it is
 
 test("a chapter to open at launch is two ids, else nothing", () => {
   assert.deepEqual(M.chapterTarget("12 345"), { mangaId: 12, chapterId: 345 });
+  assert.deepEqual(M.chapterTarget("12 345 core"), { mangaId: 12, chapterId: 345, core: true }, "the mark under the switch names core's ids");
+  assert.equal(M.chapterTarget("12 345 other"), null);
   assert.equal(M.chapterTarget(""), null);
   assert.equal(M.chapterTarget("12"), null);
   assert.equal(M.chapterTarget("12 x"), null);

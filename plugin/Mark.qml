@@ -11,12 +11,17 @@ import "../window/Sync.js" as Sync
 // The mark in the Omarchy bar and its popup of recent updates. It stays thin
 // (ADR 0003): it polls the server and starts the window, which runs as its
 // own process through window/miharchy. Mark.js decides what shows; Sync now
-// runs the same sync helper the window runs.
+// runs the same sync the window runs: the helper, or under
+// MIHARCHY_BACKEND=core miharchy-core's sync.run (#386).
 Panel {
   id: root
   moduleName: "miharchy"
 
-  readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
+  readonly property bool core: Quickshell.env("MIHARCHY_BACKEND") === "core"
+  readonly property string backend: core ? "core" : ""
+  readonly property string configPath: core ? (Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json")
+    : (Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json")
+  readonly property string phoneBaseline: Mark.phoneBaseline({ HOME: Quickshell.env("HOME"), MIHARCHY_CORE_DATA: Quickshell.env("MIHARCHY_CORE_DATA") }, core)
   readonly property string launcher: decodeURIComponent(Qt.resolvedUrl("../window/miharchy").toString().replace(/^file:\/\//, ""))
   property var config: null
   property var mark: Mark.initial()
@@ -39,13 +44,13 @@ Panel {
   property double now: Date.now()
 
   readonly property var rows: mark.rows
-  readonly property var notice: Mark.notice(mark, configPath)
+  readonly property var notice: Mark.notice(mark, configPath, backend)
   readonly property int more: mark.count - rows.length
   // Up next's reply, null while it loads; asked for only when the popup
   // opens, never in the poll.
   property var upNextReply: null
   property int upNextSeq: 0
-  readonly property var entries: Mark.entries(Mark.upNext(upNextReply, now), rows)
+  readonly property var entries: Mark.entries(Mark.upNext(upNextReply, now, core), rows, core)
   property var lastEntries: []
   onEntriesChanged: {
     cursor = Mark.follow(lastEntries, entries, cursor)
@@ -64,8 +69,9 @@ Panel {
   function loadUpNext() {
     var seq = ++upNextSeq
     upNextReply = null
-    if (!config) return
-    Session.send(config, Mark.upNextPayload(), function(reply) {
+    var cfg = config
+    if (!cfg) return
+    Mark.loadUpNext(function(payload, done) { Session.send(cfg, payload, done) }, core, function(reply) {
       if (seq === root.upNextSeq) root.upNextReply = reply
     })
   }
@@ -88,7 +94,7 @@ Panel {
   }
 
   function applyConfig(text) {
-    config = Model.parseConfig(text)
+    config = core ? Model.parseCoreConfig(text) : Model.parseConfig(text)
     if (config) return poll()
     pollSeq++
     mark = Mark.reduce(mark, { type: "config-missing" })
@@ -98,7 +104,7 @@ Panel {
     if (!config) return
     var seq = ++pollSeq
     var cfg = config
-    Session.send(cfg, Mark.listPayload(), function(reply) {
+    Mark.load(function(payload, done) { Session.send(cfg, payload, done) }, core, Date.now(), function(reply) {
       if (seq !== root.pollSeq) return
       root.mark = Mark.reduce(root.mark, { type: "reply", reply: reply, config: cfg, now: Date.now() })
       var n = Mark.notification(root.mark)
@@ -109,7 +115,7 @@ Panel {
         newestPhone.running = true
       }
       if (root.mark.autoSync && root.mark.syncFolder && root.sync.state !== "running" && !phoneCheck.running) {
-        phoneCheck.command = Mark.phoneCheckCommand(root.mark.syncFolder)
+        phoneCheck.command = Mark.phoneCheckCommand(root.mark.syncFolder, root.phoneBaseline)
         phoneCheck.running = true
       }
     })
@@ -140,7 +146,17 @@ Panel {
     }
   }
 
+  property bool healthBusy: false
+
   function refreshHealth() {
+    if (core) {
+      if (healthBusy || !config) return
+      healthBusy = true
+      return Session.send(config, Sync.HEALTH_PAYLOAD, function(reply) {
+        root.healthBusy = false
+        root.health = Sync.healthReply(reply)
+      })
+    }
     if (healthJob.running) return
     healthJob.command = Sync.healthCommand(devHelper)
     healthJob.running = true
@@ -178,24 +194,31 @@ Panel {
   function startSync() {
     if (sync.state === "running") return
     sync = Sync.reduce(sync, { type: "start" })
+    if (core) {
+      if (!config) return finishSync({ type: "reply", reply: { state: "no-config", message: "" } })
+      return Session.send(config, Sync.corePayload(false), function(reply) { root.finishSync({ type: "reply", reply: reply }) })
+    }
     syncJob.command = Sync.command(devHelper)
     syncJob.running = true
+  }
+
+  // event: Sync.reduce's "finish" (the helper's output) or "reply" (core's).
+  function finishSync(event) {
+    sync = Sync.reduce(sync, event)
+    if (autoRun) {
+      // The backup's mtime: the same on every bar, so one marker.
+      var n = Mark.syncNotification(sync, "sync-" + lastTried.split(" ")[0].replace(/[^0-9]/g, ""))
+      if (n) Quickshell.execDetached(Mark.notifyCommand(n, launcher, notifyIcon))
+      autoRun = false
+    }
+    refreshHealth()
+    poll()
   }
 
   Process {
     id: syncJob
     stdout: StdioCollector {
-      onStreamFinished: {
-        root.sync = Sync.reduce(root.sync, { type: "finish", text: text })
-        if (root.autoRun) {
-          // The backup's mtime: the same on every bar, so one marker.
-          var n = Mark.syncNotification(root.sync, "sync-" + root.lastTried.split(" ")[0].replace(/[^0-9]/g, ""))
-          if (n) Quickshell.execDetached(Mark.notifyCommand(n, root.launcher, root.notifyIcon))
-          root.autoRun = false
-        }
-        root.refreshHealth()
-        root.poll()
-      }
+      onStreamFinished: root.finishSync({ type: "finish", text: text })
     }
   }
 
@@ -210,7 +233,7 @@ Panel {
     anchors.top: parent.top
     anchors.bottom: parent.bottom
     bar: root.bar
-    tooltipText: Mark.tooltip(root.mark)
+    tooltipText: Mark.tooltip(root.mark, root.backend)
     onPressed: function(button) { root.pressed(button) }
     // The rays turn green while a sync runs (icons/miharchy-active.svg).
     iconComponent: Component {
@@ -234,7 +257,7 @@ Panel {
     text: Mark.label(root.mark)
     fontSize: Style.font.bodySmall
     horizontalMargin: 3
-    tooltipText: Mark.tooltip(root.mark)
+    tooltipText: Mark.tooltip(root.mark, root.backend)
     onPressed: function(button) { root.pressed(button) }
   }
 

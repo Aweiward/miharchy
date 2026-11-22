@@ -38,7 +38,9 @@ ShellRoot {
   // the rest stay on Suwayomi. Users never set it; #373 flips the default.
   readonly property bool coreBackend: Quickshell.env("MIHARCHY_BACKEND") === "core"
   // A view on the server the Downloads view does not show says this.
-  readonly property string downloadsElsewhere: "Downloads for chapters opened from the bar move to miharchy-core with #386"
+  // A detail or reader on Suwayomi under the switch: Migrate's until #394, or
+  // a target from a mark without the switch.
+  readonly property string downloadsElsewhere: "This manga is open on Suwayomi; downloads run on miharchy-core"
   readonly property string coreConfigPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
   property var coreConfig: null
   // The library and categories on miharchy-core, beside connection's on
@@ -174,8 +176,7 @@ ShellRoot {
       fetchLibrary(true)
       libraryView.reload()
       loadSettings()
-      // A launcher peek that came before core.json; a peek-open's row is Suwayomi's (#386).
-      if (pendingPeek && !Model.chapterTarget(pendingPeek)) peek(pendingPeek === "next")
+      applyPending()
       return
     }
     coreRequestSeq++
@@ -209,13 +210,27 @@ ShellRoot {
     fetchLibrary()
     if (!coreBackend) loadSettings()
     if (!coreBackend) libraryView.reload()
+    applyPending()
+  }
+
+  // A launcher target that came before its server's config: each config
+  // that loads tries again, and a target waits for its own server's.
+  function applyPending() {
     var peekTarget = Model.chapterTarget(pendingPeek)
     if (pendingChapter) openChapter(pendingChapter)
     else if (peekTarget) {
+      if (!targetReady(peekTarget)) return
       pendingPeek = ""
       peekOpen(peekTarget)
     }
     else if (pendingPeek) peek(pendingPeek === "next")
+  }
+
+  // A target's server has its config, or cannot get one: a core target in a
+  // window without the switch, which openChapter turns down.
+  function targetReady(target) {
+    if (target.core) return !coreBackend || !!coreConfig
+    return !!config
   }
 
   // Every path that opens a view or a chapter closes these first. A running
@@ -234,14 +249,21 @@ ShellRoot {
   // The mark's update rows land here, through the launcher's open-chapter.
   // peek: a peek opens it, so Catch-up counts from 0 in the new reader;
   // every peek that opens a manga comes through here.
+  // target.core: the row holds miharchy-core's ids (the mark under the
+  // switch); without it, Suwayomi's. Both number from 1, so each opens on
+  // its own server.
   function openChapter(target, peek) {
     pendingChapter = target
-    if (!config) return
+    if (!targetReady(target)) return
     pendingChapter = null
     closeOverlays()
+    if (target.core && !coreBackend) {
+      view = "library"
+      return libraryView.fail("This chapter is on miharchy-core. Start the window with MIHARCHY_BACKEND=core to open it.")
+    }
     view = "updates"
-    // The bar's rows hold Suwayomi's ids until it moves (#386).
-    if (updatesView.core) openOn(target, peek, false)
+    if (target.core) openOn(target, peek, true)
+    else if (updatesView.core) openOn(target, peek, false)
     else updatesView.openChapter(target.mangaId, target.chapterId, peek === true)
   }
 
@@ -355,6 +377,15 @@ ShellRoot {
 
     function openChapter(mangaId: int, chapterId: int): void {
       root.openChapter({ mangaId: mangaId, chapterId: chapterId })
+    }
+
+    // The launcher's open-chapter and peek-open with a trailing server name.
+    function openChapterOn(mangaId: int, chapterId: int, backend: string): void {
+      root.openChapter(Model.chapterTarget(mangaId + " " + chapterId + (backend === "core" ? " core" : "")))
+    }
+
+    function peekOpenOn(mangaId: int, chapterId: int, backend: string): void {
+      root.peekOpen(Model.chapterTarget(mangaId + " " + chapterId + (backend === "core" ? " core" : "")))
     }
 
     function openUpdates(): void {

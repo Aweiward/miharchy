@@ -8,6 +8,8 @@
 # key's job.
 # miharchy peek-open <mangaId> <chapterId>: shows the peek on that chapter,
 # a new peek run; the popup's Up next rows.
+# A trailing "core" on open-chapter or peek-open names miharchy-core's ids
+# (the mark under MIHARCHY_BACKEND=core): both servers number from 1.
 dir="$(dirname "$(readlink -f "$0")")"
 
 # Every Quickshell window has class org.quickshell, so the pid of this config's
@@ -45,6 +47,8 @@ if [ "$1" = peek ] || [ "$1" = peek-next ] || [ "$1" = peek-open ]; then
     if [ "$1" != peek ]; then
       if [ "$1" = peek-next ]; then
         quickshell ipc -p "$dir" call miharchy peekNext >/dev/null 2>&1
+      elif [ "$4" = core ]; then
+        quickshell ipc -p "$dir" call miharchy peekOpenOn "$2" "$3" core >/dev/null 2>&1
       else
         quickshell ipc -p "$dir" call miharchy peekOpen "$2" "$3" >/dev/null 2>&1
       fi
@@ -71,6 +75,7 @@ if [ "$1" = peek ] || [ "$1" = peek-next ] || [ "$1" = peek-open ]; then
   peek=1
   [ "$1" = peek-next ] && peek=next
   [ "$1" = peek-open ] && peek="$2 $3"
+  [ "$1" = peek-open ] && [ "$4" = core ] && peek="$2 $3 core"
   MIHARCHY_PEEK=$peek setsid -f quickshell -n -p "$dir" >/dev/null 2>&1
   i=0
   until address; do
@@ -83,7 +88,14 @@ if [ "$1" = peek ] || [ "$1" = peek-next ] || [ "$1" = peek-open ]; then
   exit 0
 fi
 
-if [ "$1" = open-chapter ]; then
+if [ "$1" = open-chapter ] && [ "$4" = core ]; then
+  if quickshell ipc -p "$dir" call miharchy openChapterOn "$2" "$3" core >/dev/null 2>&1; then
+    focus
+    exit 0
+  fi
+  export MIHARCHY_OPEN_CHAPTER="$2 $3 core"
+  shift 4
+elif [ "$1" = open-chapter ]; then
   if quickshell ipc -p "$dir" call miharchy openChapter "$2" "$3" >/dev/null 2>&1; then
     focus
     exit 0

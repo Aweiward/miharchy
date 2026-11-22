@@ -52,12 +52,13 @@ var STEPS = [
 ]
 
 // Under MIHARCHY_BACKEND=core: build core, run its unit, then move the
-// Suwayomi install into it, after Suwayomi's own service.
+// Suwayomi install into it, after Suwayomi's own service. Core syncs, and
+// so does the mark through it (#386), so the sync helper step goes.
 var CORE_STEPS = STEPS.slice(0, 2).concat([
   { id: "coreBuild", title: "miharchy-core", kind: "run", required: true, prompt: "Build miharchy-core now? It takes a few minutes." },
   { id: "coreService", title: "miharchy-core service", kind: "run", required: true, prompt: "Install and start the miharchy-core user service?" },
   { id: "move", title: "Move from Suwayomi (optional)", kind: "run", prompt: "Copy the library, extensions and downloads from Suwayomi into miharchy-core, and replace core's settings and preferences with Suwayomi's? Suwayomi stays as it is." }
-], STEPS.slice(2))
+], STEPS.slice(2).filter(function(st) { return st.id !== "helper" }))
 
 // The steps this window shows.
 function steps(s) {
@@ -546,7 +547,8 @@ function moveDetail(r) {
 }
 
 function step(id) {
-  for (var i = 0; i < CORE_STEPS.length; i++) if (CORE_STEPS[i].id === id) return CORE_STEPS[i]
+  var all = STEPS.concat(CORE_STEPS)
+  for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i]
   return null
 }
 
