@@ -104,3 +104,9 @@ fun TrackState.toBackup(trackerId: Int) = BackupTracking(
 fun mergeSourceNames(stored: Map<String, String>, sources: List<BackupSource>): Map<String, String> =
     // Mihon names a source it never knew by its id, which says nothing.
     stored + sources.filter { it.name.isNotBlank() && it.name != it.sourceId.toString() }.associate { it.sourceId.toString() to it.name }
+
+/** Global meta holding the source names, so a missing source still shows a name. */
+const val SOURCE_NAMES_KEY = "miharchy.sourceNames"
+
+/** Manga meta holding Mihon's notes; Suwayomi's backups have no notes field. */
+const val NOTES_KEY = "miharchy.notes"

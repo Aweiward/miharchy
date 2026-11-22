@@ -21,7 +21,7 @@ data class CoreConfig(val url: String, val secret: String)
 
 /**
  * Reads the config, or creates it with a new secret. The file is born mode 600, never chmodded
- * after the secret is in it, and its mode is repaired on each start, as `server/miharchy-server` does.
+ * after the secret is in it, and its mode is repaired on each start.
  */
 fun loadOrCreateConfig(file: Path, port: Int): CoreConfig {
     // Only a folder core creates is made 700: the parent may be shared, such as /tmp or $HOME.
