@@ -515,3 +515,34 @@ test("on core, the reading card pages core's read history by offset", () => {
   assert.deepEqual(RC.pageInfo({ chapters: { pageInfo: { hasNextPage: false, endCursor: "c" }, nodes: [] } }), { hasNextPage: false, endCursor: "c" });
   assert.equal(RC.card(RC.rows(data), 600, core).covers[0], "http://127.0.0.1:4591/api/cover/3");
 });
+
+const H = load("History.js");
+
+test("on core, History loads the cleared cutoff and history.list, hides and clears through meta.set", () => {
+  const sent = [];
+  const replies = {
+    "meta.get": { metas: [{ scope: "global", owner: 0, key: H.CLEARED_KEY, value: "100" }] },
+    "history.list": { hasNextPage: false, chapters: [
+      { id: 12, name: "Ch. 2", lastReadAt: 300, lastPageRead: 4, pageCount: 9, isRead: false, manga: { id: 3, title: "A", thumbnailUrl: "/api/cover/3", meta: [] } },
+      { id: 11, name: "Ch. 1", lastReadAt: 250, lastPageRead: 0, pageCount: 9, isRead: true, manga: { id: 3, title: "A", thumbnailUrl: "/api/cover/3", meta: [] } },
+      { id: 20, name: "Ch. 1", lastReadAt: 200, lastPageRead: 1, pageCount: 0, isRead: false, manga: { id: 4, title: "B", thumbnailUrl: null, meta: [{ key: H.HIDDEN_KEY, value: "200" }] } },
+      { id: 30, name: "Ch. 1", lastReadAt: 90, lastPageRead: 1, pageCount: 0, isRead: false, manga: { id: 5, title: "C", thumbnailUrl: null, meta: [] } }
+    ] }
+  };
+  let reply;
+  H.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, true, (r) => { reply = r; });
+  assert.deepEqual(sent, [{ route: "meta.get", body: { scope: "global", keys: [H.CLEARED_KEY] } }, { route: "history.list", body: { limit: 500 } }]);
+  const h = H.reduce(H.initial(), { type: "reply", reply, config: core });
+  assert.deepEqual(h.entries.map((e) => [e.mangaId, e.chapterId, e.page, e.at]), [[3, 12, 4, 300]]);
+  assert.equal(h.entries[0].cover, "http://127.0.0.1:4591/api/cover/3");
+  assert.deepEqual(H.removePayload(h.entries[0], true), { route: "meta.set", body: { metas: [{ scope: "manga", owner: 3, key: H.HIDDEN_KEY, value: "300" }] } });
+  assert.deepEqual(H.clearPayload(h.entries, true), { route: "meta.set", body: { metas: [{ scope: "global", key: H.CLEARED_KEY, value: "300" }] } });
+  assert.equal(H.clearPayload([], true), null);
+  let failed;
+  H.load((p, done) => done(p.route === "history.list" ? { state: "down" } : { state: "ok", data: replies[p.route] }), true, (r) => { failed = r; });
+  assert.equal(failed.state, "down");
+  assert.equal(H.notice(H.reduce(H.initial(), { type: "reply", reply: { state: "down" } }), "core.json", "", "core").title, "miharchy-core is not running");
+  const suwa = [];
+  H.load((p, done) => suwa.push(p), false, () => {});
+  assert.deepEqual(suwa, [{ query: H.QUERY }]);
+});
