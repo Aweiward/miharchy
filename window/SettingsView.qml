@@ -26,7 +26,8 @@ Item {
   // the rest of Settings stays on Suwayomi until #385.
   property var trackerConfig: config
   property string trackerConfigPath: "server.json"
-  readonly property bool trackersCore: trackerConfig !== null && trackerConfig.backend === "core"
+  // Set by the switch, so a missing core.json says so instead of loading.
+  property bool trackersCore: false
   property var trackers: Trackers.initial()
   readonly property bool loginEditing: Trackers.editing(trackers)
   readonly property string loginStep: loginEditing ? trackers.login.step : ""
@@ -108,9 +109,13 @@ Item {
   // Never during a login: reading the trackers makes a new MyAnimeList
   // link, and the old one the browser holds stops working.
   function loadTrackers() {
-    if (!trackerConfig || !visible || trackers.login) return
+    if (!visible || trackers.login) return
     // The state names its server, so its payloads match the one it talks to.
     if (trackers.core !== trackersCore) trackers = Trackers.initial(trackersCore)
+    if (!trackerConfig) {
+      if (trackersCore) trackers = Trackers.reduce(trackers, { type: "no-config" })
+      return
+    }
     trackers = Trackers.reduce(trackers, { type: "request" })
     sendTracker(Trackers.listPayload(trackersCore), function(reply) {
       view.trackers = Trackers.reduce(view.trackers, { type: "list", reply: reply })

@@ -48,9 +48,9 @@ function initial(core) {
   return { core: core === true, state: "loading", message: "", list: [], login: null, error: "" }
 }
 
-// A list of nodes: core sends the array, Suwayomi { nodes }.
+// A list of nodes: Suwayomi sends { nodes }, core the list itself.
 function nodes(x) {
-  return Array.isArray(x) ? x : (x && x.nodes) || []
+  return x && x.nodes ? x.nodes : x || []
 }
 
 function toTracker(n) {
@@ -76,7 +76,7 @@ function callbackKey(authUrl) {
 function callbackError(text, authUrl) {
   var key = callbackKey(authUrl)
   if (new RegExp("[?#&]" + key + "=[^&\\s]+").test(String(text))) return ""
-  return "That address has no " + key + "=. Copy the whole address the browser shows after you allow access."
+  return "That address has no " + key + "=. Copy the whole address from the browser's address bar after you allow access."
 }
 
 // Enter on tracker row i: a logged-in tracker logs out, a logged-out one
@@ -125,9 +125,12 @@ function retry(l, error) {
 //   "sent"     loginPayload() went out    "link"   { reply } for the link
 //   "commit"   { text } from the field    "cancel" Esc in the field
 //   "reply"    { reply } for a login or logout mutation
+//   "no-config" the trackers' server has no config file
 function reduce(s, event) {
   var l = s.login
   switch (event.type) {
+    case "no-config":
+      return copy(s, { state: "no-config", message: "", list: [], login: null })
     case "request":
       return copy(s, { state: "loading", message: "" })
     case "list":
@@ -197,7 +200,7 @@ function note(s) {
   var l = s.login
   if (!l) return s.error
   if (l.error) return l.error
-  if (l.step === "paste") return "Allow access in the browser. It ends on a suwayomi.org page: copy that page's whole address and paste it here. No browser? Open " + l.url
+  if (l.step === "paste") return "Allow access in the browser. It ends on a suwayomi.org page that says it opens your client: copy the whole address from the browser's address bar and paste it here. No browser? Open " + l.url
   if (l.step === "username") return "The server sends your " + l.name + " login once and keeps only its token."
   return ""
 }

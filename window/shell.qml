@@ -916,6 +916,7 @@ ShellRoot {
           config: root.config
           trackerConfig: root.coreBackend ? root.coreConfig : root.config
           trackerConfigPath: root.coreBackend ? root.coreConfigPath : "server.json"
+          trackersCore: root.coreBackend
           values: root.settingsState.values
           categories: root.connection.categories
           cursor: root.settingsCursor

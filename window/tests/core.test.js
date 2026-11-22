@@ -769,6 +769,8 @@ test("on core, Settings lists the trackers and logs in by callback and by passwo
   s = T.reduce(T.reduce(s, { type: "sent" }), { type: "link", reply: ok({ trackers: TRACKERS }) });
   assert.equal(s.login.step, "paste");
   assert.equal(s.login.url, TRACKERS[0].authUrl);
+  // The suwayomi.org page forwards nowhere: the note points at the address bar.
+  assert.match(T.note(s), /address bar/);
   s = T.reduce(s, { type: "commit", text: "https://suwayomi.org/tracker-oauth?code=abc" });
   assert.deepEqual(T.loginPayload(s), { route: "tracker.login", body: { trackerId: 1, callbackUrl: "https://suwayomi.org/tracker-oauth?code=abc" } });
   // A refusal reads once, with core's own words, and asks for a fresh link.
@@ -788,6 +790,11 @@ test("on core, Settings lists the trackers and logs in by callback and by passwo
   assert.deepEqual(T.loginPayload(o), { route: "tracker.logout", body: { trackerId: 2 } });
   o = T.reduce(T.reduce(o, { type: "sent" }), { type: "reply", reply: ok({ tracker: Object.assign({}, TRACKERS[1], { isLoggedIn: false }) }) });
   assert.equal(o.list[1].loggedIn, false);
+
+  // No core.json: the section says so instead of loading for ever.
+  const none = T.reduce(T.initial(true), { type: "no-config" });
+  assert.equal(none.state, "no-config");
+  assert.equal(M.problem(none, "/x/core.json", "core").title, "No miharchy-core config");
 
   // Suwayomi's state still builds GraphQL.
   assert.ok(T.loginPayload(T.begin(T.reduce(T.initial(), { type: "list", reply: ok({ trackers: { nodes: TRACKERS } }) }), 1)).query);
