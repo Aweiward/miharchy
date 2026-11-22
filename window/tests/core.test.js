@@ -687,3 +687,53 @@ test("on core, a check for new chapters is update.start, with categories only wh
   assert.deepEqual(U.checkPayload([0, 4], true), { route: "update.start", body: { categories: [0, 4] } });
   assert.match(U.checkPayload([4]).query, /updateLibrary/);
 });
+
+test("on core, Updates loads its list from library.list, chapter.list, update.status and the skip metas", () => {
+  const U = load("Updates.js");
+  const now = Date.UTC(2026, 10, 22);
+  const sent = [];
+  const replies = {
+    "library.list": { mangas: [{ id: 1, title: "A", thumbnailUrl: "/api/cover/1", inLibraryAt: 100, categories: [3], meta: [] }] },
+    "chapter.list": { chapters: [
+      { id: 10, mangaId: 1, name: "Ch. 2", uploadDate: now - 1000, fetchedAt: 200, sourceOrder: 2, isRead: false, lastPageRead: 0, isBookmarked: false, isDownloaded: false },
+      { id: 9, mangaId: 1, name: "Ch. 1", uploadDate: now - 200 * 86400000, fetchedAt: 200, sourceOrder: 1, isRead: false },
+    ] },
+    "update.status": { isRunning: false, finishedJobs: 3, totalJobs: 3, skippedMangasCount: 2, lastUpdateTimestamp: now - 60000, failed: [] },
+    "meta.get": { metas: [{ scope: "global", owner: 0, key: "miharchy.excludeCompleted", value: "false" }] },
+  };
+  let out;
+  U.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, true, now, (r) => { out = r; });
+  assert.deepEqual(sent.map((p) => p.route), ["library.list", "chapter.list", "update.status", "meta.get"]);
+  assert.deepEqual(sent[1].body, { mangaIds: [1] });
+  const u = U.reduce(U.initial(), { type: "list", reply: out, config: { url: "http://127.0.0.1:4591", secret: "s", backend: "core" }, now, prefs: { updatesFilterUnread: "include", updatesIncludedCategories: "[3]" } });
+  assert.deepEqual(u.rows.map((r) => r.id), [10], "older than 3 months is history");
+  assert.deepEqual([u.finished, u.total, u.skipped, u.checkedAt], [3, 3, 2, now - 60000]);
+  assert.deepEqual(u.skipReasons, ["unread chapters", "not started"]);
+
+  let failed;
+  U.load((p, done) => done(p.route === "update.status" ? { state: "error", kind: "internal", message: "boom" } : { state: "ok", data: replies[p.route] }), true, now, (r) => { failed = r; });
+  assert.equal(failed.message, "boom");
+  let empty;
+  U.load((p, done) => { assert.notEqual(p.route, "chapter.list"); done({ state: "ok", data: p.route === "library.list" ? { mangas: [] } : replies[p.route] }); }, true, now, (r) => { empty = r; });
+  assert.deepEqual(empty.data.chapters.nodes, []);
+});
+
+test("on core, Updates follows the flat run status and stops with update.stop", () => {
+  const U = load("Updates.js");
+  assert.deepEqual(U.stopPayload(true), { route: "update.stop" });
+  let u = U.reduce(U.initial(), { type: "checking" });
+  // The start reply: core has no all-zero opening result.
+  const running = U.reduce(u, { type: "live", data: { isRunning: true, finishedJobs: 0, totalJobs: 4, skippedMangasCount: 1, started: true } });
+  assert.deepEqual([running.checking, running.running, running.total], [false, true, 4]);
+  const done = U.reduce(running, { type: "live", data: { isRunning: false, finishedJobs: 4, totalJobs: 4, skippedMangasCount: 1 } });
+  assert.ok(U.finished(running, done), "a run's end reloads the list");
+  // A stop keeps its counts; core's status says so, before or after the stop's reply.
+  const after = U.reduce(running, { type: "live", data: { isRunning: false, stopped: true, finishedJobs: 2, totalJobs: 4, skippedMangasCount: 1 } });
+  assert.match(U.progress(after, Date.now()), /Stopped checking for new chapters at 2 \/ 4/);
+  assert.equal(U.reduce(after, { type: "stopped" }).stopped, "2 / 4");
+  assert.equal(U.reduce(U.reduce(running, { type: "stopped" }), { type: "live", data: { isRunning: false, stopped: true, finishedJobs: 3, totalJobs: 4 } }).stopped, "3 / 4");
+  assert.equal(done.stopped, null, "an end is no stop");
+  // An instant run of nothing ends the check too.
+  assert.equal(U.reduce(u, { type: "live", data: { isRunning: false, finishedJobs: 0, totalJobs: 0, skippedMangasCount: 0 } }).checking, false);
+  assert.equal(U.notice({ state: "no-config", rows: [] }, "/x/core.json", "core").title, M.problem({ state: "no-config" }, "/x/core.json", "core").title);
+});

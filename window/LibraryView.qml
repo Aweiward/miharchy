@@ -311,16 +311,9 @@ Item {
       case "library.update":
         if (!config) break
         var all = shown.id === Model.ALL, name = shown.name
-        var said = function(started) {
-          view.reduce({ type: "note", text: started ? "Checking " + (all ? "the library" : name) + " for new chapters." + (core ? "" : " Updates shows the progress.") : "A check for new chapters is already running." })
-        }
-        // ponytail: on core the Updates view does not follow the run until #382.
-        if (core) {
-          send(Updates.checkPayload(all ? null : [shown.id], true), function(reply) {
-            if (reply.state === "ok") said(reply.data.started === true)
-            else view.report(reply)
-          })
-        } else check(all ? null : [shown.id], said)
+        check(all ? null : [shown.id], function(started) {
+          view.reduce({ type: "note", text: started ? "Checking " + (all ? "the library" : name) + " for new chapters. Updates shows the progress." : "A check for new chapters is already running." })
+        })
         break
       case "library.options":
         reduce({ type: "options", open: true })

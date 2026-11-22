@@ -32,7 +32,7 @@ import kotlinx.serialization.json.put
 /**
  * Library update runs (#368, ADR 0010): [refresh] fetches each manga's chapters, one source at a time per source and up
  * to [SOURCES] sources at once, as Suwayomi's `Updater`. Every route answers with the status,
- * `{ isRunning, finishedJobs, totalJobs, skippedMangasCount, lastUpdateTimestamp (ms), failed: [{ mangaId, kind, message }] }`,
+ * `{ isRunning, stopped, finishedJobs, totalJobs, skippedMangasCount, lastUpdateTimestamp (ms), failed: [{ mangaId, kind, message }] }`,
  * and the `updates` topic sends it on each change. Unlike Suwayomi, a stop keeps the counts until the next run.
  *
  * The choices are the window's global metas (`miharchy.<Settings key>`), with `Settings.js`'s defaults, until Settings
@@ -46,6 +46,8 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
     private val lock = Any()
     @Volatile private var job: Job? = null
     private var running = false
+    // The last run ended by update.stop, so a client can tell a stop from an end.
+    private var stopped = false
     private var total = 0
     private var finished = 0
     private var skipped = 0
@@ -75,8 +77,9 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
         "update.start" to { input -> start((input["categories"] as? JsonArray)?.let { input.longs("categories") }?.takeIf { it.isNotEmpty() }) },
         "update.stop" to { _ ->
             ops.withLock {
+                val was = job?.isActive == true
                 job?.cancelAndJoin()
-                synchronized(lock) { running = false }
+                synchronized(lock) { running = false; if (was) stopped = true }
             }
             publish()
             statusJson()
@@ -100,7 +103,7 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
             db.run { c ->
                 c.update("INSERT INTO metas (scope, owner, key, value) VALUES ('global', 0, ?, ?) ON CONFLICT (scope, owner, key) DO UPDATE SET value = excluded.value", LAST, now.toString())
             }
-            synchronized(lock) { last = now; running = true; total = todo.size; finished = 0; skipped = skip; failed.clear() }
+            synchronized(lock) { last = now; running = true; stopped = false; total = todo.size; finished = 0; skipped = skip; failed.clear() }
             publish()
             job = scope.launch { work(todo) }
             true
@@ -191,7 +194,7 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
 
     private fun statusJson(): JsonObject = synchronized(lock) {
         buildJsonObject {
-            put("isRunning", running); put("finishedJobs", finished); put("totalJobs", total); put("skippedMangasCount", skipped)
+            put("isRunning", running); put("stopped", stopped); put("finishedJobs", finished); put("totalJobs", total); put("skippedMangasCount", skipped)
             put("lastUpdateTimestamp", last)
             put("failed", JsonArray(failed.toList()))
         }

@@ -193,6 +193,51 @@ function viewPayload(now) {
   return { query: VIEW_QUERY, variables: { since: String(since(now)) } }
 }
 
+// The view's list: viewPayload()'s reply, or on core the same data from
+// library.list, chapter.list, update.status and the skip filters' metas.
+function load(send, core, now, done) {
+  if (!core) return send(viewPayload(now), done)
+  send({ route: "library.list" }, function(lib) {
+    if (lib.state !== "ok") return done(lib)
+    var ids = lib.data.mangas.map(function(m) { return m.id })
+    var chapters = function(next) {
+      if (!ids.length) return next({ state: "ok", data: { chapters: [] } })
+      send({ route: "chapter.list", body: { mangaIds: ids } }, next)
+    }
+    chapters(function(ch) {
+      if (ch.state !== "ok") return done(ch)
+      send({ route: "update.status" }, function(st) {
+        if (st.state !== "ok") return done(st)
+        var keys = SKIP_FILTERS.map(function(f) { return Prefs.PREFIX + f[0] })
+        send({ route: "meta.get", body: { scope: "global", keys: keys } }, function(meta) {
+          if (meta.state !== "ok") return done(meta)
+          done({ state: "ok", data: fromCore(lib.data, ch.data, st.data, meta.data, now) })
+        })
+      })
+    })
+  })
+}
+
+// Core's replies -> VIEW_QUERY's reply data. The skip filters are on unless
+// a meta turns them off, as core reads them.
+function fromCore(lib, ch, st, meta, now) {
+  var manga = {}
+  lib.mangas.forEach(function(m) {
+    manga[m.id] = { id: m.id, title: m.title, thumbnailUrl: m.thumbnailUrl, inLibraryAt: m.inLibraryAt,
+      categories: { nodes: (m.categories || []).map(function(id) { return { id: id } }) }, meta: m.meta || [] }
+  })
+  var cut = since(now)
+  var settings = {}
+  SKIP_FILTERS.forEach(function(f) { settings[f[0]] = true })
+  meta.metas.forEach(function(m) { settings[m.key.slice(Prefs.PREFIX.length)] = m.value === "true" })
+  return {
+    chapters: { nodes: ch.chapters.filter(function(c) { return Number(c.uploadDate) > cut && manga[c.mangaId] }).map(function(c) { return copy(c, { manga: manga[c.mangaId] }) }) },
+    libraryUpdateStatus: { jobsInfo: st },
+    lastUpdateTimestamp: { timestamp: st.lastUpdateTimestamp },
+    settings: settings
+  }
+}
+
 // categories: ids to update, or none for the whole library. On core the
 // reply's started says whether this call began the run.
 function checkPayload(categories, core) {
@@ -201,7 +246,8 @@ function checkPayload(categories, core) {
 }
 
 // Mihon's cancel on the update notification.
-function stopPayload() {
+function stopPayload(core) {
+  if (core) return { route: "update.stop" }
   return { query: "mutation { updateStop(input: {}) { clientMutationId } }" }
 }
 
@@ -282,9 +328,13 @@ function reduce(u, event) {
     case "failed":
       return copy(u, { running: false, checking: false })
     case "live":
-      var l = event.data.libraryUpdateStatusChanged
+      // Core sends its status flat, never an all-zero opening result, and
+      // says whether a stop ended the run, so it may come before the stop's reply.
+      var flat = event.data.isRunning !== undefined
+      var l = flat ? { jobsInfo: event.data } : event.data.libraryUpdateStatusChanged
       if (!l) return u
       var s = jobs(l.jobsInfo || {})
+      if (flat) return copy(copy(u, s), { checking: false, stopped: event.data.stopped === true ? stoppedAt(s) : null })
       // A run opens with a result of all zeros, before it counts the
       // library; u's check waits past it. ponytail: a library with no
       // manga sends nothing more, so its check shows until C stops it.
@@ -356,9 +406,9 @@ function mangaIds(rows) {
 }
 
 // { title, detail } in place of the list, or null.
-function notice(u, configPath) {
+function notice(u, configPath, backend) {
   if (u.state === "loading") return u.rows.length ? null : { title: "Loading updates", detail: "" }
-  var p = Model.problem(u, configPath)
+  var p = Model.problem(u, configPath, backend)
   if (p) return p
   if (!u.rows.length && u.found) return { title: "No updates match the filters", detail: "Press F to change the filters." }
   if (!u.rows.length) return { title: "No new chapters", detail: "Press u to check the library for new chapters." }
@@ -372,6 +422,7 @@ if (typeof module !== "undefined") {
     PREFS: PREFS,
     updates: updates,
     viewPayload: viewPayload,
+    load: load,
     filterRows: filterRows,
     choose: choose,
     count: count,
