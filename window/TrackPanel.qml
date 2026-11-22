@@ -16,9 +16,6 @@ Rectangle {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // miharchy-core's (ADR 0010): the only server the panel talks to.
-  property var coreConfig: null
-  property string coreConfigPath: ""
   // False once the manga detail closes, which closes the panel too.
   property bool active: false
   property var panel: null
@@ -30,7 +27,7 @@ Rectangle {
   readonly property bool open: panel !== null
   readonly property bool editing: open && ["query", "progress", "start", "finish"].indexOf(panel.mode) !== -1
   readonly property bool picking: open && panel.mode === "pick"
-  readonly property var problem: open ? Model.problem(panel, coreConfigPath) : null
+  readonly property var problem: open ? Model.problem(panel, configPath) : null
   readonly property string hint: !open ? ""
     : picking ? "j k move   enter choose   esc back   "
     : "j k trackers   enter find the manga   s status   c chapters   S score   d started   D finished   p private   o open   y copy link   x stop tracking   esc close   "
@@ -45,14 +42,14 @@ Rectangle {
   height: Math.min(parent.height - theme.fontSize * 4, body.implicitHeight + theme.fontSize * 2)
 
   onActiveChanged: if (!active) close()
-  onCoreConfigChanged: close()
+  onConfigChanged: close()
 
   function send(payload, done) {
-    return Session.send(coreConfig, payload, done)
+    return Session.send(config, payload, done)
   }
 
   function show(manga) {
-    if (!manga || !coreConfig) return
+    if (!manga || !config) return
     panel = Trackers.panel(manga.id, manga.title)
     var seq = ++loadSeq
     Trackers.panelLoad(send, panel, function(reply) {
