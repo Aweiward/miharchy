@@ -146,13 +146,21 @@ Panel {
     }
   }
 
+  // Core's requests have no deadline of their own, so these timers give the
+  // helper's (Sync.command, Sync.healthCommand); a reply after one is dropped.
   property bool healthBusy: false
+  property int healthSeq: 0
+  property int syncSeq: 0
 
   function refreshHealth() {
     if (core) {
       if (healthBusy || !config) return
       healthBusy = true
+      var seq = ++healthSeq
+      healthDeadline.restart()
       return Session.send(config, Sync.HEALTH_PAYLOAD, function(reply) {
+        if (seq !== root.healthSeq) return
+        healthDeadline.stop()
         root.healthBusy = false
         root.health = Sync.healthReply(reply)
       })
@@ -196,7 +204,13 @@ Panel {
     sync = Sync.reduce(sync, { type: "start" })
     if (core) {
       if (!config) return finishSync({ type: "reply", reply: { state: "no-config", message: "" } })
-      return Session.send(config, Sync.corePayload(false), function(reply) { root.finishSync({ type: "reply", reply: reply }) })
+      var seq = ++syncSeq
+      syncDeadline.restart()
+      return Session.send(config, Sync.corePayload(false), function(reply) {
+        if (seq !== root.syncSeq) return
+        syncDeadline.stop()
+        root.finishSync({ type: "reply", reply: reply })
+      })
     }
     syncJob.command = Sync.command(devHelper)
     syncJob.running = true
@@ -213,6 +227,25 @@ Panel {
     }
     refreshHealth()
     poll()
+  }
+
+  Timer {
+    id: syncDeadline
+    interval: 1800 * 1000
+    onTriggered: {
+      root.syncSeq++
+      root.finishSync({ type: "reply", reply: { state: "error", message: "miharchy-core did not finish the sync in 30 minutes." } })
+    }
+  }
+
+  Timer {
+    id: healthDeadline
+    interval: 120 * 1000
+    onTriggered: {
+      root.healthSeq++
+      root.healthBusy = false
+      root.health = Sync.healthReply({ state: "error", message: "miharchy-core did not answer the health check in 2 minutes." })
+    }
   }
 
   Process {

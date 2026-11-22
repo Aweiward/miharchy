@@ -138,7 +138,7 @@ test("on core the phone check reads core's baseline, not the helper's", () => {
 });
 
 test("on core a sync that lost the race stays silent, and other results notify", () => {
-  const lost = Sync.reduce(Sync.reduce(Sync.initial(), { type: "start" }), { type: "reply", reply: M.coreReply(409, JSON.stringify({ error: { kind: "busy", message: "A sync is already running." } })) });
+  const lost = Sync.reduce(Sync.reduce(Sync.initial(), { type: "start" }), { type: "reply", reply: M.coreReply(400, JSON.stringify({ error: { kind: "invalid", message: "A sync is already running." } })) });
   assert.equal(lost.state, "failed");
   assert.equal(Mark.syncNotification(lost, "sync-1"), null);
   const down = Sync.reduce(Sync.initial(), { type: "reply", reply: M.coreReply(0, "") });
