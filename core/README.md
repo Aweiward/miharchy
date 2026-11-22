@@ -77,6 +77,7 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 - `backup.import { file }` restores a Mihon or Suwayomi backup as Mihon's restore does and gives `{ manga }`, the number of manga in the file. An unknown manga comes in whole. A known manga keeps its own data and gains read and bookmarked chapters (OR), higher last pages, newer history and the backup's tracks (chapters read never lower). A non-empty category list replaces the manga's categories, by name. Notes come in only on a manga core did not have. Source names merge into meta `miharchy.sourceNames`. Tracks on trackers core lacks stay out.
 - Notes are manga meta `miharchy.notes`, as the window writes them. `manga.user_notes` stays unused.
 - One run of the three routes at a time; another answers `invalid` "A sync is already running."
+- `sync.health { folder? }` is the helper's `health` (every field, nulls too). `backup.check { file }` or `{ preSync: true }` gives `{ file, missingSources, missingTrackers }`, as Mihon's `BackupFileValidator`: the backup's sources core has not installed, and the trackers core has but is not logged in to. `preSync` names `pre-sync.tachibk` in core's state folder, the library before the last sync, so the window's Undo restores it with `backup.import` (#384). Both read only and take no lock.
 
 ## Settings and automatic backups (#375)
 

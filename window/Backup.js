@@ -20,6 +20,10 @@ function command(devHelper, dir) {
   return Capped.command(Sync.helperCommand(devHelper, ["backup", dir]), CAP, 600)
 }
 
+// Core's backup: core takes its own backup folder and parts rows, so the
+// payload names neither.
+var PAYLOAD = { route: "backup.export", body: {} }
+
 // backup.state: "idle" | "running" | "done" (file) | "failed" (message)
 function initial() {
   return { state: "idle" }
@@ -39,6 +43,9 @@ function reduce(b, event) {
       if (job.code === 0) try { result = JSON.parse(lines[lines.length - 1]) } catch (e) { result = null }
       if (!result || !result.file) return { state: "failed", message: job.output.trim() || "The sync helper stopped with status " + job.code + "." }
       return { state: "done", file: result.file }
+    case "reply":
+      // { reply }: core's answer to PAYLOAD, as Session.send gives it.
+      return event.reply.state === "ok" ? { state: "done", file: event.reply.data.file } : { state: "failed", message: Sync.coreMessage(event.reply) }
   }
   return b
 }
@@ -56,6 +63,7 @@ if (typeof module !== "undefined") {
   module.exports = {
     folder: folder,
     command: command,
+    PAYLOAD: PAYLOAD,
     initial: initial,
     reduce: reduce,
     note: note

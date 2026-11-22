@@ -86,3 +86,22 @@ test("the real command hands the path to the helper as one argument", async () =
   const { stdout } = await execFile(argv[0], argv.slice(1), { env: { ...process.env, HOME: path.join(dir, "home") } });
   assert.equal(stdout, "check|/a b/$(touch x)'.tachibk|\n0\n");
 });
+
+test("on core the check and the restore are routes, and the undo asks core for the file", () => {
+  const R = require("./load")("Restore.js");
+  const path = { step: "checking", path: "/s/b.tachibk" };
+  assert.deepEqual(R.checkPayload(path), { route: "backup.check", body: { file: "/s/b.tachibk" } });
+  const undo = R.reduce(R.initial(), { type: "check-presync" });
+  assert.deepEqual(R.checkPayload(undo), { route: "backup.check", body: { preSync: true } });
+  assert.deepEqual(R.lines(undo), ["Reading the library from before the last sync."]);
+  const data = { file: "/core/sync/pre-sync.tachibk", missingSources: ["Gone"], missingTrackers: [] };
+  const confirm = R.reduce(undo, { type: "checked-reply", reply: { state: "ok", data } });
+  assert.equal(confirm.step, "confirm");
+  assert.equal(confirm.path, "/core/sync/pre-sync.tachibk");
+  assert.deepEqual(R.importPayload(confirm), { route: "backup.import", body: { file: "/core/sync/pre-sync.tachibk" } });
+  const running = R.reduce(confirm, { type: "start" });
+  assert.deepEqual(R.lines(R.reduce(running, { type: "finish-reply", reply: { state: "ok", data: { manga: 3 } } })), ["Restored /core/sync/pre-sync.tachibk."]);
+  const refused = R.reduce(running, { type: "finish-reply", reply: { state: "error", message: "A sync is already running." } });
+  assert.deepEqual(R.lines(refused), ["A sync is already running."]);
+  assert.deepEqual(R.lines(R.reduce(undo, { type: "checked-reply", reply: { state: "error", message: "There is no sync to undo yet." } })), ["There is no sync to undo yet."]);
+});

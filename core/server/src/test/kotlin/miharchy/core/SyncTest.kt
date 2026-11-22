@@ -468,4 +468,39 @@ class SyncTest {
             assertEquals(listOf(SOURCE to "MangaDex"), back.backupSources.map { it.sourceId to it.name })
         }
     }
+
+    @Test fun `sync health on an empty folder names every field, the lists empty`() {
+        val core = core(EMPTY)
+        core.db.use {
+            val h = core.call("sync.health", buildJsonObject { put("folder", core.folder.toString()) })
+            assertEquals(kotlinx.serialization.json.JsonNull, h["phoneBackup"])
+            assertEquals(0, h.getValue("restorable").jsonArray.size)
+            assertEquals(0, h.getValue("byHand").jsonArray.size)
+            assertEquals(false, h.getValue("behind").jsonPrimitive.content.toBoolean())
+        }
+    }
+
+    @Test fun `backup check lists sources core lacks and trackers it is not logged in to, and finds the undo file`() {
+        val dir = work.resolve("check")
+        val db = Database(Files.createDirectories(dir).resolve("core.db"))
+        val sync = Sync(
+            db, dir.resolve("state"), "http://127.0.0.1:4591", setOf(MAL, ANILIST),
+            installedSources = { mapOf(SOURCE to "MangaDex") },
+            trackerLogins = { mapOf(MAL to ("MyAnimeList" to false), ANILIST to ("AniList" to true)) },
+        )
+        db.use {
+            val b = backup(manga(M, tracks = listOf(track(tracker = MAL), track(tracker = ANILIST), track(tracker = 99)))).apply {
+                backupSources = listOf(BackupSource("MangaDex", SOURCE), BackupSource("Gone", 7))
+            }
+            val file = dir.resolve("b.tachibk").also { it.writeBytes(encodeBackup(b)) }
+            fun check(body: JsonObject) = runBlocking { sync.routes.getValue("backup.check")(body) }.jsonObject
+            val r = check(buildJsonObject { put("file", file.toString()) })
+            assertEquals(listOf("Gone"), r.getValue("missingSources").jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(listOf("MyAnimeList"), r.getValue("missingTrackers").jsonArray.map { it.jsonPrimitive.content })
+            val none = runCatching { check(buildJsonObject { put("preSync", true) }) }.exceptionOrNull()
+            assertTrue(none is ApiError && none.kind == Kind.notFound)
+            val pre = Files.createDirectories(dir.resolve("state")).resolve("pre-sync.tachibk").also { it.writeBytes(encodeBackup(b)) }
+            assertEquals(pre.toString(), check(buildJsonObject { put("preSync", true) }).getValue("file").jsonPrimitive.content)
+        }
+    }
 }

@@ -41,6 +41,8 @@ import miharchy.sync.SetCategories
 import miharchy.sync.SetLastPage
 import miharchy.sync.SetNotes
 import miharchy.sync.Summary
+import miharchy.sync.Health
+import miharchy.sync.health
 import miharchy.sync.TRACKER_NAMES
 import miharchy.sync.TrackState
 import miharchy.sync.UnbindTrack
@@ -66,6 +68,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
 import java.time.Instant
+import java.time.ZoneId
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
@@ -93,6 +96,8 @@ class Sync(
     private val installedSources: suspend () -> Map<Long, String> = { emptyMap() },
     /** Where backups go when Settings' backup folder is blank: `backups` beside the state folder, in core's data folder. */
     private val backups: Path = stateDir.resolveSibling("backups"),
+    /** Each tracker's name and whether it is logged in, by id, for `backup.check`. */
+    private val trackerLogins: suspend () -> Map<Int, Pair<String, Boolean>> = { emptyMap() },
 ) {
     // One at a time, as the helper's sync.lock: an import never runs into a sync's read of the library.
     private val lock = Mutex()
@@ -101,6 +106,9 @@ class Sync(
         "sync.run" to { input -> locked { run(input) } },
         "backup.export" to { input -> locked { exportTo(input) } },
         "backup.import" to { input -> locked { import(input) } },
+        // These two read only, so they take no lock: the window asks for health right after a sync.
+        "sync.health" to { input -> Json { encodeDefaults = true }.encodeToJsonElement(Health.serializer(), health(folder(input), stateDir, ZoneId.systemDefault())) },
+        "backup.check" to { input -> check(input) },
     )
 
     private suspend fun locked(block: suspend () -> JsonElement): JsonElement {
@@ -208,6 +216,30 @@ class Sync(
         val backup = readBackup(path.readBytes(), file)
         val count = db.run { c -> c.transaction { restore(c, backup) } }
         return buildJsonObject { put("manga", count) }
+    }
+
+    /**
+     * `{ file }` or `{ preSync: true }` -> `{ file, missingSources, missingTrackers }`: what a restore of the file needs that
+     * core lacks, as Mihon's `BackupFileValidator`. `preSync` names the library before the last sync, which a restore
+     * brings back; the reply names its path, for `backup.import`.
+     */
+    private suspend fun check(input: JsonObject): JsonElement {
+        val path = if (input.flag("preSync")) stateDir.resolve("pre-sync.tachibk").also {
+            if (!it.isRegularFile()) throw ApiError(Kind.notFound, "There is no sync to undo yet.")
+        } else Path.of(input.text("file") ?: throw ApiError(Kind.invalid, "The request needs file, a backup file's path."))
+        if (!path.isRegularFile()) throw ApiError(Kind.invalid, "$path is not a file.")
+        val backup = readBackup(path.readBytes(), path.toString())
+        val installed = installedSources().keys
+        val trackers = trackerLogins()
+        // Mihon's rules: a source by the backup's own list, a tracker core has but is not logged in to; others stay out.
+        val sources = backup.backupSources.filter { it.sourceId !in installed }.map { it.name.ifBlank { it.sourceId.toString() } }.distinct().sorted()
+        val loggedOut = backup.backupManga.flatMap { m -> m.tracking.map { it.syncId } }.toSet()
+            .mapNotNull { id -> trackers[id]?.takeIf { !it.second }?.first }.sorted()
+        return buildJsonObject {
+            put("file", path.toString())
+            put("missingSources", kotlinx.serialization.json.JsonArray(sources.map(::JsonPrimitive)))
+            put("missingTrackers", kotlinx.serialization.json.JsonArray(loggedOut.map(::JsonPrimitive)))
+        }
     }
 
     private suspend fun folder(input: JsonObject): Path {

@@ -99,8 +99,36 @@ function reduce(s, event) {
       return s.state === "held" ? { state: "running", apply: true } : s
     case "finish":
       return result(Setup.parseJob(event.text, SYNC_CAP))
+    case "reply":
+      // { reply }: core's answer to corePayload, as Session.send gives it.
+      return event.reply.state === "ok" ? summaryResult(event.reply.data) : { state: "failed", message: coreMessage(event.reply) }
   }
   return s
+}
+
+// --- miharchy-core (#384), behind MIHARCHY_BACKEND=core: the same sync, health,
+// restore and backup through core's routes, never the helper. Core reads its
+// own sync folder meta, so no payload names a folder.
+
+function corePayload(apply) {
+  return { route: "sync.run", body: apply ? { apply: true } : {} }
+}
+
+var HEALTH_PAYLOAD = { route: "sync.health", body: {} }
+
+function healthReply(reply) {
+  return reply.state === "ok" ? { state: "ready", health: reply.data } : { state: "failed", message: coreMessage(reply) }
+}
+
+// What a failed core reply says in a panel or a row: core's own message, or
+// why core could not answer. A view with no core.json passes { state: "no-config" }.
+function coreMessage(reply) {
+  switch (reply.state) {
+    case "error": return reply.message
+    case "down": return "miharchy-core is not running. Start it with: systemctl --user start miharchy-core."
+    case "unauthorized": return "miharchy-core rejected the secret in core.json."
+  }
+  return "No miharchy-core config. Start miharchy-core once to create core.json."
 }
 
 // The helper's one JSON line, or the failure to show instead.
@@ -115,8 +143,11 @@ function reply(job) {
 
 function result(job) {
   var r = reply(job)
-  if (!r.value) return { state: "failed", message: r.message }
-  var summary = r.value
+  return r.value ? summaryResult(r.value) : { state: "failed", message: r.message }
+}
+
+// The helper's Summary, which core's sync.run answers too.
+function summaryResult(summary) {
   var changes = COUNTS.map(function(c) {
     var n = summary.changes.filter(function(ch) { return ch.type === c[0] }).length
     return n ? c[1].replace("%d", n) : ""
@@ -226,6 +257,10 @@ if (typeof module !== "undefined") {
     NOT_BUILT: NOT_BUILT,
     PRE_SYNC: PRE_SYNC,
     command: command,
+    corePayload: corePayload,
+    HEALTH_PAYLOAD: HEALTH_PAYLOAD,
+    healthReply: healthReply,
+    coreMessage: coreMessage,
     healthCommand: healthCommand,
     parseHealth: parseHealth,
     healthSummary: healthSummary,

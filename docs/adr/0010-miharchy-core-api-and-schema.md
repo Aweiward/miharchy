@@ -52,6 +52,7 @@ The first routes of each slice. A slice may add routes; it keeps these names.
 | #374 local manga | none: the local source is source `0` in the source routes |
 | #375 settings | `settings.get`, `settings.set`, `cache.clear` |
 | #372 move from Suwayomi | `move.start`, `move.status` |
+| #384 sync and backup views | `sync.health`, `backup.check` |
 
 ## Considered Options
 

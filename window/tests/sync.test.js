@@ -130,3 +130,27 @@ test("a helper that is not built points at Setup, never at a build in the plugin
   const s = await run(null);
   assert.deepEqual(s, { state: "failed", message: "The sync helper is not built. Build it in the window: press : and choose Setup." });
 });
+
+test("on core the sync is a route, never the helper, and its Summary reads as the helper's line", () => {
+  assert.deepEqual(S.corePayload(false), { route: "sync.run", body: {} });
+  assert.deepEqual(S.corePayload(true), { route: "sync.run", body: { apply: true } });
+  const ok = { state: "ok", data: { ...summary, export: "/home/u/Sync/miharchy-2026-10-04_09-07-00.tachibk", unreachable: [] } };
+  const helper = S.reduce(S.reduce(S.initial(), { type: "start" }), { type: "finish", text: JSON.stringify(ok.data) + "\n0\n" });
+  assert.deepEqual(S.reduce({ state: "running" }, { type: "reply", reply: ok }), helper);
+  assert.equal(S.reduce({ state: "running" }, { type: "reply", reply: { state: "ok", data: { ...ok.data, held: true } } }).state, "held");
+});
+
+test("a failed core sync says core's message, or why core did not answer", () => {
+  const failed = (reply) => S.reduce({ state: "running" }, { type: "reply", reply });
+  assert.deepEqual(failed({ state: "error", message: "A sync is already running." }), { state: "failed", message: "A sync is already running." });
+  assert.match(failed({ state: "down" }).message, /miharchy-core is not running/);
+  assert.match(failed({ state: "unauthorized" }).message, /secret in core.json/);
+  assert.match(failed({ state: "no-config" }).message, /No miharchy-core config/);
+});
+
+test("core's sync health reads as the helper's", () => {
+  assert.deepEqual(S.HEALTH_PAYLOAD, { route: "sync.health", body: {} });
+  const h = { phoneBackup: null, phoneBackupAt: null, desktopBackup: null, restored: null, markerMissing: false, restorable: [], byHand: [], pendingSince: null, behind: false };
+  assert.deepEqual(S.healthReply({ state: "ok", data: h }), { state: "ready", health: h });
+  assert.deepEqual(S.healthReply({ state: "error", message: "/s is not a folder." }), { state: "failed", message: "/s is not a folder." });
+});
