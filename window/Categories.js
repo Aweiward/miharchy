@@ -26,8 +26,6 @@ function checkName(text, categories, exceptId) {
   return { name: name }
 }
 
-// core (the last argument of each payload here) is unused: the routes are
-// miharchy-core's.
 function createPayload(name) {
   return { route: "category.create", body: { name: name } }
 }

@@ -17,8 +17,6 @@ Panel {
   id: root
   moduleName: "miharchy"
 
-  readonly property bool core: true
-  readonly property string backend: "core"
   readonly property string configPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
   readonly property string phoneBaseline: Mark.phoneBaseline({ HOME: Quickshell.env("HOME"), MIHARCHY_CORE_DATA: Quickshell.env("MIHARCHY_CORE_DATA") })
   readonly property string launcher: decodeURIComponent(Qt.resolvedUrl("../window/miharchy").toString().replace(/^file:\/\//, ""))

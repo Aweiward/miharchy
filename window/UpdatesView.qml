@@ -20,9 +20,7 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // Set by shell.qml; config is miharchy-core's. shell.qml reads core.
-  property string backend: ""
-  readonly property bool core: true
+  // Set by shell.qml; config is miharchy-core's.
   // The view shows, so it loads and follows the library update live.
   property bool active: false
   property var updates: Updates.initial()

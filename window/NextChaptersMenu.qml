@@ -15,8 +15,6 @@ Item {
 
   required property Theme theme
   property var config: null
-  // Set by shell.qml; the Library and Up next it opens from are core's.
-  property string backend: ""
   // The download queue's items: a queued chapter is not queued again.
   property var queueItems: []
   // { label, manga: [{ id, title }] } while the menu shows, else null.

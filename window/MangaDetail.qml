@@ -21,8 +21,6 @@ Rectangle {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // The manga is miharchy-core's. shell.qml reads it to match the other views.
-  property bool onCore: true
   property var detail: null
   property int cursor: 0
   // The user's categories, from the library; the checklist lists them.
@@ -89,12 +87,11 @@ Rectangle {
     : selecting ? "j k extend   R read   u unread   b bookmark   d download   x delete download   esc end   "
     : (note ? note + "   " : "") + "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   n notes   o browser   y copy link   Y copy title   / search title   r refresh   esc back   "
 
-  // core: whether the manga is miharchy-core's.
-  signal libraryChanged(int mangaId, bool inLibrary, bool core)
+  signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
   // shell.qml's markChapters() applies it and answers with markReply().
   // action: "read", "unread" or "bookmark".
-  signal mark(var chapters, string action, int mangaId, bool core)
+  signal mark(var chapters, string action, int mangaId)
   signal categorized()
   // A download request's reply, which carries the queue.
   signal downloads(var reply)
@@ -137,8 +134,7 @@ Rectangle {
   }
 
   // fromSource: opened while browsing a source, so it refreshes once.
-  // core: unused, the manga is miharchy-core's.
-  function openManga(mangaId, fromSource, core) {
+  function openManga(mangaId, fromSource) {
     dupes = []
     detail = Browse.detail(mangaId, fromSource)
     chapterPrefs.open(mangaId)
@@ -199,12 +195,11 @@ Rectangle {
       if (dupes.length) return
     }
     var mangaId = detail.mangaId
-    var core = onCore
     var cfg = config
     detail = Browse.reduceDetail(detail, { type: "library-request" })
     send(payload, function(reply) {
       if (view.detail && view.detail.mangaId === mangaId && view.config === cfg) view.detail = Browse.reduceDetail(view.detail, { type: "library-reply", reply: reply })
-      if (reply.state === "ok") view.libraryChanged(mangaId, Browse.libraryReply(reply), core)
+      if (reply.state === "ok") view.libraryChanged(mangaId, Browse.libraryReply(reply))
     })
   }
 
@@ -224,7 +219,7 @@ Rectangle {
 
   function sendMark(list, action) {
     anchor = -1
-    mark(list, action, detail.mangaId, onCore)
+    mark(list, action, detail.mangaId)
   }
 
   function chooseOption() {
@@ -382,7 +377,7 @@ Rectangle {
         dupesCursor = Math.max(0, Math.min(dupes.length - 1, dupesCursor + (id === "manga.duplicatesUp" ? -1 : 1)))
         break
       case "manga.duplicateOpen":
-        openManga(dupes[dupesCursor].id, false, onCore)
+        openManga(dupes[dupesCursor].id, false)
         break
       case "manga.select":
         anchor = cursor

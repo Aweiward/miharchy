@@ -17,9 +17,6 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // The check reads and writes miharchy-core, and its ids are core's.
-  // shell.qml sets this; the view no longer reads it.
-  property bool core: false
   property bool active: false
 
   // state: the connection states (Model.problem words a failure), "idle"

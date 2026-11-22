@@ -16,9 +16,7 @@ Item {
 
   required property Theme theme
   property var config: null
-  // Set by shell.qml; config is miharchy-core's. shell.qml reads core.
-  property string backend: ""
-  readonly property bool core: true
+  // Set by shell.qml; config is miharchy-core's.
   property string configPath: ""
   property bool active: false
 

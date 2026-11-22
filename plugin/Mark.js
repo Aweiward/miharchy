@@ -178,7 +178,6 @@ function down(mark) {
   return mark.state !== "ok" && mark.state !== "loading"
 }
 
-// backend: "core", so a failure names miharchy-core.
 function tooltip(mark) {
   if (down(mark)) return "Miharchy: " + Model.problem(mark, "").title
   if (mark.state === "loading") return "Miharchy"
@@ -213,8 +212,7 @@ function reason(e, now) {
 }
 
 // reply: loadUpNext()'s, null while it loads. -> the section's rows;
-// none while loading or after a failure, so the section hides. core: the
-// rows name core's ids, so the window opens them there (target()).
+// none while loading or after a failure, so the section hides.
 function upNext(reply, now) {
   if (!reply || reply.state !== "ok") return []
   var metas = (reply.data.metas && reply.data.metas.nodes) || []

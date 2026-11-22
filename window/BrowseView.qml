@@ -21,9 +21,6 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // shell.qml sets backend to "core". The view always runs on core.
-  property string backend: ""
-  readonly property bool core: true
   property bool active: false
   property bool showNsfw: false
   // Where the local source reads, for its empty how-to.

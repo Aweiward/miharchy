@@ -19,8 +19,6 @@ Rectangle {
   // miharchy-core's (ADR 0010): the only server the panel talks to.
   property var coreConfig: null
   property string coreConfigPath: ""
-  // shell.qml sets this; the panel no longer reads it.
-  property bool core: false
   // False once the manga detail closes, which closes the panel too.
   property bool active: false
   property var panel: null
@@ -53,8 +51,7 @@ Rectangle {
     return Session.send(coreConfig, payload, done)
   }
 
-  // onCore: shell.qml passes it; the manga is always miharchy-core's.
-  function show(manga, onCore) {
+  function show(manga) {
     if (!manga || !coreConfig) return
     panel = Trackers.panel(manga.id, manga.title)
     var seq = ++loadSeq

@@ -19,8 +19,6 @@ Rectangle {
   property var config: null
   property string configPath: ""
   // Set by shell.qml: the queue is miharchy-core's.
-  property string backend: ""
-  readonly property bool core: backend === "core"
   property bool open: false
   property var queue: Downloads.initial()
   property int cursor: 0

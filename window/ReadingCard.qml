@@ -19,8 +19,6 @@ Rectangle {
 
   required property Theme theme
   property var config: null
-  // Set by shell.qml; the card reads core's history.
-  property string backend: ""
   property string configPath: ""
   // The "Save pages to" setting; empty for ~/Pictures/Miharchy.
   property string folder: ""

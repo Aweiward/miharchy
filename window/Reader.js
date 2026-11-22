@@ -138,7 +138,6 @@ function onward(r, delta) {
 // to trackers and deletes nothing after reading.
 // mangaTitle names the folder a saved page goes to.
 // peek: a peek opened the chapter, so Catch-up applies (stops()).
-// core: unused, the chapters are miharchy-core's (ADR 0010).
 function open(mangaId, chapters, chapterId, readingMode, incognito, mangaTitle, peek) {
   var l = relist(chapters, chapterId)
   return at({ mangaId: mangaId, chapters: l.chapters, mode: readingMode, incognito: incognito === true, mangaTitle: mangaTitle || "", peek: peek === true, finished: 0, lifted: false }, l.index, false)

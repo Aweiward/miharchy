@@ -22,8 +22,6 @@ Item {
   // Suwayomi's server.json: the probe checks it, and the move reads it.
   property string configPath: ""
   property string home: ""
-  property string backend: ""
-  readonly property bool core: backend === "core"
   property string coreConfigPath: ""
 
   property var setup: Setup.initial()

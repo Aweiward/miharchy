@@ -36,9 +36,6 @@ Item {
 
   readonly property var rows: Extensions.rows(ext, { query: query, allLanguages: allLanguages, showNsfw: showNsfw })
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.key === view.cursorKey }))
-  // shell.qml sets backend to "core". The view always runs on core.
-  property string backend: ""
-  readonly property bool core: true
   readonly property var problem: Model.problem(ext, configPath)
   readonly property var detailsExtension: details ? Extensions.find(ext, details.pkgName) : null
   readonly property bool updatable: ext.extensions.some(function(e) { return e.installed && e.hasUpdate })

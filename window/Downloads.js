@@ -82,7 +82,6 @@ function ids(chapters) {
   return chapters.map(function(c) { return c.id })
 }
 
-// core (the last argument of each payload here) is unused: the routes are
 // miharchy-core's download routes (ADR 0010), each answering with the status.
 function statusPayload() {
   return { route: "download.queue" }
@@ -239,7 +238,7 @@ function failed(items, reasons) {
 }
 
 // A queue row's status: progressText, and on a failed row its reason once
-// known. flareOn and core are unused: core's reasons carry no hint.
+// known. flareOn is unused: core's reasons carry no hint.
 function statusText(item, reason, flareOn) {
   var text = progressText(item)
   if (item.state !== "ERROR" || !reason) return text

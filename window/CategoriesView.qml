@@ -17,8 +17,6 @@ Item {
   required property Theme theme
   property var config: null
   // Set by shell.qml: config and categories are miharchy-core's.
-  property string backend: ""
-  readonly property bool core: backend === "core"
   property var categories: []
   property var manga: []
   property bool loading: false

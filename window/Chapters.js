@@ -14,8 +14,6 @@
 // changes.
 // One chapter.update; page 0 on the ones already there is no change, and
 // core stamps no History for an unread reset.
-// core (the last argument of each payload here) is unused: the routes are
-// miharchy-core's.
 function markPayload(chapters, read) {
   var todo = chapters.filter(function(c) { return read ? !c.read : c.read || c.lastPage > 0 })
   if (!todo.length) return null

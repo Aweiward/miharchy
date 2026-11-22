@@ -26,8 +26,6 @@ Item {
   required property Theme theme
   property var config: null
   // Set by shell.qml: config and connection are miharchy-core's.
-  property string backend: ""
-  readonly property bool core: backend === "core"
   property string configPath: ""
   // Model.reduce()'s connection: the library manga and categories.
   property var connection: Model.initial()

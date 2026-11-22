@@ -313,8 +313,6 @@ function continueChapter(chapters, chapterPrefs) {
 // The actions on selected manga (Mihon's library selection) take their
 // chapters from one route; Browse.toChapters() gives them the shape the
 // chapter actions read.
-// core (the last argument of each payload here) is unused: the routes are
-// miharchy-core's (ADR 0010).
 function chaptersPayload(mangaIds) {
   return { route: "chapter.list", body: { mangaIds: mangaIds } }
 }

@@ -21,9 +21,6 @@ Rectangle {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // Every id here is miharchy-core's. shell.qml sets this; the view no
-  // longer reads it.
-  property bool core: false
   property bool showNsfw: false
   // The library's categories, to name the ones that move.
   property var categories: []

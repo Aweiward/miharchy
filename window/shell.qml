@@ -34,7 +34,6 @@ ShellRoot {
   // Suwayomi's server.json: Setup's move reads a Suwayomi install from it.
   readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
   // miharchy-core is the only server (ADR 0010, #373).
-  readonly property bool coreBackend: true
   // ponytail: pass 1 of #373's slice 2; pass 2 drops these and their gates.
   readonly property string downloadsElsewhere: ""
   readonly property string migrateElsewhere: ""
@@ -156,7 +155,7 @@ ShellRoot {
     if (next && coreConfig && JSON.stringify(next) === JSON.stringify(coreConfig)) return
     coreConfig = next
     if (coreConfig) {
-      fetchLibrary(true)
+      fetchLibrary()
       libraryView.reload()
       loadSettings()
       applyPending()
@@ -208,7 +207,7 @@ ShellRoot {
     pendingChapter = null
     closeOverlays()
     view = "updates"
-    openOn(target, peek, true)
+    openOn(target, peek)
   }
 
   // The mark's new-chapter notification lands here, through the
@@ -252,10 +251,10 @@ ShellRoot {
 
   // A chapter in the reader, as Updates opens one.
   function openOnCore(target, peek) {
-    openOn(target, peek, true)
+    openOn(target, peek)
   }
 
-  function openOn(target, peek, core) {
+  function openOn(target, peek) {
     var cfg = coreConfig
     var seq = ++coreOpenSeq
     var d = Browse.detail(target.mangaId, false)
@@ -267,7 +266,7 @@ ShellRoot {
         root.view = "library"
         return libraryView.fail(Browse.notice(d, root.coreConfigPath).title)
       }
-      reader.start(d.manga, d.chapters, target.chapterId, root.settingsState.values.defaultReadingMode, peek === true, core)
+      reader.start(d.manga, d.chapters, target.chapterId, root.settingsState.values.defaultReadingMode, peek === true)
     })
   }
 
@@ -412,7 +411,7 @@ ShellRoot {
   // The one path that marks chapters, from any view. action: "read",
   // "unread" or "bookmark" (a toggle). The trackers hear of a mark read, and
   // every view showing read state or bookmarks reloads.
-  function markChapters(chapters, action, mangaIds, core) {
+  function markChapters(chapters, action, mangaIds) {
     return markOnCore(chapters, action, mangaIds)
   }
 
@@ -423,19 +422,19 @@ ShellRoot {
     Session.send(coreConfig, payload, function(reply) {
       var read = reply.state === "ok" && action === "read"
       var after = read ? Chapters.afterMarkRead(root.settingsState.values.trackOnMarkRead) : null
-      if (after === "push") root.pushTrackers(mangaIds, true)
-      if (after === "check") root.askTrackers(mangaIds, true)
-      if (read && root.settingsState.values.deleteAfterMarkRead) root.deleteRead(marked, refresh, true)
+      if (after === "push") root.pushTrackers(mangaIds)
+      if (after === "check") root.askTrackers(mangaIds)
+      if (read && root.settingsState.values.deleteAfterMarkRead) root.deleteRead(marked, refresh)
       else refresh()
       function refresh() {
         if (mangaDetail.open && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
-        root.fetchLibrary(true)
+        root.fetchLibrary()
         updatesView.load()
       }
     })
   }
 
-  function pushTrackers(mangaIds, core) {
+  function pushTrackers(mangaIds) {
     var track = Chapters.trackPayload(mangaIds)
     var cfg = coreConfig
     if (track && cfg) Session.send(cfg, track, function() {})
@@ -443,18 +442,18 @@ ShellRoot {
 
   // Mihon's question before a push: asked only when a logged-in tracker
   // sits below the chapter the push would send.
-  function askTrackers(mangaIds, core) {
+  function askTrackers(mangaIds) {
     var cfg = coreConfig
     if (!cfg) return
     Chapters.trackCheckLoad(function(payload, d) { Session.send(cfg, payload, d) }, mangaIds, function(r) {
       var ask = r.state === "ok" ? Chapters.trackAsk(r.data) : null
-      root.trackAsk = ask ? Object.assign(ask, { core: true }) : null
+      root.trackAsk = ask ? ask : null
     })
   }
 
   // Deletes the downloads of the read chapters that Downloads.autoDeletePayload
   // lets go, then calls done, whatever happened.
-  function deleteRead(chapterIds, done, core) {
+  function deleteRead(chapterIds, done) {
     var cfg = coreConfig
     var on = function(payload, d) { Session.send(cfg, payload, d) }
     Downloads.autoDeleteLoad(on, chapterIds, function(reply) {
@@ -470,16 +469,16 @@ ShellRoot {
     var cats = coreConnection.categories
     var to = Library.defaultCategory(settingsState.values.defaultCategory, cats)
     if (to === -1 && mangaDetail.open && mangaDetail.detail.mangaId === mangaId) mangaDetail.run("manga.categories")
-    if (to === -1 || !cats.length) return fetchLibrary(true)
+    if (to === -1 || !cats.length) return fetchLibrary()
     Session.send(coreConfig, Library.moveToPayload(mangaId, to, cats), function(reply) {
       libraryView.report(reply)
       mangaDetail.reload()
-      root.fetchLibrary(true)
+      root.fetchLibrary()
     })
   }
 
   // Only the latest library request may update coreConnection.
-  function fetchLibrary(core) {
+  function fetchLibrary() {
     var ccfg = coreConfig
     if (!ccfg) return
     var cseq = ++coreRequestSeq
@@ -504,7 +503,7 @@ ShellRoot {
 
   // A sync or a restore changed the library, and the source names in meta.
   function reloadAfterImport() {
-    fetchLibrary(true)
+    fetchLibrary()
     libraryView.reload()
     updatesView.load()
     loadSettings()
@@ -535,12 +534,12 @@ ShellRoot {
       return
     }
     if (id === "trackAsk.yes" || id === "trackAsk.no") {
-      if (id === "trackAsk.yes") pushTrackers(trackAsk.mangaIds, trackAsk.core)
+      if (id === "trackAsk.yes") pushTrackers(trackAsk.mangaIds)
       trackAsk = null
       return
     }
     if (id === "manga.track") {
-      trackPanel.show(mangaDetail.manga, mangaDetail.onCore)
+      trackPanel.show(mangaDetail.manga)
       return
     }
     if (id.indexOf("track.") === 0) {
@@ -710,7 +709,7 @@ ShellRoot {
         endEdit()
         break
       case "library.reload":
-        fetchLibrary(true)
+        fetchLibrary()
         libraryView.reload()
         updatesView.load()
         loadSettings()
@@ -823,18 +822,17 @@ ShellRoot {
           theme: theme
           config: root.coreConfig
           configPath: root.coreConfigPath
-          backend: "core"
           connection: root.coreConnection
           downloadedOnly: root.downloadedOnly
           categoriesHint: categoriesView.hint
           queue: downloadsView.queue.items
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds, libraryView.core) }
+          onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
           onDownloads: function(reply) { downloadsView.apply(reply) }
-          onEdited: root.fetchLibrary(libraryView.core)
-          onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false, libraryView.core) }
-          onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, false, libraryView.core) }
+          onEdited: root.fetchLibrary()
+          onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false) }
+          onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, false) }
           onDownloadMenu: function(set) { nextChapters.openFor(set) }
           onCheck: function(categories, done) { done(updatesView.check(categories)) }
           onQuit: root.run("window.quit")
@@ -846,13 +844,12 @@ ShellRoot {
           visible: root.view === "library" && libraryView.screen === "categories"
           theme: theme
           config: root.coreConfig
-          backend: "core"
           categories: root.coreConnection.categories
           manga: root.coreConnection.manga
           loading: root.coreConnection.state === "loading"
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          onEdited: if (config) root.fetchLibrary(core)
+          onEdited: if (config) root.fetchLibrary()
         }
 
         SettingsView {
@@ -862,7 +859,6 @@ ShellRoot {
           theme: theme
           config: root.settingsConfig()
           configPath: root.coreConfigPath
-          backend: "core"
           unapplied: root.settingsState.unapplied || []
           refusal: root.settingsRefusal
           values: root.settingsState.values
@@ -887,7 +883,6 @@ ShellRoot {
           theme: theme
           config: root.coreConfig
           configPath: root.coreConfigPath
-          backend: "core"
           active: visible
           showNsfw: root.settingsState.values.showNsfw
           onKey: function(event) { event.accepted = root.handleKey(event) }
@@ -903,13 +898,12 @@ ShellRoot {
           theme: theme
           config: root.coreConfig
           configPath: root.coreConfigPath
-          backend: "core"
           active: root.view === "browse"
           showNsfw: root.settingsState.values.showNsfw
           localFolder: Storage.localFolder({ HOME: Quickshell.env("HOME"), MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT") }, root.settingsState.values.localSourcePath)
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, true, true) }
+          onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, true) }
         }
 
         HistoryView {
@@ -919,10 +913,9 @@ ShellRoot {
           theme: theme
           config: root.coreConfig
           configPath: root.coreConfigPath
-          backend: "core"
           // Off while the reader shows, so closing it reloads what it read.
           active: root.view === "history" && !reader.open
-          onResume: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false, historyView.core) }
+          onResume: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
         }
@@ -935,12 +928,11 @@ ShellRoot {
           theme: theme
           config: root.coreConfig
           configPath: root.coreConfigPath
-          backend: "core"
           active: visible
           queue: downloadsView.queue.items
           categories: root.coreConnection.categories
-          onRead: function(manga, chapters, chapterId, peek) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, peek, updatesView.core) }
-          onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds, updatesView.core) }
+          onRead: function(manga, chapters, chapterId, peek) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, peek) }
+          onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
           onDownloads: function(reply) { downloadsView.apply(reply) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
         }
@@ -952,7 +944,6 @@ ShellRoot {
           theme: theme
           config: root.coreConfig
           configPath: root.configPath
-          backend: "core"
           coreConfigPath: root.coreConfigPath
           home: Quickshell.env("HOME")
           onKey: function(event) { event.accepted = root.handleKey(event) }
@@ -962,7 +953,7 @@ ShellRoot {
             coreConfigFile.reload()
           }
           onMoved: {
-            root.fetchLibrary(true)
+            root.fetchLibrary()
             libraryView.reload()
             root.loadSettings()
           }
@@ -977,7 +968,6 @@ ShellRoot {
           theme: theme
           config: root.coreConfig
           configPath: root.coreConfigPath
-          core: true
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onMergeChosen: function(job) { migrateView.startWith(job.old, job.kept) }
         }
@@ -1000,19 +990,19 @@ ShellRoot {
           downloadedOnly: root.downloadedOnly
           configPath: root.coreConfigPath
           categories: root.coreConnection.categories
-          onCategorized: if (config) root.fetchLibrary(true)
-          onLibraryChanged: function(mangaId, inLibrary, core) {
+          onCategorized: if (config) root.fetchLibrary()
+          onLibraryChanged: function(mangaId, inLibrary) {
             browseView.markInLibrary(mangaId, inLibrary)
             if (inLibrary) root.addedOnCore(mangaId)
-            else root.fetchLibrary(true)
+            else root.fetchLibrary()
           }
           queue: downloadsView.queue.items
           migrateGate: ""
           downloadsGate: ""
           onDownloads: function(reply) { downloadsView.apply(reply) }
           libraryManga: root.coreConnection.manga
-          onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false, mangaDetail.onCore) }
-          onMark: function(chapters, action, mangaId, core) { root.markChapters(chapters, action, [mangaId], core) }
+          onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false) }
+          onMark: function(chapters, action, mangaId) { root.markChapters(chapters, action, [mangaId]) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           skipFiltered: root.settingsState.values.skipFiltered
@@ -1046,17 +1036,16 @@ ShellRoot {
           theme: theme
           config: root.coreConfig
           configPath: root.coreConfigPath
-          core: true
           showNsfw: root.settingsState.values.showNsfw
           categories: root.coreConnection.categories
           pinned: Browse.pinned(browseView.prefs)
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           onLibraryChanged: {
-            root.fetchLibrary(true)
+            root.fetchLibrary()
             if (checkView.active) checkView.load()
           }
-          onMigrated: function(mangaId) { mangaDetail.openManga(mangaId, false, true) }
+          onMigrated: function(mangaId) { mangaDetail.openManga(mangaId, false) }
         }
       }
 
@@ -1122,7 +1111,7 @@ ShellRoot {
         onClosed: function(chapterId) {
           mangaDetail.reread(chapterId)
           updatesView.load()
-          root.fetchLibrary(true)
+          root.fetchLibrary()
         }
         onDeleted: mangaDetail.reload()
         onCaughtUpOn: function(mangaId) { root.lookUpNext(mangaId) }
@@ -1135,7 +1124,6 @@ ShellRoot {
         theme: theme
         config: root.coreConfig
         configPath: root.coreConfigPath
-        backend: "core"
         flareOn: root.settingsState.values.flareSolverrEnabled === true
         lastRun: nextChapters.lastRun
         onLeftQueue: function(items) {
@@ -1150,7 +1138,6 @@ ShellRoot {
         anchors.fill: parent
         theme: theme
         config: root.coreConfig
-        backend: "core"
         queueItems: downloadsView.queue.items
         onDownloads: function(reply) { downloadsView.apply(reply) }
         onQueued: {
@@ -1166,7 +1153,6 @@ ShellRoot {
         anchors.fill: parent
         theme: theme
         config: root.coreConfig
-        backend: "core"
         onSynced: root.reloadAfterImport()
         onKey: function(event) { root.handleKey(event) }
       }
@@ -1177,7 +1163,6 @@ ShellRoot {
         theme: theme
         folder: root.settingsState.values.syncFolder
         config: root.coreConfig
-        backend: "core"
         onKey: function(event) { event.accepted = root.handleKey(event) }
         onEditEnded: keyRoot.forceActiveFocus()
         onRestored: root.reloadAfterImport()
@@ -1189,7 +1174,6 @@ ShellRoot {
         theme: theme
         config: root.coreConfig
         configPath: root.coreConfigPath
-        backend: "core"
         folder: root.settingsState.values.pageFolder || ""
         onKey: function(event) { root.handleKey(event) }
       }
