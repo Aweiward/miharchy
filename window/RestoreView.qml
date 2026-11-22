@@ -2,9 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import "Restore.js" as Restore
-import "Sync.js" as Sync
 import "Session.js" as Session
 
 // Restore a backup: a panel over the window, the same shape as the sync
@@ -19,12 +17,9 @@ Rectangle {
   property bool open: false
   property var restore: Restore.initial()
   readonly property bool editing: open && restore.step === "path"
-  readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
   readonly property alias pathField: field
-  // "core" with MIHARCHY_BACKEND=core (shell.qml): core checks and restores, never the helper.
-  property string backend: ""
+  property string backend: "core"
   property var config: null
-  readonly property bool core: backend === "core"
 
   signal key(var event)
   signal editEnded()
@@ -79,46 +74,17 @@ Rectangle {
         restore = Restore.reduce(restore, { type: "check", text: field.text, home: Quickshell.env("HOME") })
         if (restore.step !== "checking") break
         editEnded()
-        if (core) {
-          coreSend(Restore.checkPayload(restore), "checked-reply")
-          break
-        }
-        proc.command = Restore.command(devHelper, "check", restore.path)
-        proc.running = true
+        coreSend(Restore.checkPayload(restore), "checked-reply")
         break
       case "restore.confirm":
         if (restore.step !== "confirm") break
         restore = Restore.reduce(restore, { type: "start" })
-        if (core) {
-          coreSend(Restore.importPayload(restore), "finish-reply")
-          break
-        }
-        proc.command = Restore.command(devHelper, "restore", restore.path)
-        proc.running = true
+        coreSend(Restore.importPayload(restore), "finish-reply")
         break
       case "restore.cancel":
       case "restore.close":
         close()
         break
-    }
-  }
-
-  // One process for both jobs: the check ends before the restore starts.
-  Process {
-    id: proc
-    property string output: ""
-    onStarted: output = ""
-    stdout: SplitParser {
-      onRead: function(line) {
-        proc.output += line + "\n"
-        if (view.restore.step === "running") view.restore = Restore.reduce(view.restore, { type: "line", text: line })
-      }
-    }
-    onRunningChanged: {
-      if (running) return
-      var step = view.restore.step
-      view.restore = Restore.reduce(view.restore, { type: step === "checking" ? "checked" : "finish", text: proc.output })
-      if (view.restore.step === "done") view.restored()
     }
   }
 

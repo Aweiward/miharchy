@@ -1,11 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const F = require("./load")("Failure.js");
-const M = require("./load")("Model.js");
-
-// What Model.reply leaves of a GraphQL error: the first line, without
-// Suwayomi's "Exception while fetching data (/path) : " prefix.
-const message = (raw) => M.reply(200, JSON.stringify({ errors: [{ message: raw }] })).message;
 
 const samples = {
   cloudflare: [
@@ -40,13 +35,6 @@ test("each sample message gets its kind", () => {
   for (const kind in samples) {
     for (const text of samples[kind]) assert.equal(F.reason(text).kind, kind, text);
   }
-});
-
-test("a real Suwayomi error, stack trace and all, classifies after Model.reply strips it", () => {
-  const raw = "Exception while fetching data (/a) : Source not installed: 2499283573021220255\r\n\r\n"
-    + "suwayomi.tachidesk.manga.impl.util.source.StubSource$SourceNotInstalledException: Source not installed: 2499283573021220255\n\tat x";
-  assert.equal(F.reason(message(raw)).kind, "sourceMissing");
-  assert.equal(F.reason(message("Exception while fetching data (/a) : Chapter not found\r\n\r\njava.lang.Exception: Chapter not found")).kind, "notFound");
 });
 
 test("another message is other, its raw text shortened", () => {

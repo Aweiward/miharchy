@@ -1,11 +1,9 @@
 .pragma library
 
-// Why a source request failed, from its error message: what Model.reply
-// leaves of a Suwayomi GraphQL error. Suwayomi keeps no reason of its own
-// (a download only has state ERROR), so the download queue probes a failed
-// chapter and labels the probe's message here; any other failed request
-// can be labelled the same way. Pure, so tests/failure.test.js pins it
-// against messages seen from the server.
+// Why a source request failed, from its error message. The download queue
+// labels a failed chapter with it, and any other failed request can be
+// labelled the same way. Pure, so tests/failure.test.js pins it against
+// messages seen from the server.
 
 // In order: the first kind whose test matches wins, so a Cloudflare
 // timeout is Cloudflare and a source that is not installed is not "not

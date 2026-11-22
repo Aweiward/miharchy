@@ -4,7 +4,7 @@ const R = require("./load")("Reader.js");
 const M = require("./load")("Model.js");
 
 const config = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
-const ok = (data) => M.reply(200, JSON.stringify({ data }));
+const ok = (data) => M.coreReply(200, JSON.stringify(data));
 
 // Newest first, as Browse.detail holds them.
 const chapters = [
@@ -12,10 +12,10 @@ const chapters = [
   { id: 12, name: "Ch. 2", url: "https://example.org/c/2" },
   { id: 11, name: "Ch. 1" }
 ];
-const pages = (id, n, o) => ok({ fetchChapterPages: {
+const pages = (id, n, o) => ok({
   pages: Array.from({ length: n }, (_, i) => "/api/v1/manga/5/chapter/" + id + "/page/" + i),
   chapter: Object.assign({ id, isRead: false, lastPageRead: 0 }, o)
-} });
+});
 const loaded = (id, n, o, mode) => R.reduce(R.open(5, chapters, id, mode || "paged-rtl"), { type: "pages", reply: pages(id, n, o), config });
 const turn = (r, delta) => R.reduce(r, { type: "turn", delta });
 
@@ -40,7 +40,7 @@ test("opening a chapter asks for its pages, which load from the server", () => {
   assert.equal(r.state, "loading");
   assert.equal(R.chapterName(r), "Ch. 2");
   assert.equal(r.chapters[r.index].url, "https://example.org/c/2", "o and y in the reader act on this link");
-  assert.deepEqual(R.pagesPayload(r).variables, { id: 12 });
+  assert.deepEqual(R.pagesPayload(r).body, { id: 12 });
   assert.equal(R.savePayload(r), null, "nothing saves before the pages are fetched: the server clamps to pageCount");
   const l = loaded(12, 3);
   assert.equal(l.state, "ok");
@@ -57,18 +57,18 @@ test("reopening resumes on the saved page; a read chapter starts over", () => {
 
 test("the first save after opening always goes out, so the chapter enters the history", () => {
   const r = loaded(12, 10, { lastPageRead: 6 });
-  assert.deepEqual(R.savePayload(r).variables, { id: 12, patch: { lastPageRead: 6 } });
+  assert.deepEqual(R.savePayload(r).body, { ids: [12], lastPageRead: 6 });
   const s = R.reduce(r, { type: "saving" });
   assert.equal(R.savePayload(s), null, "an unchanged page saves once");
-  assert.deepEqual(R.savePayload(turn(s, 1)).variables, { id: 12, patch: { lastPageRead: 7 } });
+  assert.deepEqual(R.savePayload(turn(s, 1)).body, { ids: [12], lastPageRead: 7 });
 });
 
 test("the last page marks the chapter read, and nothing ever marks it unread", () => {
   let r = R.reduce(loaded(12, 3, { lastPageRead: 1 }), { type: "saving" });
   r = turn(r, 1);
-  assert.deepEqual(R.savePayload(r).variables, { id: 12, patch: { lastPageRead: 2, isRead: true } });
+  assert.deepEqual(R.savePayload(r).body, { ids: [12], lastPageRead: 2, isRead: true });
   r = turn(R.reduce(r, { type: "saving" }), -1);
-  assert.deepEqual(R.savePayload(r).variables, { id: 12, patch: { lastPageRead: 1, isRead: true } });
+  assert.deepEqual(R.savePayload(r).body, { ids: [12], lastPageRead: 1, isRead: true });
 });
 
 test("the save that first marks a chapter read asks the server to push progress to the trackers", () => {
@@ -76,7 +76,7 @@ test("the save that first marks a chapter read asks the server to push progress 
   assert.equal(R.trackPayload(r), null, "not before the chapter is read");
   r = turn(r, 1);
   const push = R.trackPayload(r);
-  assert.match(push.query, /trackProgress\(input: \{ mangaId: 5 \}\)/);
+  assert.deepEqual(push, { route: "track.progress", body: { mangaIds: [5] } });
   r = R.reduce(r, { type: "saving" });
   assert.equal(R.trackPayload(turn(r, -1)), null, "only once per reading");
   assert.notEqual(R.trackPayload(R.reduce(r, { type: "save-failed", chapterId: 12 })), null, "a failed save pushes again with its retry");
@@ -94,7 +94,7 @@ test("past the last page the next chapter opens where it was left", () => {
   const r = turn(loaded(12, 2, { lastPageRead: 1 }), 1);
   assert.equal(R.chapterName(r), "Ch. 3");
   assert.equal(r.state, "loading");
-  assert.deepEqual(R.pagesPayload(r).variables, { id: 13 });
+  assert.deepEqual(R.pagesPayload(r).body, { id: 13 });
   assert.equal(R.reduce(r, { type: "pages", reply: pages(13, 4), config }).page, 0);
   assert.equal(R.reduce(r, { type: "pages", reply: pages(13, 4, { lastPageRead: 2 }), config }).page, 2);
 });
@@ -199,7 +199,7 @@ test("a failed page fetch shows the problem and r fetches again", () => {
   const r = R.reduce(R.open(5, chapters, 12, "paged-rtl"), { type: "pages", reply: M.reply(0, ""), config });
   assert.equal(r.state, "down");
   assert.equal(R.pagesPayload(r), null);
-  assert.deepEqual(R.pagesPayload(R.reduce(r, { type: "retry" })).variables, { id: 12 });
+  assert.deepEqual(R.pagesPayload(R.reduce(r, { type: "retry" })).body, { id: 12 });
   assert.equal(R.chapterName(turn(r, 1)), "Ch. 3", "a broken chapter can still be skipped");
 });
 
@@ -236,7 +236,7 @@ test("m cycles the reading mode and saves it for the manga, keeping the page", (
   r = R.reduce(r, { type: "mode" });
   assert.equal(r.mode, "paged-ltr");
   assert.equal(r.page, 4);
-  assert.deepEqual(R.modePayload(r).variables, { meta: { mangaId: 5, key: "miharchy.readingMode", value: "paged-ltr" } });
+  assert.deepEqual(R.modePayload(r), { route: "meta.set", body: { metas: [{ scope: "manga", owner: 5, key: "miharchy.readingMode", value: "paged-ltr" }] } });
   r = R.reduce(r, { type: "mode" });
   assert.equal(r.mode, "paged-vertical");
   assert.equal(R.indicator(r, "screen", "60"), "5 / 10   vertical   fit screen");
@@ -279,10 +279,10 @@ test("in webtoon the page is the one at the middle of the view, the last at the 
   assert.equal(scroll(r, 3), r, "an unchanged page changes nothing");
   const s = scroll(R.reduce(r, { type: "saving" }), 5);
   assert.equal(s.page, 5);
-  assert.deepEqual(R.savePayload(s).variables, { id: 12, patch: { lastPageRead: 5 } });
+  assert.deepEqual(R.savePayload(s).body, { ids: [12], lastPageRead: 5 });
   const end = scroll(s, 8, false, true);
   assert.equal(end.page, 9, "a short last page never reaches the middle");
-  assert.deepEqual(R.savePayload(end).variables, { id: 12, patch: { lastPageRead: 9, isRead: true } });
+  assert.deepEqual(R.savePayload(end).body, { ids: [12], lastPageRead: 9, isRead: true });
   assert.equal(scroll(s, 1, true).page, 0);
   assert.equal(scroll(R.open(5, chapters, 12, "webtoon"), 2).page, 0, "no scroll counts before the pages load");
 });
@@ -460,7 +460,7 @@ test("Home, End and a typed page number go to that page, within the chapter", ()
   assert.equal(go(-5).page, 0);
   assert.equal(go(NaN), r, "no number, no jump");
   assert.equal(go(9).read, true, "the last page marks the chapter read, as a turn there does");
-  assert.deepEqual(R.savePayload(go(6)).variables, { id: 12, patch: { lastPageRead: 6 } });
+  assert.deepEqual(R.savePayload(go(6)).body, { ids: [12], lastPageRead: 6 });
   const loading = R.open(5, chapters, 12, "paged-rtl");
   assert.equal(R.reduce(loading, { type: "goto", page: 3 }), loading, "nothing to go to before the pages load");
   assert.equal(R.pageNumber(" 7 "), 6, "pages count from 1 on screen");
@@ -544,12 +544,12 @@ test("in incognito the reader saves no read state, pushes no track and deletes n
 test("b bookmarks the chapter open, or takes its bookmark off, and the list keeps what the server stored", () => {
   const marked = [{ id: 13, name: "Ch. 3" }, { id: 12, name: "Ch. 2", bookmarked: true }, { id: 11, name: "Ch. 1" }];
   let r = R.open(5, marked, 11, "paged-rtl");
-  assert.deepEqual(R.bookmarkPayload(r).variables, { ids: [11], bookmarked: true });
+  assert.deepEqual(R.bookmarkPayload(r).body, { ids: [11], isBookmarked: true });
   r = R.reduce(r, { type: "bookmarked", chapterId: 11, bookmarked: true });
   assert.equal(r.chapters[r.index].bookmarked, true);
-  assert.deepEqual(R.bookmarkPayload(r).variables, { ids: [11], bookmarked: false }, "a second b takes it off");
+  assert.deepEqual(R.bookmarkPayload(r).body, { ids: [11], isBookmarked: false }, "a second b takes it off");
   const two = R.reduce(r, { type: "chapter", delta: 1 });
-  assert.deepEqual(R.bookmarkPayload(two).variables, { ids: [12], bookmarked: false }, "the chapter's own bookmark comes from the list");
+  assert.deepEqual(R.bookmarkPayload(two).body, { ids: [12], isBookmarked: false }, "the chapter's own bookmark comes from the list");
 });
 
 test("a saved page goes to a folder per manga under ~/Pictures/Miharchy, named as Mihon names it", () => {
@@ -587,8 +587,8 @@ test("download ahead takes the next unread chapters after the one open, in readi
   assert.deepEqual(R.ahead(r, "10").map((c) => c.id), [13, 15, 16], "no more than there are");
   assert.deepEqual(R.ahead(r, "0"), [], "off");
   const D = require("./load")("Downloads.js");
-  assert.deepEqual(D.enqueuePayload(R.ahead(r, "3")).variables.ids, [13, 16], "the one on disk is not queued again");
-  assert.equal(D.enqueuePayload(R.ahead(R.open(5, list, 16, "paged-rtl"), "5")), null, "the last chapter queues nothing");
+  assert.deepEqual(D.enqueuePayload(R.ahead(r, "3"), true).body.ids, [13, 16], "the one on disk is not queued again");
+  assert.equal(D.enqueuePayload(R.ahead(R.open(5, list, 16, "paged-rtl"), "5"), true), null, "the last chapter queues nothing");
 });
 
 // Page sizes by URL, as ReaderView collects them; the pages at wideAt are
@@ -627,12 +627,12 @@ test("the spread that ends on the last page reads the chapter", () => {
   const layout = { dual: true, split: false, sizes: sized(r, []) };
   r = turnIn(turnIn(r, 1, layout), 1, layout);
   assert.deepEqual([r.page, r.read], [3, true], "3 and 4 show: 4 is the last");
-  assert.deepEqual(R.savePayload(r).variables.patch, { lastPageRead: 3, isRead: true });
+  assert.deepEqual(R.savePayload(r).body, { ids: [12], lastPageRead: 3, isRead: true });
   const reopened = loaded(12, 5, { lastPageRead: 3 });
   assert.equal(reopened.read, false, "opened on the spread before the last page");
   const past = R.reduce(reopened, { type: "turn", delta: 1, layout, always: true });
   assert.deepEqual([past.transition && past.transition.dir, past.read], ["next", true], "reading on past it marks the chapter read");
-  assert.equal(R.savePayload(past).variables.patch.isRead, true);
+  assert.equal(R.savePayload(past).body.isRead, true);
 });
 
 test("a wide page splits in two halves outside spreads, turned half by half", () => {

@@ -21,10 +21,8 @@ Rectangle {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // The manga is miharchy-core's: Browse opened it with MIHARCHY_BACKEND=core.
-  // shell.qml then gives the core config and no Suwayomi categories,
-  // library or queue. Set before the detail, as config's change closes it.
-  property bool onCore: false
+  // The manga is miharchy-core's. shell.qml reads it to match the other views.
+  property bool onCore: true
   property var detail: null
   property int cursor: 0
   // The user's categories, from the library; the checklist lists them.
@@ -69,10 +67,8 @@ Rectangle {
   // The chapters as listed; cursor and anchor index it. detail.chapters
   // stays in source order, newest first, for the reader.
   // The chapter choices and the excluded scanlators, as Chapters.js takes them.
-  // Downloaded only forces the Downloaded filter on, as Mihon's
-  // Manga.downloadedFilter does.
   property bool downloadedOnly: false
-  readonly property var prefs: Prefs.force(Object.assign({}, chapterPrefs.values, scanlatorPrefs.values), "chapterFilterDownloaded", "include", downloadedOnly && !onCore)
+  readonly property var prefs: Object.assign({}, chapterPrefs.values, scanlatorPrefs.values)
   readonly property var shown: detail ? Chapters.apply(detail.chapters, prefs) : []
   readonly property var next: Chapters.nextUnread(shown, prefs)
   readonly property string resume: detail ? Chapters.resumeLabel(detail.chapters, next) : ""
@@ -83,8 +79,7 @@ Rectangle {
   // the other server's queue (shell.qml).
   property string downloadsGate: ""
   readonly property var downloadIds: ({ "manga.download": true, "manga.downloads": true, "manga.deleteDownload": true })
-  // Migrate runs on the switch's server (#394); on the other one the shell
-  // sets this, and the Migrate keys answer with it.
+  // The shell sets this to hold the Migrate keys, which answer with it.
   property string migrateGate: ""
   readonly property var migrateIds: ({ "manga.migrate": true, "manga.duplicateMigrate": true })
   readonly property string hint: dupesOpen ? "j k move   enter open   M migrate to this   a add anyway   esc cancel   "
@@ -101,7 +96,7 @@ Rectangle {
   // action: "read", "unread" or "bookmark".
   signal mark(var chapters, string action, int mangaId, bool core)
   signal categorized()
-  // A download mutation's reply, which carries the queue.
+  // A download request's reply, which carries the queue.
   signal downloads(var reply)
   // A double click sends Enter, a click on a key label its key, as typed.
   signal key(var event)
@@ -142,9 +137,8 @@ Rectangle {
   }
 
   // fromSource: opened while browsing a source, so it refreshes once.
-  // core: the manga is miharchy-core's.
+  // core: unused, the manga is miharchy-core's.
   function openManga(mangaId, fromSource, core) {
-    onCore = core === true
     dupes = []
     detail = Browse.detail(mangaId, fromSource, onCore)
     chapterPrefs.open(mangaId)
@@ -251,7 +245,7 @@ Rectangle {
     editEnded()
   }
 
-  // Saved as manga meta, which the sync helper maps to Mihon's notes.
+  // Saved as manga meta, which sync maps to Mihon's notes.
   function saveNotes() {
     var mangaId = detail.mangaId
     var text = notesField.text
