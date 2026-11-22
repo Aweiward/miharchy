@@ -41,7 +41,8 @@ function initial() {
 // Every download mutation answers with the status, under its own name.
 function statusIn(data) {
   // miharchy-core's routes and topic: the plain status, { state, queue }.
-  if (Array.isArray(data.queue)) return data
+  // Not Array.isArray: a list that crossed a QML signal is no JS array.
+  if (data.queue) return data
   if (data.downloadStatus) return data.downloadStatus
   for (var k in data) if (data[k] && data[k].downloadStatus) return data[k].downloadStatus
   return null
@@ -90,7 +91,7 @@ function reduce(q, event) {
   if (event.type === "live") {
     var l = event.data.downloadStatusChanged
     // Core's topic sends the whole status each time.
-    if (!l && event.data && Array.isArray(event.data.queue)) return queueOf(event.data.state === "STARTED", event.data.queue.map(item))
+    if (!l && event.data && event.data.queue) return queueOf(event.data.state === "STARTED", event.data.queue.map(item))
     if (!l) return q
     return queueOf(l.state === "STARTED", l.initial ? l.initial.map(item) : changed(q.items, l.updates || []))
   }
