@@ -42,8 +42,8 @@ test("a server that does not answer shows the dot, never a stale count", () => {
   assert.equal(Mark.down(m), true);
   assert.equal(Mark.label(m), "");
   assert.deepEqual(m.rows, []);
-  assert.equal(Mark.tooltip(m), "Miharchy: The server is not running");
-  assert.equal(Mark.notice(m, "/c").title, "The server is not running");
+  assert.equal(Mark.tooltip(m), "Miharchy: miharchy-core is not running");
+  assert.equal(Mark.notice(m, "/c").title, "miharchy-core is not running");
 });
 
 test("any failure to reach the updates is the dot; loading is not", () => {
@@ -59,35 +59,6 @@ test("any failure to reach the updates is the dot; loading is not", () => {
 const other = { id: 8, title: "Normal Girl", thumbnailUrl: null, inLibraryAt: sec(1) };
 const withNotify = (nodes, value) => M.reply(200, JSON.stringify({ data: { chapters: { nodes }, notify: { nodes: value === undefined ? [] : [{ value }] } } }));
 const poll = (m, r) => Mark.reduce(m, { type: "reply", reply: r, config, now });
-
-test("the poll asks for the notification and sync settings and the server's version in the same query", () => {
-  const q = Mark.listPayload().query;
-  assert.match(q, /chapters\(filter:/);
-  assert.match(q, /notify: metas\(condition: \{ key: "miharchy.notifyNewChapters" \}\) \{ nodes \{ value \} \} /);
-  assert.match(q, /autoSync: metas\(condition: \{ key: "miharchy.autoSync" \}\) \{ nodes \{ value \} \} /);
-  assert.match(q, /syncFolder: metas\(condition: \{ key: "miharchy.syncFolder" \}\) \{ nodes \{ value \} \} aboutServer \{ version \} \}$/);
-  assert.equal(q.split("{").length, q.split("}").length, "braces balance");
-});
-
-const withVersion = (version) => M.reply(200, JSON.stringify({ data: { chapters: { nodes: [chapter(1, 3)] }, aboutServer: { version } } }));
-
-test("a server newer than the checked version adds a warning, and the mark keeps working", () => {
-  const m = poll(Mark.initial(), withVersion("v2.4.2400"));
-  assert.equal(Mark.warning(m), "Suwayomi-Server v2.4.2400 is newer than the version Miharchy has checked (v2.4.2366). It should work, but report problems.");
-  assert.equal(Mark.tooltip(m), "Miharchy: 1 new chapter\n" + Mark.warning(m));
-  assert.equal(Mark.down(m), false);
-  assert.equal(Mark.label(m), "1");
-  assert.equal(m.rows.length, 1);
-});
-
-test("an older or equal server, or none answering, shows no warning", () => {
-  for (const v of ["v2.3.2243", "v2.4.2366"]) {
-    const m = poll(Mark.initial(), withVersion(v));
-    assert.equal(Mark.warning(m), "", v);
-    assert.equal(Mark.tooltip(m), "Miharchy: 1 new chapter", v);
-  }
-  assert.equal(Mark.warning(poll(poll(Mark.initial(), withVersion("v9.0.0")), M.reply(0, ""))), "");
-});
 
 test("the first poll after a start notifies nothing, however many updates wait", () => {
   const first = poll(Mark.initial(), withNotify([chapter(1, 3), chapter(2, 4)]));
@@ -297,9 +268,8 @@ test("a reason without a page count shows the page alone; an update under a day 
   assert.deepEqual(Mark.upNext(upReply([noCount, hours]), now).map((r) => r.side), ["p. 7", "new 5h"]);
 });
 
-test("the popup's Up next follows Downloaded only, which it asks the server for", () => {
+test("the popup's Up next follows Downloaded only", () => {
   const disk = upManga(5, "Disk", [upChapter(51, readAt(1)), upChapter(52, { isDownloaded: true })]);
-  assert.ok(Mark.upNextPayload().variables.keys.includes("miharchy.downloadedOnly"));
   assert.deepEqual(Mark.upNext(upReply([close, disk], [{ key: "miharchy.downloadedOnly", value: "true" }]), now).map((r) => r.title), ["Disk"]);
 });
 

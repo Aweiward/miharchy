@@ -1,77 +1,21 @@
 .pragma library
 .import "Model.js" as Model
 
-// This process's login to the server (ADR 0005). Every request to the server
-// goes through here: the window's and the plugin's. The first one logs in
-// with server.json's username and password, the rest send the access token.
-// When the server refuses the token, one refresh (or, failing that, a new
-// login) runs for every request waiting on it, and each request goes once
-// more. The tokens live in this module only: .pragma library keeps one copy
-// per process, and nothing writes them to a file or a URL.
+// Every request to miharchy-core (ADR 0010) goes through here: the window's
+// and the plugin's. Core takes core.json's secret as the bearer token on
+// every request: no login and no refresh.
 
-var LOGIN = "mutation($username: String!, $password: String!) { login(input: { username: $username, password: $password }) { accessToken refreshToken } }"
-var REFRESH = "mutation($refreshToken: String!) { refreshToken(input: { refreshToken: $refreshToken }) { accessToken } }"
-
-// The newest Suwayomi-Server version this login has been checked against
-// (ADR 0005). Setup and the mark warn about a newer server; nothing refuses
-// it. Setup's packages step compares the AUR's version with it before an
-// install (ADR 0007).
-var APPROVED_SUWAYOMI = "v2.4.2366"
-
-// "v2.4.2366" -> [2, 4, 2366]; anything else -> null.
-function versionParts(version) {
-  var m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(version || ""))
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
-}
-
-// An unparsable version counts as not newer: a warning about it helps no one.
-function newerThanApproved(version) {
-  var v = versionParts(version)
-  var a = versionParts(APPROVED_SUWAYOMI)
-  if (!v) return false
-  for (var i = 0; i < 3; i++) if (v[i] !== a[i]) return v[i] > a[i]
-  return false
-}
-
-// The warning for aboutServer's version, or "".
-function versionWarning(version) {
-  if (!newerThanApproved(version)) return ""
-  return "Suwayomi-Server " + version + " is newer than the version Miharchy has checked (" + APPROVED_SUWAYOMI + "). It should work, but report problems."
-}
-
-// key: the config the tokens belong to. waiting: the callbacks of the login
-// or refresh in flight, null while none is.
-var session = { key: "", access: "", refresh: "", waiting: null }
-
-function loginPayload(config) {
-  return { query: LOGIN, variables: { username: config.username, password: config.password } }
-}
-
-function refreshPayload(refreshToken) {
-  return { query: REFRESH, variables: { refreshToken: refreshToken } }
-}
-
-function keyOf(config) {
-  return [config.url, config.username, config.password].join("\n")
-}
-
-// What each kind of request makes of its XHR, whether that answer refuses
-// the token, and what it answers when no login succeeds. GraphQL refuses
-// with an "Unauthorized" error (Model.reply), an image with HTTP 401.
-var GRAPHQL = {
-  read: function(xhr) { return Model.reply(xhr.status, xhr.responseText) },
-  refused: function(reply) { return reply.state === "unauthorized" },
+var JSON_KIND = {
+  read: function(xhr) { return Model.coreReply(xhr.status, xhr.responseText) },
   failed: function(reply) { return reply }
 }
 var IMAGE = {
   binary: true,
   read: function(xhr) { return { status: xhr.status, data: xhr.response, contentType: xhr.getResponseHeader("Content-Type") || "" } },
-  refused: function(r) { return r.status === 401 },
   failed: function() { return { status: 0, data: null, contentType: "" } }
 }
 
-// One XHR. With no token it sends none: login refuses a request that
-// carries a valid one.
+// One XHR with the secret.
 function open(url, payload, binary, token, back) {
   var xhr = new XMLHttpRequest()
   if (binary) xhr.responseType = "arraybuffer"
@@ -85,90 +29,9 @@ function open(url, payload, binary, token, back) {
   return xhr
 }
 
-function graphql(config, payload, back) {
-  open(config.url + "/api/graphql", payload, false, "", function(xhr) { back(Model.reply(xhr.status, xhr.responseText)) })
-}
-
-// Calls back(null) once this process holds an access token other than
-// stale, or back(reply) with the failed login's reply. A refresh comes
-// first when there is a refresh token; a login follows when it fails.
-function renew(config, stale, back) {
-  var key = keyOf(config)
-  if (session.key !== key) session = { key: key, access: "", refresh: "", waiting: null }
-  if (session.access && session.access !== stale) return back(null)
-  if (session.waiting) return session.waiting.push(back)
-  var s = session
-  s.waiting = [back]
-  var finish = function(failure) {
-    var waiting = s.waiting
-    s.waiting = null
-    waiting.forEach(function(w) { w(failure) })
-  }
-  var login = function() {
-    graphql(config, loginPayload(config), function(reply) {
-      var t = reply.state === "ok" && reply.data.login
-      if (t && t.accessToken) {
-        s.access = t.accessToken
-        s.refresh = t.refreshToken
-        return finish(null)
-      }
-      s.access = ""
-      s.refresh = ""
-      finish(reply.message === "Incorrect username or password." ? { state: "unauthorized", message: "", data: null } : reply)
-    })
-  }
-  if (!s.refresh) return login()
-  graphql(config, refreshPayload(s.refresh), function(reply) {
-    var t = reply.state === "ok" && reply.data.refreshToken
-    if (!t || !t.accessToken) return login()
-    s.access = t.accessToken
-    finish(null)
-  })
-}
-
-// The access token for a live socket's connection_init (LiveSocket.qml):
-// back(failure, token), failure as renew() gives. stale: the token the
-// server refused, or "".
-function token(config, stale, back) {
-  if (config.backend === "core") return back({ state: "error", message: "miharchy-core's live socket takes the secret, not a token.", data: null }, "")
-  renew(config, stale, function(failure) { back(failure, failure ? "" : session.access) })
-}
-
-// Sends one request of a kind, done gets one answer. Returns { abort },
-// which answers done at once as a request with no answer (status 0).
+// One request; done gets one answer. Returns { abort }, which answers done
+// at once as a request with no answer (status 0).
 function call(config, url, payload, kind, done) {
-  var c = { xhr: null, over: false }
-  var finish = function(result) {
-    if (c.over) return
-    c.over = true
-    done(result)
-  }
-  var attempt = function(retried) {
-    if (c.over) return
-    var token = session.key === keyOf(config) ? session.access : ""
-    if (!token) return renew(config, "", function(failure) { failure ? finish(kind.failed(failure)) : attempt(retried) })
-    c.xhr = open(url, payload, kind.binary, token, function(xhr) {
-      c.xhr = null
-      var result = kind.read(xhr)
-      if (retried || !kind.refused(result)) return finish(result)
-      renew(config, token, function(failure) { failure ? finish(kind.failed(failure)) : attempt(true) })
-    })
-  }
-  attempt(false)
-  return {
-    abort: function() {
-      if (c.xhr) c.xhr.abort()
-      finish(kind.failed(Model.reply(0, "")))
-    }
-  }
-}
-
-// --- miharchy-core (ADR 0010), behind MIHARCHY_BACKEND=core ---
-// Core takes core.json's secret as the bearer token on every request: no
-// login, no refresh, and nothing here touches the Suwayomi session above.
-
-// One request to core; done gets one answer. Returns { abort }, as call().
-function coreCall(config, url, payload, kind, done) {
   var c = { xhr: null, over: false }
   var finish = function(result) {
     if (c.over) return
@@ -187,44 +50,32 @@ function coreCall(config, url, payload, kind, done) {
   }
 }
 
-var CORE = {
-  read: function(xhr) { return Model.coreReply(xhr.status, xhr.responseText) },
-  failed: function(reply) { return reply }
-}
-
-// A request sent to the wrong server fails at once, so a view half moved to
-// core can never reach Suwayomi, nor the other way round.
-// Logged too: some sends drop their reply, and a drive greps the log for it.
-function wrongBackend(core, done) {
-  console.warn("miharchy: refused a " + (core ? "GraphQL request on miharchy-core" : "miharchy-core request on Suwayomi"))
-  done({ state: "error", message: core ? "This request is GraphQL, but this view talks to miharchy-core." : "This request is for miharchy-core, but this view talks to Suwayomi.", data: null, kind: "internal" })
+// A payload that is not a core route fails at once, and is logged: some
+// sends drop their reply, and a drive greps the log for it.
+function refused(done) {
+  console.warn("miharchy: refused a request that is not a miharchy-core route")
+  done({ state: "error", message: "This request is not a miharchy-core route.", data: null, kind: "internal" })
   return { abort: function() {} }
 }
 
-// payload: { query, variables? } for Suwayomi, { route, body? } for core
-// (config.backend "core"); done(reply), reply as Model.reply or
-// Model.coreReply gives.
+// payload: { route, body? }; done(reply), reply as Model.coreReply gives.
 function send(config, payload, done) {
-  var core = config.backend === "core"
-  if (core !== (!!payload && typeof payload.route === "string")) return wrongBackend(core, done)
-  if (core) return coreCall(config, config.url + "/api/" + payload.route, payload.body || {}, CORE, done)
-  return call(config, config.url + "/api/graphql", payload, GRAPHQL, done)
+  if (!payload || typeof payload.route !== "string") return refused(done)
+  return call(config, config.url + "/api/" + payload.route, payload.body || {}, JSON_KIND, done)
 }
 
 // A server image's bytes: done({ status, data, contentType }).
 function image(config, url, done) {
-  if (config.backend === "core") return coreCall(config, url, null, IMAGE, done)
   return call(config, url, null, IMAGE, done)
+}
+
+// ponytail: pass 1 of #373's slice 2 keeps this until LiveSocket stops calling it.
+function token(config, stale, back) {
+  back({ state: "error", message: "miharchy-core's live socket takes the secret, not a token.", data: null }, "")
 }
 
 if (typeof module !== "undefined") {
   module.exports = {
-    APPROVED_SUWAYOMI: APPROVED_SUWAYOMI,
-    versionParts: versionParts,
-    newerThanApproved: newerThanApproved,
-    versionWarning: versionWarning,
-    loginPayload: loginPayload,
-    refreshPayload: refreshPayload,
     send: send,
     image: image,
     token: token

@@ -52,7 +52,6 @@ test("core.json gives a core config, and anything else none", () => {
   for (const bad of ["", "{", '{"url":"x"}', '{"url":"","secret":"s"}', '{"url":"x","secret":""}', '{"url":"x","username":"u","password":"p"}']) {
     assert.equal(M.parseCoreConfig(bad), null, bad);
   }
-  assert.equal(M.parseConfig('{"url":"x","secret":"s"}'), null, "server.json's parser does not take core.json");
 });
 
 test("core's replies keep the connection states and carry the error kind", () => {
@@ -74,7 +73,6 @@ test("a core view words its own failures", () => {
   assert.match(M.problem({ state: "unauthorized" }, path, "core").detail, /secret in \/home\/u\/\.config\/miharchy\/core\.json/);
   assert.match(M.problem({ state: "no-config" }, path, "core").detail, /core\.json is missing/);
   assert.equal(M.problem({ state: "ok" }, path, "core"), null);
-  assert.equal(M.problem({ state: "down" }, "server.json").title, "The server is not running", "Suwayomi's wording stays");
 });
 
 test("a core request is one POST with the secret, and never a login", async () => {
@@ -98,14 +96,12 @@ test("a core request is one POST with the secret, and never a login", async () =
   assert.equal(requests[2].headers.Authorization, "Bearer c0ffee");
 });
 
-test("a request for the other server fails before it leaves", async () => {
+test("a GraphQL payload fails before it leaves", async () => {
   const requests = install({});
   const S = load("Session.js");
   const a = await new Promise((resolve) => S.send(core, { query: "{ mangas { totalCount } }" }, resolve));
   assert.equal(a.state, "error");
-  assert.match(a.message, /GraphQL, but this view talks to miharchy-core/);
-  const b = await new Promise((resolve) => S.send(suwayomi, { route: "extension.list" }, resolve));
-  assert.match(b.message, /for miharchy-core, but this view talks to Suwayomi/);
+  assert.match(a.message, /not a miharchy-core route/);
   assert.equal(requests.length, 0);
 });
 
@@ -409,8 +405,7 @@ test("on core, the reader loads pages, saves, bookmarks and keeps its mode on co
 const L = load("Library.js");
 const Cat = load("Categories.js");
 
-// One manga as core's library.list sends it (Library.kt), and as Suwayomi's
-// LIBRARY_QUERY sends the same manga.
+// One manga as core's library.list sends it (Library.kt).
 const coreManga = {
   id: 1, title: "Manga 1", author: "A", artist: "B", genre: ["Action"], status: "ONGOING",
   thumbnailUrl: "/api/cover/1", sourceId: "7", source: { id: "7", displayName: "MangaDex (EN)", lang: "en" },
@@ -418,24 +413,16 @@ const coreManga = {
   lastReadChapter: { lastReadAt: 1700000500 }, latestUploadedChapter: { uploadDate: 1690000000000 },
   latestFetchedChapter: { fetchedAt: 1700000100 }, categories: [2], meta: []
 };
-const suwayomiManga = Object.assign({}, coreManga, {
-  thumbnailUrl: "/api/v1/manga/1/thumbnail", chapters: { totalCount: 3 }, trackRecords: { totalCount: 0 }, categories: { nodes: [{ id: 2 }] }
-});
 const coreCategories = [
   { id: 0, name: "Default", includeInUpdate: "UNSET", includeInDownload: "UNSET", meta: [] },
   { id: 2, name: "Drama", includeInUpdate: "EXCLUDE", includeInDownload: "UNSET", meta: [{ key: "miharchy.keepDownloads", value: "true" }] }
 ];
 
-test("on core, the Library reads library.list into the same manga and categories as Suwayomi's reply", () => {
+test("on core, the Library reads library.list into manga and categories", () => {
   assert.deepEqual(M.libraryPayload(true), { route: "library.list" });
-  assert.equal(typeof M.libraryPayload(false).query, "string");
   const fromCore = M.reduce(M.initial(), { type: "response", config: core, reply: { state: "ok", data: { categories: coreCategories, mangas: [coreManga] } } });
-  const fromSuwayomi = M.reduce(M.initial(), { type: "response", config: suwayomi, reply: { state: "ok", data: {
-    categories: { nodes: coreCategories }, metas: { nodes: [] }, mangas: { nodes: [suwayomiManga] } } } });
   assert.equal(fromCore.state, "ok");
-  const strip = (m) => Object.assign({}, m, { cover: "" });
-  assert.deepEqual(fromCore.manga.map(strip), fromSuwayomi.manga.map(strip));
-  assert.deepEqual(fromCore.categories, fromSuwayomi.categories);
+  assert.deepEqual(fromCore.manga.map((m) => [m.id, m.title, m.categories, m.total, m.unread, m.tracks, m.source]), [[1, "Manga 1", [2], 3, 2, 0, "MangaDex (EN)"]]);
   assert.deepEqual(fromCore.categories, [{ id: 2, name: "Drama", download: "UNSET", update: "EXCLUDE", keep: true }]);
   assert.equal(fromCore.manga[0].cover, "http://127.0.0.1:4591/api/cover/1");
   assert.deepEqual([fromCore.manga[0].read, fromCore.manga[0].lastRead, fromCore.manga[0].latestUpload], [1, 1700000500, 1690000000000]);

@@ -2,24 +2,21 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4590", username: "miharchy", password: "s3cret" };
-const respond = (status, body) => ({ type: "response", reply: M.reply(status, typeof body === "string" ? body : JSON.stringify(body)), config });
+const config = { url: "http://127.0.0.1:4590", secret: "s3cret", backend: "core" };
+// A library as core's library.list gives it, from the connection shape the
+// tests write: { data: { mangas: { nodes }, categories: { nodes }, metas } }.
+const coreLibrary = (data) => ({
+  mangas: data.mangas.nodes.map((n) => ({ ...n, chapterCount: n.chapters ? n.chapters.totalCount : 0, trackCount: n.trackRecords ? n.trackRecords.totalCount : 0, categories: n.categories ? n.categories.nodes.map((c) => c.id) : [] })),
+  categories: data.categories ? data.categories.nodes : [],
+  metas: data.metas
+});
+const respond = (status, body) => ({ type: "response", reply: M.coreReply(status, typeof body === "string" ? body : JSON.stringify(body.data && body.data.mangas ? coreLibrary(body.data) : body.data || body)), config });
 
 test("five views in glossary order, keyed 1-5", () => {
   assert.deepEqual(M.VIEWS.map((v) => v.title), ["Library", "Updates", "History", "Browse", "Settings"]);
   assert.deepEqual(M.VIEWS.map((v) => v.key), ["1", "2", "3", "4", "5"]);
   assert.equal(M.viewIndex("browse"), 3);
   assert.equal(M.viewIndex("nope"), -1);
-});
-
-test("parseConfig accepts server.json and drops a trailing slash", () => {
-  assert.deepEqual(M.parseConfig(JSON.stringify({ ...config, url: "http://127.0.0.1:4590/" })), config);
-});
-
-test("parseConfig rejects missing, broken or incomplete config", () => {
-  for (const text of ["", "{", "null", "[]", JSON.stringify({ url: "x", username: "u" }), JSON.stringify({ ...config, url: "" })]) {
-    assert.equal(M.parseConfig(text), null, text);
-  }
 });
 
 test("the connection starts loading", () => {
@@ -30,9 +27,7 @@ test("transitions: missing config, request, and each kind of answer", () => {
   const s0 = M.initial();
   assert.equal(M.reduce(s0, { type: "config-missing" }).state, "no-config");
   assert.equal(M.reduce(s0, respond(0, "")).state, "down");
-  assert.equal(M.reduce(s0, respond(401, "Unauthorized")).state, "unauthorized");
-  // ui_login refuses a missing or expired token with HTTP 200 and this error.
-  assert.equal(M.reduce(s0, respond(200, { errors: [{ message: "Exception while fetching data (/mangas) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized" }] })).state, "unauthorized");
+  assert.equal(M.reduce(s0, respond(401, '{"error":{"kind":"unauthorized","message":"x"}}')).state, "unauthorized");
   assert.equal(M.reduce(s0, respond(200, { data: { mangas: { nodes: [] } } })).state, "ok");
 
   const e500 = M.reduce(s0, respond(500, "boom"));
@@ -41,27 +36,9 @@ test("transitions: missing config, request, and each kind of answer", () => {
   assert.equal(M.reduce(s0, respond(200, "<html>")).state, "error");
   assert.equal(M.reduce(s0, respond(200, { data: {} })).state, "error");
 
-  const gql = M.reduce(s0, respond(200, { errors: [{ message: "Bad field" }] }));
-  assert.equal(gql.state, "error");
-  assert.equal(gql.message, "Bad field");
-
-  assert.equal(M.reduce(M.reduce(s0, respond(401, "")), { type: "request" }).state, "loading");
+  assert.equal(M.reduce(M.reduce(s0, respond(401, '{"error":{"kind":"unauthorized","message":"x"}}')), { type: "request" }).state, "loading");
   assert.equal(M.reduce(s0, { type: "unknown" }), s0);
 });
-
-test("a Suwayomi exception reads as its message, without the wrapper or stack", () => {
-  const body = { errors: [{ message: "Exception while fetching data (/addExtensionStore) : HTTP error 404\r\n\r\nHttpException: HTTP error 404\n\tat x.y(Z.kt:50)\n" }] };
-  assert.equal(M.reply(200, JSON.stringify(body)).message, "HTTP error 404");
-});
-
-test("CEF is disabled names the server's WebView and the Settings row; other errors stay raw", () => {
-  const body = { errors: [{ message: "Exception while fetching data (/fetchManga) : CEF is disabled\n\tat CEFManager$CefException" }] };
-  const p = M.problem(M.reply(200, JSON.stringify(body)), "/c");
-  assert.equal(p.title + ". " + p.detail, "This source needs the server's WebView (KCEF), which is off. Turn it on in Settings.");
-  const other = M.problem({ state: "error", message: "HTTP error 500" }, "/c");
-  assert.equal(other.title + ". " + other.detail, "The server sent an error. HTTP error 500 Press r to retry.");
-});
-
 test("a reload keeps the shown library; a failed one drops it", () => {
   const ok = M.reduce(M.initial(), respond(200, { data: { mangas: { nodes: [{ id: 1, title: "A", thumbnailUrl: null }] } } }));
   const reloading = M.reduce(ok, { type: "request" });
@@ -69,7 +46,7 @@ test("a reload keeps the shown library; a failed one drops it", () => {
   assert.equal(reloading.manga.length, 1);
   assert.equal(M.notice(reloading, "p"), null, "no loading notice over a shown library");
   assert.deepEqual(M.reduce(reloading, respond(0, "")).manga, []);
-  assert.deepEqual(M.reduce(M.reduce(M.initial(), respond(401, "")), { type: "request" }).manga, []);
+  assert.deepEqual(M.reduce(M.reduce(M.initial(), respond(401, '{"error":{"kind":"unauthorized","message":"x"}}')), { type: "request" }).manga, []);
 });
 
 test("the library answer becomes manga with absolute cover URLs", () => {
@@ -99,7 +76,6 @@ test("a library manga carries what search, filters and sort read; LongString tim
     total: 10, read: 7, downloads: 2, bookmarks: 1, tracks: 2, lastRead: 1700000500, latestUpload: 1690000000000, lastUpdate: 1700000100, added: 1700000000 });
   assert.deepEqual([bare.read, bare.lastRead, bare.added, bare.genre, bare.status], [0, 0, 0, [], ""]);
   assert.equal(bare.source, "Asura Scans (not installed)", "a missing source takes its name from the sync's meta");
-  assert.match(M.LIBRARY_QUERY, /chapters \{ totalCount \}/);
 });
 
 test("sourceLabel names the installed source, a known missing one, or the id", () => {
@@ -140,9 +116,9 @@ test("coverUrl makes server paths absolute and leaves other hosts untouched", ()
   for (const url of hostile) assert.equal(M.coverUrl(config, url), url, url);
 });
 
-test("no image URL carries userinfo, whatever the password", () => {
+test("no image URL carries userinfo, whatever the secret", () => {
   const userinfo = /^[a-z]+:\/\/[^\/?#]*@/i;
-  const cfg = { ...config, password: "a@b:c" };
+  const cfg = { ...config, secret: "a@b:c" };
   const library = M.reduce(M.initial(), { ...respond(200, { data: { categories: { nodes: [] }, mangas: { nodes: [
     { id: 1, title: "A", thumbnailUrl: "/api/v1/manga/1/thumbnail", source: { id: "1" }, unreadCount: 0, categories: { nodes: [] } },
     { id: 2, title: "B", thumbnailUrl: "http://127.0.0.1:4590/api/v1/manga/2/thumbnail", source: { id: "1" }, unreadCount: 0, categories: { nodes: [] } }
@@ -165,13 +141,13 @@ test("serverImageUrl takes the server's own origin only, which gets the token", 
 });
 
 test("notice: a clear message per state, none over a filled library", () => {
-  const path = "~/.config/miharchy/server.json";
+  const path = "~/.config/miharchy/core.json";
   const n = (c) => M.notice(c, path);
   assert.equal(n(M.initial()).title, "Loading the library");
-  assert.equal(n(M.reduce(M.initial(), { type: "config-missing" })).title, "No server config");
-  assert.match(n(M.reduce(M.initial(), { type: "config-missing" })).detail, /server\.json/);
-  assert.equal(n(M.reduce(M.initial(), respond(0, ""))).title, "The server is not running");
-  assert.equal(n(M.reduce(M.initial(), respond(401, ""))).title, "The server rejected the credentials");
+  assert.equal(n(M.reduce(M.initial(), { type: "config-missing" })).title, "No miharchy-core config");
+  assert.match(n(M.reduce(M.initial(), { type: "config-missing" })).detail, /core\.json/);
+  assert.equal(n(M.reduce(M.initial(), respond(0, ""))).title, "miharchy-core is not running");
+  assert.equal(n(M.reduce(M.initial(), respond(401, '{"error":{"kind":"unauthorized","message":"x"}}'))).title, "miharchy-core rejected the secret");
   assert.match(n(M.reduce(M.initial(), respond(500, ""))).detail, /HTTP 500/);
   assert.equal(n(M.reduce(M.initial(), respond(200, { data: { mangas: { nodes: [] } } }))).title, "Your library is empty");
   assert.equal(n(M.reduce(M.initial(), respond(200, { data: { mangas: { nodes: [{ id: 1, title: "A" }] } } }))), null);
@@ -183,9 +159,8 @@ const library = (categories, manga) => M.reduce(M.initial(), respond(200, { data
 } }));
 const ids = (shown) => shown.manga.map((m) => m.id);
 
-test("the library answer carries user categories, without Suwayomi's Default", () => {
+test("the library answer carries user categories, without the built-in Default", () => {
   const c = library([{ id: 4, name: "Action", order: 1, includeInDownload: "INCLUDE", includeInUpdate: "EXCLUDE", meta: [{ key: "miharchy.keepDownloads", value: "true" }] }, { id: 2, name: "Romance", order: 2, includeInDownload: "UNSET", includeInUpdate: "UNSET", meta: [] }], [[7, [4, 2]]]);
-  assert.match(M.LIBRARY_QUERY, /categories\(orderBy: ORDER\) \{ nodes \{ id name includeInDownload includeInUpdate meta \{ key value \} \} \}/);
   assert.deepEqual(c.categories, [{ id: 4, name: "Action", download: "INCLUDE", update: "EXCLUDE", keep: true }, { id: 2, name: "Romance", download: "UNSET", update: "UNSET", keep: false }]);
   assert.deepEqual(c.manga[0].categories, [4, 2]);
 });

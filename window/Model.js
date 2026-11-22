@@ -16,15 +16,9 @@ var VIEWS = [
 // The sync helper stores source names from phone backups here, id -> name.
 var SOURCE_NAMES_META = "miharchy.sourceNames"
 
-var LIBRARY_QUERY = "{ categories(orderBy: ORDER) { nodes { id name includeInDownload includeInUpdate meta { key value } } }"
-  + " metas(condition: { key: \"" + SOURCE_NAMES_META + "\" }) { nodes { value } }"
-  + " mangas(condition: {inLibrary: true}) { nodes { id title author artist genre status thumbnailUrl sourceId source { id displayName lang } unreadCount downloadCount bookmarkCount inLibraryAt"
-  + " chapters { totalCount } lastReadChapter { lastReadAt } latestUploadedChapter { uploadDate } latestFetchedChapter { fetchedAt }"
-  + " trackRecords { totalCount } categories { nodes { id } } } } }"
-
-// The library request: Suwayomi's query, or core's library.list (ADR 0010).
+// The library request: core's library.list (ADR 0010).
 function libraryPayload(core) {
-  return core ? { route: "library.list" } : { query: LIBRARY_QUERY }
+  return { route: "library.list" }
 }
 
 var LIBRARY_MUTATION = "mutation($id: Int!, $inLibrary: Boolean!) { updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) { manga { id inLibrary } } }"
@@ -34,23 +28,8 @@ var LIBRARY_MUTATION = "mutation($id: Int!, $inLibrary: Boolean!) { updateManga(
 var DEFAULT_CATEGORY = 0
 var ALL = -1
 
-// server.json text -> { url, username, password } with the url's trailing
-// slash dropped, or null when the text is missing, not JSON, or lacks a key.
-function parseConfig(text) {
-  var c
-  try {
-    c = JSON.parse(text)
-  } catch (e) {
-    return null
-  }
-  if (!c || typeof c.url !== "string" || typeof c.username !== "string" || typeof c.password !== "string") return null
-  if (!c.url) return null
-  return { url: c.url.replace(/\/+$/, ""), username: c.username, password: c.password }
-}
-
 // miharchy-core's core.json (ADR 0010) -> { url, secret, backend: "core" },
-// or null. backend tells Session.send and Model.problem which server a
-// view talks to; a Suwayomi config has none.
+// or null.
 function parseCoreConfig(text) {
   var c
   try {
@@ -210,7 +189,7 @@ function sourceLabel(n, names) {
 
 function fromResponse(r, config) {
   if (r.state !== "ok") return conn(r.state, { message: r.message })
-  var data = config && config.backend === "core" ? coreLibrary(r.data) : r.data
+  var data = coreLibrary(r.data)
   var nodes = data.mangas && data.mangas.nodes
   if (!Array.isArray(nodes)) return conn("error", { message: "The server's reply has no library." })
   var ids = function(list) { return ((list && list.nodes) || []).map(function(c) { return c.id }) }
@@ -253,13 +232,14 @@ function fromResponse(r, config) {
   })
 }
 
-// Core's library.list as Suwayomi's reply: the same fields in plain
-// arrays, with chapterCount and trackCount for the connections'
-// totalCount, in the same units.
+// Core's library.list in the shape fromResponse reads: connections with
+// nodes and totalCount, from core's plain arrays, chapterCount and
+// trackCount.
 function coreLibrary(data) {
   if (!Array.isArray(data.mangas)) return {}
   return {
     categories: { nodes: data.categories || [] },
+    metas: data.metas,
     mangas: { nodes: data.mangas.map(function(n) {
       var m = {}
       for (var k in n) m[k] = n[k]
@@ -308,33 +288,16 @@ function notice(connection, configPath, shown, narrowed, backend) {
 
 // { title, detail } for a failed connection, null for "loading" and "ok".
 // Any { state, message } works, so other views reuse it.
-// backend: "core" for a view on miharchy-core, which words its own failures.
 function problem(connection, configPath, backend) {
-  if (backend === "core") {
-    switch (connection.state) {
-      case "no-config":
-        return { title: "No miharchy-core config", detail: configPath + " is missing or invalid. Open Miharchy: its Setup builds and starts miharchy-core, which creates it." }
-      case "down":
-        return { title: "miharchy-core is not running", detail: "Start it with: systemctl --user start miharchy-core. Press r to retry." }
-      case "unauthorized":
-        return { title: "miharchy-core rejected the secret", detail: "Check the secret in " + configPath + ". Press r to retry." }
-      case "error":
-        return { title: "miharchy-core sent an error", detail: connection.message + " Press r to retry." }
-    }
-    return null
-  }
   switch (connection.state) {
     case "no-config":
-      return { title: "No server config", detail: configPath + " is missing or invalid. Run Setup from the : palette to create it." }
+      return { title: "No miharchy-core config", detail: configPath + " is missing or invalid. Open Miharchy: its Setup builds and starts miharchy-core, which creates it." }
     case "down":
-      return { title: "The server is not running", detail: "Start it with: systemctl --user start miharchy-server. Press r to retry." }
+      return { title: "miharchy-core is not running", detail: "Start it with: systemctl --user start miharchy-core. Press r to retry." }
     case "unauthorized":
-      return { title: "The server rejected the credentials", detail: "Check username and password in " + configPath + ". Press r to retry." }
+      return { title: "miharchy-core rejected the secret", detail: "Check the secret in " + configPath + ". Press r to retry." }
     case "error":
-      // Suwayomi's answer to a source that runs part of its site in KCEF
-      // while the server setting kcefEnabled is off.
-      if (/^CEF is disabled/.test(connection.message)) return { title: "This source needs the server's WebView (KCEF), which is off", detail: "Turn it on in Settings." }
-      return { title: "The server sent an error", detail: connection.message + " Press r to retry." }
+      return { title: "miharchy-core sent an error", detail: connection.message + " Press r to retry." }
   }
   return null
 }
@@ -468,11 +431,9 @@ if (typeof module !== "undefined") {
     coreReply: coreReply,
     VIEWS: VIEWS,
     SOURCE_NAMES_META: SOURCE_NAMES_META,
-    LIBRARY_QUERY: LIBRARY_QUERY,
     libraryPayload: libraryPayload,
     parseNames: parseNames,
     sourceLabel: sourceLabel,
-    parseConfig: parseConfig,
     inLibraryPayload: inLibraryPayload,
     placeholder: placeholder,
     reply: reply,

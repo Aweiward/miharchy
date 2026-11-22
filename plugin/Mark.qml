@@ -11,22 +11,19 @@ import "../window/Sync.js" as Sync
 
 // The mark in the Omarchy bar and its popup of recent updates. It stays thin
 // (ADR 0003): it polls the server and starts the window, which runs as its
-// own process through window/miharchy. Mark.js decides what shows; Sync now
-// runs the same sync the window runs: the helper, or under
-// MIHARCHY_BACKEND=core miharchy-core's sync.run (#386).
+// own process through window/miharchy. Mark.js decides what shows; Sync
+// runs the same sync the window runs: miharchy-core's sync.run.
 Panel {
   id: root
   moduleName: "miharchy"
 
-  readonly property bool core: Quickshell.env("MIHARCHY_BACKEND") !== "suwayomi"
-  readonly property string backend: core ? "core" : ""
-  readonly property string configPath: core ? (Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json")
-    : (Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json")
+  readonly property bool core: true
+  readonly property string backend: "core"
+  readonly property string configPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
   readonly property string phoneBaseline: Mark.phoneBaseline({ HOME: Quickshell.env("HOME"), MIHARCHY_CORE_DATA: Quickshell.env("MIHARCHY_CORE_DATA") }, core)
   readonly property string launcher: decodeURIComponent(Qt.resolvedUrl("../window/miharchy").toString().replace(/^file:\/\//, ""))
   property var config: null
   property var mark: Mark.initial()
-  readonly property string devHelper: decodeURIComponent(Qt.resolvedUrl(Sync.DEV_HELPER).toString().replace(/^file:\/\//, ""))
   readonly property string notifyIcon: decodeURIComponent(Qt.resolvedUrl("../icons/miharchy.svg").toString().replace(/^file:\/\//, ""))
   property var sync: Sync.initial()
   property int cursor: 0
@@ -95,7 +92,7 @@ Panel {
   }
 
   function applyConfig(text) {
-    config = core ? Model.parseCoreConfig(text) : Model.parseConfig(text)
+    config = Model.parseCoreConfig(text)
     if (config) return poll()
     pollSeq++
     mark = Mark.reduce(mark, { type: "config-missing" })
@@ -147,38 +144,26 @@ Panel {
     }
   }
 
-  // Core's requests have no deadline of their own, so these timers give the
-  // helper's (Sync.command, Sync.healthCommand); a reply after one is dropped.
+  // Core's requests have no deadline of their own, so these timers give
+  // one; a reply after one is dropped.
   property bool healthBusy: false
   property int healthSeq: 0
   property int syncSeq: 0
 
   function refreshHealth() {
-    if (core) {
-      if (healthBusy || !config) return
-      healthBusy = true
-      var seq = ++healthSeq
-      healthDeadline.restart()
-      return Session.send(config, Sync.HEALTH_PAYLOAD, function(reply) {
-        if (seq !== root.healthSeq) return
-        healthDeadline.stop()
-        root.healthBusy = false
-        root.health = Sync.healthReply(reply)
-      })
-    }
-    if (healthJob.running) return
-    healthJob.command = Sync.healthCommand(devHelper)
-    healthJob.running = true
+    if (healthBusy || !config) return
+    healthBusy = true
+    var seq = ++healthSeq
+    healthDeadline.restart()
+    Session.send(config, Sync.HEALTH_PAYLOAD, function(reply) {
+      if (seq !== root.healthSeq) return
+      healthDeadline.stop()
+      root.healthBusy = false
+      root.health = Sync.healthReply(reply)
+    })
   }
 
-  Process {
-    id: healthJob
-    stdout: StdioCollector {
-      onStreamFinished: root.health = Sync.parseHealth(text)
-    }
-  }
-
-  // One GraphQL query to localhost a minute; opening the popup polls too.
+  // One poll of core a minute; opening the popup polls too.
   // ponytail: each monitor's bar polls on its own; a service-kind entry
   // point could share one poll if that ever costs anything.
   Timer {
@@ -203,21 +188,17 @@ Panel {
   function startSync() {
     if (sync.state === "running") return
     sync = Sync.reduce(sync, { type: "start" })
-    if (core) {
-      if (!config) return finishSync({ type: "reply", reply: { state: "no-config", message: "" } })
-      var seq = ++syncSeq
-      syncDeadline.restart()
-      return Session.send(config, Sync.corePayload(false), function(reply) {
-        if (seq !== root.syncSeq) return
-        syncDeadline.stop()
-        root.finishSync({ type: "reply", reply: reply })
-      })
-    }
-    syncJob.command = Sync.command(devHelper)
-    syncJob.running = true
+    if (!config) return finishSync({ type: "reply", reply: { state: "no-config", message: "" } })
+    var seq = ++syncSeq
+    syncDeadline.restart()
+    Session.send(config, Sync.corePayload(false), function(reply) {
+      if (seq !== root.syncSeq) return
+      syncDeadline.stop()
+      root.finishSync({ type: "reply", reply: reply })
+    })
   }
 
-  // event: Sync.reduce's "finish" (the helper's output) or "reply" (core's).
+  // event: Sync.reduce's "reply".
   function finishSync(event) {
     sync = Sync.reduce(sync, event)
     if (autoRun) {
@@ -246,13 +227,6 @@ Panel {
       root.healthSeq++
       root.healthBusy = false
       root.health = Sync.healthReply({ state: "error", message: "miharchy-core did not answer the health check in 2 minutes." })
-    }
-  }
-
-  Process {
-    id: syncJob
-    stdout: StdioCollector {
-      onStreamFinished: root.finishSync({ type: "finish", text: text })
     }
   }
 
@@ -351,17 +325,6 @@ Panel {
           visible: text !== ""
           wrapMode: Text.Wrap
           text: root.health.state === "ready" ? Sync.healthPopupLine(root.health.health, root.now) : ""
-          color: Commons.Color.urgent
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-        }
-
-        Text {
-          textFormat: Text.PlainText
-          width: parent.width
-          visible: text !== ""
-          wrapMode: Text.Wrap
-          text: Mark.warning(root.mark)
           color: Commons.Color.urgent
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
