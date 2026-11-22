@@ -431,4 +431,41 @@ class SyncTest {
             assertEquals(0, core.call("sync.run", buildJsonObject { put("folder", core.folder.toString()) }).getValue("changes").jsonArray.size)
         }
     }
+
+    @Test fun `an import then an export keeps every field Mihon's restore reads`() {
+        val m = BackupManga(
+            source = SOURCE, url = "/manga/m", title = "Title", artist = "Artist", author = "Author", description = "About", genre = listOf("Action", "Drama"),
+            status = 2, thumbnailUrl = "https://example.org/c.jpg", dateAdded = 1_700_000_000_000, chapterFlags = 3, viewer_flags = 4,
+            updateStrategy = eu.kanade.tachiyomi.source.model.UpdateStrategy.ONLY_FETCH_ONCE, initialized = true,
+            memo = """{"a":1}""".toByteArray(), categories = listOf(10), notes = "n",
+            chapters = listOf(
+                BackupChapter("/c2", "Ch. 2", scanlator = "Group", read = true, bookmark = true, lastPageRead = 3, dateFetch = 1_700_000_100_000,
+                    dateUpload = 1_699_000_000_000, chapterNumber = 2.5F, sourceOrder = 0, memo = """{"b":2}""".toByteArray()),
+                BackupChapter("/c1", "Ch. 1", dateFetch = 1_700_000_100_000, dateUpload = 1_698_000_000_000, chapterNumber = 1F, sourceOrder = 1),
+            ),
+            tracking = listOf(track(tracker = 11, read = 2.5F, status = 3, score = 7.5F, start = 1_690_000_000_000, finish = 1_691_000_000_000, remoteId = 77)
+                .apply { libraryId = 12; private = true }),
+            history = listOf(BackupHistory("/c2", lastRead = 1_700_000_200_000, readDuration = 90_000)),
+        )
+        val original = Backup(listOf(m), listOf(BackupCategory("A", order = 10)), backupSources = listOf(BackupSource("MangaDex", SOURCE)))
+        val core = core(original)
+        core.db.use {
+            val out = Files.createDirectories(work.resolve("out"))
+            val file = core.call("backup.export", buildJsonObject { put("folder", out.toString()) }).getValue("file").jsonPrimitive.content
+            val back = decodeBackup(Path.of(file).readBytes())
+            val e = back.backupManga.single()
+            fun BackupManga.fields() = listOf(source, url, title, artist, author, description, genre, status, thumbnailUrl, dateAdded, chapterFlags,
+                viewer_flags, updateStrategy, initialized, String(memo), notes, favorite)
+            assertEquals(m.fields(), e.fields())
+            fun BackupChapter.fields() = listOf(url, name, scanlator, read, bookmark, lastPageRead, dateFetch, dateUpload, chapterNumber, sourceOrder, String(memo))
+            assertEquals(m.chapters.map { it.fields() }, e.chapters.map { it.fields() })
+            assertEquals(m.history, e.history)
+            fun BackupTracking.fields() = listOf(syncId, libraryId, mediaId, trackingUrl, title, lastChapterRead, totalChapters, score, status,
+                startedReadingDate, finishedReadingDate, private)
+            assertEquals(m.tracking.map { it.fields() }, e.tracking.map { it.fields() })
+            assertEquals(listOf("A"), back.backupCategories.map { it.name })
+            assertEquals(back.backupCategories.map { it.order }, e.categories)
+            assertEquals(listOf(SOURCE to "MangaDex"), back.backupSources.map { it.sourceId to it.name })
+        }
+    }
 }
