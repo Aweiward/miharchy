@@ -41,7 +41,8 @@ The views moved to miharchy-core (ADR 0010) run with `MIHARCHY_BACKEND=core` in 
 ```
 .claude/skills/verify-miharchy/scripts/core.sh start    # builds core/ if needed; "ready: miharchy-core on 127.0.0.1:<port> …"
 .claude/skills/verify-miharchy/scripts/core.sh seed     # Keiyoushi repo + MangaDex, so Browse has a source
-.claude/skills/verify-miharchy/scripts/core.sh api library.list '{}'   # any route; the secret goes on stdin
+.claude/skills/verify-miharchy/scripts/core.sh api library.list '{}'   # any route; the secret never goes on the command line
+printf %s "$BODY" | .claude/skills/verify-miharchy/scripts/core.sh api tracker.login -   # a body with a password, token or callback: on stdin
 .claude/skills/verify-miharchy/scripts/core.sh stop     # keeps $RUN/core; start again resumes the same data
 ```
 

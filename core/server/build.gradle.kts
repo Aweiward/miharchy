@@ -18,11 +18,12 @@ dependencies {
     implementation("io.ktor:ktor-server-cio:3.6.1")
     implementation("io.ktor:ktor-server-websockets:3.6.1")
     implementation("org.xerial:sqlite-jdbc:3.54.1.0")
+    // The tracker clients (#371) call their sites directly; the version the host pins.
+    implementation("com.squareup.okhttp3:okhttp:5.4.0")
+    implementation("org.jsoup:jsoup:1.22.2")
     // Ktor logs through SLF4J; the same version as Ktor's slf4j-api. Logs go to stderr, so journald keeps them.
     runtimeOnly("org.slf4j:slf4j-simple:2.0.19")
     testImplementation("io.ktor:ktor-server-test-host:3.6.1")
-    // The version the host pins: the fixture source builds its client with it.
-    testImplementation("com.squareup.okhttp3:okhttp:5.4.0")
     testImplementation(kotlin("test"))
 }
 
