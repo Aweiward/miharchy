@@ -537,10 +537,16 @@ ShellRoot {
 
   // A sync or a restore changed the library, and the source names in meta.
   function reloadAfterImport() {
+    // A sync or a restore on core changed core's library.
+    if (coreBackend) {
+      fetchLibrary(true)
+      libraryView.reload()
+      updatesView.load()
+    }
     if (!config) return
     fetchLibrary()
     sendSettings(Settings.loadPayload())
-    updatesView.load()
+    if (!coreBackend) updatesView.load()
   }
 
   function closePalette() {
@@ -673,7 +679,9 @@ ShellRoot {
       return
     }
     if (id === "sync.undo") {
-      restoreView.openFile(Quickshell.env("HOME") + "/" + Sync.PRE_SYNC)
+      // Core keeps the file in its own data folder and names it.
+      if (coreBackend) restoreView.openPreSync()
+      else restoreView.openFile(Quickshell.env("HOME") + "/" + Sync.PRE_SYNC)
       return
     }
     if (id.indexOf("sync.") === 0) {
@@ -1216,6 +1224,8 @@ ShellRoot {
         id: syncView
         anchors.fill: parent
         theme: theme
+        config: root.coreBackend ? root.coreConfig : null
+        backend: root.coreBackend ? "core" : ""
         onSynced: root.reloadAfterImport()
         onKey: function(event) { root.handleKey(event) }
       }
@@ -1225,6 +1235,8 @@ ShellRoot {
         anchors.fill: parent
         theme: theme
         folder: root.settingsState.values.syncFolder
+        config: root.coreBackend ? root.coreConfig : null
+        backend: root.coreBackend ? "core" : ""
         onKey: function(event) { event.accepted = root.handleKey(event) }
         onEditEnded: keyRoot.forceActiveFocus()
         onRestored: root.reloadAfterImport()

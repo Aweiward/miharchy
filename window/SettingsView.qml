@@ -22,8 +22,8 @@ Item {
 
   required property Theme theme
   property var config: null
-  // The trackers' server: miharchy-core under MIHARCHY_BACKEND=core, while
-  // the rest of Settings stays on Suwayomi until #385.
+  // The trackers' and the backup row's server: miharchy-core under
+  // MIHARCHY_BACKEND=core, while the rest of Settings stays on Suwayomi until #385.
   property var trackerConfig: config
   property string trackerConfigPath: "server.json"
   // Set by the switch, so a missing core.json says so instead of loading.
@@ -164,13 +164,21 @@ Item {
   }
 
   function createBackup() {
-    if (backupJob.running) return
+    if (backupJob.running || backup.state === "running") return
     backup = Backup.reduce(backup, { type: "start" })
+    // Core writes to its own backup folder row, not this view's Suwayomi one, until #385.
+    if (trackersCore) return backupOnCore()
     backupJob.command = Backup.command(devHelper, Backup.folder(values.backupPath, {
       HOME: Quickshell.env("HOME"),
       MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT")
     }))
     backupJob.running = true
+  }
+
+  function backupOnCore() {
+    var done = function(reply) { view.backup = Backup.reduce(view.backup, { type: "reply", reply: reply }) }
+    if (!trackerConfig) return done({ state: "no-config" })
+    Session.send(trackerConfig, Backup.PAYLOAD, done)
   }
 
   Process {

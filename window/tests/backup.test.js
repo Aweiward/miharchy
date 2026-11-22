@@ -34,3 +34,12 @@ test("the folder reaches the helper as one argument, never as shell text", async
   const { stdout } = await execFile(cmd, args, { env: { HOME: home, PATH: process.env.PATH } });
   assert.deepEqual(B.reduce({ state: "running" }, { type: "finish", text: stdout }), { state: "done", file: "backup|/tmp/a b; touch x" });
 });
+
+test("on core the backup is a route that names no folder, and its reply reads as the helper's", () => {
+  assert.deepEqual(B.PAYLOAD, { route: "backup.export", body: {} });
+  assert.deepEqual(B.reduce({ state: "running" }, { type: "reply", reply: { state: "ok", data: { file: "/core/backups/miharchy-backup-x.tachibk" } } }),
+    { state: "done", file: "/core/backups/miharchy-backup-x.tachibk" });
+  assert.equal(B.note(B.reduce({ state: "running" }, { type: "reply", reply: { state: "error", message: "/s is the sync folder. Choose another backup folder in Settings." } })),
+    "/s is the sync folder. Choose another backup folder in Settings.");
+  assert.match(B.note(B.reduce({ state: "running" }, { type: "reply", reply: { state: "down" } })), /not running/);
+});

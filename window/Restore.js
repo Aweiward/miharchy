@@ -68,6 +68,9 @@ function reduce(s, event) {
     case "open":
       if (s.step === "checking" || s.step === "running") return s
       return { step: "path", path: event.path || s.path || (event.folder ? event.folder + "/" : "") }
+    case "check-presync":
+      // Core's undo: core names the file before the last sync in its check reply.
+      return { step: "checking", path: "", preSync: true }
     case "check":
       var path = resolvePath(event.text, event.home)
       if (!path) return { step: "path", path: event.text, error: "Enter an absolute path, such as ~/Sync/Mihon/backup.tachibk." }
@@ -77,6 +80,14 @@ function reduce(s, event) {
       var check = job.code === 0 ? lastJson(job.output) : null
       if (!check) return copy(s, { step: "failed", message: failed(job) })
       return copy(s, { step: "confirm", missingSources: check.missingSources, missingTrackers: check.missingTrackers })
+    case "checked-reply":
+      // { reply }: core's backup.check, as Session.send gives it.
+      if (event.reply.state !== "ok") return copy(s, { step: "failed", message: Sync.coreMessage(event.reply) })
+      var d = event.reply.data
+      return copy(s, { step: "confirm", path: d.file, preSync: false, missingSources: d.missingSources, missingTrackers: d.missingTrackers })
+    case "finish-reply":
+      // { reply }: core's backup.import. It runs in one transaction, so there is no progress to show.
+      return event.reply.state === "ok" ? copy(s, { step: "done", progress: null }) : copy(s, { step: "failed", message: Sync.coreMessage(event.reply) })
     case "start":
       return copy(s, { step: "running", progress: null })
     case "line":
@@ -96,13 +107,22 @@ function command(devHelper, sub, path) {
   return Sync.helperCommand(devHelper, [sub, path])
 }
 
+// Core's check of s (the path, or the file before the last sync), then its restore.
+function checkPayload(s) {
+  return { route: "backup.check", body: s.preSync ? { preSync: true } : { file: s.path } }
+}
+
+function importPayload(s) {
+  return { route: "backup.import", body: { file: s.path } }
+}
+
 // The lines the panel shows for the current step.
 function lines(s) {
   switch (s.step) {
     case "path":
       return [s.error || "Enter the path of a Mihon or Miharchy backup (.tachibk)."]
     case "checking":
-      return ["Reading " + s.path + "."]
+      return [s.preSync ? "Reading the library from before the last sync." : "Reading " + s.path + "."]
     case "confirm":
       var l = ["Data from " + s.path + " will be restored: manga, chapters, categories, history and tracks."]
       if (s.missingSources.length) l = l.concat(["", "Missing sources:"], s.missingSources.map(function(n) { return "- " + n }))
@@ -138,6 +158,8 @@ if (typeof module !== "undefined") {
     initial: initial,
     reduce: reduce,
     command: command,
+    checkPayload: checkPayload,
+    importPayload: importPayload,
     lines: lines,
     hint: hint
   }

@@ -47,7 +47,7 @@ fun main() {
     // No host and no tracker client: a sync never contacts a source or a tracker.
     val sync = Sync(db, data.resolve("sync"), config.url, clients.map { it.id.toInt() }.toSet(), installedSources = {
         extensions.sources().associate { it.getValue("id").jsonPrimitive.content.toLong() to it.getValue("name").jsonPrimitive.content }
-    })
+    }, trackerLogins = { clients.associate { it.id.toInt() to (it.name to it.isLoggedIn) } })
     val settings = Settings(db, data.resolve("covers"))
     Backups(db, sync, data.resolve("backups"))
     val slices = listOf(extensions.routes, browse.routes, library.routes, downloads.routes, updates.routes, trackers.routes, sync.routes, settings.routes)
