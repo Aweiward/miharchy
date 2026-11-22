@@ -2,6 +2,7 @@ package miharchy.core
 
 import eu.kanade.tachiyomi.network.CloudflareChallengeException
 import eu.kanade.tachiyomi.network.HttpException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -51,6 +52,10 @@ suspend fun Host.call(req: JsonObject, seconds: Long = 120): JsonElement {
     } catch (e: TimeoutCancellationException) {
         job.cancel()
         throw ApiError(Kind.network, "The source did not answer within $seconds s.")
+    } catch (e: CancellationException) {
+        // The caller stopped (a download or update stop): not a source failure.
+        job.cancel()
+        throw e
     } catch (e: ApiError) {
         throw e
     } catch (e: Exception) {
@@ -216,7 +221,7 @@ class Browse(private val db: Database, private val host: Host, private val exten
     private fun chapters(c: Connection, mangaId: Long) = chapterRows(c, "ch.manga_id = ?", mangaId)
 
     /** Fetches details and chapters, as `fetchMangaAndChapters` does. Read state survives: chapters match by URL. */
-    private suspend fun refresh(id: Long): JsonObject {
+    internal suspend fun refresh(id: Long): JsonObject {
         val (row, known) = db.run { c -> row(c, id) to hostChapters(c, id) }
         val reply = host.call(buildJsonObject {
             put("op", "update"); put("source", row.source.toString()); put("manga", hostManga(row))

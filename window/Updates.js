@@ -193,8 +193,10 @@ function viewPayload(now) {
   return { query: VIEW_QUERY, variables: { since: String(since(now)) } }
 }
 
-// categories: ids to update, or none for the whole library.
-function checkPayload(categories) {
+// categories: ids to update, or none for the whole library. On core the
+// reply's started says whether this call began the run.
+function checkPayload(categories, core) {
+  if (core) return { route: "update.start", body: categories ? { categories: categories } : {} }
   return { query: CHECK_MUTATION, variables: { categories: categories || null } }
 }
 

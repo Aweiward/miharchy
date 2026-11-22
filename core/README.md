@@ -50,6 +50,13 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 - `chapter.pages` and `GET /api/page/...` read a downloaded chapter from its `.cbz`, with no network.
 - `chapter.list` also takes chapter `ids`, for the window's delete-after-read rules (`Downloads.autoDeleteQuery`).
 
+## Update runs (#368)
+
+- `update.start { categories? }` fetches new chapters for the library, through the same refresh as `manga.refresh`. With category ids it takes every manga in them (Default is `0`, the manga with no category); with none or `[]` it takes Mihon's rule: the INCLUDE categories, or the UNSET ones when none is, and never a manga in an EXCLUDE one. Both forms then skip what Suwayomi's skip filters skip: `ONLY_FETCH_ONCE`, unread chapters, not started (initialized, no read time and no read chapter), completed.
+- The skip filters and the schedule are the window's global metas, `miharchy.excludeUnreadChapters`, `miharchy.excludeNotStarted`, `miharchy.excludeCompleted` (`"true"` or `"false"`, default on) and `miharchy.globalUpdateInterval` (hours, default 12, `0` off), until Settings moves (#385). Core runs the whole library when the interval has passed since the last run, or since its start when there was none, so runs happen while the window is closed.
+- Every route answers with the status `{ isRunning, finishedJobs, totalJobs, skippedMangasCount, lastUpdateTimestamp, failed: [{ mangaId, kind, message }] }`, with `lastUpdateTimestamp` in ms, kept in the global meta `miharchy.lastUpdateTimestamp`. `update.start` adds `started`, false when a run was already going. A stop keeps the run's counts and reasons until the next start. A failed manga counts as finished and does not stop the run. The `updates` topic sends the whole status on each change.
+- Up to 5 sources update at once, one manga at a time per source. A run does not auto-download new chapters, and it always fetches details (Suwayomi's `updateMangas`).
+
 ## Known limits
 
 - On JDK 26 and later, Keiyoushi's library sets a `final` field by reflection, and the JVM warns that a future release blocks it unless `--enable-final-field-mutation=ALL-UNNAMED` is set. JDK 21 refuses that flag, so the launcher cannot pass it to every JDK yet.

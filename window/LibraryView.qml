@@ -30,7 +30,6 @@ Item {
   readonly property bool core: backend === "core"
   // ponytail: what core does not serve yet, by key, with the issue that moves it.
   readonly property var coreGates: ({
-    "library.update": "Checking for new chapters is not on miharchy-core yet (#368)",
     "view.check": "The library check is not on miharchy-core yet (#394)",
     "migrate.batch": "Migrate is not on miharchy-core yet (#394)"
   })
@@ -312,9 +311,16 @@ Item {
       case "library.update":
         if (!config) break
         var all = shown.id === Model.ALL, name = shown.name
-        check(all ? null : [shown.id], function(started) {
-          view.reduce({ type: "note", text: started ? "Checking " + (all ? "the library" : name) + " for new chapters. Updates shows the progress." : "A check for new chapters is already running." })
-        })
+        var said = function(started) {
+          view.reduce({ type: "note", text: started ? "Checking " + (all ? "the library" : name) + " for new chapters." + (core ? "" : " Updates shows the progress.") : "A check for new chapters is already running." })
+        }
+        // ponytail: on core the Updates view does not follow the run until #382.
+        if (core) {
+          send(Updates.checkPayload(all ? null : [shown.id], true), function(reply) {
+            if (reply.state === "ok") said(reply.data.started === true)
+            else view.report(reply)
+          })
+        } else check(all ? null : [shown.id], said)
         break
       case "library.options":
         reduce({ type: "options", open: true })

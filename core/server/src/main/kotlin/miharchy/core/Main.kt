@@ -28,10 +28,11 @@ fun main() {
     val browse = Browse(db, host, extensions, data.resolve("covers"), data.resolve("downloads"))
     val library = Library(db, extensions)
     val downloads = Downloads(db, browse, extensions, data.resolve("downloads"))
-    val slices = listOf(extensions.routes, browse.routes, library.routes, downloads.routes)
+    val updates = Updates(db, { browse.refresh(it) })
+    val slices = listOf(extensions.routes, browse.routes, library.routes, downloads.routes, updates.routes)
     // A + B silently keeps one of two routes with the same name.
     check(slices.sumOf { it.size } == slices.flatMap { it.keys }.toSet().size) { "two slices define the same route" }
-    val core = Core(config.secret, db, routes = slices.reduce { a, b -> a + b }, topics = mapOf("downloads" to downloads.status), images = browse.images)
+    val core = Core(config.secret, db, routes = slices.reduce { a, b -> a + b }, topics = mapOf("downloads" to downloads.status, "updates" to updates.status), images = browse.images)
     System.err.println("miharchy-core: listening on 127.0.0.1:$port")
     embeddedServer(CIO, host = "127.0.0.1", port = port) { api(core) }.start(wait = true)
 }

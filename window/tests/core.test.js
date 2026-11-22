@@ -680,3 +680,10 @@ test("on core, the detail reads a delete's chapters beside the status", () => {
   const enq = B.reduceDetail(d, { type: "downloads-reply", reply: { state: "ok", data: { state: "STARTED", queue: [] } } });
   assert.deepEqual(enq.chapters.map((c) => c.downloaded), [true, true]);
 });
+
+test("on core, a check for new chapters is update.start, with categories only when named", () => {
+  const U = load("Updates.js");
+  assert.deepEqual(U.checkPayload(null, true), { route: "update.start", body: {} });
+  assert.deepEqual(U.checkPayload([0, 4], true), { route: "update.start", body: { categories: [0, 4] } });
+  assert.match(U.checkPayload([4]).query, /updateLibrary/);
+});
