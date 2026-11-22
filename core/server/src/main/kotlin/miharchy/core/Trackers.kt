@@ -182,6 +182,7 @@ class Trackers(private val db: Database, trackers: List<BaseTracker>) {
 
     /** Suwayomi's `Track.bind`: the tracker's own entry wins, then the manga's read chapters move it on. */
     private suspend fun bind(input: JsonObject): JsonObject {
+        if ("recordId" in input) return copy(input.long("mangaId"), input.long("recordId"))
         val t = loggedIn(input.long("trackerId"))
         val mangaId = input.long("mangaId")
         val remoteId = input.long("remoteId")
@@ -207,6 +208,26 @@ class Trackers(private val db: Database, trackers: List<BaseTracker>) {
             chapter?.let { put("lastChapterRead", it) }
             start?.let { put("startDate", it) }
         })
+    }
+
+    /**
+     * Migrate's form, Suwayomi's `bindTrackRecord`: the record's remote entry and personal fields copied onto [mangaId],
+     * replacing that manga's own record on the same tracker. It calls no tracker, so it needs no login and pushes nothing.
+     */
+    private suspend fun copy(mangaId: Long, recordId: Long): JsonObject = db.run { c ->
+        c.transaction {
+            if (c.query("SELECT 1 FROM manga WHERE id = ?", mangaId) { 1 }.isEmpty()) throw ApiError(Kind.notFound, "There is no manga $mangaId.")
+            if (c.query("SELECT 1 FROM manga_track WHERE id = ?", recordId) { 1 }.isEmpty()) throw ApiError(Kind.notFound, "There is no track $recordId.")
+            c.update(
+                """INSERT OR REPLACE INTO manga_track (manga_id, tracker_id, remote_id, remote_url, library_id, title, last_chapter_read,
+                       total_chapters, status, score, start_date, finish_date, private)
+                   SELECT ?, tracker_id, remote_id, remote_url, library_id, title, last_chapter_read, total_chapters, status, score,
+                       start_date, finish_date, private FROM manga_track WHERE id = ?""",
+                mangaId, recordId,
+            )
+            val track = c.query("$SELECT WHERE manga_id = ? AND tracker_id = (SELECT tracker_id FROM manga_track WHERE id = ?)", mangaId, recordId, map = ::row).single()
+            buildJsonObject { put("track", recordJson(track)) }
+        }
     }
 
     private suspend fun update(input: JsonObject): JsonObject {

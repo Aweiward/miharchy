@@ -30,8 +30,7 @@ Item {
   readonly property bool core: backend === "core"
   // ponytail: what core does not serve yet, by key, with the issue that moves it.
   readonly property var coreGates: ({
-    "view.check": "The library check is not on miharchy-core yet (#394)",
-    "migrate.batch": "Migrate is not on miharchy-core yet (#394)"
+    "view.check": "The library check is not on miharchy-core yet (#394)"
   })
   property string configPath: ""
   // Model.reduce()'s connection: the library manga and categories.

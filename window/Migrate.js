@@ -284,8 +284,16 @@ function checks(b) {
 // { type: "checked", reply }.
 // ponytail: prepare() fetches the target again on confirm; keep this reply
 // in the job if the second fetch shows.
-function checkPayload(b, index) {
-  return { query: TARGET_MUTATION, variables: { id: b.search.groups[index].items[b.held[index].pick].id } }
+// core: the check fetches through manga.refresh, one request as on
+// Suwayomi, so expire() can still abort it.
+function checkPayload(b, index, core) {
+  var id = b.search.groups[index].items[b.held[index].pick].id
+  return core ? { route: "manga.refresh", body: { id: id } } : { query: TARGET_MUTATION, variables: { id: id } }
+}
+
+// A fetch's data: TARGET_MUTATION's, or manga.refresh's { manga, chapters }.
+function fetched(data) {
+  return data.fetchMangaAndChapters || data
 }
 
 function newest(chapters) {
@@ -322,7 +330,7 @@ function reduceBatch(b, index, event) {
     if (!h || h.state !== "loading") return b
     var r = event.reply
     if (r.state !== "ok" && b.at[index] + 1 >= b.manga[index].targets.length) return set(b, "held", index, copy(h, { state: "failed" }))
-    var more = r.state === "ok" && newest(r.data.fetchMangaAndChapters.chapters) > b.manga[index].highest
+    var more = r.state === "ok" && newest(fetched(r.data).chapters) > b.manga[index].highest
     var cleared = set(b, "held", index, null)
     return more ? set(cleared, "picks", index, h.pick) : advance(cleared, index)
   }
@@ -384,8 +392,153 @@ function jobs(b) {
   return out
 }
 
+// On miharchy-core (MIHARCHY_BACKEND=core, #394) these loads and writes
+// build the same data from core's routes, so plan(), mergeInto() and the
+// rest work on either server. Each takes send(payload, done), as
+// Session.send gives it, and core; without core it sends the GraphQL above.
+
+function ok(data) {
+  return { state: "ok", message: "", data: data, kind: "" }
+}
+
+// payloads one after the other; the first failure stops the rest.
+// done(the failed reply, or the last one).
+function chain(send, payloads, done) {
+  var i = 0
+  var last = ok({})
+  var next = function() {
+    if (i >= payloads.length) return done(last)
+    send(payloads[i++], function(r) {
+      last = r
+      if (r.state !== "ok") return done(r)
+      next()
+    })
+  }
+  next()
+}
+
+// done(reply): LIBRARY_QUERY's data.
+function libraryLoad(send, core, done) {
+  if (!core) return send({ query: LIBRARY_QUERY }, done)
+  send({ route: "library.list" }, function(lib) {
+    if (lib.state !== "ok") return done(lib)
+    send({ route: "meta.get", body: { scope: "global", keys: [Model.SOURCE_NAMES_META] } }, function(meta) {
+      if (meta.state !== "ok") return done(meta)
+      done(ok({ mangas: { nodes: lib.data.mangas }, metas: { nodes: meta.data.metas.map(function(m) { return { value: m.value } }) } }))
+    })
+  })
+}
+
+// done(reply): HIGHEST_QUERY's data for ids.
+function highestLoad(send, core, ids, done) {
+  if (!core) return send({ query: HIGHEST_QUERY, variables: { ids: ids } }, done)
+  send({ route: "chapter.list", body: { mangaIds: ids } }, function(r) {
+    if (r.state !== "ok") return done(r)
+    done(ok({ mangas: { nodes: ids.map(function(id) {
+      var top = null
+      r.data.chapters.forEach(function(c) { if (c.mangaId === id && (top === null || c.chapterNumber > top)) top = c.chapterNumber })
+      return { id: id, highestNumberedChapter: top === null ? null : { chapterNumber: top } }
+    }) } }))
+  })
+}
+
+// A core manga (manga.get's or manga.refresh's) with its track.list
+// records -> an OLD_QUERY node, inLibrary too. names: tracker id -> name.
+function coreNode(m, tracks, names) {
+  return {
+    id: m.id,
+    title: m.title,
+    inLibrary: m.inLibrary === true,
+    categories: { nodes: (m.categories || []).map(function(id) { return { id: id } }) },
+    meta: m.meta || [],
+    chapters: { nodes: m.chapters || [] },
+    trackRecords: { nodes: tracks.filter(function(t) { return t.mangaId === m.id }).map(function(t) {
+      return { id: t.id, trackerId: t.trackerId, tracker: { name: names[t.trackerId] || String(t.trackerId) } }
+    }) }
+  }
+}
+
+// manga's tracks and the trackers' names. done(reply, node).
+function withTracks(send, manga, done) {
+  send({ route: "track.list", body: { mangaIds: [manga.id] } }, function(tracks) {
+    if (tracks.state !== "ok") return done(tracks)
+    send({ route: "tracker.list" }, function(list) {
+      if (list.state !== "ok") return done(list)
+      var names = {}
+      list.data.trackers.forEach(function(t) { names[t.id] = String(t.name) })
+      done(list, coreNode(manga, tracks.data.tracks, names))
+    })
+  })
+}
+
+// The old manga from the server's database, never its source (manga.get
+// answers without one). done(failedReply or null, OLD_QUERY's manga).
+function oldLoad(send, core, id, done) {
+  var back = function(r, node) { r.state === "ok" ? done(null, node) : done(r) }
+  if (!core) return send({ query: OLD_QUERY, variables: { id: id } }, function(r) { back(r, r.data && r.data.manga) })
+  send({ route: "manga.get", body: { id: id } }, function(r) {
+    if (r.state !== "ok") return done(r)
+    withTracks(send, r.data.manga, back)
+  })
+}
+
+// The target fetched from its source with its chapters. done(failedReply
+// or null, { manga, chapters }: TARGET_MUTATION's). On core an empty
+// chapter list is the source's error, as manga.refresh gives it.
+function targetLoad(send, core, id, done) {
+  if (!core) return send({ query: TARGET_MUTATION, variables: { id: id } }, function(r) { r.state === "ok" ? done(null, fetched(r.data)) : done(r) })
+  send({ route: "manga.refresh", body: { id: id } }, function(r) {
+    if (r.state !== "ok") return done(r)
+    withTracks(send, r.data.manga, function(t, node) {
+      if (t.state !== "ok") return done(t)
+      done(null, { manga: node, chapters: r.data.chapters })
+    })
+  })
+}
+
+// targetPayload's write. On core a chain that adds the target to the
+// library last, so one stopped midway leaves no second copy there.
+// done(reply).
+function writeTarget(send, core, old, targetId, p, tracks, merge, done) {
+  if (!core) return send(targetPayload(old, targetId, p, tracks, merge), done)
+  var mode = merge && readingMode(merge) ? null : readingMode(old)
+  var list = []
+  if (p.read.length) list.push({ route: "chapter.update", body: { ids: p.read, isRead: true } })
+  if (p.bookmark.length) list.push({ route: "chapter.update", body: { ids: p.bookmark, isBookmarked: true } })
+  if (mode) list.push({ route: "meta.set", body: { metas: [{ scope: "manga", owner: targetId, key: MODE_KEY, value: mode.value }] } })
+  ;(tracks ? movingTracks(old, merge) : []).forEach(function(t) {
+    list.push({ route: "track.bind", body: { mangaId: targetId, recordId: t.id } })
+  })
+  var update = { ids: [targetId], inLibrary: true, addToCategories: old.categories.nodes.map(function(c) { return c.id }) }
+  if (!merge) update.clearCategories = true
+  list.push({ route: "manga.update", body: update })
+  chain(send, list, done)
+}
+
+// oldPayload's write, after the target's. done(reply), or done(null)
+// with nothing to do.
+function writeOld(send, core, old, replace, deleteDownloads, done) {
+  if (!core) {
+    var payload = oldPayload(old, replace, deleteDownloads)
+    return payload ? send(payload, done) : done(null)
+  }
+  var ids = deleteDownloads ? downloaded(old) : []
+  var list = []
+  if (replace) list.push({ route: "manga.update", body: { ids: [old.id], inLibrary: false } })
+  if (ids.length) list.push({ route: "download.delete", body: { ids: ids } })
+  if (!list.length) return done(null)
+  chain(send, list, done)
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
+    libraryLoad: libraryLoad,
+    highestLoad: highestLoad,
+    oldLoad: oldLoad,
+    targetLoad: targetLoad,
+    writeTarget: writeTarget,
+    writeOld: writeOld,
+    fetched: fetched,
     OLD_QUERY: OLD_QUERY,
     TARGET_MUTATION: TARGET_MUTATION,
     LIBRARY_QUERY: LIBRARY_QUERY,

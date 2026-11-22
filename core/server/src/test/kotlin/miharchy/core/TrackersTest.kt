@@ -146,6 +146,32 @@ class TrackersTest {
     }
 
     @Test
+    fun aRecordCopiesToAnotherMangaWithNoLoginAndNoTrackerCall() = runBlocking {
+        Database(file).use { db ->
+            val fake = Fake(TrackerStore(db).of(99))
+            val routes = Trackers(db, listOf(fake)).routes
+            val old = manga(db, chapters = 5, read = 2)
+            val target = manga(db, chapters = 5, read = 0)
+            routes.getValue("tracker.login")(obj("trackerId" to 99, "username" to "u", "password" to "right"))
+            routes.getValue("track.search")(obj("trackerId" to 99, "query" to "x"))
+            val record = routes.getValue("track.bind")(obj("mangaId" to old, "trackerId" to 99, "remoteId" to 500)).o().track()
+            routes.getValue("track.update")(obj("recordId" to record["id"]!!.jsonPrimitive.long, "scoreString" to "7"))
+            // The target's own record on that tracker goes; Migrate's copy replaces it.
+            db.run { c -> c.update("INSERT INTO manga_track (manga_id, tracker_id, remote_id, remote_url, title, last_chapter_read, total_chapters, status, score) VALUES (?, 99, 1, '', 'Own', 0, 0, 1, 0)", target) }
+            routes.getValue("tracker.logout")(obj("trackerId" to 99))
+            val before = fake.remote.mapValues { it.value.toString() }
+
+            val copied = routes.getValue("track.bind")(obj("mangaId" to target, "recordId" to record["id"]!!.jsonPrimitive.long)).o().track()
+            val tracks = routes.getValue("track.list")(obj("mangaIds" to listOf(old, target))).o()["tracks"]!!.jsonArray.map { it.jsonObject }
+            val (a, b) = listOf(old, target).map { m -> tracks.single { it["mangaId"]!!.jsonPrimitive.long == m } }
+            for (k in listOf("trackerId", "remoteId", "title", "status", "score", "lastChapterRead", "totalChapters", "remoteUrl", "startDate", "finishDate", "private")) assertEquals(a[k], b[k], k)
+            assertEquals(target, copied["mangaId"]!!.jsonPrimitive.long)
+            assertEquals(before, fake.remote.mapValues { it.value.toString() }, "no tracker call")
+            assertEquals(Kind.notFound, routes.fails("track.bind", obj("mangaId" to target, "recordId" to 999)).kind)
+        }
+    }
+
+    @Test
     fun progressPushesOnlyAHigherChapterAndOneCallRunsAtATime() = runBlocking {
         Database(file).use { db ->
             val fake = Fake(TrackerStore(db).of(99))
