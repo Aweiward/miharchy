@@ -38,8 +38,8 @@ ShellRoot {
   // the rest stay on Suwayomi. Users never set it; #373 flips the default.
   readonly property bool coreBackend: Quickshell.env("MIHARCHY_BACKEND") === "core"
   // A view on the server the Downloads view does not show says this.
-  // A detail or reader on Suwayomi under the switch: Migrate's until #394, or
-  // a target from a mark without the switch.
+  // A detail or reader on Suwayomi under the switch: a target from a mark
+  // without the switch.
   readonly property string downloadsElsewhere: "This manga is open on Suwayomi; downloads run on miharchy-core"
   // Migrate follows the switch (#394), so its ids are that server's.
   readonly property string migrateElsewhere: coreBackend ? "This manga is open on Suwayomi; Migrate runs on miharchy-core"
@@ -711,7 +711,8 @@ ShellRoot {
       return
     }
     if (id === "check.migrate") {
-      migrateView.startList(checkView.migrateList())
+      // The check still reads Suwayomi, and Migrate follows the switch (#394).
+      if (!coreBackend) migrateView.startList(checkView.migrateList())
       return
     }
     if (id.indexOf("migrate.") === 0) {
@@ -1121,7 +1122,7 @@ ShellRoot {
           config: root.config
           configPath: root.configPath
           onKey: function(event) { event.accepted = root.handleKey(event) }
-          onMergeChosen: function(job) { migrateView.startWith(job.old, job.kept) }
+          onMergeChosen: function(job) { if (!root.coreBackend) migrateView.startWith(job.old, job.kept) }
         }
 
         Text {
