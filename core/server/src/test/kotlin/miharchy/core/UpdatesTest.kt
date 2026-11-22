@@ -1,5 +1,6 @@
 package miharchy.core
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -64,23 +65,24 @@ class UpdatesTest {
             manga(db, "Once", strategy = 1)
             manga(db, "Elsewhere", inLibrary = false)
             val dropped = manga(db, "Dropped one", categories = listOf(excluded))
+            val both = manga(db, "Both", categories = listOf(category(db, "Reading", "UNSET"), excluded))
             val refreshed = Collections.synchronizedList(mutableListOf<Long>())
             Updates(db, { refreshed += it }, tick = 3_600_000).use { u ->
                 fun counts(s: JsonObject) = listOf(s.n("totalJobs"), s.n("skippedMangasCount"))
                 // Settings.js's defaults: all three skip filters on.
-                assertEquals(listOf(1, 4), counts(u.routes.call("update.start")))
-                assertEquals(listOf(1, 1, 4), u.idle().let { listOf(it.n("finishedJobs")) + counts(it) })
+                assertEquals(listOf(1, 5), counts(u.routes.call("update.start")))
+                assertEquals(listOf(1, 1, 5), u.idle().let { listOf(it.n("finishedJobs")) + counts(it) })
                 assertEquals(listOf(done), refreshed)
 
-                // Off, only the update strategy skips; a manga only in an EXCLUDE category is not in the run at all.
+                // Off, the update strategy and an EXCLUDE category skip; a manga only in an EXCLUDE category is not in the run at all.
                 for (k in listOf("excludeUnreadChapters", "excludeNotStarted", "excludeCompleted")) setMeta(db, "miharchy.$k", "false")
-                assertEquals(listOf(4, 1), counts(u.routes.call("update.start")))
+                assertEquals(listOf(4, 2), counts(u.routes.call("update.start")))
                 u.idle()
                 // Named categories update every manga in them; Default (0) holds the manga with none.
                 refreshed.clear()
-                assertEquals(listOf(1, 0), counts(u.routes.call("update.start", cats(excluded))))
+                assertEquals(listOf(2, 0), counts(u.routes.call("update.start", cats(excluded))))
                 u.idle()
-                assertEquals(listOf(dropped), refreshed)
+                assertEquals(listOf(both, dropped), refreshed)
                 assertEquals(listOf(4, 1), counts(u.routes.call("update.start", cats(0))))
                 u.idle()
                 u.routes.expect(Kind.notFound, "update.start", cats(999))
@@ -107,7 +109,8 @@ class UpdatesTest {
             Updates(db, { id ->
                 when (id) {
                     bad -> throw ApiError(Kind.network, "The site answered HTTP 500.")
-                    held -> { reached.complete(Unit); gate.await() }
+                    // As Host.call did once: a stop that comes back as a source error.
+                    held -> { reached.complete(Unit); try { gate.await() } catch (e: CancellationException) { throw ApiError(Kind.source, "JobCancellationException: wrapped") } }
                     else -> {}
                 }
             }, tick = 3_600_000).use { u ->
@@ -122,6 +125,7 @@ class UpdatesTest {
                 assertEquals(listOf(bad.toString(), "network"), listOf(failed["mangaId"].toString(), failed["kind"]!!.jsonPrimitive.content))
                 // One run at a time.
                 assertEquals("false", u.routes.call("update.start")["started"].toString())
+                u.routes.expect(Kind.notFound, "update.start", cats(999))
 
                 val stopped = u.routes.call("update.stop")
                 assertEquals(listOf(false, 2, 3), listOf(stopped.running(), stopped.n("finishedJobs"), stopped.n("totalJobs")))

@@ -2,6 +2,7 @@ package miharchy.core
 
 import eu.kanade.tachiyomi.network.CloudflareChallengeException
 import eu.kanade.tachiyomi.network.HttpException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -51,6 +52,10 @@ suspend fun Host.call(req: JsonObject, seconds: Long = 120): JsonElement {
     } catch (e: TimeoutCancellationException) {
         job.cancel()
         throw ApiError(Kind.network, "The source did not answer within $seconds s.")
+    } catch (e: CancellationException) {
+        // The caller stopped (a download or update stop): not a source failure.
+        job.cancel()
+        throw e
     } catch (e: ApiError) {
         throw e
     } catch (e: Exception) {

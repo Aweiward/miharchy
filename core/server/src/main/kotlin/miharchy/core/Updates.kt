@@ -9,6 +9,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,7 +50,7 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
     private var finished = 0
     private var skipped = 0
     private val failed = mutableListOf<JsonObject>()
-    private var last = 0L
+    @Volatile private var last = 0L
     // With no run yet, the schedule counts from core's start, as Suwayomi's first scheduling waits one interval.
     private val born = System.currentTimeMillis()
     private val state = MutableStateFlow<JsonElement>(JsonNull)
@@ -91,8 +93,9 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
     /** `started` says whether this call began the run; one runs at a time. */
     private suspend fun start(categories: List<Long>?): JsonObject {
         val began = ops.withLock {
-            if (job?.isActive == true) return@withLock false
+            // Unknown categories fail even while a run goes.
             val (todo, skip) = select(categories)
+            if (job?.isActive == true) return@withLock false
             val now = System.currentTimeMillis()
             db.run { c ->
                 c.update("INSERT INTO metas (scope, owner, key, value) VALUES ('global', 0, ?, ?) ON CONFLICT (scope, owner, key) DO UPDATE SET value = excluded.value", LAST, now.toString())
@@ -123,10 +126,10 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
             null
         } catch (e: CancellationException) {
             throw e
-        } catch (e: ApiError) {
-            e.kind to e.message.orEmpty()
         } catch (e: Exception) {
-            Kind.`internal` to "${e::class.java.simpleName}: ${e.message}"
+            // A refresh that wraps a stop in its own error is still a stop, never a failure.
+            currentCoroutineContext().ensureActive()
+            (e as? ApiError)?.let { it.kind to it.message.orEmpty() } ?: (Kind.`internal` to "${e::class.java.simpleName}: ${e.message}")
         }
         synchronized(lock) {
             finished++
