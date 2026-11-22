@@ -48,6 +48,7 @@ Only the window under the developer switch `MIHARCHY_BACKEND=core` calls core, a
 - Every route answers with the status `{ state: "STARTED" | "STOPPED", queue }`, each item with Suwayomi's `state`, `progress`, `tries`, `chapter` and `manga` plus core's `error { kind, message }`, which keeps why a download failed. `download.reorder` moves one item (`{ chapterId, to }`) or sets the whole order (`{ order }`): ids that left the queue are skipped, and queued ids the order leaves out follow it in their order. `download.delete` adds `chapters: [{ id, isDownloaded }]` to the status. The `downloads` topic sends the whole status on each change.
 - An enqueue starts the downloader, which stops when nothing is left to try. A failed chapter stays in the queue as `ERROR` and does not hold up the next one. Enqueue it again to retry; it keeps its place and its tries.
 - `chapter.pages` and `GET /api/page/...` read a downloaded chapter from its `.cbz`, with no network.
+- `extension.list { cached: true }` answers from the repo indexes core already holds and fetches only one it has none of, so the library check, which loads each time Settings shows, does not reach the network each time (#394).
 - `chapter.list` also takes chapter `ids`, for the window's delete-after-read rules (`Downloads.autoDeleteQuery`). `unread: true` keeps unread chapters only, and `since` (upload time in ms) the ones uploaded after it: the bar mark's poll reads only those each minute (#386).
 
 ## Update runs (#368)

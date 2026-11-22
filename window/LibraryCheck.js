@@ -380,7 +380,7 @@ function names(meta) {
 // update.status, the skip filters from settings.get.
 function load(send, core, done) {
   if (!core) return send({ query: QUERY }, done)
-  all(send, [{ route: "library.list" }, NAMES_PAYLOAD, { route: "extension.list" }, { route: "update.status" }, { route: "settings.get" }], function(failed, r) {
+  all(send, [{ route: "library.list" }, NAMES_PAYLOAD, { route: "extension.list", body: { cached: true } }, { route: "update.status" }, { route: "settings.get" }], function(failed, r) {
     if (failed) return done(failed)
     var bySource = {}
     r[2].extensions.forEach(function(e) {

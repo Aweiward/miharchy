@@ -75,6 +75,7 @@ test("on core the check reads the library, source names, extensions, the last ru
   assert.equal(reply.state, "ok");
   assert.deepEqual(core.routes(), ["library.list", "meta.get", "extension.list", "update.status", "settings.get"]);
   assert.deepEqual(core.sent[1].body, { scope: "global", keys: [M.SOURCE_NAMES_META] });
+  assert.deepEqual(core.sent[2].body, { cached: true }, "no repo fetch each time Settings shows");
 });
 
 test("on core the check finds the same problems as on Suwayomi, every kind", () => {
