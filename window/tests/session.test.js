@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const load = require("./load");
 
 // core.test.js covers a request's POST, its secret and an image.
-const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
 
 // QML's XMLHttpRequest, answering on a later tick.
 function install(answer) {

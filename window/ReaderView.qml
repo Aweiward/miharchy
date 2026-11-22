@@ -23,8 +23,6 @@ Rectangle {
 
   required property Theme theme
   property var config: null
-  // The chapters are miharchy-core's. shell.qml reads it to match the other views.
-  property bool onCore: true
   property string configPath: ""
   property var reader: null
   // The Settings values: page fit, webtoon width, skips, delete after read.
@@ -176,7 +174,7 @@ Rectangle {
     onTriggered: view.scanned()
   }
 
-  readonly property var problem: reader ? Model.again(Model.problem(reader, configPath, "core"), reader) : null
+  readonly property var problem: reader ? Model.again(Model.problem(reader, configPath), reader) : null
 
   // The chapter the reader showed last, when it closed.
   signal closed(int chapterId)
@@ -212,8 +210,7 @@ Rectangle {
   // setting: miharchy.defaultReadingMode. The pages load at once with the
   // default chapter choices; the manga's own sort and filters follow.
   // peek: a peek opened it, so Catch-up counts.
-  // core: unused, the chapters are miharchy-core's.
-  function start(manga, chapters, chapterId, setting, peek, core) {
+  function start(manga, chapters, chapterId, setting, peek) {
     var table = Chapters.PREFS.concat(Chapters.SCANLATOR_PREFS)
     var defaults = Prefs.defaults(table)
     source = { chapters: chapters, prefs: defaults }
@@ -221,13 +218,13 @@ Rectangle {
     autoSpeed = 0
     original = false
     upNext = undefined
-    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title, peek, onCore)
+    reader = Reader.open(manga.id, Chapters.readingOrder(chapters, defaults, chapterId, skip), chapterId, Reader.mode(manga, setting), values.incognito, manga.title, peek)
     pageSizes = {}
     scans = {}
     aheadFor = -1
     loadPages()
     var seq = ++startSeq
-    send(Prefs.loadPayload(table, manga.id, onCore), function(reply) {
+    send(Prefs.loadPayload(table, manga.id), function(reply) {
       if (seq !== view.startSeq || !view.reader || reply.state !== "ok") return
       view.source = { chapters: chapters, prefs: Prefs.read(table, reply.data, defaults) }
       view.relist()
@@ -281,7 +278,7 @@ Rectangle {
     if (downloadsOff) return
     if (reader.state !== "ok" || Reader.chapterId(reader) === aheadFor) return
     aheadFor = Reader.chapterId(reader)
-    var payload = Downloads.enqueuePayload(Reader.ahead(reader, values.downloadAhead), onCore)
+    var payload = Downloads.enqueuePayload(Reader.ahead(reader, values.downloadAhead))
     if (payload) send(payload, function() {})
   }
 
@@ -311,8 +308,8 @@ Rectangle {
     if (target === null) return
     var read = [Reader.chapterId(reader)]
     exitStep("write")
-    Downloads.autoDeleteLoad(function(payload, done) { view.send(payload, done) }, onCore, [target], function(reply) {
-      var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, view.deleteBookmarked, read, view.onCore) : null
+    Downloads.autoDeleteLoad(function(payload, done) { view.send(payload, done) }, [target], function(reply) {
+      var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, view.deleteBookmarked, read) : null
       if (!payload) return view.exitStep("wrote")
       view.send(payload, function() {
         view.deleted()

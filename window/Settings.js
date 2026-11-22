@@ -260,15 +260,15 @@ function initial() {
 
 // Server rows are core's settings (settings.get/settings.set) and meta rows
 // core's global metas (#385). A load is two requests, sent one after the other.
-function loadPayloads(core) {
+function loadPayloads() {
   var keys = ROWS.filter(function(r) { return r.store === "meta" }).map(function(r) { return META_PREFIX + r.key })
   return [{ route: "settings.get", body: {} }, { route: "meta.get", body: { scope: "global", keys: keys } }]
 }
 
 // The request that stores value for row. Its reply carries the stored
 // value back, so reduce() reads saves and loads alike.
-function savePayload(row, value, core) {
-  if (row.store === "meta") return Prefs.savePayload(row.key, value, undefined, core)
+function savePayload(row, value) {
+  if (row.store === "meta") return Prefs.savePayload(row.key, value, undefined)
   var s = {}
   s[row.key] = value
   if (value === true && row.whenOn) for (var k in row.whenOn) s[k] = row.whenOn[k]

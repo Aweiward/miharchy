@@ -138,8 +138,7 @@ function onward(r, delta) {
 // to trackers and deletes nothing after reading.
 // mangaTitle names the folder a saved page goes to.
 // peek: a peek opened the chapter, so Catch-up applies (stops()).
-// core: unused, the chapters are miharchy-core's (ADR 0010).
-function open(mangaId, chapters, chapterId, readingMode, incognito, mangaTitle, peek, core) {
+function open(mangaId, chapters, chapterId, readingMode, incognito, mangaTitle, peek) {
   var l = relist(chapters, chapterId)
   return at({ mangaId: mangaId, chapters: l.chapters, mode: readingMode, incognito: incognito === true, mangaTitle: mangaTitle || "", peek: peek === true, finished: 0, lifted: false }, l.index, false)
 }
@@ -450,7 +449,7 @@ function savePayload(r) {
 // first marks the chapter read. Take it before "saving" records the save.
 function trackPayload(r) {
   if (r.state !== "ok" || r.incognito || !r.read || r.wasRead || (r.saved && r.saved.read)) return null
-  return Chapters.trackPayload([r.mangaId], true)
+  return Chapters.trackPayload([r.mangaId])
 }
 
 // Mihon's delete after reading: once the chapter open is read here, the
@@ -476,7 +475,7 @@ function deleteTarget(r, slots) {
 
 // Mihon's top bar bookmark: b turns the chapter open's bookmark on or off.
 function bookmarkPayload(r) {
-  return Chapters.bookmarkPayload([r.chapters[r.index]], true)
+  return Chapters.bookmarkPayload([r.chapters[r.index]])
 }
 
 function modePayload(r) {

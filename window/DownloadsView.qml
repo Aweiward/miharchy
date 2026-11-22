@@ -19,8 +19,6 @@ Rectangle {
   property var config: null
   property string configPath: ""
   // Set by shell.qml: the queue is miharchy-core's.
-  property string backend: ""
-  readonly property bool core: backend === "core"
   property bool open: false
   property var queue: Downloads.initial()
   property int cursor: 0
@@ -41,7 +39,7 @@ Rectangle {
   readonly property bool summaryShown: NextChapters.shown(lastRun)
   readonly property var tally: lastRun ? NextChapters.tally(lastRun, queue.items, marks) : null
 
-  readonly property var problem: Model.problem(queue, configPath, backend)
+  readonly property var problem: Model.problem(queue, configPath)
   // The first X arms "cancel all"; shell.qml disarms it on any other key.
   property bool armed: false
   readonly property string hint: armed ? "X again to cancel every download, any other key keeps them"
@@ -62,7 +60,7 @@ Rectangle {
     queue = Downloads.initial()
     reasons = {}
     if (!config) queue = { state: "no-config", message: "", running: false, items: [] }
-    send(Downloads.statusPayload(core))
+    send(Downloads.statusPayload())
   }
   // A missing core.json leaves config null from the start, so onConfigChanged never fires.
   Component.onCompleted: if (!config) queue = { state: "no-config", message: "", running: false, items: [] }
@@ -80,7 +78,7 @@ Rectangle {
     var gone = Downloads.left(queue.items, next.items)
     queue = next
     cursor = Math.max(summaryShown ? -1 : 0, Math.min(cursor, queue.items.length - 1))
-    reasons = Downloads.failed(queue.items, reasons, core).reasons
+    reasons = Downloads.failed(queue.items, reasons).reasons
     follow()
     settleGone(NextChapters.goneIds(lastRun, gone))
     if (gone.length) leftQueue(gone)
@@ -108,7 +106,7 @@ Rectangle {
     settling = true
     var run = lastRun
     var cfg = config
-    NextChapters.settleLoad(function(payload, done) { Session.send(cfg, payload, done) }, core, run, function(reply) {
+    NextChapters.settleLoad(function(payload, done) { Session.send(cfg, payload, done) }, run, function(reply) {
       view.settling = false
       if (reply.state !== "ok" || run !== view.lastRun || view.notified) return
       view.marks = NextChapters.settle(view.marks, run, view.queue.items, reply.data)
@@ -121,7 +119,7 @@ Rectangle {
 
   // A retried chapter loses its reason, so its next failure is labelled again.
   function retry(chapterIds) {
-    var payload = Downloads.retryPayload(chapterIds, core)
+    var payload = Downloads.retryPayload(chapterIds)
     if (!payload) return
     var r = Object.assign({}, reasons)
     chapterIds.forEach(function(id) { delete r[id] })
@@ -148,7 +146,7 @@ Rectangle {
   // The cursor stays on its download wherever the new order puts it.
   function reorder(order) {
     var item = queue.items[cursor]
-    var payload = Downloads.orderPayload(queue, order, core)
+    var payload = Downloads.orderPayload(queue, order)
     if (!payload) return
     cursor = order.indexOf(item.chapterId)
     send(payload)
@@ -181,14 +179,14 @@ Rectangle {
         reorder(Downloads.sorted(queue, id === "downloads.sortNumber" ? "chapterNumber" : "uploadDate"))
         break
       case "downloads.clear":
-        if (armed) send(Downloads.clearPayload(core))
+        if (armed) send(Downloads.clearPayload())
         armed = !armed && queue.items.length > 0
         break
       case "downloads.dequeue":
-        if (item) send(Downloads.dequeuePayload(item.chapterId, core))
+        if (item) send(Downloads.dequeuePayload(item.chapterId))
         break
       case "downloads.toggle":
-        send(Downloads.togglePayload(queue, core))
+        send(Downloads.togglePayload(queue))
         break
     }
   }
@@ -328,7 +326,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.5
         anchors.verticalCenter: parent.verticalCenter
-        text: Downloads.statusText(row.modelData, view.reasons[row.modelData.chapterId], view.flareOn, view.core)
+        text: Downloads.statusText(row.modelData, view.reasons[row.modelData.chapterId], view.flareOn)
         color: row.modelData.state === "ERROR" ? view.theme.urgent : row.current ? view.theme.selectedText : view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall

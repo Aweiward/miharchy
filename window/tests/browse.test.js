@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const B = require("./load")("Browse.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
 const ok = (data) => M.coreReply(200, JSON.stringify(data));
 const fail = (message) => M.coreReply(502, JSON.stringify({ error: { kind: "upstream", message } }));
 const cloudflare = M.coreReply(502, '{"error":{"kind":"cloudflare","message":"https://x shows a Cloudflare challenge."}}');

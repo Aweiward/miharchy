@@ -21,9 +21,6 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // shell.qml sets backend to "core". The view always runs on core.
-  property string backend: ""
-  readonly property bool core: true
   property bool active: false
   property bool showNsfw: false
   // Where the local source reads, for its empty how-to.
@@ -124,7 +121,7 @@ Item {
     var seq = ++sourcesSeq
     var cfg = config
     src = { state: "loading", message: "", sources: src.sources }
-    send(Browse.sourcesPayload(core), function(reply) {
+    send(Browse.sourcesPayload(), function(reply) {
       if (seq !== view.sourcesSeq) return
       view.src = Browse.sources(reply, cfg, view.showNsfw, true)
       view.sourceCursor = Math.min(view.sourceCursor, Math.max(0, view.sourceRows.length - 1))
@@ -389,7 +386,7 @@ Item {
         if (panel.state !== "ok") break
         // Filters reach a source only in a search, so applying searches,
         // with the query of a search already showing.
-        var applied = Widgets.filterChanges(panel.widgets, true)
+        var applied = Widgets.filterChanges(panel.widgets)
         var count = Widgets.changedCount(panel.widgets)
         closePanel()
         openListing("search", listing.mode === "search" ? listing.query : "", applied, count)
@@ -476,7 +473,7 @@ Item {
       anchors.margins: view.theme.fontSize * 2
       visible: text !== ""
       wrapMode: Text.Wrap
-      text: { var p = Model.problem(view.src, view.configPath, "core"); return p ? p.title + ". " + p.detail : "" }
+      text: { var p = Model.problem(view.src, view.configPath); return p ? p.title + ". " + p.detail : "" }
       color: view.theme.urgent
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSize
@@ -566,7 +563,7 @@ Item {
     Text {
       textFormat: Text.PlainText
       anchors.centerIn: sourceList
-      visible: view.sourceRows.length === 0 && Model.problem(view.src, view.configPath, "core") === null
+      visible: view.sourceRows.length === 0 && Model.problem(view.src, view.configPath) === null
       text: view.src.state !== "ok" ? "Loading sources" : view.src.sources.length ? "No source in the languages shown. Press l to pick them." : "No source yet. Press tab, then install an extension."
       color: view.theme.muted
       font.family: view.theme.fontFamily
@@ -653,7 +650,7 @@ Item {
     problem: {
       if (!view.panel) return ""
       if (view.panel.state === "loading") return "Loading"
-      var p = Model.problem(view.panel, view.configPath, "core")
+      var p = Model.problem(view.panel, view.configPath)
       if (p) return p.title + ". " + p.detail
       if (view.panel.error) return "Not saved: " + view.panel.error
       return view.panel.state === "ok" && view.panelRows.length === 0 ? (view.panel.kind === "filters" ? "This source has no filters." : "This source has no settings.") : ""

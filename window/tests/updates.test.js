@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const U = require("./load")("Updates.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
 const ok = (data) => M.coreReply(200, JSON.stringify(data));
 const at = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi || 0).getTime();
 const now = at(2026, 10, 4, 15);
@@ -85,10 +85,10 @@ test("a reload keeps the rows shown; a failure says why and keeps them", () => {
 });
 
 test("the notice: loading, a failed connection, or no updates", () => {
-  assert.equal(U.notice(U.initial(), "/s.json", "core").title, "Loading updates");
-  assert.equal(U.notice(U.reduce(U.initial(), { type: "list", reply: M.coreReply(401, JSON.stringify({ error: { kind: "unauthorized", message: "secret" } })), config, now }), "/s.json", "core").title, "miharchy-core rejected the secret");
-  assert.equal(U.notice(loaded([]), "/s.json", "core").title, "No new chapters");
-  assert.equal(U.notice(loaded([chapter(1, manga, at(2026, 10, 4, 14))]), "/s.json", "core"), null);
+  assert.equal(U.notice(U.initial(), "/s.json").title, "Loading updates");
+  assert.equal(U.notice(U.reduce(U.initial(), { type: "list", reply: M.coreReply(401, JSON.stringify({ error: { kind: "unauthorized", message: "secret" } })), config, now }), "/s.json").title, "miharchy-core rejected the secret");
+  assert.equal(U.notice(loaded([]), "/s.json").title, "No new chapters");
+  assert.equal(U.notice(loaded([chapter(1, manga, at(2026, 10, 4, 14))]), "/s.json"), null);
 });
 
 // The updates topic's status, as core sends it: flat, with stopped when a stop ended the run.
@@ -211,13 +211,13 @@ test("rows carry what the shared chapter actions need, across manga", () => {
     chapter(2, other, at(2026, 10, 4, 13), { isBookmarked: true }),
     chapter(3, manga, at(2026, 10, 4, 12))
   ]).rows;
-  assert.deepEqual(Ch.markPayload(rows, true, true).body, { ids: [1, 2, 3], isRead: true });
-  assert.deepEqual(Ch.markPayload(rows, false, true).body, { ids: [1], isRead: false, lastPageRead: 0 }, "unread only sends a started update back to page 1");
-  assert.deepEqual(Ch.bookmarkPayload(rows, true).body, { ids: [1, 3], isBookmarked: true });
-  assert.deepEqual(Ch.bookmarkPayload([rows[1]], true).body, { ids: [2], isBookmarked: false });
-  assert.deepEqual(D.enqueuePayload(rows, true).body, { ids: [2, 3] });
-  assert.deepEqual(D.removePayload(rows, [], true).body, { ids: [1] });
-  assert.equal(D.removePayload([rows[1]], [], true), null, "nothing on disk, nothing to confirm");
+  assert.deepEqual(Ch.markPayload(rows, true).body, { ids: [1, 2, 3], isRead: true });
+  assert.deepEqual(Ch.markPayload(rows, false).body, { ids: [1], isRead: false, lastPageRead: 0 }, "unread only sends a started update back to page 1");
+  assert.deepEqual(Ch.bookmarkPayload(rows).body, { ids: [1, 3], isBookmarked: true });
+  assert.deepEqual(Ch.bookmarkPayload([rows[1]]).body, { ids: [2], isBookmarked: false });
+  assert.deepEqual(D.enqueuePayload(rows).body, { ids: [2, 3] });
+  assert.deepEqual(D.removePayload(rows, []).body, { ids: [1] });
+  assert.equal(D.removePayload([rows[1]], []), null, "nothing on disk, nothing to confirm");
 });
 
 const P = require("./load")("Prefs.js");

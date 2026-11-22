@@ -19,8 +19,6 @@ Rectangle {
 
   required property Theme theme
   property var config: null
-  // Set by shell.qml; the card reads core's history.
-  property string backend: ""
   property string configPath: ""
   // The "Save pages to" setting; empty for ~/Pictures/Miharchy.
   property string folder: ""
@@ -39,7 +37,7 @@ Rectangle {
   property int seq: 0
 
   readonly property bool coversShown: prefs.values.readingCardCovers !== "hidden"
-  readonly property var problem: Model.problem({ state: phase, message: message }, configPath, backend)
+  readonly property var problem: Model.problem({ state: phase, message: message }, configPath)
   readonly property string hint: "S save   Y copy   h " + (coversShown ? "hide" : "show") + " covers   esc close"
 
   // A click on a key in the hint sends that key, as typed.
@@ -100,7 +98,7 @@ Rectangle {
   }
 
   function page(after, s) {
-    Session.send(config, ReadingCard.payload(after, true), function(reply) {
+    Session.send(config, ReadingCard.payload(after), function(reply) {
       if (s !== view.seq) return
       if (reply.state !== "ok") {
         view.message = reply.message || ""

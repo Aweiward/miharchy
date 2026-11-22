@@ -10,7 +10,7 @@ const Mark = load("../plugin/Mark.js");
 const M = load("Model.js");
 const Sync = load("Sync.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "s", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "s" };
 const now = new Date(2026, 9, 4, 15).getTime();
 const sec = (h) => Math.floor(new Date(2026, 9, 4, h).getTime() / 1000);
 const ok = (data) => M.coreReply(200, JSON.stringify(data));
@@ -31,7 +31,7 @@ function fakeCore(routes) {
 const poll = (routes, mark) => {
   const core = fakeCore(routes);
   let reply;
-  Mark.load(core.send, true, now, (r) => { reply = r; });
+  Mark.load(core.send, now, (r) => { reply = r; });
   return { sent: core.sent, reply, mark: Mark.reduce(mark || Mark.initial(), { type: "reply", reply, config, now }) };
 };
 
@@ -82,8 +82,8 @@ test("on core a new chapter after the first poll notifies, and a failure shows t
     assert.equal(Mark.label(down), "", "no stale count");
   }
   const down = poll({ ...ROUTES([]), "library.list": M.coreReply(0, "") }).mark;
-  assert.equal(Mark.tooltip(down, "core"), "Miharchy: miharchy-core is not running");
-  assert.equal(Mark.notice(down, "/c/core.json", "core").title, "miharchy-core is not running");
+  assert.equal(Mark.tooltip(down), "Miharchy: miharchy-core is not running");
+  assert.equal(Mark.notice(down, "/c/core.json").title, "miharchy-core is not running");
 });
 
 test("on core Up next comes from core with Downloaded only, and every row opens on core", () => {
@@ -94,18 +94,17 @@ test("on core Up next comes from core with Downloaded only, and every row opens 
   };
   const core = fakeCore(routes);
   let reply;
-  Mark.loadUpNext(core.send, true, (r) => { reply = r; });
+  Mark.loadUpNext(core.send, (r) => { reply = r; });
   assert.ok(core.sent.every((p) => p.route), "core routes only");
   assert.deepEqual(core.sent.at(-1).body.keys, ["miharchy.downloadedOnly"]);
-  assert.deepEqual(Mark.upNext(reply, now, true), [], "Downloaded only hides a chapter not downloaded");
+  assert.deepEqual(Mark.upNext(reply, now), [], "Downloaded only hides a chapter not downloaded");
   routes["meta.get"] = ok({ metas: [] });
-  Mark.loadUpNext(core.send, true, (r) => { reply = r; });
-  const up = Mark.upNext(reply, now, true);
+  Mark.loadUpNext(core.send, (r) => { reply = r; });
+  const up = Mark.upNext(reply, now);
   assert.deepEqual(up.map((e) => e.open), [["peek-open", "7", "1", "core"]]);
   const mark = poll(ROUTES([chapter(1, 3)])).mark;
-  const rows = Mark.entries(up, mark.rows, true);
+  const rows = Mark.entries(up, mark.rows);
   assert.deepEqual(rows.map((e) => e.open), [["peek-open", "7", "1", "core"], ["open-chapter", "7", "1", "core"]]);
-  assert.deepEqual(Mark.entries([], mark.rows, false)[0].open, ["open-chapter", "7", "1"], "Suwayomi's rows stay as they were");
 });
 
 test("on core the phone check reads core's baseline, not the helper's", () => {
@@ -113,8 +112,8 @@ test("on core the phone check reads core's baseline, not the helper's", () => {
   const home = path.join(dir, "home");
   const folder = path.join(dir, "phone");
   fs.mkdirSync(folder, { recursive: true });
-  assert.equal(Mark.phoneBaseline({ HOME: home }, true), home + "/.local/share/miharchy/core/sync/phone-baseline.tachibk");
-  assert.equal(Mark.phoneBaseline({ HOME: home, MIHARCHY_CORE_DATA: "/d" }, true), "/d/sync/phone-baseline.tachibk");
+  assert.equal(Mark.phoneBaseline({ HOME: home }), home + "/.local/share/miharchy/core/sync/phone-baseline.tachibk");
+  assert.equal(Mark.phoneBaseline({ HOME: home, MIHARCHY_CORE_DATA: "/d" }), "/d/sync/phone-baseline.tachibk");
   const t = Math.floor(Date.now() / 1000);
   const file = (d, name, age) => {
     fs.mkdirSync(d, { recursive: true });
@@ -124,7 +123,7 @@ test("on core the phone check reads core's baseline, not the helper's", () => {
     return p;
   };
   const backup = file(folder, "com.mihon.tachibk", 600);
-  const baseline = Mark.phoneBaseline({ HOME: home }, true);
+  const baseline = Mark.phoneBaseline({ HOME: home });
   const [cmd, ...args] = Mark.phoneCheckCommand(folder, baseline);
   const check = () => execFileSync(cmd, args, { env: { ...process.env, HOME: home }, encoding: "utf8" }).trim();
   // The helper's baseline is newer, but core syncs: its own (none yet) decides.

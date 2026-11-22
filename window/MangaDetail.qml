@@ -21,8 +21,6 @@ Rectangle {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // The manga is miharchy-core's. shell.qml reads it to match the other views.
-  property bool onCore: true
   property var detail: null
   property int cursor: 0
   // The user's categories, from the library; the checklist lists them.
@@ -74,14 +72,6 @@ Rectangle {
   readonly property string resume: detail ? Chapters.resumeLabel(detail.chapters, next) : ""
   readonly property var optionRows: Chapters.rows(prefs, detail ? Chapters.scanlators(detail.chapters) : [])
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
-  // ponytail: what core does not serve yet, by key, with the issue that moves it.
-  // Why this manga's downloads stay off, or "": the Downloads view shows
-  // the other server's queue (shell.qml).
-  property string downloadsGate: ""
-  readonly property var downloadIds: ({ "manga.download": true, "manga.downloads": true, "manga.deleteDownload": true })
-  // The shell sets this to hold the Migrate keys, which answer with it.
-  property string migrateGate: ""
-  readonly property var migrateIds: ({ "manga.migrate": true, "manga.duplicateMigrate": true })
   readonly property string hint: dupesOpen ? "j k move   enter open   M migrate to this   a add anyway   esc cancel   "
     : picking ? "j k move   space in or out   esc close   "
     : optionsOpen ? "j k move   enter change   esc close   "
@@ -89,12 +79,11 @@ Rectangle {
     : selecting ? "j k extend   R read   u unread   b bookmark   d download   x delete download   esc end   "
     : (note ? note + "   " : "") + "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   n notes   o browser   y copy link   Y copy title   / search title   r refresh   esc back   "
 
-  // core: whether the manga is miharchy-core's.
-  signal libraryChanged(int mangaId, bool inLibrary, bool core)
+  signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
   // shell.qml's markChapters() applies it and answers with markReply().
   // action: "read", "unread" or "bookmark".
-  signal mark(var chapters, string action, int mangaId, bool core)
+  signal mark(var chapters, string action, int mangaId)
   signal categorized()
   // A download request's reply, which carries the queue.
   signal downloads(var reply)
@@ -137,10 +126,9 @@ Rectangle {
   }
 
   // fromSource: opened while browsing a source, so it refreshes once.
-  // core: unused, the manga is miharchy-core's.
-  function openManga(mangaId, fromSource, core) {
+  function openManga(mangaId, fromSource) {
     dupes = []
-    detail = Browse.detail(mangaId, fromSource, onCore)
+    detail = Browse.detail(mangaId, fromSource)
     chapterPrefs.open(mangaId)
     scanlatorPrefs.open(mangaId)
     menuPrefs.load()
@@ -199,17 +187,16 @@ Rectangle {
       if (dupes.length) return
     }
     var mangaId = detail.mangaId
-    var core = onCore
     var cfg = config
     detail = Browse.reduceDetail(detail, { type: "library-request" })
     send(payload, function(reply) {
       if (view.detail && view.detail.mangaId === mangaId && view.config === cfg) view.detail = Browse.reduceDetail(view.detail, { type: "library-reply", reply: reply })
-      if (reply.state === "ok") view.libraryChanged(mangaId, Browse.libraryReply(reply), core)
+      if (reply.state === "ok") view.libraryChanged(mangaId, Browse.libraryReply(reply))
     })
   }
 
   function downloadsLeft(items) {
-    if (detail && !downloadsGate && items.some(function(i) { return i.mangaId === view.detail.mangaId })) reload()
+    if (detail && items.some(function(i) { return i.mangaId === view.detail.mangaId })) reload()
   }
 
   function sendDownloads(payload) {
@@ -224,7 +211,7 @@ Rectangle {
 
   function sendMark(list, action) {
     anchor = -1
-    mark(list, action, detail.mangaId, onCore)
+    mark(list, action, detail.mangaId)
   }
 
   function chooseOption() {
@@ -251,7 +238,7 @@ Rectangle {
     var text = notesField.text
     var cfg = config
     notesNote = "Saving"
-    send(Prefs.savePayload("notes", text, mangaId, onCore), function(reply) {
+    send(Prefs.savePayload("notes", text, mangaId), function(reply) {
       if (!view.detail || view.detail.mangaId !== mangaId || view.config !== cfg) return
       if (reply.state !== "ok") {
         view.notesNote = reply.message || reply.state
@@ -271,7 +258,7 @@ Rectangle {
       return
     }
     downloadsOpen = false
-    sendDownloads(Downloads.enqueuePayload(list, onCore))
+    sendDownloads(Downloads.enqueuePayload(list))
   }
 
   onWritingChanged: {
@@ -302,14 +289,6 @@ Rectangle {
 
   function run(id) {
     note = ""
-    if (migrateGate && migrateIds[id]) {
-      note = migrateGate
-      return
-    }
-    if (downloadsGate && downloadIds[id]) {
-      note = downloadsGate
-      return
-    }
     switch (id) {
       case "manga.openWeb":
       case "manga.copyLink":
@@ -382,7 +361,7 @@ Rectangle {
         dupesCursor = Math.max(0, Math.min(dupes.length - 1, dupesCursor + (id === "manga.duplicatesUp" ? -1 : 1)))
         break
       case "manga.duplicateOpen":
-        openManga(dupes[dupesCursor].id, false, onCore)
+        openManga(dupes[dupesCursor].id, false)
         break
       case "manga.select":
         anchor = cursor
@@ -391,7 +370,7 @@ Rectangle {
         anchor = -1
         break
       case "manga.download":
-        sendDownloads(Downloads.enqueuePayload(Downloads.marked(shown, cursor, anchor), onCore))
+        sendDownloads(Downloads.enqueuePayload(Downloads.marked(shown, cursor, anchor)))
         break
       case "manga.downloads":
         downloadsOpen = true
@@ -433,7 +412,7 @@ Rectangle {
         endEdit()
         break
       case "manga.deleteDownload":
-        sendDownloads(Downloads.removePayload(Downloads.marked(shown, cursor, anchor), queue, onCore))
+        sendDownloads(Downloads.removePayload(Downloads.marked(shown, cursor, anchor), queue))
         break
       case "manga.markRead":
       case "manga.markUnread":

@@ -26,23 +26,21 @@ function checkName(text, categories, exceptId) {
   return { name: name }
 }
 
-// core (the last argument of each payload here) is unused: the routes are
-// miharchy-core's.
-function createPayload(name, core) {
+function createPayload(name) {
   return { route: "category.create", body: { name: name } }
 }
 
-function renamePayload(id, name, core) {
+function renamePayload(id, name) {
   return { route: "category.update", body: { id: id, name: name } }
 }
 
-function deletePayload(id, core) {
+function deletePayload(id) {
   return { route: "category.delete", body: { id: id } }
 }
 
 // Cycles the category's flag (kind "update" or "download") through unset,
 // included and excluded.
-function includePayload(categories, id, kind, core) {
+function includePayload(categories, id, kind) {
   var state = categories.filter(function(c) { return c.id === id })[0][kind]
   var next = INCLUDE_STATES[(INCLUDE_STATES.indexOf(state) + 1) % INCLUDE_STATES.length]
   var body = { id: id }
@@ -52,14 +50,14 @@ function includePayload(categories, id, kind, core) {
 
 // Mihon's excluded categories for deleting chapters: a manga in one keeps
 // its read downloads (Downloads.autoDeletePayload).
-function keepPayload(categories, id, core) {
+function keepPayload(categories, id) {
   var keep = !categories.filter(function(c) { return c.id === id })[0].keep
   return { route: "meta.set", body: { metas: [{ scope: "category", owner: id, key: Downloads.KEEP_KEY, value: String(keep) }] } }
 }
 
 // Moves categories[index] by delta (-1 or 1), or null past either end.
 // Positions count from 1, after Default at 0.
-function movePayload(categories, index, delta, core) {
+function movePayload(categories, index, delta) {
   var to = index + delta
   if (!categories[index] || to < 0 || to >= categories.length) return null
   return { route: "category.reorder", body: { id: categories[index].id, position: to + 1 } }

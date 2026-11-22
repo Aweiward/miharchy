@@ -166,9 +166,9 @@ test("the change category rows say whether all, some or none of the chosen manga
   const chosen = [manga(1, "a", { categories: [1, 2] }), manga(2, "b", { categories: [1] })];
   const rows = L.categoryRows(cats, chosen);
   assert.deepEqual(rows.map((r) => [r.name, r.state]), [["Action", "all"], ["Drama", "some"], ["Later", "none"]]);
-  assert.deepEqual(L.categoryPayload(rows[0], [1, 2], true).body, { ids: [1, 2], removeFromCategories: [1] }, "all in: choosing takes them out");
-  assert.deepEqual(L.categoryPayload(rows[1], [1, 2], true).body, { ids: [1, 2], addToCategories: [2] }, "some in: choosing puts every one in");
-  assert.deepEqual(L.categoryPayload(rows[2], [1, 2], true).body, { ids: [1, 2], addToCategories: [3] });
+  assert.deepEqual(L.categoryPayload(rows[0], [1, 2]).body, { ids: [1, 2], removeFromCategories: [1] }, "all in: choosing takes them out");
+  assert.deepEqual(L.categoryPayload(rows[1], [1, 2]).body, { ids: [1, 2], addToCategories: [2] }, "some in: choosing puts every one in");
+  assert.deepEqual(L.categoryPayload(rows[2], [1, 2]).body, { ids: [1, 2], addToCategories: [3] });
 });
 
 test("an added manga goes to the default category, to none, or asks, as Mihon", () => {
@@ -178,8 +178,8 @@ test("an added manga goes to the default category, to none, or asks, as Mihon", 
   assert.equal(L.defaultCategory("ask", cats), -1);
   assert.equal(L.defaultCategory("7", cats), -1, "a deleted category asks");
   assert.equal(L.defaultCategory("ask", []), 0, "with no categories there is nothing to ask");
-  assert.deepEqual(L.moveToPayload(9, 3, [], true).body, { ids: [9], clearCategories: true, addToCategories: [3] }, "exactly the default category");
-  assert.deepEqual(L.moveToPayload(9, 0, [], true).body, { ids: [9], clearCategories: true, addToCategories: [] }, "Default: out of every category");
+  assert.deepEqual(L.moveToPayload(9, 3, []).body, { ids: [9], clearCategories: true, addToCategories: [3] }, "exactly the default category");
+  assert.deepEqual(L.moveToPayload(9, 0, []).body, { ids: [9], clearCategories: true, addToCategories: [] }, "Default: out of every category");
 });
 
 test("the header names the search, the active filters and a sort other than the default", () => {

@@ -12,12 +12,12 @@ const fail = (message) => M.coreReply(502, JSON.stringify({ error: { kind: "upst
 const row = (rows, label, option) => rows.find((r) => r.label === label && (option === undefined || r.option === option));
 
 function loaded(kind, nodes) {
-  const p = W.panel(kind, { id: "7", name: "S", core: true });
+  const p = W.panel(kind, { id: "7", name: "S" });
   return W.reducePanel(p, { type: "reply", reply: ok(kind === "filters" ? { filters: nodes } : { settings: nodes }) });
 }
 
 const filters = (nodes) => loaded("filters", nodes).widgets;
-const send = (w) => W.filterChanges(w, true);
+const send = (w) => W.filterChanges(w);
 
 test("a fresh filter list sends no changes", () => {
   assert.deepEqual(send(filters(F.mangadexFilters)), []);

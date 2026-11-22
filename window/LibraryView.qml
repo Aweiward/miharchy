@@ -26,8 +26,6 @@ Item {
   required property Theme theme
   property var config: null
   // Set by shell.qml: config and connection are miharchy-core's.
-  property string backend: ""
-  readonly property bool core: backend === "core"
   property string configPath: ""
   // Model.reduce()'s connection: the library manga and categories.
   property var connection: Model.initial()
@@ -73,7 +71,7 @@ Item {
   // The change categories panel's rows, shown while picking.
   readonly property var pickRows: Library.categoryRows(connection.categories, connection.manga.filter(function(m) { return view.pickIds.indexOf(m.id) !== -1 }))
   // Model.notice(): null for the grid, otherwise { title, detail }.
-  readonly property var notice: Model.notice(connection, configPath, shown, Library.narrowed(prefs, query), backend)
+  readonly property var notice: Model.notice(connection, configPath, shown, Library.narrowed(prefs, query))
   // Whether the search field is open.
   property bool editing: false
   readonly property string summary: Library.summary(prefs, editing ? "" : query)
@@ -145,7 +143,7 @@ Item {
   }
 
   function report(reply) {
-    if (reply.state !== "ok") fail(reply.message || Model.problem(reply, configPath, backend).title)
+    if (reply.state !== "ok") fail(reply.message || Model.problem(reply, configPath).title)
   }
 
   // x and X ask once; the same key again acts.
@@ -165,17 +163,17 @@ Item {
     reduce({ type: "deselect" })
     if (!ids.length || !config) return
     var remove = function() {
-      view.send(Library.removePayload(ids, view.core), function(reply) {
+      view.send(Library.removePayload(ids), function(reply) {
         view.report(reply)
         view.edited()
       })
     }
     if (action === "remove") return remove()
-    send(Library.chaptersPayload(ids, core), function(reply) {
+    send(Library.chaptersPayload(ids), function(reply) {
       if (reply.state !== "ok") return view.report(reply)
       var chapters = Browse.toChapters(Library.chapterNodes(reply.data))
       if (action === "read" || action === "unread") return view.mark(chapters, action, ids)
-      var payload = Downloads.removePayload(chapters, view.queue, core)
+      var payload = Downloads.removePayload(chapters, view.queue)
       if (action === "removeDeleting") {
         if (!payload) return remove()
         // The manga leave only once their downloads are gone.
@@ -215,11 +213,11 @@ Item {
   function continueReading(m) {
     if (!m.unread) return reduce({ type: "note", text: "Every chapter of " + m.title + " is read." })
     var cfg = config
-    var d = Browse.detail(m.id, false, core)
+    var d = Browse.detail(m.id, false)
     send(Browse.detailPayload(d), function(reply) {
       d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
       if (!d.manga) return view.fail(Browse.notice(d, view.configPath).title)
-      view.send(Prefs.loadPayload(Library.CHAPTER_PREFS, m.id, view.core), function(saved) {
+      view.send(Prefs.loadPayload(Library.CHAPTER_PREFS, m.id), function(saved) {
         var next = Library.continueChapter(d.chapters, Library.chapterPrefs(saved.state === "ok" ? saved.data : {}, view.downloadedOnly))
         if (next) view.read(d.manga, d.chapters, next.id)
         else view.reduce({ type: "note", text: "No next chapter of " + m.title + " passes its chapter filters." })
@@ -355,7 +353,7 @@ Item {
         break
       case "library.pickToggle":
         var pick = pickRows[pickCursor]
-        if (pick) send(Library.categoryPayload(pick, pickIds, core), function(reply) {
+        if (pick) send(Library.categoryPayload(pick, pickIds), function(reply) {
           view.report(reply)
           view.edited()
         })

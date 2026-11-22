@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const H = require("./load")("History.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
 const ok = (data) => M.coreReply(200, JSON.stringify(data));
 const sec = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi).getTime() / 1000;
 
@@ -72,11 +72,11 @@ test("entries group by day: today, yesterday, then the date; each shows its time
 });
 
 test("a notice for an empty or failed history, none while entries show", () => {
-  assert.equal(H.notice(H.initial(), "core.json", "", "core").title, "Loading the history");
-  assert.equal(H.notice(H.reduce(loaded([chapter(31, 3, 300)]), { type: "config-missing" }), "core.json", "", "core").title, "No miharchy-core config");
-  assert.equal(H.notice(loaded([]), "core.json", "", "core").title, "No history yet");
-  assert.equal(H.notice(loaded([chapter(31, 3, 300)]), "core.json", "", "core"), null);
-  assert.equal(H.notice(H.reduce(H.initial(), { type: "reply", reply: M.coreReply(401, JSON.stringify({ error: { kind: "unauthorized", message: "secret" } })), config }), "core.json", "", "core").title, "miharchy-core rejected the secret");
+  assert.equal(H.notice(H.initial(), "core.json", "").title, "Loading the history");
+  assert.equal(H.notice(H.reduce(loaded([chapter(31, 3, 300)]), { type: "config-missing" }), "core.json", "").title, "No miharchy-core config");
+  assert.equal(H.notice(loaded([]), "core.json", "").title, "No history yet");
+  assert.equal(H.notice(loaded([chapter(31, 3, 300)]), "core.json", ""), null);
+  assert.equal(H.notice(H.reduce(H.initial(), { type: "reply", reply: M.coreReply(401, JSON.stringify({ error: { kind: "unauthorized", message: "secret" } })), config }), "core.json", "").title, "miharchy-core rejected the secret");
 });
 
 test("the search keeps the entries whose manga title holds it, ignoring case", () => {
@@ -84,7 +84,7 @@ test("the search keeps the entries whose manga title holds it, ignoring case", (
   assert.deepEqual(H.search(h.entries, "manga 1").map((e) => e.mangaId), [12]);
   assert.deepEqual(H.search(h.entries, "  MANGA ").map((e) => e.mangaId), [3, 12, 5], "trimmed, any case");
   assert.deepEqual(H.search(h.entries, ""), h.entries, "no search, every entry");
-  assert.equal(H.notice(h, "core.json", "manga 3", "core"), null);
-  assert.deepEqual(H.notice(h, "core.json", "nothing ", "core"), { title: "No history matches \"nothing\"", detail: "Esc clears the search." });
-  assert.equal(H.notice(loaded([]), "core.json", "x", "core").title, "No history yet", "an empty history says so, search or not");
+  assert.equal(H.notice(h, "core.json", "manga 3"), null);
+  assert.deepEqual(H.notice(h, "core.json", "nothing "), { title: "No history matches \"nothing\"", detail: "Esc clears the search." });
+  assert.equal(H.notice(loaded([]), "core.json", "x").title, "No history yet", "an empty history says so, search or not");
 });

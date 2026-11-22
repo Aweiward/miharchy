@@ -86,9 +86,9 @@ test("the marked chapters: the one under the cursor, or the range from the ancho
 
 test("x deletes the marked chapters that are downloaded or queued; none of those sends nothing", () => {
   const queue = polled(D.initial(), status("STARTED", [item(14, "DOWNLOADING", 0.3)])).items;
-  assert.deepEqual(D.removePayload(chapters, queue, true), { route: "download.delete", body: { ids: [14, 13, 11] } });
-  assert.deepEqual(D.removePayload(chapters, [], true).body, { ids: [13, 11] });
-  assert.equal(D.removePayload([chapters[2]], queue, true), null);
+  assert.deepEqual(D.removePayload(chapters, queue), { route: "download.delete", body: { ids: [14, 13, 11] } });
+  assert.deepEqual(D.removePayload(chapters, []).body, { ids: [13, 11] });
+  assert.equal(D.removePayload([chapters[2]], queue), null);
 });
 
 test("a chapter's marker: its place in the queue first, then whether it is on disk", () => {
@@ -115,15 +115,15 @@ test("the delete after reading setting is how many read chapters back the delete
 const node = (id, o) => Object.assign({ id, isRead: true, isBookmarked: false, isDownloaded: true, manga: { categories: { nodes: [] } } }, o);
 const keepCategory = (value) => ({ categories: { nodes: [{ meta: [{ key: "miharchy.other", value: "true" }] }, { meta: [{ key: D.KEEP_KEY, value }] }] } });
 const autoDeleted = (nodes, bookmarked, readIds) => {
-  const p = D.autoDeletePayload({ chapters: { nodes } }, bookmarked, readIds || [], true);
+  const p = D.autoDeletePayload({ chapters: { nodes } }, bookmarked, readIds || []);
   return p ? p.body.ids : [];
 };
 
 test("an automatic delete takes read chapters on disk only, as Mihon's getChaptersToDelete", () => {
   assert.deepEqual(autoDeleted([node(1), node(2, { isRead: false }), node(3, { isDownloaded: false })], false), [1]);
   assert.deepEqual(autoDeleted([node(2, { isRead: false })], false, [2]), [2], "a chapter just read, its save still on the way");
-  assert.equal(D.autoDeletePayload({ chapters: { nodes: [node(3, { isDownloaded: false })] } }, false, [], true), null);
-  assert.equal(D.autoDeletePayload({ chapters: { nodes: [node(1)] } }, false, [], true).route, "download.delete");
+  assert.equal(D.autoDeletePayload({ chapters: { nodes: [node(3, { isDownloaded: false })] } }, false, []), null);
+  assert.equal(D.autoDeletePayload({ chapters: { nodes: [node(1)] } }, false, []).route, "download.delete");
 });
 
 test("bookmarked chapters stay unless deleting them is allowed", () => {
@@ -161,7 +161,7 @@ test("a sort orders the queue ascending, and descending once it already runs asc
 });
 
 test("a retry of no chapter sends nothing", () => {
-  assert.equal(D.retryPayload([], true), null);
+  assert.equal(D.retryPayload([]), null);
 });
 
 const failedItem = (id, error) => Object.assign(item(id, "ERROR", 0), { error });
@@ -175,26 +175,26 @@ test("the queue keeps whether each manga's source is installed", () => {
 });
 
 test("a healthy queue has no failure reasons", () => {
-  const f = D.failed(queueOf(item(13, "DOWNLOADING", 0.4), item(14, "QUEUED", 0), item(15, "FINISHED", 1)), {}, true);
+  const f = D.failed(queueOf(item(13, "DOWNLOADING", 0.4), item(14, "QUEUED", 0), item(15, "FINISHED", 1)), {});
   assert.deepEqual(f.reasons, {});
 });
 
 test("a failed chapter keeps its reason until it is retried or leaves the queue", () => {
   const error = { kind: "source", message: "Chapter not found" };
-  const first = D.failed(queueOf(failedItem(13, error), item(14, "QUEUED", 0)), {}, true);
+  const first = D.failed(queueOf(failedItem(13, error), item(14, "QUEUED", 0)), {});
   assert.deepEqual(Object.keys(first.reasons), ["13"]);
   assert.equal(first.reasons[13].kind, "notFound");
-  const kept = D.failed(queueOf(failedItem(13, { kind: "network", message: "timeout" })), first.reasons, true);
+  const kept = D.failed(queueOf(failedItem(13, { kind: "network", message: "timeout" })), first.reasons);
   assert.equal(kept.reasons[13], first.reasons[13], "reason cached");
-  assert.deepEqual(D.failed(queueOf(item(13, "QUEUED", 0)), first.reasons, true).reasons, {}, "retried");
-  assert.deepEqual(D.failed([], first.reasons, true).reasons, {}, "left the queue");
+  assert.deepEqual(D.failed(queueOf(item(13, "QUEUED", 0)), first.reasons).reasons, {}, "retried");
+  assert.deepEqual(D.failed([], first.reasons).reasons, {}, "left the queue");
 });
 
 test("a failed row shows its reason beside failed", () => {
   const it = queueOf(failedItem(13, null))[0];
-  assert.equal(D.statusText(it, undefined, false, true), "failed");
-  assert.equal(D.statusText(it, null, false, true), "failed");
-  assert.equal(D.statusText(it, { kind: "notFound", text: "Not found on the source" }, false, true), "failed   Not found on the source");
-  assert.equal(D.statusText(it, { kind: "cloudflare", text: "Cloudflare blocked the source" }, false, true), "failed   Cloudflare blocked the source", "no hint on core");
-  assert.equal(D.statusText(queueOf(item(14, "DOWNLOADING", 0.5))[0], undefined, false, true), "50%");
+  assert.equal(D.statusText(it, undefined, false), "failed");
+  assert.equal(D.statusText(it, null, false), "failed");
+  assert.equal(D.statusText(it, { kind: "notFound", text: "Not found on the source" }, false), "failed   Not found on the source");
+  assert.equal(D.statusText(it, { kind: "cloudflare", text: "Cloudflare blocked the source" }, false), "failed   Cloudflare blocked the source", "no hint on core");
+  assert.equal(D.statusText(queueOf(item(14, "DOWNLOADING", 0.5))[0], undefined, false), "50%");
 });

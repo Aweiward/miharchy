@@ -20,13 +20,11 @@ Item {
   // Setup's server reads and writes: core's config.
   property var config: null
   // Suwayomi's server.json: the probe checks it, and the move reads it.
-  property string configPath: ""
+  property string suwayomiConfigPath: ""
   property string home: ""
-  property string backend: ""
-  readonly property bool core: backend === "core"
   property string coreConfigPath: ""
 
-  property var setup: Setup.initial(core)
+  property var setup: Setup.initial()
   property int cursor: 0
   property bool editing: false
   property string message: ""
@@ -70,7 +68,7 @@ Item {
   }
 
   function check() {
-    if (!setup.job) start("probe", Setup.probeCommand(configPath, "", Quickshell.shellDir, false, coreConfigPath))
+    if (!setup.job) start("probe", Setup.probeCommand(suwayomiConfigPath, "", Quickshell.shellDir, false, coreConfigPath))
   }
 
   function post(payload, done) {
@@ -79,7 +77,7 @@ Item {
 
   function readServer() {
     if (!config) return
-    post(Setup.serverPayload(core), function(reply) {
+    post(Setup.serverPayload(), function(reply) {
       view.setup = Setup.reduce(view.setup, { type: "server", reply: reply })
       view.checkPhones()
       view.offer()
@@ -104,7 +102,7 @@ Item {
     setup = Setup.reduce(setup, { type: "start", id: "move" })
     if (!config) return setup = Setup.reduce(setup, { type: "move", reply: { state: "no-config", message: "" } })
     post(Setup.movePayload({
-      serverConfig: configPath,
+      serverConfig: suwayomiConfigPath,
       serverRoot: Storage.root({ HOME: home, MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT") }),
       home: home
     }), function(reply) {
@@ -185,7 +183,7 @@ Item {
       if (Setup.incomplete(setup)) needed()
       return
     }
-    var save = Setup.savePayload(id, setup.results[id], folder, core)
+    var save = Setup.savePayload(id, setup.results[id], folder)
     if (save) {
       post(save, function(reply) {
         if (reply.state !== "ok") view.message = "Saving to the server failed: " + (reply.message || reply.state) + "."

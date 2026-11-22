@@ -17,7 +17,7 @@ var VIEWS = [
 var SOURCE_NAMES_META = "miharchy.sourceNames"
 
 // The library request: core's library.list (ADR 0010).
-function libraryPayload(core) {
+function libraryPayload() {
   return { route: "library.list" }
 }
 
@@ -26,7 +26,7 @@ function libraryPayload(core) {
 var DEFAULT_CATEGORY = 0
 var ALL = -1
 
-// miharchy-core's core.json (ADR 0010) -> { url, secret, backend: "core" },
+// miharchy-core's core.json (ADR 0010) -> { url, secret },
 // or null.
 function parseCoreConfig(text) {
   var c
@@ -36,7 +36,7 @@ function parseCoreConfig(text) {
     return null
   }
   if (!c || typeof c.url !== "string" || typeof c.secret !== "string" || !c.url || !c.secret) return null
-  return { url: c.url.replace(/\/+$/, ""), secret: c.secret, backend: "core" }
+  return { url: c.url.replace(/\/+$/, ""), secret: c.secret }
 }
 
 // "http://host:port/path" -> { origin: "http://host:port", rest: "/path" },
@@ -241,9 +241,9 @@ function switcherIndex(list, id) {
 // What the library view shows for a connection and its shown category: null
 // for the cover grid, otherwise { title, detail }. narrowed: a search or a
 // filter may be what empties the category (Library.narrowed()).
-function notice(connection, configPath, shown, narrowed, backend) {
+function notice(connection, configPath, shown, narrowed) {
   if (connection.state === "loading") return connection.manga.length ? null : { title: "Loading the library", detail: "" }
-  var p = problem(connection, configPath, backend)
+  var p = problem(connection, configPath)
   if (p) return p
   if (!connection.manga.length) return { title: "Your library is empty", detail: "Manga you follow show up here." }
   if (shown && !shown.manga.length && narrowed) return { title: "No manga match", detail: "Esc clears the search. F changes the filters." }
@@ -253,7 +253,7 @@ function notice(connection, configPath, shown, narrowed, backend) {
 
 // { title, detail } for a failed connection, null for "loading" and "ok".
 // Any { state, message } works, so other views reuse it.
-function problem(connection, configPath, backend) {
+function problem(connection, configPath) {
   switch (connection.state) {
     case "no-config":
       return { title: "No miharchy-core config", detail: configPath + " is missing or invalid. Open Miharchy: its Setup builds and starts miharchy-core, which creates it." }
@@ -291,13 +291,11 @@ function again(p, s) {
 
 // "<mangaId> <chapterId>", as the launcher's open-chapter passes it in
 // MIHARCHY_OPEN_CHAPTER -> { mangaId, chapterId }, or null.
-// "<mangaId> <chapterId>", with " core" for miharchy-core's ids (#386).
+// "<mangaId> <chapterId>", with an optional trailing " core" (the bar's rows end in it).
 function chapterTarget(text) {
   var m = /^\s*(\d+)\s+(\d+)(\s+core)?\s*$/.exec(text || "")
   if (!m) return null
-  var t = { mangaId: Number(m[1]), chapterId: Number(m[2]) }
-  if (m[3]) t.core = true
-  return t
+  return { mangaId: Number(m[1]), chapterId: Number(m[2]) }
 }
 
 function viewIndex(id) {

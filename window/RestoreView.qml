@@ -18,7 +18,6 @@ Rectangle {
   property var restore: Restore.initial()
   readonly property bool editing: open && restore.step === "path"
   readonly property alias pathField: field
-  property string backend: "core"
   property var config: null
 
   signal key(var event)

@@ -46,10 +46,3 @@ test("another message is other, its raw text shortened", () => {
   assert.ok(long.text.endsWith("…"));
   assert.equal(F.reason("").kind, "other");
 });
-
-test("the hint: Cloudflare points to Setup only while FlareSolverr is off, a missing source to the library check", () => {
-  assert.match(F.hint(F.reason("Cloudflare bypass currently disabled"), false), /FlareSolverr in Setup/);
-  assert.equal(F.hint(F.reason("Failed to bypass Cloudflare"), true), "");
-  assert.match(F.hint(F.reason("Source not installed: 1"), true), /library check/);
-  assert.equal(F.hint(F.reason("timeout"), false), "");
-});

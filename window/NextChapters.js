@@ -46,13 +46,13 @@ function brief(m) {
 
 // The payloads and loads here are miharchy-core's routes (ADR 0010). A
 // load's send(payload, done) is Session.send on core's config.
-function refreshPayload(mangaId, core) {
+function refreshPayload(mangaId) {
   return { route: "manga.refresh", body: { id: mangaId } }
 }
 
 // The chapters of the set and their prefs: the manga's chapters, then the
 // global and the manga's own chapter prefs in one meta.get.
-function readLoad(send, core, mangaIds, done) {
+function readLoad(send, mangaIds, done) {
   send({ route: "chapter.list", body: { mangaIds: mangaIds } }, function(ch) {
     if (ch.state !== "ok") return done(ch)
     var keys = Prefs.keys(Library.CHAPTER_PREFS)
@@ -127,7 +127,7 @@ function looksOver(run, items) {
 }
 
 // The queue, then the run's chapters by id.
-function settleLoad(send, core, run, done) {
+function settleLoad(send, run, done) {
   send({ route: "download.queue" }, function(q) {
     if (q.state !== "ok") return done(q)
     send({ route: "chapter.list", body: { ids: run.queued } }, function(ch) {

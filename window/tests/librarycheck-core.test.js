@@ -71,7 +71,7 @@ function expectedData() {
 
 test("on core the check reads the library, source names, extensions, the last run and the skip filters", () => {
   const core = fakeCore(routes());
-  const [reply] = run(L.load, core.send, true);
+  const [reply] = run(L.load, core.send);
   assert.equal(reply.state, "ok");
   assert.deepEqual(core.routes(), ["library.list", "meta.get", "extension.list", "update.status", "settings.get"]);
   assert.deepEqual(core.sent[1].body, { scope: "global", keys: [M.SOURCE_NAMES_META] });
@@ -79,7 +79,7 @@ test("on core the check reads the library, source names, extensions, the last ru
 });
 
 test("the check finds every kind of problem on what load builds, as on the same data written by hand", () => {
-  const [reply] = run(L.load, fakeCore(routes()).send, true);
+  const [reply] = run(L.load, fakeCore(routes()).send);
   const strip = (list) => list.map(({ dismissals, ...p }) => p);
   const onCore = L.problems(reply.data, NOW);
   assert.deepEqual(strip(onCore), strip(L.problems(expectedData(), NOW)));
@@ -91,7 +91,7 @@ test("the check finds every kind of problem on what load builds, as on the same 
 
 test("on core the skip filters come from settings.get and leave out what the update skips", () => {
   const over = { "settings.get": ok({ settings: { excludeUnreadChapters: true, excludeNotStarted: false, excludeCompleted: false }, unapplied: [] }) };
-  const [reply] = run(L.load, fakeCore(routes(over)).send, true);
+  const [reply] = run(L.load, fakeCore(routes(over)).send);
   const kinds = L.problems(reply.data, NOW).map((p) => p.kind + ":" + p.mangaId);
   assert.ok(!kinds.includes("failed:7"), "unread chapters: skipped by design");
   assert.ok(kinds.includes("failed:3"));
@@ -99,16 +99,16 @@ test("on core the skip filters come from settings.get and leave out what the upd
 
 test("on core a failed route stops the load with core's reply", () => {
   const core = fakeCore(routes({ "extension.list": M.coreReply(0, "") }));
-  const [reply] = run(L.load, core.send, true);
+  const [reply] = run(L.load, core.send);
   assert.equal(reply.state, "down");
   assert.deepEqual(core.routes(), ["library.list", "meta.get", "extension.list"]);
-  assert.equal(M.problem(reply, "/c/core.json", "core").title, "miharchy-core is not running");
+  assert.equal(M.problem(reply, "/c/core.json").title, "miharchy-core is not running");
 });
 
 test("on core a dismiss is one meta.set per batch, keeping each manga's other kinds", () => {
-  const [reply] = run(L.load, fakeCore(routes()).send, true);
+  const [reply] = run(L.load, fakeCore(routes()).send);
   const list = L.problems(reply.data, NOW).filter((p) => p.mangaId === 6 || p.mangaId === 2);
-  const p = L.dismissPayload(list, NOW, false, true);
+  const p = L.dismissPayload(list, NOW, false);
   assert.equal(p.route, "meta.set");
   assert.deepEqual(p.body.metas.map((m) => [m.scope, m.owner, m.key]), [["manga", 2, L.DISMISSED_META], ["manga", 6, L.DISMISSED_META]]);
   assert.deepEqual(JSON.parse(p.body.metas[1].value), { stalled: NOW, extension: NOW });
@@ -123,7 +123,7 @@ test("on core the merge prompt reads both copies from the database, with categor
     "category.list": ok({ categories: [{ id: 1, name: "Action" }] }),
     "meta.get": ok({ metas: [{ scope: "global", owner: 0, key: M.SOURCE_NAMES_META, value: "{\"99\":\"Old Source\"}" }] })
   });
-  const [reply] = run(L.mergeLoad, core.send, true, { mangaId: 4, others: [6] });
+  const [reply] = run(L.mergeLoad, core.send, { mangaId: 4, others: [6] });
   assert.deepEqual(core.sent.slice(0, 3).map((p) => [p.route, p.body]), [["manga.get", { id: 4 }], ["manga.get", { id: 6 }], ["track.list", { mangaIds: [4, 6] }]]);
   const copies = L.mergeCopies(reply.data);
   assert.deepEqual(copies.map((c) => [c.id, c.source, c.missing, c.read, c.total, c.categories, c.tracks]), [

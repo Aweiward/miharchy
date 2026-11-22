@@ -40,21 +40,11 @@ function coreReason(error) {
   return KINDS.filter(function(k) { return k.kind === kind }).map(function(k) { return { kind: k.kind, text: k.text } })[0]
 }
 
-// What the user can do about it, or "". flareOn: the server's
-// flareSolverrEnabled, the half of Setup's FlareSolverr step the window
-// can see without Setup's probe.
-function hint(r, flareOn) {
-  if (r.kind === "cloudflare" && !flareOn) return "set up FlareSolverr in Setup"
-  if (r.kind === "sourceMissing") return "see the library check, ! on the Library"
-  return ""
-}
-
 if (typeof module !== "undefined") {
   module.exports = {
     coreReason: coreReason,
     KINDS: KINDS,
     MAX_TEXT: MAX_TEXT,
-    reason: reason,
-    hint: hint
+    reason: reason
   }
 }

@@ -143,15 +143,15 @@ test("dismissPayload writes each manga's kinds with the time, keeping the others
     node(1, { source: null, chapters: { totalCount: 0 }, latestUploadedChapter: null, latestFetchedChapter: null, meta: dismissed({ stalled: 5 }) }),
     node(2, { source: null })
   ]), NOW);
-  const p = L.dismissPayload(ps, NOW, false, true);
+  const p = L.dismissPayload(ps, NOW, false);
   assert.equal(p.route, "meta.set");
   assert.deepEqual(p.body.metas.map((m) => [m.scope, m.owner, m.key, JSON.parse(m.value)]), [
     ["manga", 1, "miharchy.checkDismissed", { stalled: 5, missing: NOW, empty: NOW }],
     ["manga", 2, "miharchy.checkDismissed", { missing: NOW }]
   ]);
-  const undo = L.dismissPayload(ps.filter((x) => x.mangaId === 1 && x.kind === "missing"), NOW, true, true);
+  const undo = L.dismissPayload(ps.filter((x) => x.mangaId === 1 && x.kind === "missing"), NOW, true);
   assert.deepEqual(JSON.parse(undo.body.metas[0].value), { stalled: 5 });
-  assert.equal(L.dismissPayload([], NOW, false, true), null);
+  assert.equal(L.dismissPayload([], NOW, false), null);
 });
 
 test("rows group by kind in order, then by source, with counts; dismissed ones only when shown", () => {

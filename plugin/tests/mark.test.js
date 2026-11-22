@@ -4,7 +4,7 @@ const load = require("../../window/tests/load");
 const Mark = load("../plugin/Mark.js");
 const M = load("Model.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "s", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "s" };
 // A core reply as Session.send gives it, from { data }.
 const ok = (body) => ({ state: "ok", message: "", data: body.data, kind: "" });
 const now = new Date(2026, 9, 4, 15).getTime();
@@ -258,9 +258,9 @@ const older = upManga(4, "Older", [upChapter(41, { fetchedAt: String(NOWS - 3 * 
 
 test("the popup's Up next shows the first 3 manga, each with its next chapter, a reason and a peek-open", () => {
   assert.deepEqual(Mark.upNext(upReply([older, fresh, close, partly]), now), [
-    { title: "Partly", chapter: "Ch. 12", side: "p. 4 / 20", open: ["peek-open", "1", "12"] },
-    { title: "Close", chapter: "Ch. 22", side: "3 left", open: ["peek-open", "2", "22"] },
-    { title: "Fresh", chapter: "Ch. 31", side: "new 2d", open: ["peek-open", "3", "31"] }
+    { title: "Partly", chapter: "Ch. 12", side: "p. 4 / 20", open: ["peek-open", "1", "12", "core"] },
+    { title: "Close", chapter: "Ch. 22", side: "3 left", open: ["peek-open", "2", "22", "core"] },
+    { title: "Fresh", chapter: "Ch. 31", side: "new 2d", open: ["peek-open", "3", "31", "core"] }
   ]);
 });
 
@@ -277,7 +277,7 @@ test("the popup's Up next follows Downloaded only", () => {
 
 test("Up next still loading, failed or empty shows no section, and the popup lists its updates as today", () => {
   const rows = after(reply([chapter(9, 3)])).rows;
-  const today = [{ section: "", title: "Maid to Skate", chapter: "Ch.9", side: "2026-10-04", open: ["open-chapter", "7", "9"] }];
+  const today = [{ section: "", title: "Maid to Skate", chapter: "Ch.9", side: "2026-10-04", open: ["open-chapter", "7", "9", "core"] }];
   assert.deepEqual(Mark.upNext(null, now), [], "loading");
   assert.deepEqual(Mark.upNext(M.coreReply(0, ""), now), [], "failed");
   assert.deepEqual(Mark.upNext(upReply([]), now), [], "empty");

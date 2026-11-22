@@ -36,10 +36,7 @@ Item {
 
   readonly property var rows: Extensions.rows(ext, { query: query, allLanguages: allLanguages, showNsfw: showNsfw })
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.key === view.cursorKey }))
-  // shell.qml sets backend to "core". The view always runs on core.
-  property string backend: ""
-  readonly property bool core: true
-  readonly property var problem: Model.problem(ext, configPath, "core")
+  readonly property var problem: Model.problem(ext, configPath)
   readonly property var detailsExtension: details ? Extensions.find(ext, details.pkgName) : null
   readonly property bool updatable: ext.extensions.some(function(e) { return e.installed && e.hasUpdate })
   readonly property string hint: !details ? "j k move   enter install/details   u update   " + (updatable ? "U update all   " : "") + "x remove   a add repo   / filter   l languages   "
@@ -67,7 +64,7 @@ Item {
     if (editing) closeField()
     loadSeq++
     closeDetails()
-    ext = config ? Extensions.initial(core) : Extensions.reduce(Extensions.initial(), { type: "config-missing" })
+    ext = config ? Extensions.initial() : Extensions.reduce(Extensions.initial(), { type: "config-missing" })
     if (active) load()
   }
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
@@ -109,13 +106,13 @@ Item {
   function act(a) {
     var cfg = config
     if (a.removeRepo) {
-      send(Extensions.removeRepoPayload(a.removeRepo, core), function(reply) {
+      send(Extensions.removeRepoPayload(a.removeRepo), function(reply) {
         view.ext = Extensions.reduce(view.ext, { type: "repo-reply", reply: reply, removed: a.removeRepo })
       })
       return
     }
     ext = Extensions.reduce(ext, { type: "action", pkgName: a.pkgName, action: a.action })
-    send(Extensions.actionPayload(a.pkgName, a.action, core), function(reply) {
+    send(Extensions.actionPayload(a.pkgName, a.action), function(reply) {
       view.ext = Extensions.reduce(view.ext, { type: "action-reply", pkgName: a.pkgName, reply: reply, config: cfg })
       // An uninstall from the details ends them.
       var left = Extensions.find(view.ext, a.pkgName)
@@ -203,7 +200,7 @@ Item {
             editError = p.error
             break
           }
-          send(Extensions.addRepoPayload(p.url, core), function(reply) {
+          send(Extensions.addRepoPayload(p.url), function(reply) {
             view.ext = Extensions.reduce(view.ext, { type: "repo-reply", reply: reply })
             view.advance()
           })

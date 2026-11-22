@@ -16,9 +16,7 @@ Item {
 
   required property Theme theme
   property var config: null
-  // Set by shell.qml; config is miharchy-core's. shell.qml reads core.
-  property string backend: ""
-  readonly property bool core: true
+  // Set by shell.qml; config is miharchy-core's.
   property string configPath: ""
   property bool active: false
 
@@ -40,7 +38,7 @@ Item {
   readonly property alias searchField: field
 
   readonly property var entries: History.search(history.entries, query)
-  readonly property var notice: History.notice(history, configPath, query, backend)
+  readonly property var notice: History.notice(history, configPath, query)
   readonly property string hint: "j k move   enter resume   x remove   X clear all   c reading card   " + (query ? "esc clear search   " : "/ search   ")
 
   // chapters: newest first, as the manga detail holds them.
@@ -71,7 +69,7 @@ Item {
     var cfg = config
     opening = null
     history = History.reduce(history, { type: "request" })
-    History.load(function(payload, done) { Session.send(cfg, payload, done) }, true, function(reply) {
+    History.load(function(payload, done) { Session.send(cfg, payload, done) }, function(reply) {
       if (s !== view.seq) return
       view.now = Date.now() / 1000
       view.history = History.reduce(view.history, { type: "reply", reply: reply, config: cfg })
@@ -83,7 +81,7 @@ Item {
     if (!payload || !config) return
     error = ""
     send(payload, function(reply) {
-      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, view.configPath, view.backend).title
+      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, view.configPath).title
       view.reload()
     })
   }
@@ -93,7 +91,7 @@ Item {
   function open(entry) {
     var s = ++seq
     var cfg = config
-    opening = Browse.detail(entry.mangaId, false, true)
+    opening = Browse.detail(entry.mangaId, false)
     var step = function() {
       var payload = Browse.detailPayload(view.opening)
       if (!payload) {
@@ -129,13 +127,13 @@ Item {
         break
       case "history.remove":
         if (!entry) break
-        if (wasArmed === String(entry.mangaId)) mutate(History.removePayload(entry, true))
+        if (wasArmed === String(entry.mangaId)) mutate(History.removePayload(entry))
         else armed = String(entry.mangaId)
         break
       // All of it, whatever the search shows: the cutoff is the newest entry.
       case "history.clear":
         if (!history.entries.length) break
-        if (wasArmed === "clear") mutate(History.clearPayload(history.entries, true))
+        if (wasArmed === "clear") mutate(History.clearPayload(history.entries))
         else armed = "clear"
         break
       case "history.search":

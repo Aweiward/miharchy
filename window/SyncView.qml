@@ -17,7 +17,6 @@ Rectangle {
   property string mode: "sync"
   property var health: ({ state: "idle" })
   readonly property bool healthMode: mode === "health"
-  property string backend: "core"
   property var config: null
   property bool coreHealthBusy: false
   readonly property var report: healthMode ? (health.state === "ready" ? [Sync.healthSummary(health.health, Date.now())] : [])
