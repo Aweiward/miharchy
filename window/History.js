@@ -24,6 +24,20 @@ var QUERY = "{ metas(condition: { key: \"" + CLEARED_KEY + "\" }) { nodes { valu
 var REMOVE_MUTATION = "mutation($meta: MangaMetaTypeInput!) { setMangaMeta(input: { meta: $meta }) { meta { key value } } }"
 var CLEAR_MUTATION = "mutation($key: String!, $value: String!) { setGlobalMeta(input: { meta: { key: $key, value: $value } }) { meta { key value } } }"
 
+// The history from either server, as QUERY's reply: send(payload, done) is
+// Session.send on that server's config. Core (ADR 0010) takes the cleared
+// cutoff from meta.get, then history.list's newest 500.
+function load(send, core, done) {
+  if (!core) return send({ query: QUERY }, done)
+  send({ route: "meta.get", body: { scope: "global", keys: [CLEARED_KEY] } }, function(meta) {
+    if (meta.state !== "ok") return done(meta)
+    send({ route: "history.list", body: { limit: 500 } }, function(list) {
+      if (list.state !== "ok") return done(list)
+      done({ state: "ok", data: { metas: { nodes: meta.data.metas }, chapters: { nodes: list.data.chapters } } })
+    })
+  })
+}
+
 function copy(o, changes) {
   var c = {}
   for (var k in o) c[k] = o[k]
@@ -82,11 +96,14 @@ function reduce(h, event) {
 
 // The cutoffs are the server's own lastReadAt, so the local clock never
 // decides what hides.
-function removePayload(entry) {
+// core: miharchy-core's meta.set (ADR 0010).
+function removePayload(entry, core) {
+  if (core) return { route: "meta.set", body: { metas: [{ scope: "manga", owner: entry.mangaId, key: HIDDEN_KEY, value: String(entry.at) }] } }
   return { query: REMOVE_MUTATION, variables: { meta: { mangaId: entry.mangaId, key: HIDDEN_KEY, value: String(entry.at) } } }
 }
 
-function clearPayload(list) {
+function clearPayload(list, core) {
+  if (core) return list.length ? { route: "meta.set", body: { metas: [{ scope: "global", key: CLEARED_KEY, value: String(list[0].at) }] } } : null
   return list.length ? { query: CLEAR_MUTATION, variables: { key: CLEARED_KEY, value: String(list[0].at) } } : null
 }
 
@@ -121,11 +138,11 @@ function search(entries, query) {
 }
 
 // { title, detail } in place of the list, or null when entries show.
-function notice(h, configPath, query) {
+function notice(h, configPath, query, backend) {
   if (h.entries.length && search(h.entries, query).length) return null
   if (h.entries.length) return { title: "No history matches \"" + String(query).trim() + "\"", detail: "Esc clears the search." }
   if (h.state === "loading") return { title: "Loading the history", detail: "" }
-  var p = Model.problem(h, configPath)
+  var p = Model.problem(h, configPath, backend)
   if (p) return p
   return { title: "No history yet", detail: "Chapters you open show up here." }
 }
@@ -136,6 +153,7 @@ if (typeof module !== "undefined") {
     CLEARED_KEY: CLEARED_KEY,
     metaValue: metaValue,
     QUERY: QUERY,
+    load: load,
     initial: initial,
     reduce: reduce,
     removePayload: removePayload,

@@ -930,11 +930,12 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "history"
           theme: theme
-          config: root.config
-          configPath: root.configPath
+          config: root.coreBackend ? root.coreConfig : root.config
+          configPath: root.coreBackend ? root.coreConfigPath : root.configPath
+          backend: root.coreBackend ? "core" : ""
           // Off while the reader shows, so closing it reloads what it read.
           active: root.view === "history" && !reader.open
-          onResume: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+          onResume: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false, historyView.core) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
         }
