@@ -74,7 +74,8 @@ suspend fun Host.call(req: JsonObject, seconds: Long = 120): JsonElement {
  * Browsing and reading on the source side (#365): source listings, manga details and chapter lists
  * in Mihon's tables, chapter pages, and covers and page images fetched through the source's client.
  */
-class Browse(private val db: Database, private val host: Host, private val extensions: Extensions, private val covers: Path) {
+/** [downloads]: the downloads folder, whose .cbz files the reader reads with no network (#367). */
+class Browse(private val db: Database, private val host: Host, private val extensions: Extensions, private val covers: Path, private val downloads: Path) {
     private val pages = object : LinkedHashMap<Long, List<JsonObject>>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, List<JsonObject>>) = size > 50
     }
@@ -94,10 +95,12 @@ class Browse(private val db: Database, private val host: Host, private val exten
         },
         "manga.get" to { input -> buildJsonObject { put("manga", detail(input.id("id"))) } },
         "manga.refresh" to { input -> refresh(input.id("id")) },
+        // By manga (mangaIds) or by chapter (ids), as Downloads.autoDeleteQuery asks.
         "chapter.list" to { input ->
-            val ids = (input["mangaIds"] as? JsonArray)?.map { it.jsonPrimitive.longOrNull ?: throw ApiError(Kind.invalid, "mangaIds holds numbers.") }
-                ?: throw ApiError(Kind.invalid, "The request needs mangaIds, a list of manga ids.")
-            buildJsonObject { put("chapters", JsonArray(db.run { c -> chapterRows(c, among("ch.manga_id"), idList(ids)) })) }
+            val (key, col) = if ("ids" in input) "ids" to "ch.id" else "mangaIds" to "ch.manga_id"
+            val ids = (input[key] as? JsonArray)?.map { it.jsonPrimitive.longOrNull ?: throw ApiError(Kind.invalid, "$key holds numbers.") }
+                ?: throw ApiError(Kind.invalid, "The request needs mangaIds or ids, a list of ids.")
+            buildJsonObject { put("chapters", JsonArray(db.run { c -> chapterRows(c, among(col), idList(ids)) })) }
         },
         "chapter.pages" to { input -> chapterPages(input.id("id")) },
     )
@@ -291,15 +294,29 @@ class Browse(private val db: Database, private val host: Host, private val exten
     }
 
     private suspend fun chapterPages(id: Long): JsonObject {
-        val (state, list) = pageList(id)
+        val (state, count) = archive(id)?.let { file -> readState(id) to withContext(Dispatchers.IO) { cbzPages(file).size } }
+            ?: pageList(id).let { (state, list) -> state to list.size }
         return buildJsonObject {
-            put("pages", JsonArray(list.indices.map { JsonPrimitive("/api/page/$id/$it") }))
+            put("pages", JsonArray((0 until count).map { JsonPrimitive("/api/page/$id/$it") }))
             put("chapter", state)
         }
     }
 
+    /** The chapter's .cbz when it is downloaded and on disk, else null. */
+    private suspend fun archive(id: Long): Path? {
+        val rel = db.run { c -> c.query("SELECT download_path FROM chapter WHERE id = ?", id) { it.getString(1) }.firstOrNull() } ?: return null
+        val file = inside(downloads, rel)
+        return file.takeIf { withContext(Dispatchers.IO) { Files.isRegularFile(it) } }
+    }
+
+    private suspend fun readState(id: Long): JsonObject = db.run { c ->
+        c.query("SELECT user_read, user_last_page_read FROM chapter WHERE id = ?", id) { r ->
+            buildJsonObject { put("id", id); put("isRead", r.getInt(1) == 1); put("lastPageRead", r.getInt(2)) }
+        }.firstOrNull() ?: throw ApiError(Kind.notFound, "There is no chapter $id.")
+    }
+
     /** A chapter's read state and its page list, fetched again when it is not cached (for example after a restart). */
-    private suspend fun pageList(id: Long, fresh: Boolean = true): Pair<JsonObject, List<JsonObject>> {
+    internal suspend fun pageList(id: Long, fresh: Boolean = true): Pair<JsonObject, List<JsonObject>> {
         val (source, chapter, state) = db.run { c ->
             c.prepareStatement(
                 """SELECT m.source_id, ch.remote_url, ch.remote_name, ch.remote_chapter_number, ch.remote_scanlator, ch.remote_date_upload,
@@ -328,7 +345,17 @@ class Browse(private val db: Database, private val host: Host, private val exten
         return state to list
     }
 
+    /** A page from the chapter's .cbz when it is downloaded, else from the source. */
     private suspend fun page(chapter: Long, index: Int): Image {
+        archive(chapter)?.let { file ->
+            val bytes = withContext(Dispatchers.IO) { cbzPage(file, index) } ?: throw ApiError(Kind.notFound, "Chapter $chapter has no page $index.")
+            return Image(bytes, sniff(bytes))
+        }
+        return fetchPage(chapter, index)
+    }
+
+    /** A page from the source, which the downloader writes to the .cbz. */
+    internal suspend fun fetchPage(chapter: Long, index: Int): Image {
         val (_, list) = pageList(chapter, fresh = false)
         val page = list.getOrNull(index) ?: throw ApiError(Kind.notFound, "Chapter $chapter has no page $index.")
         val source = db.run { c -> c.prepareStatement("SELECT m.source_id FROM chapter ch JOIN manga m ON m.id = ch.manga_id WHERE ch.id = ?").use { p -> p.setLong(1, chapter); p.executeQuery().use { r -> r.next(); r.getLong(1).toString() } } }

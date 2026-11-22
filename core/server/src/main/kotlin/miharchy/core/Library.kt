@@ -45,7 +45,7 @@ class Library(private val db: Database, private val extensions: Extensions) {
                 """SELECT m.id, m.remote_title, m.remote_author, m.remote_artist, m.remote_genre, m.remote_status, m.remote_cover,
                           m.source_id, m.user_favorite_at, m.remote_update_strategy, m.state_chapter_last_update,
                           count(ch.id), coalesce(sum(ch.user_read = 0), 0), coalesce(sum(ch.user_bookmark = 1), 0),
-                          max(h.read_at), max(ch.remote_date_upload), max(ch.state_date_fetch)
+                          max(h.read_at), max(ch.remote_date_upload), max(ch.state_date_fetch), count(ch.download_path)
                    FROM manga m LEFT JOIN chapter ch ON ch.manga_id = m.id LEFT JOIN history h ON h.chapter_id = ch.id
                    WHERE m.user_favorite_at IS NOT NULL GROUP BY m.id ORDER BY m.remote_title COLLATE NOCASE""",
             ).use { p ->
@@ -64,7 +64,7 @@ class Library(private val db: Database, private val extensions: Extensions) {
                                 put("updateStrategy", if (r.getInt(10) == 1) "ONLY_FETCH_ONCE" else "ALWAYS_UPDATE")
                                 put("chaptersLastFetchedAt", seconds(r.getObject(11)?.let { r.getLong(11) }))
                                 put("chapterCount", r.getInt(12)); put("unreadCount", r.getInt(13)); put("bookmarkCount", r.getInt(14))
-                                put("downloadCount", 0); put("trackCount", 0)
+                                put("downloadCount", r.getInt(18)); put("trackCount", 0)
                                 put("lastReadChapter", r.getObject(15)?.let { buildJsonObject { put("lastReadAt", seconds(r.getLong(15))) } } ?: JsonNull)
                                 put("latestUploadedChapter", if (r.getInt(12) > 0) buildJsonObject { put("uploadDate", r.getLong(16)) } else JsonNull)
                                 put("latestFetchedChapter", if (r.getInt(12) > 0) buildJsonObject { put("fetchedAt", seconds(r.getLong(17))) } else JsonNull)
@@ -331,10 +331,10 @@ private fun JsonObject.scope(): String = (this["scope"] as? JsonPrimitive)?.cont
 private fun JsonObject.string(k: String): String = (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
     ?: throw ApiError(Kind.invalid, "The request needs the string $k.")
 
-private fun JsonObject.long(k: String): Long = (this[k] as? JsonPrimitive)?.longOrNull
+fun JsonObject.long(k: String): Long = (this[k] as? JsonPrimitive)?.longOrNull
     ?: throw ApiError(Kind.invalid, "The request needs $k, a number.")
 
-private fun JsonObject.longs(k: String): List<Long> = (this[k] as? JsonArray)?.map { (it as? JsonPrimitive)?.longOrNull ?: throw ApiError(Kind.invalid, "$k holds numbers.") }
+fun JsonObject.longs(k: String): List<Long> = (this[k] as? JsonArray)?.map { (it as? JsonPrimitive)?.longOrNull ?: throw ApiError(Kind.invalid, "$k holds numbers.") }
     ?.takeIf { it.isNotEmpty() || k != "ids" } ?: throw ApiError(Kind.invalid, "The request needs $k, a list of ids.")
 
 private fun JsonObject.strings(k: String): List<String> = (this[k] as? JsonArray)?.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: throw ApiError(Kind.invalid, "$k holds strings.") }

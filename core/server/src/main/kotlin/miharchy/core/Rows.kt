@@ -20,7 +20,7 @@ fun seconds(ms: Long?): Long = (ms ?: 0) / 1000
 fun chapterRows(c: Connection, where: String, vararg args: Any): List<JsonObject> = c.prepareStatement(
     """SELECT ch.id, ch.manga_id, ch.remote_url, ch.remote_name, ch.remote_chapter_number, ch.remote_date_upload, ch.user_read,
               ch.user_bookmark, ch.user_last_page_read, ch.remote_scanlator,
-              n.total - ch.remote_order, h.read_at, ch.state_date_fetch, ch.page_count
+              n.total - ch.remote_order, h.read_at, ch.state_date_fetch, ch.page_count, ch.download_path
        FROM chapter ch LEFT JOIN history h ON h.chapter_id = ch.id
        JOIN (SELECT manga_id, count(*) AS total FROM chapter GROUP BY manga_id) n ON n.manga_id = ch.manga_id
        WHERE $where ORDER BY ch.manga_id, ch.remote_order""",
@@ -32,7 +32,7 @@ fun chapterRows(c: Connection, where: String, vararg args: Any): List<JsonObject
 private fun chapterJson(r: ResultSet) = buildJsonObject {
     put("id", r.getLong(1)); put("mangaId", r.getLong(2)); put("url", r.getString(3)); put("name", r.getString(4))
     put("chapterNumber", r.getDouble(5)); put("uploadDate", r.getLong(6)); put("isRead", r.getInt(7) == 1)
-    put("isBookmarked", r.getInt(8) == 1); put("lastPageRead", r.getInt(9)); put("isDownloaded", false)
+    put("isBookmarked", r.getInt(8) == 1); put("lastPageRead", r.getInt(9)); put("isDownloaded", r.getString(15) != null)
     put("scanlator", r.getString(10)); put("sourceOrder", r.getInt(11))
     put("lastReadAt", seconds(r.getObject(12)?.let { r.getLong(12) })); put("fetchedAt", seconds(r.getLong(13)))
     put("pageCount", r.getInt(14))
