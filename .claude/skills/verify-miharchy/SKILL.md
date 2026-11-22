@@ -48,7 +48,17 @@ printf %s "$BODY" | .claude/skills/verify-miharchy/scripts/core.sh api tracker.l
 .claude/skills/verify-miharchy/scripts/core.sh stop     # keeps $RUN/core; start again resumes the same data
 ```
 
-Core never uses 4590 or 4591, and keeps its data under `$RUN/core`. Rebuild with `./gradlew :server:installDist` in `core/` after a core change: `start` builds only when no build exists. The scratch Suwayomi (`server.sh`) is only for Setup's move, which reads it. `server.sh stop` then `start` wipes the Suwayomi library; use `server.sh restart` to keep a seeded one. A drive greps `$RUN/window.log` for `miharchy: refused`, which `Session.send` logs for a payload with no core route; it must stay 0.
+`seed` leaves the library empty. To get a library with Updates rows, an Up next head and a reading history, run these after `seed` (MangaDex's search creates manga rows):
+
+```
+core.sh api source.list '{}'                                         # MangaDex (EN)'s id
+core.sh api source.search '{"source":"<id>","page":1,"query":"Berserk"}'
+core.sh api manga.update '{"ids":[2,3],"inLibrary":true}'            # add first ...
+core.sh api manga.refresh '{"id":2}'                                 # ... then fetch: chapters fetched after the add are Updates rows
+core.sh api chapter.update '{"ids":[<ch 1>],"isRead":true,"lastPageRead":5}'   # a read time puts the manga in Up next and History
+```
+
+In Browse, Tab switches between sources and extensions. Core never uses 4590 or 4591, and keeps its data under `$RUN/core`. Rebuild with `./gradlew :server:installDist` in `core/` after a core change: `start` builds only when no build exists. The scratch Suwayomi (`server.sh`) is only for Setup's move, which reads it. `server.sh stop` then `start` wipes the Suwayomi library; use `server.sh restart` to keep a seeded one. A drive greps `$RUN/window.log` for `miharchy: refused`, which `Session.send` logs for a payload with no core route; it must stay 0.
 
 ## Live updates
 
