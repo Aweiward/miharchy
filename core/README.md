@@ -40,6 +40,16 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 - Id lists go to SQLite as one JSON parameter (`json_each`), so a whole library fits in one call.
 - `meta.get` takes one query `{ scope, owners?, keys? }` or several as `{ queries: [...] }`, answered in order. The window loads a manga's own choices with the global ones this way (#378).
 
+## Downloads (#367)
+
+- Chapters go to `<data>/downloads/<source>/<manga>/<chapter>.cbz` with Mihon's names (`DownloadProvider`, `DiskUtil.buildValidFilename`): FAT's forbidden characters become `_`, and a name fits 240 bytes. A second chapter with the same name gets Mihon's `_<md5(url) 6>` suffix. The folder setting waits for Settings (#385).
+- `chapter.download_path` holds the file's path, set once the `.cbz` is complete, so `isDownloaded` and `downloadCount` are SQL. A file deleted outside core still counts as downloaded; the reader then reads from the source.
+- One chapter downloads at a time, into a `.part` file that is moved into place. A restart drops `.part` files and finds the queue stopped.
+- Every route answers with the status `{ state: "STARTED" | "STOPPED", queue }`, each item with Suwayomi's `state`, `progress`, `tries`, `chapter` and `manga` plus core's `error { kind, message }`, which keeps why a download failed. `download.reorder { chapterId, to }` moves one item. The `downloads` topic sends the whole status on each change.
+- An enqueue starts the downloader, which stops when nothing is left to try. A failed chapter stays in the queue as `ERROR` and does not hold up the next one. Enqueue it again to retry; it keeps its place and its tries.
+- `chapter.pages` and `GET /api/page/...` read a downloaded chapter from its `.cbz`, with no network.
+- `chapter.list` also takes chapter `ids`, for the window's delete-after-read rules (`Downloads.autoDeleteQuery`).
+
 ## Known limits
 
 - On JDK 26 and later, Keiyoushi's library sets a `final` field by reflection, and the JVM warns that a future release blocks it unless `--enable-final-field-mutation=ALL-UNNAMED` is set. JDK 21 refuses that flag, so the launcher cannot pass it to every JDK yet.

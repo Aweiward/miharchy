@@ -44,7 +44,7 @@ The first routes of each slice. A slice may add routes; it keeps these names.
 | #364 extensions | `extensionRepo.list`, `extensionRepo.add`, `extensionRepo.remove`, `extension.list`, `extension.install`, `extension.update`, `extension.updateAll`, `extension.remove` |
 | #365 browse | `source.list`, `source.popular`, `source.latest`, `source.search`, `source.filters`, `source.settings`, `source.setSetting`, `manga.get`, `manga.refresh`, `chapter.list`, `chapter.pages`; `GET /api/cover/<manga>`, `GET /api/page/<chapter>/<index>` |
 | #366 library | `library.list`, `manga.update`, `chapter.update`, `category.list`, `category.create`, `category.update`, `category.delete`, `category.reorder`, `meta.get`, `meta.set`, `meta.delete`, `history.list` |
-| #367 downloads | `download.queue`, `download.enqueue`, `download.dequeue`, `download.start`, `download.stop`, `download.clear`, `download.delete`; topic `downloads` |
+| #367 downloads | `download.queue`, `download.enqueue`, `download.dequeue`, `download.reorder`, `download.start`, `download.stop`, `download.clear`, `download.delete`; topic `downloads` |
 | #368 update runs | `update.start`, `update.stop`, `update.status`; topic `updates` |
 | #369 sync | `sync.run`, `backup.export`, `backup.import` |
 | #371 trackers | `tracker.list`, `tracker.login`, `tracker.logout`, `track.search`, `track.bind`, `track.update`, `track.unbind` |

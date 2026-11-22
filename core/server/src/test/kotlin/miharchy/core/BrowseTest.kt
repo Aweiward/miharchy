@@ -79,7 +79,7 @@ class BrowseTest {
                     val extensions = Extensions(db, TestHost.host, work.resolve("extensions"))
                     extensions.routes.call("extensionRepo.add", buildJsonObject { put("url", repo.base) })
                     extensions.routes.call("extension.install", buildJsonObject { put("pkgName", repo.pkg) })
-                    var browse = Browse(db, TestHost.host, extensions, work.resolve("covers"))
+                    var browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), work.resolve("downloads"))
                     val r = browse.routes
 
                     val source = r.call("source.list")["sources"]!!.jsonArray.single().jsonObject
@@ -146,7 +146,7 @@ class BrowseTest {
                     assertEquals("[]", detail["meta"].toString())
                     assertEquals("0", detail["inLibraryAt"].toString())
                     // After a restart the page list is gone from memory, and a page image fetches it again.
-                    browse = Browse(db, TestHost.host, extensions, work.resolve("covers"))
+                    browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), work.resolve("downloads"))
                     val image = browse.images.getValue("page")(listOf(read.toString(), "1"))
                     assertEquals("image/png", image.contentType)
                     assertTrue("/page1.png" in requests)
