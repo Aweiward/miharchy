@@ -18,7 +18,6 @@ import "Restart.js" as Restart
 import "Images.js" as Images
 import "Runtime.js" as Runtime
 import "UpNext.js" as UpNext
-import "Sync.js" as Sync
 import "Overlays.js" as Overlays
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):

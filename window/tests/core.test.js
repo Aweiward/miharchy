@@ -194,7 +194,6 @@ test("on core, details come from the list with no request, and settings open on 
   const opened = E.detailsAction(s, d, "extension.settings").settings;
   assert.deepEqual(opened, { id: "1", name: "MangaDex (EN)", lang: "en", configurable: true, core: true });
   assert.deepEqual(W.loadPayload(W.panel("preferences", opened)), { route: "source.settings", body: { source: "1" } });
-  assert.ok(E.detailsPayload(E.details(MANGADEX.pkgName)).query, "Suwayomi still asks");
 });
 
 // --- Browse on core ---
@@ -206,7 +205,6 @@ const SOURCES = [
 
 test("on core, the sources come from source.list and carry core", () => {
   assert.deepEqual(B.sourcesPayload(true), { route: "source.list" });
-  assert.ok(B.sourcesPayload(false).query, "Suwayomi still asks GraphQL");
   const s = B.sources(ok({ sources: SOURCES }), core, false, true);
   assert.equal(s.state, "ok");
   assert.deepEqual(s.sources[0], { id: "2499283573021220255", name: "MangaDex (EN)", lang: "en", icon: "https://raw.githubusercontent.com/k/icon.png", warning: "MIXED", supportsLatest: true, configurable: true, core: true });
@@ -305,7 +303,6 @@ test("on core, global choices live in core's global metas", () => {
   assert.deepEqual(P.loadPayload(table, undefined, true), { route: "meta.get", body: { scope: "global", keys: ["miharchy.pinnedSources"] } });
   assert.deepEqual(P.savePayload("pinnedSources", '["9"]', undefined, true), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.pinnedSources", value: '["9"]' }] } });
   assert.deepEqual(P.read(table, { metas: [{ scope: "global", owner: 0, key: "miharchy.pinnedSources", value: '["9"]' }] }, P.defaults(table)), { pinnedSources: '["9"]' });
-  assert.ok(P.loadPayload(table).query, "Suwayomi still asks GraphQL");
 });
 
 // --- The manga detail and the reader on core ---
@@ -380,7 +377,6 @@ test("on core, a Cloudflare page says core cannot pass it yet", () => {
   const n = B.notice({ core: true, state: "error", message: "x", flare: true }, "core.json");
   assert.match(n.detail, /#361/);
   assert.equal(B.notice({ core: true, state: "down" }, "core.json").title, "miharchy-core is not running");
-  assert.equal(B.notice({ state: "error", message: "x", flare: true }, "server.json").title, "This source needs FlareSolverr");
 });
 
 test("on core, the reader loads pages, saves, bookmarks and keeps its mode on core, and pushes the trackers on core", () => {
@@ -486,8 +482,6 @@ test("on core, Up next loads the library, its chapters and the global chapter pr
   U.load((p, done) => { empty.push(p.route); done({ state: "ok", data: { mangas: [], categories: [] } }); }, true, (r) => { none = r; });
   assert.deepEqual(empty, ["library.list"]);
   assert.deepEqual(U.list(none.data, false, 1e6 * 1000), []);
-  U.load((p, done) => { sent.push(p); done({ state: "ok", data: {} }); }, false, () => {});
-  assert.equal(typeof sent[sent.length - 1].query, "string");
 });
 
 test("on core, the reading card pages core's read history by offset", () => {
@@ -496,7 +490,6 @@ test("on core, the reading card pages core's read history by offset", () => {
   const data = { chapters: [{ id: 1, isRead: true, lastReadAt: 500, manga: { id: 3, thumbnailUrl: "/api/cover/3", inLibrary: true, unreadCount: 2 } }], hasNextPage: true };
   assert.deepEqual(RC.rows(data), [{ at: 500, mangaId: 3, thumbnailUrl: "/api/cover/3", inLibrary: true, unread: 2 }]);
   assert.deepEqual(RC.pageInfo(data, 200), { hasNextPage: true, endCursor: 400 });
-  assert.deepEqual(RC.pageInfo({ chapters: { pageInfo: { hasNextPage: false, endCursor: "c" }, nodes: [] } }), { hasNextPage: false, endCursor: "c" });
   assert.equal(RC.card(RC.rows(data), 600, core).covers[0], "http://127.0.0.1:4591/api/cover/3");
 });
 
@@ -526,9 +519,6 @@ test("on core, History loads the cleared cutoff and history.list, hides and clea
   H.load((p, done) => done(p.route === "history.list" ? { state: "down" } : { state: "ok", data: replies[p.route] }), true, (r) => { failed = r; });
   assert.equal(failed.state, "down");
   assert.equal(H.notice(H.reduce(H.initial(), { type: "reply", reply: { state: "down" } }), "core.json", "", "core").title, "miharchy-core is not running");
-  const suwa = [];
-  H.load((p, done) => suwa.push(p), false, () => {});
-  assert.deepEqual(suwa, [{ query: H.QUERY }]);
 });
 
 const D = load("Downloads.js");
@@ -662,7 +652,6 @@ test("on core, a check for new chapters is update.start, with categories only wh
   const U = load("Updates.js");
   assert.deepEqual(U.checkPayload(null, true), { route: "update.start", body: {} });
   assert.deepEqual(U.checkPayload([0, 4], true), { route: "update.start", body: { categories: [0, 4] } });
-  assert.match(U.checkPayload([4]).query, /updateLibrary/);
 });
 
 test("on core, Updates loads its list from library.list, chapter.list, update.status and the skip metas", () => {
@@ -774,7 +763,6 @@ test("on core, Settings lists the trackers and logs in by callback and by passwo
   assert.equal(M.problem(none, "/x/core.json", "core").title, "No miharchy-core config");
 
   // Suwayomi's state still builds GraphQL.
-  assert.ok(T.loginPayload(T.begin(T.reduce(T.initial(), { type: "list", reply: ok({ trackers: { nodes: TRACKERS } }) }), 1)).query);
 });
 
 test("on core, the tracking panel loads, searches, binds, updates and unbinds on core's routes", async () => {
@@ -843,11 +831,9 @@ test("on core, a mark read pushes or asks the trackers through core's routes", a
   assert.notEqual(failed.state, "ok");
 });
 
-test("a core tracker request reaches core's route with the secret, and Suwayomi's GraphQL is refused", async () => {
+test("a core tracker request reaches core's route with the secret", async () => {
   const requests = install({ "tracker.list": () => ({ trackers: TRACKERS }) });
   const reply = await new Promise((resolve) => S2.send(core, T.listPayload(true), resolve));
   assert.equal(reply.data.trackers.length, 3);
   assert.equal(requests[0].url, "http://127.0.0.1:4591/api/tracker.list");
-  const wrong = await new Promise((resolve) => S2.send(core, T.listPayload(false), resolve));
-  assert.equal(wrong.state, "error");
 });
