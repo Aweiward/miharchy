@@ -85,6 +85,7 @@ function format(bytes) {
 if (typeof module !== "undefined") {
   module.exports = {
     dirs: dirs,
+    root: root,
     localFolder: localFolder,
     command: command,
     sizes: sizes,

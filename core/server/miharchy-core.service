@@ -4,7 +4,7 @@ After=graphical-session.target network-online.target
 PartOf=graphical-session.target
 
 [Service]
-# Built by `./gradlew :server:installDist` and copied to core-app (ADR 0010); Setup takes this over in #385.
+# Setup's miharchy-core steps build this into core-app and install this unit (#385, ADR 0010).
 ExecStart=%h/.local/share/miharchy/core-app/bin/miharchy-core
 Restart=on-failure
 RestartSec=5

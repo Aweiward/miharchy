@@ -40,7 +40,10 @@ import kotlin.io.path.writeBytes
 import kotlin.math.roundToInt
 
 /** The keys core writes itself: a move from Suwayomi never overwrites them. */
-private val CORE_OWN_METAS = setOf(Backups.LAST, Backups.SINCE, "miharchy.lastUpdateTimestamp")
+/** The last finished move's report, so `move.status` still says done after core restarts (#385). */
+private const val MOVED_KEY = "miharchy.moveReport"
+
+private val CORE_OWN_METAS = setOf(Backups.LAST, Backups.SINCE, "miharchy.lastUpdateTimestamp", MOVED_KEY)
 
 private const val DEFAULT_CATEGORY_KEY = "miharchy.defaultCategory"
 
@@ -74,7 +77,8 @@ class Move(
     override fun close() = scope.cancel()
 
     val routes: Map<String, Route> = mapOf(
-        "move.status" to { _ -> status },
+        // Idle after a restart: the saved report of the last finished move, if any.
+        "move.status" to { _ -> if (status["state"]?.jsonPrimitive?.content == "idle") saved() ?: status else status },
         // serverConfig: the v1.1.1 server.json; serverRoot: Suwayomi's root folder; helperSync: the sync helper's state.
         // Explicit paths only, so a test or a scratch core never reads the real install by default.
         "move.start" to { input ->
@@ -93,6 +97,10 @@ class Move(
             status
         },
     )
+
+    private suspend fun saved(): JsonObject? = db.run { c ->
+        c.query("SELECT value FROM metas WHERE scope = 'global' AND owner = 0 AND key = ?", MOVED_KEY) { it.getString(1) }.firstOrNull()
+    }?.let { text -> runCatching { status("done", null, Json.parseToJsonElement(text).jsonObject) }.getOrNull() }
 
     private class Report {
         var repos = 0; var extensions = 0; var manga = 0; var metas = 0; var settings = 0; var downloads = 0
@@ -122,12 +130,14 @@ class Move(
             moveDownloads(suwayomi, folder.resolve("mangas"), report)
             step("baselines")
             if (helper != null) moveBaselines(helper, report)
-            status = status("done", null, report.json())
+            val done = report.json()
+            db.run { c -> c.putMeta("global", 0, buildJsonObject { put("key", MOVED_KEY); put("value", done.toString()) }) }
+            status = status("done", null, done)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             if (e !is ApiError && e !is IOException) e.printStackTrace()
-            val error = e as? ApiError ?: if (e is IOException) ApiError(Kind.network, "Suwayomi did not answer: ${e.message}") else ApiError(Kind.internal, e.message ?: e.toString())
+            val error = e as? ApiError ?: if (e is IOException) ApiError(Kind.network, "Suwayomi did not answer" + (e.message?.let { ": $it" } ?: "") + ". The move needs it running: systemctl --user start miharchy-server.") else ApiError(Kind.internal, e.message ?: e.toString())
             status = status("failed", status["step"]?.jsonPrimitive?.content, report.json(), error)
         }
     }

@@ -1058,13 +1058,23 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "setup"
           theme: theme
-          config: root.config
+          config: root.coreBackend ? root.coreConfig : root.config
           configPath: root.configPath
+          backend: root.coreBackend ? "core" : ""
+          coreConfigPath: root.coreConfigPath
           home: Quickshell.env("HOME")
           onKey: function(event) { event.accepted = root.handleKey(event) }
           offers: Setup.offersOnStart({ MIHARCHY_PEEK: Quickshell.env("MIHARCHY_PEEK"), MIHARCHY_OPEN_CHAPTER: Quickshell.env("MIHARCHY_OPEN_CHAPTER"), MIHARCHY_OPEN_VIEW: Quickshell.env("MIHARCHY_OPEN_VIEW") })
           onNeeded: if (root.view === "library") root.view = "setup"
-          onWrote: configFile.reload()
+          onWrote: {
+            configFile.reload()
+            if (root.coreBackend) coreConfigFile.reload()
+          }
+          onMoved: {
+            root.fetchLibrary(true)
+            libraryView.reload()
+            root.loadSettings()
+          }
           onEditEnded: keyRoot.forceActiveFocus()
         }
 
@@ -1181,7 +1191,8 @@ ShellRoot {
           // Styled for that color; the states and Settings.modes are constant text.
           textFormat: Text.StyledText
           text: [({ loading: "connecting", ok: "connected", "no-config": "no server config", down: "server down", unauthorized: "unauthorized", error: "server error" })[(root.coreBackend ? root.coreConnection : root.connection).state]].concat(Settings.modes(root.settingsState.values).map(function(m) { return "<font color='" + theme.accent + "'>" + m + "</font>" })).join("&nbsp;&nbsp;&nbsp;")
-          color: root.connection.state === "ok" || root.connection.state === "loading" ? theme.muted : theme.urgent
+          readonly property string barState: (root.coreBackend ? root.coreConnection : root.connection).state
+          color: barState === "ok" || barState === "loading" ? theme.muted : theme.urgent
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
         }

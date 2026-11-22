@@ -18,7 +18,7 @@ MIHARCHY_CORE_DATA=/tmp/core/data MIHARCHY_CORE_CONFIG=/tmp/core/core.json MIHAR
   server/build/install/miharchy-core/bin/miharchy-core
 ```
 
-Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/` until the switch-over (#373). `server/miharchy-core.service` is the user unit; Setup installs it in #385.
+Only the window under the developer switch `MIHARCHY_BACKEND=core` calls core, and `stable` leaves out `core/` until the switch-over (#373). `server/miharchy-core.service` is the user unit. Under the switch, Setup builds a copy of `core/` and `sync/` into `~/.local/share/miharchy/core-app` (its fingerprint covers both, build output pruned), installs the unit, waits for `core.json`, and offers the move (#385). A rebuild restarts a running core.
 
 ## Extension repos (#364)
 
@@ -42,7 +42,7 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 
 ## Downloads (#367)
 
-- Chapters go to `<data>/downloads/<source>/<manga>/<chapter>.cbz` with Mihon's names (`DownloadProvider`, `DiskUtil.buildValidFilename`): FAT's forbidden characters become `_`, and a name fits 240 bytes. A second chapter with the same name gets Mihon's `_<md5(url) 6>` suffix. The folder setting waits for Settings (#385).
+- Chapters go to `<data>/downloads/<source>/<manga>/<chapter>.cbz` with Mihon's names (`DownloadProvider`, `DiskUtil.buildValidFilename`): FAT's forbidden characters become `_`, and a name fits 240 bytes. A second chapter with the same name gets Mihon's `_<md5(url) 6>` suffix. The `downloadsPath` setting is stored only.
 - `chapter.download_path` holds the file's path, set once the `.cbz` is complete, so `isDownloaded` and `downloadCount` are SQL. A file deleted outside core still counts as downloaded; the reader then reads from the source.
 - One chapter downloads at a time, into a `.part` file that is moved into place. A restart drops `.part` files and finds the queue stopped.
 - Every route answers with the status `{ state: "STARTED" | "STOPPED", queue }`, each item with Suwayomi's `state`, `progress`, `tries`, `chapter` and `manga` plus core's `error { kind, message }`, which keeps why a download failed. `download.reorder` moves one item (`{ chapterId, to }`) or sets the whole order (`{ order }`): ids that left the queue are skipped, and queued ids the order leaves out follow it in their order. `download.delete` adds `chapters: [{ id, isDownloaded }]` to the status. The `downloads` topic sends the whole status on each change.
@@ -53,7 +53,7 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 ## Update runs (#368)
 
 - `update.start { categories? }` fetches new chapters for the library, through the same refresh as `manga.refresh`. With category ids it takes every manga in them (Default is `0`, the manga with no category); with none or `[]` it takes Mihon's rule: the INCLUDE categories, or the UNSET ones when none is, and never a manga in an EXCLUDE one. Both forms then skip what Suwayomi's skip filters skip: `ONLY_FETCH_ONCE`, unread chapters, not started (initialized, no read time and no read chapter), completed.
-- The skip filters and the schedule are the window's global metas, `miharchy.excludeUnreadChapters`, `miharchy.excludeNotStarted`, `miharchy.excludeCompleted` (`"true"` or `"false"`, default on) and `miharchy.globalUpdateInterval` (hours, default 12, `0` off), until Settings moves (#385). Core runs the whole library when the interval has passed since the last run, or since its start when there was none, so runs happen while the window is closed.
+- The skip filters and the schedule are the window's global metas, `miharchy.excludeUnreadChapters`, `miharchy.excludeNotStarted`, `miharchy.excludeCompleted` (`"true"` or `"false"`, default on) and `miharchy.globalUpdateInterval` (hours, default 12, `0` off), which the Settings rows write (#385). Core runs the whole library when the interval has passed since the last run, or since its start when there was none, so runs happen while the window is closed.
 - Every route answers with the status `{ isRunning, stopped, finishedJobs, totalJobs, skippedMangasCount, lastUpdateTimestamp, failed: [{ mangaId, kind, message }] }`, with `lastUpdateTimestamp` in ms, kept in the global meta `miharchy.lastUpdateTimestamp`. `update.start` adds `started`, false when a run was already going. A stop keeps the run's counts and reasons until the next start, with `stopped` true. A failed manga counts as finished and does not stop the run. The `updates` topic sends the whole status on each change.
 - Up to 5 sources update at once, one manga at a time per source. A run does not auto-download new chapters, and it always fetches details (Suwayomi's `updateMangas`).
 
@@ -92,7 +92,7 @@ Nothing in `window/` or `plugin/` calls core yet, and `stable` leaves out `core/
 
 ## Move from Suwayomi (#372)
 
-- `move.start { serverConfig, serverRoot, helperSync? }` moves a v1.1.1 install into core as a job, and `move.status` follows it: `{ state: "idle" | "running" | "done" | "failed", step, report, error }`. `serverConfig` is the path of Suwayomi's `server.json`, `serverRoot` Suwayomi's root folder (`~/.local/share/miharchy/suwayomi`), and `helperSync` the sync helper's state (`~/.local/share/miharchy/sync`). The paths have no defaults, so a test or a scratch core never reads the real install. Setup's step that calls it comes in #385.
+- `move.start { serverConfig, serverRoot, helperSync? }` moves a v1.1.1 install into core as a job, and `move.status` follows it: `{ state: "idle" | "running" | "done" | "failed", step, report, error }`. `serverConfig` is the path of Suwayomi's `server.json`, `serverRoot` Suwayomi's root folder (`~/.local/share/miharchy/suwayomi`), and `helperSync` the sync helper's state (`~/.local/share/miharchy/sync`). The paths have no defaults, so a test or a scratch core never reads the real install. Setup's move step sends it with the real paths and follows `move.status` (#385). A finished move's report is kept in meta `miharchy.moveReport`, so `move.status` still answers `done` after a restart; Setup then offers no second move, which would write Suwayomi's values over core's.
 - The move only reads Suwayomi; Suwayomi stays the live server until #373. In order: the extension repos and installed extensions; the library from a Suwayomi backup with every part on and no server settings (`backup.import`); the categories' update and download choices, which a backup does not carry; every global, manga and category meta; the server settings; the downloads; the helper's baselines.
 - Ids become core's: a manga by source and URL, a category by name (Default is 0 on both). The global meta `miharchy.defaultCategory` holds a category id, so it is mapped too. Core's own metas (`miharchy.lastAutoBackup`, `miharchy.autoBackupSince`, `miharchy.lastUpdateTimestamp`) are never overwritten.
 - Each setting goes through `settings.set` on its own, so a value core refuses skips that row only. Suwayomi's `globalUpdateInterval` is a float of hours; core takes it as whole hours.

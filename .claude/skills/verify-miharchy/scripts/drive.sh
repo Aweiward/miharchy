@@ -10,6 +10,8 @@ steps=$1; secs=${2:-120}
 copy=$RUN/app
 rm -rf "$copy"; mkdir -p "$copy" "$EVIDENCE"
 cp -r "$REPO/window" "$copy/"
+# Setup reads the plugin's server/, sync/ and core/ beside window/; build output stays out.
+tar -C "$REPO" --exclude=build --exclude=.gradle --exclude=.kotlin -cf - server sync core | tar -C "$copy" -xf -
 python3 "$here/patch-window.py" "$copy/window" "$steps" "$EVIDENCE"
 cd "$RUN"
 set +e
