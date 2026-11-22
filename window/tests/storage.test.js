@@ -47,3 +47,8 @@ test("sizes read in decimal units", () => {
   assert.equal(S.format(56700000), "56.7 MB");
   assert.equal(S.format(3.2e9), "3.2 GB");
 });
+
+test("on miharchy-core the sizes and the clear are core's routes", () => {
+  assert.deepEqual(S.SIZES_PAYLOAD, { route: "storage.get", body: {} });
+  assert.deepEqual(S.CORE_CLEAR_PAYLOAD, { route: "cache.clear", body: {} });
+});

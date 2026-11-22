@@ -64,6 +64,12 @@ function cleared(data) {
   return !!c && c.cachedPages === true && c.cachedThumbnails === true
 }
 
+// On miharchy-core (#385) core measures its own folders, which the window
+// cannot know: { downloads, cache } in bytes, cache being the covers of
+// manga outside the library that cache.clear deletes, answering { freed }.
+var SIZES_PAYLOAD = { route: "storage.get", body: {} }
+var CORE_CLEAR_PAYLOAD = { route: "cache.clear", body: {} }
+
 // Decimal units, as Android's file sizes in Mihon.
 function format(bytes) {
   var units = ["B", "kB", "MB", "GB", "TB"]
@@ -83,6 +89,8 @@ if (typeof module !== "undefined") {
     command: command,
     sizes: sizes,
     clearPayload: clearPayload,
+    SIZES_PAYLOAD: SIZES_PAYLOAD,
+    CORE_CLEAR_PAYLOAD: CORE_CLEAR_PAYLOAD,
     cleared: cleared,
     format: format
   }
