@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeList
 import eu.kanade.tachiyomi.data.track.shikimori.Shikimori
 import yomi.host.startHost
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Path
 
 /**
@@ -38,11 +39,16 @@ fun main() {
     val updates = Updates(db, { browse.refresh(it) })
     val trackerStore = TrackerStore(db)
     val http = okhttp3.OkHttpClient()
-    val trackers = Trackers(db, listOf(
+    val clients = listOf(
         MyAnimeList(http, trackerStore.of(1)), Anilist(http, trackerStore.of(2)), Kitsu(http, trackerStore.of(3)), Shikimori(http, trackerStore.of(4)),
         Bangumi(http, trackerStore.of(5)), MangaUpdates(http, trackerStore.of(7)), MangaBaka(http, trackerStore.of(11)),
-    ))
-    val slices = listOf(extensions.routes, browse.routes, library.routes, downloads.routes, updates.routes, trackers.routes)
+    )
+    val trackers = Trackers(db, clients)
+    // No host and no tracker client: a sync never contacts a source or a tracker.
+    val sync = Sync(db, data.resolve("sync"), config.url, clients.map { it.id.toInt() }.toSet()) {
+        extensions.sources().associate { it.getValue("id").jsonPrimitive.content.toLong() to it.getValue("name").jsonPrimitive.content }
+    }
+    val slices = listOf(extensions.routes, browse.routes, library.routes, downloads.routes, updates.routes, trackers.routes, sync.routes)
     // A + B silently keeps one of two routes with the same name.
     check(slices.sumOf { it.size } == slices.flatMap { it.keys }.toSet().size) { "two slices define the same route" }
     val core = Core(config.secret, db, routes = slices.reduce { a, b -> a + b }, topics = mapOf("downloads" to downloads.status, "updates" to updates.status), images = browse.images)
