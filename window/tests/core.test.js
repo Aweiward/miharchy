@@ -649,13 +649,13 @@ test("on core, the detail reads a delete's chapters beside the status", () => {
 });
 
 test("on core, a check for new chapters is update.start, with categories only when named", () => {
-  const U = load("Updates.js");
-  assert.deepEqual(U.checkPayload(null, true), { route: "update.start", body: {} });
-  assert.deepEqual(U.checkPayload([0, 4], true), { route: "update.start", body: { categories: [0, 4] } });
+  const Ups = load("Updates.js");
+  assert.deepEqual(Ups.checkPayload(null, true), { route: "update.start", body: {} });
+  assert.deepEqual(Ups.checkPayload([0, 4], true), { route: "update.start", body: { categories: [0, 4] } });
 });
 
 test("on core, Updates loads its list from library.list, chapter.list, update.status and the skip metas", () => {
-  const U = load("Updates.js");
+  const Ups = load("Updates.js");
   const now = Date.UTC(2026, 10, 22);
   const sent = [];
   const replies = {
@@ -668,40 +668,40 @@ test("on core, Updates loads its list from library.list, chapter.list, update.st
     "meta.get": { metas: [{ scope: "global", owner: 0, key: "miharchy.excludeCompleted", value: "false" }] },
   };
   let out;
-  U.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, true, now, (r) => { out = r; });
+  Ups.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, true, now, (r) => { out = r; });
   assert.deepEqual(sent.map((p) => p.route), ["library.list", "chapter.list", "update.status", "meta.get"]);
   assert.deepEqual(sent[1].body, { mangaIds: [1] });
-  const u = U.reduce(U.initial(), { type: "list", reply: out, config: { url: "http://127.0.0.1:4591", secret: "s", backend: "core" }, now, prefs: { updatesFilterUnread: "include", updatesIncludedCategories: "[3]" } });
+  const u = Ups.reduce(Ups.initial(), { type: "list", reply: out, config: { url: "http://127.0.0.1:4591", secret: "s", backend: "core" }, now, prefs: { updatesFilterUnread: "include", updatesIncludedCategories: "[3]" } });
   assert.deepEqual(u.rows.map((r) => r.id), [10], "older than 3 months is history");
   assert.deepEqual([u.finished, u.total, u.skipped, u.checkedAt], [3, 3, 2, now - 60000]);
   assert.deepEqual(u.skipReasons, ["unread chapters", "not started"]);
 
   let failed;
-  U.load((p, done) => done(p.route === "update.status" ? { state: "error", kind: "internal", message: "boom" } : { state: "ok", data: replies[p.route] }), true, now, (r) => { failed = r; });
+  Ups.load((p, done) => done(p.route === "update.status" ? { state: "error", kind: "internal", message: "boom" } : { state: "ok", data: replies[p.route] }), true, now, (r) => { failed = r; });
   assert.equal(failed.message, "boom");
   let empty;
-  U.load((p, done) => { assert.notEqual(p.route, "chapter.list"); done({ state: "ok", data: p.route === "library.list" ? { mangas: [] } : replies[p.route] }); }, true, now, (r) => { empty = r; });
+  Ups.load((p, done) => { assert.notEqual(p.route, "chapter.list"); done({ state: "ok", data: p.route === "library.list" ? { mangas: [] } : replies[p.route] }); }, true, now, (r) => { empty = r; });
   assert.deepEqual(empty.data.chapters.nodes, []);
 });
 
 test("on core, Updates follows the flat run status and stops with update.stop", () => {
-  const U = load("Updates.js");
-  assert.deepEqual(U.stopPayload(true), { route: "update.stop" });
-  let u = U.reduce(U.initial(), { type: "checking" });
+  const Ups = load("Updates.js");
+  assert.deepEqual(Ups.stopPayload(true), { route: "update.stop" });
+  let u = Ups.reduce(Ups.initial(), { type: "checking" });
   // The start reply: core has no all-zero opening result.
-  const running = U.reduce(u, { type: "live", data: { isRunning: true, finishedJobs: 0, totalJobs: 4, skippedMangasCount: 1, started: true } });
+  const running = Ups.reduce(u, { type: "live", data: { isRunning: true, finishedJobs: 0, totalJobs: 4, skippedMangasCount: 1, started: true } });
   assert.deepEqual([running.checking, running.running, running.total], [false, true, 4]);
-  const done = U.reduce(running, { type: "live", data: { isRunning: false, finishedJobs: 4, totalJobs: 4, skippedMangasCount: 1 } });
-  assert.ok(U.finished(running, done), "a run's end reloads the list");
+  const done = Ups.reduce(running, { type: "live", data: { isRunning: false, finishedJobs: 4, totalJobs: 4, skippedMangasCount: 1 } });
+  assert.ok(Ups.finished(running, done), "a run's end reloads the list");
   // A stop keeps its counts; core's status says so, before or after the stop's reply.
-  const after = U.reduce(running, { type: "live", data: { isRunning: false, stopped: true, finishedJobs: 2, totalJobs: 4, skippedMangasCount: 1 } });
-  assert.match(U.progress(after, Date.now()), /Stopped checking for new chapters at 2 \/ 4/);
-  assert.equal(U.reduce(after, { type: "stopped" }).stopped, "2 / 4");
-  assert.equal(U.reduce(U.reduce(running, { type: "stopped" }), { type: "live", data: { isRunning: false, stopped: true, finishedJobs: 3, totalJobs: 4 } }).stopped, "3 / 4");
+  const after = Ups.reduce(running, { type: "live", data: { isRunning: false, stopped: true, finishedJobs: 2, totalJobs: 4, skippedMangasCount: 1 } });
+  assert.match(Ups.progress(after, Date.now()), /Stopped checking for new chapters at 2 \/ 4/);
+  assert.equal(Ups.reduce(after, { type: "stopped" }).stopped, "2 / 4");
+  assert.equal(Ups.reduce(Ups.reduce(running, { type: "stopped" }), { type: "live", data: { isRunning: false, stopped: true, finishedJobs: 3, totalJobs: 4 } }).stopped, "3 / 4");
   assert.equal(done.stopped, null, "an end is no stop");
   // An instant run of nothing ends the check too.
-  assert.equal(U.reduce(u, { type: "live", data: { isRunning: false, finishedJobs: 0, totalJobs: 0, skippedMangasCount: 0 } }).checking, false);
-  assert.equal(U.notice({ state: "no-config", rows: [] }, "/x/core.json", "core").title, M.problem({ state: "no-config" }, "/x/core.json", "core").title);
+  assert.equal(Ups.reduce(u, { type: "live", data: { isRunning: false, finishedJobs: 0, totalJobs: 0, skippedMangasCount: 0 } }).checking, false);
+  assert.equal(Ups.notice({ state: "no-config", rows: [] }, "/x/core.json", "core").title, M.problem({ state: "no-config" }, "/x/core.json", "core").title);
 });
 
 // #383: tracker logins and the tracking panel on core's routes.
