@@ -33,6 +33,18 @@ function reason(message) {
   return { kind: "other", text: shortened(m.trim() || "Unknown error") }
 }
 
+// miharchy-core's error { kind, message } as reason() gives it: core
+// names the kind, so only "Source not installed" is read from the text.
+function coreReason(error) {
+  var m = String((error && error.message) || "")
+  if (/source not installed/i.test(m)) return { kind: "sourceMissing", text: "Source not installed" }
+  switch (error && error.kind) {
+    case "cloudflare": return { kind: "cloudflare", text: "Cloudflare blocked the source" }
+    case "network": return { kind: "network", text: "No connection to the source" }
+  }
+  return { kind: "other", text: shortened(m.trim() || "Unknown error") }
+}
+
 // What the user can do about it, or "". flareOn: the server's
 // flareSolverrEnabled, the half of Setup's FlareSolverr step the window
 // can see without Setup's probe.
@@ -44,6 +56,7 @@ function hint(r, flareOn) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+    coreReason: coreReason,
     KINDS: KINDS,
     MAX_TEXT: MAX_TEXT,
     reason: reason,

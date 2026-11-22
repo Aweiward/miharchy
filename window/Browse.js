@@ -424,7 +424,8 @@ function reduceDetail(d, event) {
     case "mark-reply":
     case "downloads-reply":
       if (event.reply.state !== "ok") return copy(d, { libraryError: event.reply.message || event.reply.state })
-      var deleted = event.reply.data.deleteDownloadedChapters
+      // Core's download.delete puts the chapters beside the status.
+      var deleted = event.reply.data.deleteDownloadedChapters || (Array.isArray(event.reply.data.chapters) ? event.reply.data : null)
       var onDisk = {}
       if (deleted) deleted.chapters.forEach(function(c) { onDisk[c.id] = c.isDownloaded === true })
       return copy(d, { libraryError: "", chapters: d.chapters.map(function(c) { return c.id in onDisk ? copy(c, { downloaded: onDisk[c.id] }) : c }) })

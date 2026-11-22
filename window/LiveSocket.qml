@@ -14,6 +14,9 @@ Item {
 
   property var config: null
   property string query: ""
+  // On miharchy-core (config.backend "core"): the topic, in place of query.
+  property string topic: ""
+  readonly property bool core: !!config && config.backend === "core"
   property bool running: false
   // A result has come since the socket opened: the stream carries every
   // change from here on.
@@ -53,6 +56,13 @@ Item {
   function connect() {
     if (!socket) socket = make()
     if (!socket) return
+    if (core) {
+      // Core takes the secret as the first message: no login, no token.
+      wanted = true
+      socket.url = Live.coreUrl(config)
+      socket.active = true
+      return
+    }
     var s = ++seq
     Session.token(config, stale, function(failure, t) {
       if (s !== live.seq) return
@@ -76,13 +86,14 @@ Item {
   function make() {
     var ws
     try {
-      ws = Qt.createQmlObject("import QtWebSockets\nWebSocket { requestedSubprotocols: [\"" + Live.PROTOCOL + "\"] }", live, "LiveSocket")
+      ws = Qt.createQmlObject("import QtWebSockets\nWebSocket { " + (core ? "" : "requestedSubprotocols: [\"" + Live.PROTOCOL + "\"]") + " }", live, "LiveSocket")
     } catch (e) {
       console.warn("Live updates need qt6-websockets:", e.message || e)
       return null
     }
     ws.statusChanged.connect(function(status) {
-      if (status === 1 && live.wanted) ws.sendTextMessage(Live.initMessage(live.token))
+      if (status === 1 && live.wanted && live.core) Live.coreOpen(live.config.secret, live.topic).forEach(function(m) { ws.sendTextMessage(m) })
+      else if (status === 1 && live.wanted) ws.sendTextMessage(Live.initMessage(live.token))
       if ((status === 3 || status === 4) && live.wanted) live.later()
     })
     ws.textMessageReceived.connect(received)
@@ -90,7 +101,7 @@ Item {
   }
 
   function received(text) {
-    var m = Live.parse(text)
+    var m = core ? Live.parseCore(text, topic) : Live.parse(text)
     switch (m.type) {
       case "ack":
         socket.sendTextMessage(Live.subscribeMessage(query, Math.random()))

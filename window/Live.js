@@ -67,6 +67,31 @@ function refused(errors) {
   return message === "Unauthorized" ? { type: "unauthorized" } : { type: "ended", message: message }
 }
 
+// miharchy-core's live socket (ADR 0010): /api/live, no subprotocol. The
+// first message is the secret, then one subscribe per topic; a wrong
+// secret closes the socket (4401), which reconnects as any close does.
+function coreUrl(config) {
+  return config.url.replace(/^http/, "ws") + "/api/live"
+}
+
+function coreOpen(secret, topic) {
+  return [JSON.stringify({ secret: secret }), JSON.stringify({ subscribe: topic })]
+}
+
+// One core message, in parse()'s terms: { topic, data } is the topic's
+// whole state, { topic, error } ends it.
+function parseCore(text, topic) {
+  var m
+  try {
+    m = JSON.parse(text)
+  } catch (e) {
+    return { type: "none" }
+  }
+  if (!m || m.topic !== topic) return { type: "none" }
+  if (m.error) return { type: "ended", message: String(m.error.message || "") }
+  return { type: "data", data: m.data }
+}
+
 // The wait before reconnect attempt n, counted from 0 since the last ack:
 // 1, 2, 4, 8, then 15 s, so a restarted server is back within 15 s.
 function backoff(attempt) {
@@ -83,6 +108,9 @@ if (typeof module !== "undefined") {
     initMessage: initMessage,
     subscribeMessage: subscribeMessage,
     parse: parse,
+    coreUrl: coreUrl,
+    coreOpen: coreOpen,
+    parseCore: parseCore,
     backoff: backoff
   }
 }

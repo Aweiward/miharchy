@@ -35,6 +35,9 @@ Item {
   property bool armed: false
   // The download queue's items, for each update's marker.
   property var queue: []
+  // Why downloads stay off here, or "": with MIHARCHY_BACKEND=core the
+  // Downloads view shows miharchy-core's queue, and Updates is Suwayomi's (#382).
+  property string downloadsGate: ""
   // The user's categories (Model's), for the category filters.
   property var categories: []
   property bool filterOpen: false
@@ -173,6 +176,10 @@ Item {
   }
 
   function run(id) {
+    if (downloadsGate && (id === "updates.download" || id === "updates.deleteDownload")) {
+      error = downloadsGate
+      return
+    }
     switch (id) {
       case "updates.up":
       case "updates.down":
