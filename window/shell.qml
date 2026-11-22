@@ -33,10 +33,9 @@ ShellRoot {
   settings.watchFiles: false
 
   readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
-  // The developer switch (ADR 0010): with MIHARCHY_BACKEND=core the views
-  // moved so far (Extensions) talk to miharchy-core through core.json, and
-  // the rest stay on Suwayomi. Users never set it; #373 flips the default.
-  readonly property bool coreBackend: Quickshell.env("MIHARCHY_BACKEND") === "core"
+  // miharchy-core is the server (ADR 0010, #373). MIHARCHY_BACKEND=suwayomi
+  // goes back to Suwayomi until its code goes.
+  readonly property bool coreBackend: Quickshell.env("MIHARCHY_BACKEND") !== "suwayomi"
   // A view on the server the Downloads view does not show says this.
   // A detail or reader on Suwayomi under the switch: a target from a mark
   // without the switch.
@@ -232,7 +231,7 @@ ShellRoot {
   // A target's server has its config, or cannot get one: a core target in a
   // window without the switch, which openChapter turns down.
   function targetReady(target) {
-    if (target.core) return !coreBackend || !!coreConfig
+    if (target.core || coreBackend) return !coreBackend || !!coreConfig
     return !!config
   }
 
@@ -256,6 +255,8 @@ ShellRoot {
   // switch); without it, Suwayomi's. Both number from 1, so each opens on
   // its own server.
   function openChapter(target, peek) {
+    // Core is the default (#373): a plain target is core's, as a mark on core names it.
+    if (coreBackend && !target.core) target = { mangaId: target.mangaId, chapterId: target.chapterId, core: true }
     pendingChapter = target
     if (!targetReady(target)) return
     pendingChapter = null

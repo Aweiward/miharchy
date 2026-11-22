@@ -7,10 +7,10 @@
 # Usage: tools/release-stable vX.Y.Z [remote]
 set -eu
 
-# The files only coding agents use, the site's trailer video, which only the
-# Pages build needs, and miharchy-core, which nothing runs until it replaces
-# Suwayomi-Server (ADR 0009): they stay on main.
-EXCLUDED="AGENTS.md CLAUDE.md .claude docs/agents site/img/trailer.mp4 site/img/trailer-poster.webp core"
+# The files only coding agents use, and the site's trailer video, which only
+# the Pages build needs: they stay on main. Setup builds miharchy-core from
+# the plugin's core/ and sync/, so both ship (#373).
+EXCLUDED="AGENTS.md CLAUDE.md .claude docs/agents site/img/trailer.mp4 site/img/trailer-poster.webp"
 
 fail() { echo "release-stable: $*" >&2; exit 1; }
 

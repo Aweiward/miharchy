@@ -313,7 +313,7 @@ function problem(connection, configPath, backend) {
   if (backend === "core") {
     switch (connection.state) {
       case "no-config":
-        return { title: "No miharchy-core config", detail: configPath + " is missing or invalid. Start miharchy-core once to create it." }
+        return { title: "No miharchy-core config", detail: configPath + " is missing or invalid. Open Miharchy: its Setup builds and starts miharchy-core, which creates it." }
       case "down":
         return { title: "miharchy-core is not running", detail: "Start it with: systemctl --user start miharchy-core. Press r to retry." }
       case "unauthorized":
