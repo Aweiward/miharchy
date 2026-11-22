@@ -22,8 +22,7 @@ Item {
   property string configPath: ""
   property bool active: false
 
-  // No config yet reads as missing: onConfigChanged never fires for one that stays null.
-  property var history: History.reduce(History.initial(), { type: "config-missing" })
+  property var history: History.initial()
   property int cursor: 0
   // "" | "clear" | a manga id as text: what waits for a second x or X.
   property string armed: ""
@@ -52,6 +51,8 @@ Item {
 
   onActiveChanged: if (active) reload()
   onQueryChanged: cursor = 0
+  // A missing core.json leaves config null from the start, so onConfigChanged never fires.
+  Component.onCompleted: if (core && !config) history = History.reduce(history, { type: "config-missing" })
   onConfigChanged: {
     seq++
     opening = null
