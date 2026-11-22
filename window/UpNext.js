@@ -23,6 +23,37 @@ function payload() {
   }
 }
 
+// Up next's data from either server, as payload()'s reply: send(payload,
+// done) is Session.send on that server's config. Core (ADR 0010) takes three
+// routes: library.list, then each library manga's chapters and the global
+// chapter prefs. done gets { state, message?, data }.
+function load(send, core, done) {
+  if (!core) return send(payload(), done)
+  send({ route: "library.list" }, function(lib) {
+    if (lib.state !== "ok") return done(lib)
+    var ids = lib.data.mangas.map(function(m) { return m.id })
+    send({ route: "chapter.list", body: { mangaIds: ids } }, function(ch) {
+      if (ch.state !== "ok") return done(ch)
+      send({ route: "meta.get", body: { scope: "global", keys: payload().variables.keys } }, function(meta) {
+        if (meta.state !== "ok") return done(meta)
+        done({ state: "ok", data: fromCore(lib.data, ch.data, meta.data) })
+      })
+    })
+  })
+}
+
+// Core's three replies -> payload()'s reply data.
+function fromCore(lib, ch, meta) {
+  var byManga = {}
+  ch.chapters.forEach(function(c) { (byManga[c.mangaId] = byManga[c.mangaId] || []).push(c) })
+  return {
+    metas: { nodes: meta.metas },
+    mangas: { nodes: lib.mangas.map(function(m) {
+      return { id: m.id, title: m.title, inLibraryAt: m.inLibraryAt, source: m.source, meta: m.meta, chapters: { nodes: byManga[m.id] || [] } }
+    }) }
+  }
+}
+
 // data: payload()'s reply. -> [{ mangaId, chapterId, tier, title, chapter,
 // page, pages, unread, update }], the head first. tier: 1 partly read, 2
 // close to caught up, 3 a fresh update. page: the next chapter's
@@ -87,6 +118,7 @@ function after(list, order, mangaId) {
 if (typeof module !== "undefined") {
   module.exports = {
     payload: payload,
+    load: load,
     list: list,
     after: after
   }

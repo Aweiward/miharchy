@@ -20,16 +20,25 @@ var QUERY = "query($after: Cursor) { chapters(filter: { isRead: { equalTo: true 
   + " order: [{ by: LAST_READ_AT, byType: DESC }], first: " + PAGE + ", after: $after) {"
   + " pageInfo { hasNextPage endCursor } nodes { lastReadAt isRead manga { id thumbnailUrl inLibrary unreadCount } } } }"
 
-function payload(after) {
+// after: Suwayomi's cursor, or core's offset (ADR 0010: history.list).
+function payload(after, core) {
+  if (core) return { route: "history.list", body: { readOnly: true, limit: PAGE, offset: after || 0 } }
   return { query: QUERY, variables: { after: after || null } }
 }
 
 // Reply data -> [{ at, mangaId, thumbnailUrl, inLibrary, unread }], at in
 // epoch seconds, newest first as the query orders them.
 function rows(data) {
-  return ((data.chapters && data.chapters.nodes) || []).filter(function(c) { return c.isRead === true }).map(function(c) {
+  var chapters = Array.isArray(data.chapters) ? data.chapters : (data.chapters && data.chapters.nodes) || []
+  return chapters.filter(function(c) { return c.isRead === true }).map(function(c) {
     return { at: Number(c.lastReadAt) || 0, mangaId: c.manga.id, thumbnailUrl: c.manga.thumbnailUrl || "", inLibrary: c.manga.inLibrary === true, unread: c.manga.unreadCount || 0 }
   })
+}
+
+// The reply's next page as Suwayomi's pageInfo; core's cursor is the offset.
+function pageInfo(data, after) {
+  if (!Array.isArray(data.chapters)) return data.chapters.pageInfo
+  return { hasNextPage: data.hasNextPage === true, endCursor: (after || 0) + PAGE }
 }
 
 // The local date of a time as a day number, so a daylight saving change
@@ -109,6 +118,7 @@ if (typeof module !== "undefined") {
   module.exports = {
     PREFS: PREFS,
     payload: payload,
+    pageInfo: pageInfo,
     rows: rows,
     more: more,
     card: card,
