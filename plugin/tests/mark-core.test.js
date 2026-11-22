@@ -10,7 +10,7 @@ const Mark = load("../plugin/Mark.js");
 const M = load("Model.js");
 const Sync = load("Sync.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "s", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "s" };
 const now = new Date(2026, 9, 4, 15).getTime();
 const sec = (h) => Math.floor(new Date(2026, 9, 4, h).getTime() / 1000);
 const ok = (data) => M.coreReply(200, JSON.stringify(data));

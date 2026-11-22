@@ -26,7 +26,7 @@ function libraryPayload() {
 var DEFAULT_CATEGORY = 0
 var ALL = -1
 
-// miharchy-core's core.json (ADR 0010) -> { url, secret, backend: "core" },
+// miharchy-core's core.json (ADR 0010) -> { url, secret },
 // or null.
 function parseCoreConfig(text) {
   var c
@@ -36,7 +36,7 @@ function parseCoreConfig(text) {
     return null
   }
   if (!c || typeof c.url !== "string" || typeof c.secret !== "string" || !c.url || !c.secret) return null
-  return { url: c.url.replace(/\/+$/, ""), secret: c.secret, backend: "core" }
+  return { url: c.url.replace(/\/+$/, ""), secret: c.secret }
 }
 
 // "http://host:port/path" -> { origin: "http://host:port", rest: "/path" },
@@ -291,13 +291,11 @@ function again(p, s) {
 
 // "<mangaId> <chapterId>", as the launcher's open-chapter passes it in
 // MIHARCHY_OPEN_CHAPTER -> { mangaId, chapterId }, or null.
-// "<mangaId> <chapterId>", with " core" for miharchy-core's ids (#386).
+// "<mangaId> <chapterId>", with an optional trailing " core" (the bar's rows end in it).
 function chapterTarget(text) {
   var m = /^\s*(\d+)\s+(\d+)(\s+core)?\s*$/.exec(text || "")
   if (!m) return null
-  var t = { mangaId: Number(m[1]), chapterId: Number(m[2]) }
-  if (m[3]) t.core = true
-  return t
+  return { mangaId: Number(m[1]), chapterId: Number(m[2]) }
 }
 
 function viewIndex(id) {

@@ -4,7 +4,7 @@ const Mi = require("./load")("Migrate.js");
 const G = require("./load")("GlobalSearch.js");
 const M = require("./load")("Model.js");
 
-const config = { backend: "core" };
+const config = {};
 const ok = (data) => M.coreReply(200, JSON.stringify(data));
 const boom = () => M.coreReply(500, JSON.stringify({ error: { kind: "source", message: "boom" } }));
 let nextId = 1;
@@ -96,10 +96,10 @@ test("the proposed match is the most similar result at 0.4 or above, or none; a 
 });
 
 const sources = [
-  { id: "1", name: "Asura Scans (EN)", core: true },
-  { id: "2", name: "Mangago (EN)", core: true },
-  { id: "3", name: "Weeb Central (EN)", core: true },
-  { id: "4", name: "AsuraScans (EN)", core: true }
+  { id: "1", name: "Asura Scans (EN)" },
+  { id: "2", name: "Mangago (EN)" },
+  { id: "3", name: "Weeb Central (EN)" },
+  { id: "4", name: "AsuraScans (EN)" }
 ];
 
 test("targets leave out the old source and put a source named like it first", () => {
@@ -250,7 +250,7 @@ test("library sources group the library by source, name missing ones from the sy
 });
 
 test("a batch searches the target source once per manga, one at a time like Mihon, and proposes each match", () => {
-  const target = { id: "8", name: "MangaPill (EN)", supportsLatest: true, core: true };
+  const target = { id: "8", name: "MangaPill (EN)", supportsLatest: true };
   let b = Mi.batch([{ id: 1, title: "Chainsaw Man", targets: [target] }, { id: 2, title: "Berserk", targets: [target] }]);
   assert.deepEqual(b.search.groups.map((g) => G.payload(g)), [
     { route: "source.search", body: { source: "8", page: 1, query: "Chainsaw Man" } },
@@ -267,7 +267,7 @@ test("a batch searches the target source once per manga, one at a time like Miho
 });
 
 test("in a batch, h/l pick another result or skip, and only picked rows migrate", () => {
-  const target = { id: "8", name: "S", supportsLatest: true, core: true };
+  const target = { id: "8", name: "S", supportsLatest: true };
   let b = Mi.batch([{ id: 1, title: "X", targets: [target] }, { id: 2, title: "Y", targets: [target] }]);
   b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "request", now: 0 }), 0, { type: "reply", attempt: 1, reply: ok({ hasNextPage: false, mangas: [{ id: 11, title: "X" }, { id: 12, title: "X2" }] }), config });
   b = Mi.pick(b, 0, 1);

@@ -16,7 +16,7 @@ var PRESET_META = Settings.META_PREFIX + "repoPreset"
 // repos: [{ url, name }] with url as core stores it, so removal must send this one.
 // busy / errors: per extension pkgName, the action in flight or its failure.
 function initial() {
-  return { state: "idle", message: "", step: null, repos: [], extensions: [], busy: {}, errors: {}, repoError: "", core: true }
+  return { state: "idle", message: "", step: null, repos: [], extensions: [], busy: {}, errors: {}, repoError: "" }
 }
 
 function copy(ext, changes) {
@@ -273,8 +273,7 @@ function details(pkgName, ext) {
   var d = { pkgName: pkgName, state: "loading", message: "", sources: [], cursor: 0 }
   var e = ext ? find(ext, pkgName) : null
   if (!e) return d
-  // core: true sends the settings panel to core's routes (Widgets.loadPayload).
-  var sources = (e.sources || []).map(function(n) { return { id: String(n.id), name: String(n.displayName || n.id), lang: String(n.lang || ""), configurable: n.isConfigurable === true, core: true } })
+  var sources = (e.sources || []).map(function(n) { return { id: String(n.id), name: String(n.displayName || n.id), lang: String(n.lang || ""), configurable: n.isConfigurable === true } })
   sources.sort(function(a, b) { return a.name.localeCompare(b.name) })
   return copy(d, { state: "ok", sources: sources })
 }

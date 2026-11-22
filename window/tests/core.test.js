@@ -9,7 +9,7 @@ const B = load("Browse.js");
 const W = load("Widgets.js");
 const P = load("Prefs.js");
 
-const core = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const core = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
 const suwayomi = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
 
 // A fake core: one route table, the secret checked as core checks it.
@@ -48,7 +48,7 @@ function install(routes) {
 }
 
 test("core.json gives a core config, and anything else none", () => {
-  assert.deepEqual(M.parseCoreConfig('{"url":"http://127.0.0.1:4591/","secret":"s"}'), { url: "http://127.0.0.1:4591", secret: "s", backend: "core" });
+  assert.deepEqual(M.parseCoreConfig('{"url":"http://127.0.0.1:4591/","secret":"s"}'), { url: "http://127.0.0.1:4591", secret: "s" });
   for (const bad of ["", "{", '{"url":"x"}', '{"url":"","secret":"s"}', '{"url":"x","secret":""}', '{"url":"x","username":"u","password":"p"}']) {
     assert.equal(M.parseCoreConfig(bad), null, bad);
   }
@@ -192,7 +192,7 @@ test("on core, details come from the list with no request, and settings open on 
   assert.equal(E.detailsPayload(d), null);
   assert.deepEqual(d.sources.map((x) => x.name), ["MangaDex (EN)", "MangaDex (JA)"]);
   const opened = E.detailsAction(s, d, "extension.settings").settings;
-  assert.deepEqual(opened, { id: "1", name: "MangaDex (EN)", lang: "en", configurable: true, core: true });
+  assert.deepEqual(opened, { id: "1", name: "MangaDex (EN)", lang: "en", configurable: true });
   assert.deepEqual(W.loadPayload(W.panel("preferences", opened)), { route: "source.settings", body: { source: "1" } });
 });
 
@@ -207,7 +207,7 @@ test("on core, the sources come from source.list and carry core", () => {
   assert.deepEqual(B.sourcesPayload(), { route: "source.list" });
   const s = B.sources(ok({ sources: SOURCES }), core, false, true);
   assert.equal(s.state, "ok");
-  assert.deepEqual(s.sources[0], { id: "2499283573021220255", name: "MangaDex (EN)", lang: "en", icon: "https://raw.githubusercontent.com/k/icon.png", warning: "MIXED", supportsLatest: true, configurable: true, core: true });
+  assert.deepEqual(s.sources[0], { id: "2499283573021220255", name: "MangaDex (EN)", lang: "en", icon: "https://raw.githubusercontent.com/k/icon.png", warning: "MIXED", supportsLatest: true, configurable: true });
   assert.equal(B.sources(ok({ sources: SOURCES }), core, false, false).sources.length, 1, "the language rule holds");
 });
 
@@ -240,7 +240,7 @@ const FILTERS = [
 ];
 
 test("on core, filters parse from the host's JSON and go back as every state", () => {
-  const src = { id: "9", name: "S", core: true };
+  const src = { id: "9", name: "S" };
   let p = W.panel("filters", src);
   assert.deepEqual(W.loadPayload(p), { route: "source.filters", body: { source: "9" } });
   p = W.reducePanel(p, { type: "reply", reply: ok({ filters: FILTERS }) });
@@ -271,7 +271,7 @@ const SETTINGS = [
 ];
 
 test("on core, settings parse from the host's JSON and save one by key", () => {
-  const src = { id: "9", name: "S", core: true };
+  const src = { id: "9", name: "S" };
   let p = W.reducePanel(W.panel("preferences", src), { type: "reply", reply: ok({ settings: SETTINGS }) });
   assert.deepEqual(p.widgets.map((w) => [w.kind, w.value]), [["choice", 0], ["bool", false], ["multi", ["en"]], ["text", ""], ["header", null]]);
   const rows = W.rows(p.widgets, {});
@@ -374,9 +374,9 @@ test("on core, the detail reads manga.get, refreshes once from a source, and tog
 });
 
 test("on core, a Cloudflare page says core cannot pass it yet", () => {
-  const n = B.notice({ core: true, state: "error", message: "x", flare: true }, "core.json");
+  const n = B.notice({ state: "error", message: "x", flare: true }, "core.json");
   assert.match(n.detail, /#361/);
-  assert.equal(B.notice({ core: true, state: "down" }, "core.json").title, "miharchy-core is not running");
+  assert.equal(B.notice({ state: "down" }, "core.json").title, "miharchy-core is not running");
 });
 
 test("on core, the reader loads pages, saves, bookmarks and keeps its mode on core, and pushes the trackers on core", () => {
@@ -671,7 +671,7 @@ test("on core, Updates loads its list from library.list, chapter.list, update.st
   Ups.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, now, (r) => { out = r; });
   assert.deepEqual(sent.map((p) => p.route), ["library.list", "chapter.list", "update.status", "meta.get"]);
   assert.deepEqual(sent[1].body, { mangaIds: [1] });
-  const u = Ups.reduce(Ups.initial(), { type: "list", reply: out, config: { url: "http://127.0.0.1:4591", secret: "s", backend: "core" }, now, prefs: { updatesFilterUnread: "include", updatesIncludedCategories: "[3]" } });
+  const u = Ups.reduce(Ups.initial(), { type: "list", reply: out, config: { url: "http://127.0.0.1:4591", secret: "s" }, now, prefs: { updatesFilterUnread: "include", updatesIncludedCategories: "[3]" } });
   assert.deepEqual(u.rows.map((r) => r.id), [10], "older than 3 months is history");
   assert.deepEqual([u.finished, u.total, u.skipped, u.checkedAt], [3, 3, 2, now - 60000]);
   assert.deepEqual(u.skipReasons, ["unread chapters", "not started"]);

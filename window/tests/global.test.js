@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const G = require("./load")("GlobalSearch.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
 const ok = (ids) => M.coreReply(200, JSON.stringify({ hasNextPage: true, mangas: ids.map((id) => ({ id, title: "M" + id, thumbnailUrl: null, inLibrary: false })) }));
 const fail = (message) => M.coreReply(502, JSON.stringify({ error: { kind: "upstream", message } }));
 const sources = (n) => Array.from({ length: n }, (_, i) => ({ id: String(i + 1), name: "S" + (i + 1), supportsLatest: true }));

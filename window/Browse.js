@@ -8,9 +8,7 @@
 
 var NOTES_META = "miharchy.notes"
 
-// The sources request. Each source then carries core: true, so its
-// listings, global search and filter and settings panels take core's routes
-// with no flag of their own.
+// The sources request.
 function sourcesPayload() {
   return { route: "source.list" }
 }
@@ -48,8 +46,7 @@ function sources(reply, config, showNsfw, allLanguages) {
         icon: Model.coverUrl(config, n.iconUrl),
         warning: String(n.contentWarning || "SAFE"),
         supportsLatest: n.supportsLatest === true,
-        configurable: n.isConfigurable === true,
-        core: true
+        configurable: n.isConfigurable === true
       }
     })
   list.sort(function(a, b) { return a.name.localeCompare(b.name) })
@@ -244,7 +241,7 @@ function reduceListing(l, event) {
 // refreshes once after showing the cache. retried, failedAt: see
 // Model.failure().
 function detail(mangaId, fromSource) {
-  return { mangaId: mangaId, fromSource: fromSource === true, core: true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null, retried: "", failedAt: 0 }
+  return { mangaId: mangaId, fromSource: fromSource === true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null, retried: "", failedAt: 0 }
 }
 
 function detailPayload(d) {

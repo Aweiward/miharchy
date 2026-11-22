@@ -4,7 +4,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const C = require("./load")("ReadingCard.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
 const sec = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi || 0).getTime() / 1000;
 // Friday 2026-10-09 22:00 in New York.
 const now = sec(2026, 10, 9, 22);

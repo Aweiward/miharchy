@@ -137,10 +137,10 @@ test("on core the library, the source names and the highest chapters build the d
 });
 
 test("on core a stalled manga's chapter check is one manga.refresh, and its reply decides", () => {
-  const source = { id: "3", name: "Weeb Central (EN)", lang: "en", core: true };
+  const source = { id: "3", name: "Weeb Central (EN)", lang: "en" };
   let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [source] }]);
   b = Mi.reduceBatch(b, 0, { type: "request" });
-  b = Mi.reduceBatch(b, 0, { type: "reply", attempt: b.search.groups[0].attempt, reply: ok({ mangas: [{ id: 100, title: "Eleceed", inLibrary: false }], hasNextPage: false }), config: { backend: "core" } });
+  b = Mi.reduceBatch(b, 0, { type: "reply", attempt: b.search.groups[0].attempt, reply: ok({ mangas: [{ id: 100, title: "Eleceed", inLibrary: false }], hasNextPage: false }), config: {} });
   assert.deepEqual(Mi.checkPayload(b, 0), { route: "manga.refresh", body: { id: 100 } });
   b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check" }), 0, { type: "checked", reply: ok({ manga: { id: 100 }, chapters: [chapter(1, 100, 300), chapter(2, 100, 301)] }) });
   assert.equal(Mi.chosen(b, 0).id, 100);

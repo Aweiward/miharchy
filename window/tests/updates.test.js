@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const U = require("./load")("Updates.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
 const ok = (data) => M.coreReply(200, JSON.stringify(data));
 const at = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi || 0).getTime();
 const now = at(2026, 10, 4, 15);

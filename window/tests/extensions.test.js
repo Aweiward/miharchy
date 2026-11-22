@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const E = require("./load")("Extensions.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
 const KEY = "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json";
 const ok = (data) => M.coreReply(200, JSON.stringify(data));
 const fail = (message) => M.coreReply(502, JSON.stringify({ error: { kind: "upstream", message } }));
@@ -105,7 +105,7 @@ test("details list the extension's sources by name and open settings only where 
   let d = E.details("pkg.MangaDex", s);
   assert.equal(d.state, "ok");
   assert.deepEqual(d.sources.map((x) => x.name), ["MangaDex (EN)", "MangaDex (JA)"]);
-  assert.deepEqual(E.detailsAction(s, d, "extension.settings"), { settings: { id: "11", name: "MangaDex (EN)", lang: "en", configurable: true, core: true } });
+  assert.deepEqual(E.detailsAction(s, d, "extension.settings"), { settings: { id: "11", name: "MangaDex (EN)", lang: "en", configurable: true } });
   d = E.reduceDetails(d, { type: "move", delta: 5 });
   assert.equal(d.cursor, 1, "the cursor stops at the last source");
   assert.equal(E.detailsAction(s, d, "extension.settings"), null, "a source without settings");

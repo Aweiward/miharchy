@@ -20,7 +20,7 @@ function copy(o, changes) {
 // state: "loading" | "ok" | a failed connection state. login: the login
 // or logout under way, or null. error: the last one's failure.
 function initial() {
-  return { core: true, state: "loading", message: "", list: [], login: null, error: "" }
+  return { state: "loading", message: "", list: [], login: null, error: "" }
 }
 
 function toTracker(n) {
@@ -174,7 +174,7 @@ function note(s) {
 // pick: { kind: "results" | "status" | "score", items: [{ label, detail,
 // value }], cursor }. busy: a write is in flight.
 function panel(mangaId, title) {
-  return { core: true, mangaId: mangaId, title: String(title || ""), state: "loading", message: "", rows: [], cursor: 0, mode: "list", pick: null, busy: false, error: "" }
+  return { mangaId: mangaId, title: String(title || ""), state: "loading", message: "", rows: [], cursor: 0, mode: "list", pick: null, busy: false, error: "" }
 }
 
 // The panel's data: done(reply), whose data { trackers: { nodes }, manga: {

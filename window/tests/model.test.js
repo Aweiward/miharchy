@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4590", secret: "s3cret", backend: "core" };
+const config = { url: "http://127.0.0.1:4590", secret: "s3cret" };
 // A library as core's library.list gives it, from the connection shape the
 // tests write: { data: { mangas: { nodes }, categories: { nodes }, metas } }.
 const coreLibrary = (data) => ({
@@ -198,7 +198,7 @@ test("a category a search or filter empties says nothing matches, not that it is
 
 test("a chapter to open at launch is two ids, else nothing", () => {
   assert.deepEqual(M.chapterTarget("12 345"), { mangaId: 12, chapterId: 345 });
-  assert.deepEqual(M.chapterTarget("12 345 core"), { mangaId: 12, chapterId: 345, core: true }, "the mark under the switch names core's ids");
+  assert.deepEqual(M.chapterTarget("12 345 core"), { mangaId: 12, chapterId: 345 }, "the bar's trailing core is accepted");
   assert.equal(M.chapterTarget("12 345 other"), null);
   assert.equal(M.chapterTarget(""), null);
   assert.equal(M.chapterTarget("12"), null);

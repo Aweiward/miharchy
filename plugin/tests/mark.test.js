@@ -4,7 +4,7 @@ const load = require("../../window/tests/load");
 const Mark = load("../plugin/Mark.js");
 const M = load("Model.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "s", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "s" };
 // A core reply as Session.send gives it, from { data }.
 const ok = (body) => ({ state: "ok", message: "", data: body.data, kind: "" });
 const now = new Date(2026, 9, 4, 15).getTime();

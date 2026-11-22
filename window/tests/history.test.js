@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const H = require("./load")("History.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
 const ok = (data) => M.coreReply(200, JSON.stringify(data));
 const sec = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi).getTime() / 1000;
 
