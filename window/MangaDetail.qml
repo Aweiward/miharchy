@@ -83,10 +83,10 @@ Rectangle {
   // the other server's queue (shell.qml).
   property string downloadsGate: ""
   readonly property var downloadIds: ({ "manga.download": true, "manga.downloads": true, "manga.deleteDownload": true })
-  readonly property var coreGates: ({
-    "manga.migrate": "Migrate is not on miharchy-core yet (#394)",
-    "manga.duplicateMigrate": "Migrate is not on miharchy-core yet (#394)"
-  })
+  // Migrate runs on the switch's server (#394); on the other one the shell
+  // sets this, and the Migrate keys answer with it.
+  property string migrateGate: ""
+  readonly property var migrateIds: ({ "manga.migrate": true, "manga.duplicateMigrate": true })
   readonly property string hint: dupesOpen ? "j k move   enter open   M migrate to this   a add anyway   esc cancel   "
     : picking ? "j k move   space in or out   esc close   "
     : optionsOpen ? "j k move   enter change   esc close   "
@@ -308,8 +308,8 @@ Rectangle {
 
   function run(id) {
     note = ""
-    if (onCore && coreGates[id]) {
-      note = coreGates[id]
+    if (migrateGate && migrateIds[id]) {
+      note = migrateGate
       return
     }
     if (downloadsGate && downloadIds[id]) {

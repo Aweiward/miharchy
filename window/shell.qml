@@ -38,9 +38,12 @@ ShellRoot {
   // the rest stay on Suwayomi. Users never set it; #373 flips the default.
   readonly property bool coreBackend: Quickshell.env("MIHARCHY_BACKEND") === "core"
   // A view on the server the Downloads view does not show says this.
-  // A detail or reader on Suwayomi under the switch: Migrate's until #394, or
-  // a target from a mark without the switch.
+  // A detail or reader on Suwayomi under the switch: a target from a mark
+  // without the switch.
   readonly property string downloadsElsewhere: "This manga is open on Suwayomi; downloads run on miharchy-core"
+  // Migrate follows the switch (#394), so its ids are that server's.
+  readonly property string migrateElsewhere: coreBackend ? "This manga is open on Suwayomi; Migrate runs on miharchy-core"
+    : "This manga is open on miharchy-core; Migrate runs on Suwayomi"
   readonly property string coreConfigPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
   property var coreConfig: null
   // The library and categories on miharchy-core, beside connection's on
@@ -661,8 +664,8 @@ ShellRoot {
       trackAsk = null
       return
     }
-    // The detail and the Library say what miharchy-core does not serve yet.
-    if (mangaDetail.open && mangaDetail.onCore && mangaDetail.coreGates[id]) {
+    // A detail on the other server than Migrate's says so.
+    if (mangaDetail.open && mangaDetail.migrateGate && mangaDetail.migrateIds[id]) {
       mangaDetail.run(id)
       return
     }
@@ -708,7 +711,8 @@ ShellRoot {
       return
     }
     if (id === "check.migrate") {
-      migrateView.startList(checkView.migrateList())
+      // The check still reads Suwayomi, and Migrate follows the switch (#394).
+      if (!coreBackend) migrateView.startList(checkView.migrateList())
       return
     }
     if (id.indexOf("migrate.") === 0) {
@@ -1118,7 +1122,7 @@ ShellRoot {
           config: root.config
           configPath: root.configPath
           onKey: function(event) { event.accepted = root.handleKey(event) }
-          onMergeChosen: function(job) { migrateView.startWith(job.old, job.kept) }
+          onMergeChosen: function(job) { if (!root.coreBackend) migrateView.startWith(job.old, job.kept) }
         }
 
         Text {
@@ -1152,6 +1156,7 @@ ShellRoot {
           // The Downloads view's server only: a chapter id means nothing to the other.
           readonly property bool downloadsHere: onCore === root.coreBackend
           queue: downloadsHere ? downloadsView.queue.items : []
+          migrateGate: onCore === root.coreBackend ? "" : root.migrateElsewhere
           downloadsGate: downloadsHere ? "" : root.downloadsElsewhere
           onDownloads: function(reply) { if (downloadsHere) downloadsView.apply(reply) }
           libraryManga: onCore ? root.coreConnection.manga : root.connection.manga
@@ -1188,18 +1193,20 @@ ShellRoot {
           id: migrateView
           anchors.fill: parent
           theme: theme
-          config: root.config
-          configPath: root.configPath
+          config: root.coreBackend ? root.coreConfig : root.config
+          configPath: root.coreBackend ? root.coreConfigPath : root.configPath
+          core: root.coreBackend
           showNsfw: root.settingsState.values.showNsfw
-          categories: root.connection.categories
+          categories: root.coreBackend ? root.coreConnection.categories : root.connection.categories
           pinned: Browse.pinned(browseView.prefs)
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           onLibraryChanged: {
-            if (root.config) root.fetchLibrary()
+            if (root.coreBackend) root.fetchLibrary(true)
+            else if (root.config) root.fetchLibrary()
             if (checkView.active) checkView.load()
           }
-          onMigrated: function(mangaId) { mangaDetail.openManga(mangaId, false) }
+          onMigrated: function(mangaId) { mangaDetail.openManga(mangaId, false, root.coreBackend) }
         }
       }
 
