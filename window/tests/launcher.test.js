@@ -220,7 +220,7 @@ test("a peek that started its window, or gave up, leaves no start marker behind"
   assert.deepEqual(fs.readdirSync(path.join(calls.runtime, "miharchy")), []);
 });
 
-// The mark under MIHARCHY_BACKEND=core names core's ids with a trailing "core" (#386).
+// The mark names core's ids with a trailing "core" (#386).
 test("open-chapter with core hands core's chapter to the running window by openChapterOn", () => {
   const calls = run(["open-chapter", "5", "9", "core"], { STUB_LIST: RUNNING, STUB_IPC_RC: "0" });
   assert.equal(calls[0], "quickshell ipc -p " + dir + " call miharchy openChapterOn 5 9 core | MIHARCHY_OPEN_CHAPTER=");

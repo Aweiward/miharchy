@@ -1,4 +1,4 @@
-// The mark under MIHARCHY_BACKEND=core (#386): miharchy-core's routes, ids and sync.
+// The mark on miharchy-core (#386): miharchy-core's routes, ids and sync.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

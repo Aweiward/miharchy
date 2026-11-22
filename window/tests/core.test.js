@@ -1,4 +1,4 @@
-// The MIHARCHY_BACKEND=core path (ADR 0010, #377): core.json, core's replies,
+// The miharchy-core path (ADR 0010, #377): core.json, core's replies,
 // Session's core requests, and the Extensions view on core's routes.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
