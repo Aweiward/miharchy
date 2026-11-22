@@ -179,6 +179,19 @@ function settle(marks, run, items, data) {
   return next
 }
 
+// The run's chapters among items, which left the queue: core sends no
+// DEQUEUED, so each is "disk" or "out" by chapter.list's isDownloaded
+// (chapters) once that reply is in.
+function goneIds(run, items) {
+  return run ? items.map(function(i) { return i.chapterId }).filter(function(id) { return run.queued.indexOf(id) !== -1 }) : []
+}
+
+function goneMarks(marks, chapters) {
+  var next = Object.assign({}, marks)
+  chapters.forEach(function(c) { next[c.id] = c.isDownloaded ? "disk" : "out" })
+  return next
+}
+
 // -> { onDisk, queued, failed: [chapterId] } over the run's chapters: in
 // the queue by its state; out of it, on disk once seen or settled so, and
 // still to come when never seen (the queue lags the enqueue reply). One
@@ -237,6 +250,8 @@ if (typeof module !== "undefined") {
     readPayload: readPayload,
     readLoad: readLoad,
     settleLoad: settleLoad,
+    goneIds: goneIds,
+    goneMarks: goneMarks,
     pick: pick,
     start: start,
     failed: failed,

@@ -86,7 +86,17 @@ Rectangle {
     f.probe.forEach(probe)
     var live = event.type === "live" && event.data.downloadStatusChanged
     follow(live && !live.initial ? live.updates || [] : [])
+    if (core) settleGone(NextChapters.goneIds(lastRun, gone))
     if (gone.length) leftQueue(gone)
+  }
+
+  // Core: a run chapter that left the queue is on disk or taken out.
+  function settleGone(ids) {
+    if (!ids.length || !config) return
+    var run = lastRun
+    Session.send(config, { route: "chapter.list", body: { ids: ids } }, function(reply) {
+      if (reply.state === "ok" && run === view.lastRun) view.marks = NextChapters.goneMarks(view.marks, reply.data.chapters)
+    })
   }
 
   function follow(updates) {
@@ -334,7 +344,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.5
         anchors.verticalCenter: parent.verticalCenter
-        text: Downloads.statusText(row.modelData, view.reasons[row.modelData.chapterId], view.flareOn || view.core)
+        text: Downloads.statusText(row.modelData, view.reasons[row.modelData.chapterId], view.flareOn, view.core)
         color: row.modelData.state === "ERROR" ? view.theme.urgent : row.current ? view.theme.selectedText : view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall

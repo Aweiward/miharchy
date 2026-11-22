@@ -353,10 +353,11 @@ function probed(reasons, chapterId, reply) {
 
 // A queue row's status: progressText, and on a failed row its reason and
 // hint once known.
-function statusText(item, reason, flareOn) {
+// core: no hint, since both point at Suwayomi's Setup and library check.
+function statusText(item, reason, flareOn, core) {
   var text = progressText(item)
   if (item.state !== "ERROR" || !reason) return text
-  var hint = Failure.hint(reason, flareOn)
+  var hint = core ? "" : Failure.hint(reason, flareOn)
   return text + "   " + reason.text + (hint ? "   " + hint : "")
 }
 

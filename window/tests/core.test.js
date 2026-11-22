@@ -556,7 +556,7 @@ const coreItem = (id, state, extra) => Object.assign({ state, progress: 0.5, tri
   chapter: { id, name: "Ch. " + id, mangaId: 3, chapterNumber: id, uploadDate: 1000 }, manga: { id: 3, title: "A", source: { id: "7" } } }, extra);
 
 test("on core, the Downloads view reads the plain status from routes and the topic", () => {
-  const reply = { state: "ok", data: { state: "STARTED", queue: [coreItem(1, "DOWNLOADING"), coreItem(2, "ERROR", { error: { kind: "network", message: "timeout" } })] } };
+  const reply = { state: "ok", data: { state: "STARTED", queue: [coreItem(1, "DOWNLOADING"), coreItem(2, "ERROR", { error: { kind: "source", message: "timeout" } })] } };
   const q = D.reduce(D.initial(), { type: "reply", reply });
   assert.equal(q.running, true);
   assert.deepEqual(q.items.map((i) => [i.chapterId, i.state]), [[1, "DOWNLOADING"], [2, "ERROR"]]);
@@ -570,6 +570,7 @@ test("on core, the Downloads view reads the plain status from routes and the top
   assert.deepEqual(f.reasons[2], { kind: "network", text: "No connection to the source" });
   assert.deepEqual(D.failed([D.reduce(D.initial(), { type: "reply", reply: { state: "ok", data: { state: "STOPPED", queue: [coreItem(5, "ERROR")] } } }).items[0]], {}, true).reasons[5], { kind: "other", text: "Unknown error" });
   // The delete reply carries the status too.
+  assert.equal(D.statusText(q.items[1], f.reasons[2], false, true), D.progressText(q.items[1]) + "   No connection to the source", "no Suwayomi hint on core");
   const del = D.reduce(q, { type: "reply", reply: { state: "ok", data: { state: "STOPPED", queue: [], chapters: [{ id: 1, isDownloaded: false }] } } });
   assert.deepEqual(del.items, []);
 });
@@ -639,6 +640,13 @@ test("on core, a next-chapters run refreshes, reads and settles through routes",
   N.settleLoad(send, true, { queued: [1, 2, 5] }, (r) => { settled = r; });
   assert.deepEqual(sent.slice(2).map((p) => p.route), ["download.queue", "chapter.list"]);
   assert.deepEqual(sent[3].body, { ids: [1, 2, 5] });
+  // Core sends no DEQUEUED: a run chapter that left the queue settles at once.
+  const run = { queued: [1, 2, 5] };
+  assert.deepEqual(N.goneIds(run, [{ chapterId: 1 }, { chapterId: 9 }]), [1]);
+  assert.deepEqual(N.goneIds(null, [{ chapterId: 1 }]), []);
+  const gone = N.goneMarks({ 1: "seen", 2: "seen" }, [{ id: 1, isDownloaded: false }, { id: 2, isDownloaded: true }]);
+  assert.deepEqual(gone, { 1: "out", 2: "disk" });
+  assert.deepEqual(N.tally(run, [{ chapterId: 5, state: "QUEUED" }], gone), { onDisk: 1, queued: 1, failed: [] });
   // Out of the window's queue: on disk, still queued on core, or taken out.
   assert.deepEqual(N.settle({}, { queued: [1, 2, 5] }, [], settled.data), { 1: "out", 2: "disk" });
 });
@@ -654,9 +662,14 @@ test("on core, the live socket sends the secret, then subscribes to its topic", 
 });
 
 test("core's error kinds map to the window's failure reasons", () => {
-  assert.equal(F.coreReason({ kind: "cloudflare", message: "x" }).kind, "cloudflare");
-  assert.equal(F.coreReason({ kind: "network", message: "x" }).kind, "network");
-  assert.equal(F.coreReason({ kind: "source", message: "Source not installed" }).kind, "sourceMissing");
+  assert.equal(F.coreReason({ kind: "cloudflare", message: "https://x shows a Cloudflare challenge." }).kind, "cloudflare");
+  assert.equal(F.coreReason({ kind: "cloudflare", message: "blocked" }).kind, "cloudflare");
+  assert.deepEqual(F.coreReason({ kind: "network", message: "The source did not answer within 30 s." }), { kind: "network", text: "No connection to the source" });
+  assert.equal(F.coreReason({ kind: "network", message: "The site answered HTTP 404." }).kind, "notFound");
+  assert.equal(F.coreReason({ kind: "webview", message: "This source needs a WebView." }).kind, "other");
+  assert.equal(F.coreReason({ kind: "source", message: "java.net.UnknownHostException: Unable to resolve host \"api.mangadex.org\"" }).kind, "network");
+  assert.equal(F.coreReason({ kind: "notFound", message: "Source not installed" }).kind, "sourceMissing");
+  assert.deepEqual(F.coreReason(null), { kind: "other", text: "Unknown error" });
   assert.deepEqual(F.coreReason({ kind: "source", message: "Page 2 of MangaDex is not an image." }), { kind: "other", text: "Page 2 of MangaDex is not an image." });
 });
 

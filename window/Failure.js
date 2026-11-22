@@ -33,16 +33,13 @@ function reason(message) {
   return { kind: "other", text: shortened(m.trim() || "Unknown error") }
 }
 
-// miharchy-core's error { kind, message } as reason() gives it: core
-// names the kind, so only "Source not installed" is read from the text.
+// miharchy-core's error { kind, message } as reason() gives it. The text
+// decides first ("HTTP 404" comes as kind network), then core's kind.
 function coreReason(error) {
-  var m = String((error && error.message) || "")
-  if (/source not installed/i.test(m)) return { kind: "sourceMissing", text: "Source not installed" }
-  switch (error && error.kind) {
-    case "cloudflare": return { kind: "cloudflare", text: "Cloudflare blocked the source" }
-    case "network": return { kind: "network", text: "No connection to the source" }
-  }
-  return { kind: "other", text: shortened(m.trim() || "Unknown error") }
+  var r = reason(error && error.message)
+  var kind = error && error.kind
+  if (r.kind !== "other" || (kind !== "cloudflare" && kind !== "network")) return r
+  return KINDS.filter(function(k) { return k.kind === kind }).map(function(k) { return { kind: k.kind, text: k.text } })[0]
 }
 
 // What the user can do about it, or "". flareOn: the server's
