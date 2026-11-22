@@ -120,7 +120,7 @@ class MoveTest {
                 val categories = """[{"id":0,"name":"Default","includeInUpdate":"UNSET","includeInDownload":"UNSET","meta":[]},
                     {"id":7,"name":"Action","includeInUpdate":"EXCLUDE","includeInDownload":"INCLUDE","meta":[{"key":"miharchy.keepDownloads","value":"true"}]},
                     {"id":9,"name":"Gone","includeInUpdate":"UNSET","includeInDownload":"UNSET","meta":[]}]"""
-                val mangas = """[{"sourceId":"$sid","url":"/m/1","meta":[{"key":"miharchy.readingMode","value":"webtoon"}]},
+                val mangas = """[{"sourceId":"$sid","url":"/m/1","chaptersLastFetchedAt":"1700000000","meta":[{"key":"miharchy.readingMode","value":"webtoon"}]},
                     {"sourceId":"$sid","url":"/m/gone","meta":[{"key":"miharchy.readingMode","value":"paged-ltr"}]}]"""
                 fun download(url: String, name: String) = """{"url":"$url","name":"$name","scanlator":null,"manga":{"sourceId":"$sid","url":"/m/1","title":"Manga: 1/2","source":{"displayName":"Fixture Downloads (EN)"}}}"""
                 val downloads = "[${download("/c/ok", "Chapter 1")},${download("/c/empty", "Chapter 2")},${download("/c/html", "Chapter 3")}]"
@@ -173,6 +173,8 @@ class MoveTest {
                             assertEquals("true", meta("category", 1, "miharchy.keepDownloads"))
                             val manga = runBlocking { db.run { c -> c.query("SELECT id FROM manga WHERE remote_url = '/m/1'") { it.getLong(1) }.single() } }
                             assertEquals("webtoon", meta("manga", manga, "miharchy.readingMode"))
+                            // The last chapter fetch, which no backup carries, for the library check (#394).
+                            assertEquals(1_700_000_000_000L, runBlocking { db.run { c -> c.query("SELECT state_chapter_last_update FROM manga WHERE id = ?", manga) { it.getLong(1) }.single() } })
                             assertEquals("24", meta("global", 0, "miharchy.globalUpdateInterval"))
                             assertEquals("21:30", meta("global", 0, "miharchy.backupTime"))
                             assertEquals("false", meta("global", 0, "miharchy.excludeCompleted"))

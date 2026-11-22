@@ -28,10 +28,6 @@ Item {
   // "core" with MIHARCHY_BACKEND=core (shell.qml): config and connection are miharchy-core's.
   property string backend: ""
   readonly property bool core: backend === "core"
-  // ponytail: what core does not serve yet, by key, with the issue that moves it.
-  readonly property var coreGates: ({
-    "view.check": "The library check is not on miharchy-core yet (#394)"
-  })
   property string configPath: ""
   // Model.reduce()'s connection: the library manga and categories.
   property var connection: Model.initial()
@@ -259,10 +255,6 @@ Item {
   // The "library." commands and categories.back; false for the rest,
   // library.reload among them, which shell.qml runs.
   function run(id) {
-    if (core && coreGates[id]) {
-      reduce({ type: "note", text: coreGates[id] })
-      return true
-    }
     switch (id) {
       case "library.left":
       case "library.right":

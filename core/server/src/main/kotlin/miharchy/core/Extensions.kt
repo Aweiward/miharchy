@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -107,7 +108,8 @@ class Extensions(private val db: Database, private val host: Host, private val d
         "extensionRepo.list" to { _ -> buildJsonObject { put("repos", JsonArray(stores().map(::repoJson))) } },
         "extensionRepo.add" to { input -> buildJsonObject { put("repo", repoJson(addStore(input.str("url")))) } },
         "extensionRepo.remove" to { input -> buildJsonObject { put("repo", buildJsonObject { put("indexUrl", removeStore(input.str("url"))) }) } },
-        "extension.list" to { _ -> list() },
+        // cached: the repo indexes as last fetched, no network; the library check loads each time Settings shows (#394).
+        "extension.list" to { input -> list((input["cached"] as? JsonPrimitive)?.booleanOrNull == true) },
         "extension.install" to { input -> buildJsonObject { put("extension", install(input.str("pkgName"), update = false)) } },
         "extension.update" to { input -> buildJsonObject { put("extension", install(input.str("pkgName"), update = true)) } },
         "extension.updateAll" to { input ->
@@ -182,10 +184,11 @@ class Extensions(private val db: Database, private val host: Host, private val d
     }
 
     /** Fetches every repo. A repo that fails keeps its last list, so its extensions never look obsolete for it. */
-    private suspend fun list(): JsonObject {
+    private suspend fun list(cached: Boolean = false): JsonObject {
         val all = stores()
         val errors = mutableListOf<JsonObject>()
         for (store in all) {
+            if (cached && lock.withLock { store.indexUrl in offers }) continue
             try {
                 val (fresh, list) = fetchIndex(store.indexUrl)
                 if (fresh.signingKey != store.signingKey) throw ApiError(Kind.invalid, "${store.indexUrl} now lists another signing key than when it was added.")

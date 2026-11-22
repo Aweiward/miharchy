@@ -80,6 +80,10 @@ class ExtensionsTest {
             publish("0".repeat(64), 1, jar(listOf(FixtureA::class.java), null))
             ext.expect(Kind.invalid, "extensionRepo.add", url(base))
             assertEquals(1, ext.call("extension.list")["errors"]!!.jsonArray.size)
+            // cached answers from the index already held, with no fetch, so the broken repo shows no error (#394).
+            val cached = ext.call("extension.list", buildJsonObject { put("cached", true) })
+            assertEquals(0, cached["errors"]!!.jsonArray.size)
+            assertEquals(1, cached["extensions"]!!.jsonArray.size)
         }
     }
 

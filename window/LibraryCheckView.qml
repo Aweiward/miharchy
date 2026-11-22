@@ -17,6 +17,9 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
+  // On miharchy-core under MIHARCHY_BACKEND=core (#394): the check reads
+  // and writes there, and its ids are core's.
+  property bool core: false
   property bool active: false
 
   // state: the connection states (Model.problem words a failure), "idle"
@@ -40,7 +43,7 @@ Item {
   readonly property string countText: check.state === "ok" ? LibraryCheck.countText(count) : ""
   readonly property var current: rows[cursor] || null
   // A failed load, worded; null while it loads or after it answers.
-  readonly property var problem: Model.problem(check, configPath)
+  readonly property var problem: Model.problem(check, configPath, core ? "core" : "")
   readonly property string hint: merging ? (merge.cursor === -1 ? "esc close   " : "j k move   enter keep this one   esc cancel   ") : "j k move   space select   x " + (showDismissed ? "bring back" : "dismiss") + "   X " + (showDismissed ? "problems" : "dismissed") + "   "
     + (current && current.kind === "extension" && current.type === "problem" ? "enter update   " : "")
     + (current && current.kind === "duplicate" && current.type === "problem" ? "enter merge   " : "") + "M migrate   "
@@ -64,7 +67,7 @@ Item {
     if (!config) return
     var s = ++seq
     check = { state: "loading", message: "", problems: check.problems }
-    send({ query: LibraryCheck.QUERY }, function(reply) {
+    LibraryCheck.load(send, core, function(reply) {
       if (s !== view.seq) return
       view.check = reply.state === "ok"
         ? { state: "ok", message: "", problems: LibraryCheck.problems(reply.data, Date.now()) }
@@ -77,7 +80,7 @@ Item {
     if (!payload || !config) return
     error = ""
     send(payload, function(reply) {
-      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, view.configPath).title
+      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, view.configPath, view.core ? "core" : "").title
       view.load()
     })
   }
@@ -103,7 +106,7 @@ Item {
         selected = LibraryCheck.select(selected, rows, cursor)
         break
       case "check.dismiss":
-        mutate(LibraryCheck.dismissPayload(LibraryCheck.targets(rows, selected, cursor), Date.now(), showDismissed))
+        mutate(LibraryCheck.dismissPayload(LibraryCheck.targets(rows, selected, cursor), Date.now(), showDismissed, core))
         selected = {}
         break
       case "check.dismissed":
@@ -112,7 +115,7 @@ Item {
         cursor = 0
         break
       case "check.activate":
-        if (current && current.type === "problem" && current.kind === "extension") mutate(Extensions.actionPayload(current.pkgName, "update"))
+        if (current && current.type === "problem" && current.kind === "extension") mutate(Extensions.actionPayload(current.pkgName, "update", core))
         if (current && current.type === "problem" && current.kind === "duplicate") openMerge(current)
         break
       case "check.mergeUp":
@@ -134,9 +137,9 @@ Item {
   function openMerge(problem) {
     error = ""
     var s = seq
-    send({ query: LibraryCheck.MERGE_QUERY, variables: LibraryCheck.mergeVariables(problem) }, function(reply) {
+    LibraryCheck.mergeLoad(send, core, problem, function(reply) {
       if (s !== view.seq || !view.active) return
-      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, view.configPath).title
+      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, view.configPath, view.core ? "core" : "").title
       else {
         var copies = LibraryCheck.mergeCopies(reply.data)
         view.merge = { copies: copies, cursor: LibraryCheck.mergeStart(copies) }
