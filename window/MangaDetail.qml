@@ -83,9 +83,9 @@ Rectangle {
     "manga.download": "Downloads are not on miharchy-core yet (#367)",
     "manga.downloads": "Downloads are not on miharchy-core yet (#367)",
     "manga.deleteDownload": "Downloads are not on miharchy-core yet (#367)",
-    "manga.categories": "Categories move to miharchy-core with the Library (#379)",
     "manga.track": "Tracking is not on miharchy-core yet (#371)",
-    "manga.migrate": "Migrate is not on miharchy-core yet (#379)"
+    "manga.migrate": "Migrate is not on miharchy-core yet (#394)",
+    "manga.duplicateMigrate": "Migrate is not on miharchy-core yet (#394)"
   })
   readonly property string hint: dupesOpen ? "j k move   enter open   M migrate to this   a add anyway   esc cancel   "
     : picking ? "j k move   space in or out   esc close   "
@@ -241,8 +241,7 @@ Rectangle {
       return
     }
     chapterPrefs.saveDefault(row.id === "defaultAll" ? libraryIds : [])
-    // ponytail: on core no library list reaches the detail until #379, so no manga resets.
-    optionsNote = row.id !== "defaultAll" ? "Saved as the default" : onCore ? "Saved as the default. Resetting every manga waits for the Library on miharchy-core (#379)" : "Saved as the default for every manga"
+    optionsNote = row.id === "defaultAll" ? "Saved as the default for every manga" : "Saved as the default"
   }
 
   function endEdit() {

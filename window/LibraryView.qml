@@ -25,6 +25,18 @@ Item {
 
   required property Theme theme
   property var config: null
+  // "core" with MIHARCHY_BACKEND=core (shell.qml): config and connection are miharchy-core's.
+  property string backend: ""
+  readonly property bool core: backend === "core"
+  // ponytail: what core does not serve yet, by key, with the issue that moves it.
+  readonly property var coreGates: ({
+    "library.update": "Checking for new chapters is not on miharchy-core yet (#368)",
+    "library.download": "Downloads are not on miharchy-core yet (#367)",
+    "library.deleteDownloads": "Downloads are not on miharchy-core yet (#367)",
+    "library.removeWithDownloads": "Downloads are not on miharchy-core yet (#367)",
+    "view.check": "The library check is not on miharchy-core yet (#394)",
+    "migrate.batch": "Migrate is not on miharchy-core yet (#394)"
+  })
   property string configPath: ""
   // Model.reduce()'s connection: the library manga and categories.
   property var connection: Model.initial()
@@ -70,7 +82,7 @@ Item {
   // The change categories panel's rows, shown while picking.
   readonly property var pickRows: Library.categoryRows(connection.categories, connection.manga.filter(function(m) { return view.pickIds.indexOf(m.id) !== -1 }))
   // Model.notice(): null for the grid, otherwise { title, detail }.
-  readonly property var notice: Model.notice(connection, configPath, shown, Library.narrowed(prefs, query))
+  readonly property var notice: Model.notice(connection, configPath, shown, Library.narrowed(prefs, query), backend)
   // Whether the search field is open.
   property bool editing: false
   readonly property string summary: Library.summary(prefs, editing ? "" : query)
@@ -142,7 +154,7 @@ Item {
   }
 
   function report(reply) {
-    if (reply.state !== "ok") fail(reply.message || Model.problem(reply, configPath).title)
+    if (reply.state !== "ok") fail(reply.message || Model.problem(reply, configPath, backend).title)
   }
 
   // x and X ask once; the same key again acts.
@@ -162,15 +174,15 @@ Item {
     reduce({ type: "deselect" })
     if (!ids.length || !config) return
     var remove = function() {
-      view.send(Library.removePayload(ids), function(reply) {
+      view.send(Library.removePayload(ids, view.core), function(reply) {
         view.report(reply)
         view.edited()
       })
     }
     if (action === "remove") return remove()
-    send(Library.chaptersPayload(ids), function(reply) {
+    send(Library.chaptersPayload(ids, core), function(reply) {
       if (reply.state !== "ok") return view.report(reply)
-      var chapters = Browse.toChapters(reply.data.chapters.nodes)
+      var chapters = Browse.toChapters(Library.chapterNodes(reply.data))
       if (action === "read" || action === "unread") return view.mark(chapters, action, ids)
       var payload = Downloads.removePayload(chapters, view.queue)
       if (action === "removeDeleting") {
@@ -212,11 +224,11 @@ Item {
   function continueReading(m) {
     if (!m.unread) return reduce({ type: "note", text: "Every chapter of " + m.title + " is read." })
     var cfg = config
-    var d = Browse.detail(m.id, false)
+    var d = Browse.detail(m.id, false, core)
     send(Browse.detailPayload(d), function(reply) {
       d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
       if (!d.manga) return view.fail(Browse.notice(d, view.configPath).title)
-      view.send(Prefs.loadPayload(Library.CHAPTER_PREFS, m.id), function(saved) {
+      view.send(Prefs.loadPayload(Library.CHAPTER_PREFS, m.id, view.core), function(saved) {
         var next = Library.continueChapter(d.chapters, Library.chapterPrefs(saved.state === "ok" ? saved.data : {}, view.downloadedOnly))
         if (next) view.read(d.manga, d.chapters, next.id)
         else view.reduce({ type: "note", text: "No next chapter of " + m.title + " passes its chapter filters." })
@@ -252,6 +264,10 @@ Item {
   // The "library." commands and categories.back; false for the rest,
   // library.reload among them, which shell.qml runs.
   function run(id) {
+    if (core && coreGates[id]) {
+      reduce({ type: "note", text: coreGates[id] })
+      return true
+    }
     switch (id) {
       case "library.left":
       case "library.right":
@@ -352,7 +368,7 @@ Item {
         break
       case "library.pickToggle":
         var pick = pickRows[pickCursor]
-        if (pick) send(Library.categoryPayload(pick, pickIds), function(reply) {
+        if (pick) send(Library.categoryPayload(pick, pickIds, core), function(reply) {
           view.report(reply)
           view.edited()
         })

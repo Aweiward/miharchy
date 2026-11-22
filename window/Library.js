@@ -319,13 +319,16 @@ var REMOVE_MUTATION = "mutation($ids: [Int!]!) { updateMangas(input: { ids: $ids
 var CATEGORIES_MUTATION = "mutation($ids: [Int!]!, $add: [Int!]!, $remove: [Int!]!) {"
   + " updateMangasCategories(input: { ids: $ids, patch: { addToCategories: $add, removeFromCategories: $remove } }) { mangas { id } } }"
 
-function chaptersPayload(mangaIds) {
+// core (the last argument of each payload here): miharchy-core's routes (ADR 0010).
+function chaptersPayload(mangaIds, core) {
+  if (core) return { route: "chapter.list", body: { mangaIds: mangaIds } }
   return { query: CHAPTERS_QUERY, variables: { ids: mangaIds } }
 }
 
 // Takes the manga out of the library. Their chapters, read state and
 // downloads stay, as in Mihon.
-function removePayload(mangaIds) {
+function removePayload(mangaIds, core) {
+  if (core) return { route: "manga.update", body: { ids: mangaIds, inLibrary: false } }
   return { query: REMOVE_MUTATION, variables: { ids: mangaIds } }
 }
 
@@ -341,8 +344,9 @@ function categoryRows(categories, manga) {
 
 // Choosing a row puts every manga in that category, or takes every manga
 // out once all are in it.
-function categoryPayload(row, mangaIds) {
+function categoryPayload(row, mangaIds, core) {
   var out = row.state === "all"
+  if (core) return { route: "manga.update", body: out ? { ids: mangaIds, removeFromCategories: [row.id] } : { ids: mangaIds, addToCategories: [row.id] } }
   return { query: CATEGORIES_MUTATION, variables: { ids: mangaIds, add: out ? [] : [row.id], remove: out ? [row.id] : [] } }
 }
 
@@ -358,7 +362,8 @@ function defaultCategory(setting, categories) {
 // Mihon moves an added manga to exactly that category, or to none for
 // Default: a manga that left the library keeps its old categories on the
 // server.
-function moveToPayload(mangaId, to, categories) {
+function moveToPayload(mangaId, to, categories, core) {
+  if (core) return { route: "manga.update", body: { ids: [mangaId], clearCategories: true, addToCategories: to > 0 ? [to] : [] } }
   return {
     query: CATEGORIES_MUTATION,
     variables: { ids: [mangaId], add: to > 0 ? [to] : [], remove: categories.map(function(c) { return c.id }).filter(function(id) { return id !== to }) }
@@ -366,6 +371,11 @@ function moveToPayload(mangaId, to, categories) {
 }
 
 // "the manga" for one, "3 manga" for more: what an armed x or X acts on.
+// chaptersPayload's reply -> its chapter nodes.
+function chapterNodes(data) {
+  return Array.isArray(data.chapters) ? data.chapters : data.chapters.nodes
+}
+
 function count(n) {
   return n === 1 ? "the manga" : n + " manga"
 }
@@ -392,6 +402,7 @@ function summary(prefs, query) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+    chapterNodes: chapterNodes,
     PREFS: PREFS,
     initial: initial,
     reduce: reduce,

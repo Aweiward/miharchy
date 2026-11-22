@@ -16,6 +16,9 @@ Item {
 
   required property Theme theme
   property var config: null
+  // "core" with MIHARCHY_BACKEND=core (shell.qml): config and categories are miharchy-core's.
+  property string backend: ""
+  readonly property bool core: backend === "core"
   property var categories: []
   property var manga: []
   property bool loading: false
@@ -58,7 +61,7 @@ Item {
     error = ""
     send(payload, function(reply) {
       view.pending = false
-      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, "server.json").title
+      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, core ? "core.json" : "server.json", backend).title
       else if (done) done(reply.data)
       view.edited()
     })
@@ -90,7 +93,7 @@ Item {
       case "categories.moveUp":
       case "categories.moveDown":
         if (row) cursorId = row.id
-        mutate(Categories.movePayload(categories, cursor, id === "categories.moveUp" ? -1 : 1))
+        mutate(Categories.movePayload(categories, cursor, id === "categories.moveUp" ? -1 : 1, core))
         break
       case "categories.add":
         openField("add", "")
@@ -100,17 +103,17 @@ Item {
         break
       case "categories.remove":
         if (!row) break
-        if (wasArmed === row.id) mutate(Categories.deletePayload(row.id))
+        if (wasArmed === row.id) mutate(Categories.deletePayload(row.id, core))
         else armed = row.id
         break
       case "categories.autoDownload":
-        if (row) mutate(Categories.includePayload(categories, row.id, "download"))
+        if (row) mutate(Categories.includePayload(categories, row.id, "download", core))
         break
       case "categories.keepDownloads":
-        if (row) mutate(Categories.keepPayload(categories, row.id))
+        if (row) mutate(Categories.keepPayload(categories, row.id, core))
         break
       case "categories.update":
-        if (row) mutate(Categories.includePayload(categories, row.id, "update"))
+        if (row) mutate(Categories.includePayload(categories, row.id, "update", core))
         break
       case "categories.commit":
         var checked = Categories.checkName(field.text, categories, editing === "rename" && row ? row.id : undefined)
@@ -119,9 +122,9 @@ Item {
           break
         }
         if (editing === "add") {
-          mutate(Categories.createPayload(checked.name), function(data) { view.cursorId = data.createCategory.category.id })
+          mutate(Categories.createPayload(checked.name, core), function(data) { view.cursorId = Categories.createdId(data) })
         } else if (row) {
-          mutate(Categories.renamePayload(row.id, checked.name))
+          mutate(Categories.renamePayload(row.id, checked.name, core))
         }
         closeField()
         break
