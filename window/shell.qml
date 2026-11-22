@@ -635,12 +635,6 @@ ShellRoot {
   }
 
   function run(id) {
-    // The Library says what miharchy-core does not serve yet.
-    if (coreBackend && libraryView.coreGates[id]) {
-      if (view !== "library") run("view.library")
-      libraryView.run(id)
-      return
-    }
     if (id.indexOf("view.") === 0) {
       closeOverlays()
       view = id.slice(5)
@@ -711,8 +705,7 @@ ShellRoot {
       return
     }
     if (id === "check.migrate") {
-      // The check still reads Suwayomi, and Migrate follows the switch (#394).
-      if (!coreBackend) migrateView.startList(checkView.migrateList())
+      migrateView.startList(checkView.migrateList())
       return
     }
     if (id.indexOf("migrate.") === 0) {
@@ -854,8 +847,9 @@ ShellRoot {
           fetchLibrary()
           if (!coreBackend) libraryView.reload()
           if (!coreBackend) updatesView.load()
-          if (view === "check") checkView.load()
         }
+        // The check follows the switch (#394).
+        if (view === "check") checkView.load()
         configFile.reload()
         break
       case "window.fullscreen":
@@ -1017,7 +1011,7 @@ ShellRoot {
           onHealthWanted: syncView.refreshHealth()
           checkCount: checkView.countText
           // The library check stays on Suwayomi until #394, so Settings does not start it on core.
-          onCheckWanted: if (!root.coreBackend) checkView.load()
+          onCheckWanted: checkView.load()
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onPicked: function(index) { root.settingsCursor = index }
           onEditEnded: keyRoot.forceActiveFocus()
@@ -1119,10 +1113,11 @@ ShellRoot {
           visible: root.view === "check"
           active: visible
           theme: theme
-          config: root.config
-          configPath: root.configPath
+          config: root.coreBackend ? root.coreConfig : root.config
+          configPath: root.coreBackend ? root.coreConfigPath : root.configPath
+          core: root.coreBackend
           onKey: function(event) { event.accepted = root.handleKey(event) }
-          onMergeChosen: function(job) { if (!root.coreBackend) migrateView.startWith(job.old, job.kept) }
+          onMergeChosen: function(job) { migrateView.startWith(job.old, job.kept) }
         }
 
         Text {

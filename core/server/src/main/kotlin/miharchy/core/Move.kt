@@ -174,13 +174,16 @@ class Move(
         }
     }
 
-    /** Metas with Suwayomi's ids made core's: manga by source and URL, categories by name. A backup carries none of them. */
+    /**
+     * Metas with Suwayomi's ids made core's: manga by source and URL, categories by name. A backup carries none of them,
+     * nor a manga's last chapter fetch, which the library check reads (#394).
+     */
     private suspend fun moveMetas(suwayomi: Suwayomi, report: Report) {
         val data = suwayomi.query(
             """{
               metas { nodes { key value } }
               categories { nodes { id name includeInUpdate includeInDownload meta { key value } } }
-              mangas { nodes { sourceId url meta { key value } } }
+              mangas { nodes { sourceId url chaptersLastFetchedAt meta { key value } } }
             }""",
         )
         val categories = data.nodes("categories")
@@ -208,6 +211,11 @@ class Move(
                 val mangaIds = c.query("SELECT source_id, remote_url, id FROM manga") { (it.getLong(1).toString() to it.getString(2)) to it.getLong(3) }.toMap()
                 var orphans = 0
                 for (manga in data.nodes("mangas")) {
+                    // Seconds on Suwayomi, ms here; a later fetch on core wins.
+                    val fetched = manga.raw("chaptersLastFetchedAt")?.toLongOrNull()?.takeIf { it > 0 }
+                    mangaIds[manga.text("sourceId") to manga.text("url")]?.let { id ->
+                        if (fetched != null) c.update("UPDATE manga SET state_chapter_last_update = max(coalesce(state_chapter_last_update, 0), ?) WHERE id = ?", fetched * 1000, id)
+                    }
                     val metas = manga["meta"]!!.jsonArray
                     if (metas.isEmpty()) continue
                     val id = mangaIds[manga.text("sourceId") to manga.text("url")]
