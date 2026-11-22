@@ -3,9 +3,9 @@ const assert = require("node:assert/strict");
 const G = require("./load")("GlobalSearch.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
-const ok = (ids) => M.reply(200, JSON.stringify({ data: { fetchSourceManga: { hasNextPage: true, mangas: ids.map((id) => ({ id, title: "M" + id, thumbnailUrl: null, inLibrary: false })) } } }));
-const fail = (message) => M.reply(200, JSON.stringify({ errors: [{ message }] }));
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee", backend: "core" };
+const ok = (ids) => M.coreReply(200, JSON.stringify({ hasNextPage: true, mangas: ids.map((id) => ({ id, title: "M" + id, thumbnailUrl: null, inLibrary: false })) }));
+const fail = (message) => M.coreReply(502, JSON.stringify({ error: { kind: "upstream", message } }));
 const sources = (n) => Array.from({ length: n }, (_, i) => ({ id: String(i + 1), name: "S" + (i + 1), supportsLatest: true }));
 
 const start = (s, now = 0) => G.due(s).reduce((acc, i) => G.reduce(acc, i, { type: "request", now }), s);
@@ -14,9 +14,9 @@ const answer = (s, i, reply) => G.reduce(s, i, { type: "reply", attempt: s.group
 
 test("one query asks every source for its first search page", () => {
   const s = G.search(sources(2), "berserk");
-  assert.deepEqual(s.groups.map((g) => G.payload(g).variables), [
-    { source: "1", type: "SEARCH", page: 1, query: "berserk", filters: [] },
-    { source: "2", type: "SEARCH", page: 1, query: "berserk", filters: [] }
+  assert.deepEqual(s.groups.map((g) => G.payload(g)), [
+    { route: "source.search", body: { source: "1", page: 1, query: "berserk" } },
+    { route: "source.search", body: { source: "2", page: 1, query: "berserk" } }
   ]);
 });
 
@@ -33,8 +33,8 @@ test("results land per source, in any order, and a failure leaves the others alo
   s = answer(s, 2, ok([7, 8]));
   assert.equal(G.status(s.groups[2], "/c"), "2 results");
   assert.equal(G.status(s.groups[0], "/c"), "searching");
-  s = answer(s, 0, fail("Exception while fetching data (/fetchSourceManga) : Cloudflare bypass currently disabled\n\tat x"));
-  assert.match(G.status(s.groups[0], "/c"), /^This source needs FlareSolverr/);
+  s = answer(s, 0, M.coreReply(502, '{"error":{"kind":"cloudflare","message":"https://x shows a Cloudflare challenge."}}'));
+  assert.match(G.status(s.groups[0], "/c"), /^This source sits behind Cloudflare/);
   s = answer(s, 1, ok([]));
   assert.match(G.status(s.groups[1], "/c"), /^No manga found/);
   assert.deepEqual(s.groups[2].items.map((m) => m.id), [7, 8]);
@@ -96,7 +96,7 @@ test("a reply after the timeout is dropped, also once r has asked again", () => 
   let s = start(G.search(sources(1), "q"));
   const first = s.groups[0].attempt;
   s = G.reduce(s, 0, { type: "timeout" });
-  assert.equal(G.reduce(s, 0, { type: "reply", attempt: first, reply: M.reply(0, ""), config }), s, "the abort's status 0 does not read as a server that is down");
+  assert.equal(G.reduce(s, 0, { type: "reply", attempt: first, reply: M.coreReply(0, ""), config }), s, "the abort's status 0 does not read as a server that is down");
   s = G.retry(s);
   assert.deepEqual(G.due(s), [0], "r retries a timed out source");
   s = start(s);

@@ -9,19 +9,14 @@
 var KEIYOUSHI = "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json"
 var PRESET_META = Settings.META_PREFIX + "repoPreset"
 
-var FIELDS = "pkgName name lang versionName iconUrl isInstalled hasUpdate isObsolete contentWarning storeIndexUrl"
-var STORES_QUERY = "{ extensionStores { nodes { indexUrl name } } metas(condition: { key: \"" + PRESET_META + "\" }) { nodes { key value } } }"
 
 // ext.state: "idle" | "loading" | "ok" | "no-config" | "down" | "unauthorized"
 // | "error", the connection states plus "idle" (never loaded), so
 // Model.problem() words failures. step: the load request in flight, see next().
-// repos: [{ url, name }] with url as the server stores it; the server
-// rewrites the Keiyoushi URL to .../index.pb, so removal must send this one.
+// repos: [{ url, name }] with url as core stores it, so removal must send this one.
 // busy / errors: per extension pkgName, the action in flight or its failure.
-// core: the view talks to miharchy-core (config.backend "core", ADR 0010).
-// Every payload and reply below then takes core's routes and shapes.
 function initial(core) {
-  return { state: "idle", message: "", step: null, repos: [], extensions: [], busy: {}, errors: {}, repoError: "", core: core === true }
+  return { state: "idle", message: "", step: null, repos: [], extensions: [], busy: {}, errors: {}, repoError: "", core: true }
 }
 
 function copy(ext, changes) {
@@ -65,33 +60,13 @@ function toExtension(config, n) {
   }
 }
 
-// The load runs as steps: "stores" reads the repos and the preset flag;
-// "preset" adds Keiyoushi, only when there is no repo and the flag is
-// unset; "mark" sets the flag so a repo the user removes stays removed;
-// "fetch" refreshes every repo and returns the whole list.
+// The load runs as steps: "stores" reads the preset flag, "repos" reads the
+// repos only when the flag is unset, "preset" adds Keiyoushi, only when
+// there is no repo and the flag is unset; "mark" sets the flag so a repo the
+// user removes stays removed; "fetch": extension.list fetches every repo
+// with the extensions in one reply.
 // Returns the payload for ext.step, or null when nothing is due.
 function next(ext) {
-  if (ext.core) return coreNext(ext)
-  switch (ext.step) {
-    case "stores":
-      return { query: STORES_QUERY }
-    case "preset":
-      return addRepoPayload(KEIYOUSHI)
-    case "mark":
-      return {
-        query: "mutation($key: String!) { setGlobalMeta(input: { meta: { key: $key, value: \"true\" } }) { meta { key } } }",
-        variables: { key: PRESET_META }
-      }
-    case "fetch":
-      return { query: "mutation { fetchExtensions(input: {}) { extensionStores { indexUrl name } extensions { " + FIELDS + " } } }" }
-  }
-  return null
-}
-
-// On core the load reads the preset flag first ("stores"), then the repos
-// only when the flag is unset ("repos"), and extension.list fetches every
-// repo with the extensions in one reply.
-function coreNext(ext) {
   switch (ext.step) {
     case "stores":
       return { route: "meta.get", body: { scope: "global", keys: [PRESET_META] } }
@@ -110,30 +85,16 @@ function coreNext(ext) {
 var CORE_ACTIONS = { install: "extension.install", update: "extension.update", uninstall: "extension.remove" }
 
 function addRepoPayload(url, core) {
-  if (core) return { route: "extensionRepo.add", body: { url: url } }
-  return {
-    query: "mutation($url: String!) { addExtensionStore(input: { indexUrl: $url }) { extensionStore { indexUrl name } } }",
-    variables: { url: url }
-  }
+  return { route: "extensionRepo.add", body: { url: url } }
 }
 
 function removeRepoPayload(repo, core) {
-  if (core) return { route: "extensionRepo.remove", body: { url: repo.url } }
-  return {
-    query: "mutation($url: String!) { removeExtensionStore(input: { indexUrl: $url }) { extensionStore { indexUrl } } }",
-    variables: { url: repo.url }
-  }
+  return { route: "extensionRepo.remove", body: { url: repo.url } }
 }
 
 // action: "install" | "update" | "uninstall".
 function actionPayload(pkgName, action, core) {
-  if (core) return { route: CORE_ACTIONS[action], body: { pkgName: pkgName } }
-  var patch = {}
-  patch[action] = true
-  return {
-    query: "mutation($id: String!, $patch: UpdateExtensionPatchInput!) { updateExtension(input: { id: $id, patch: $patch }) { extension { " + FIELDS + " } } }",
-    variables: { id: pkgName, patch: patch }
-  }
+  return { route: CORE_ACTIONS[action], body: { pkgName: pkgName } }
 }
 
 // Mihon's Update all: every installed extension with an update and no
@@ -141,14 +102,7 @@ function actionPayload(pkgName, action, core) {
 function updateAll(ext) {
   var pkgNames = ext.extensions.filter(function(e) { return e.installed && e.hasUpdate && !ext.busy[e.pkgName] }).map(function(e) { return e.pkgName })
   if (!pkgNames.length) return null
-  if (ext.core) return { pkgNames: pkgNames, payload: { route: "extension.updateAll", body: { pkgNames: pkgNames } } }
-  return {
-    pkgNames: pkgNames,
-    payload: {
-      query: "mutation($ids: [String!]!) { updateExtensions(input: { ids: $ids, patch: { update: true } }) { extensions { " + FIELDS + " } } }",
-      variables: { ids: pkgNames }
-    }
-  }
+  return { pkgNames: pkgNames, payload: { route: "extension.updateAll", body: { pkgNames: pkgNames } } }
 }
 
 // A repo URL as typed -> { url } or { error }.
@@ -159,7 +113,7 @@ function parseRepoUrl(text) {
 }
 
 // event.type:
-//   "config-missing"  server.json is absent or unreadable
+//   "config-missing"  core.json is absent or unreadable
 //   "load"            start the load steps
 //   "reply"           { reply, config } for the load step in flight
 //   "action"          { pkgName, action } went out
@@ -167,7 +121,7 @@ function parseRepoUrl(text) {
 //   "update-all"      { pkgNames } went out, updateAll()'s
 //   "update-all-reply" { pkgNames, reply, config }
 //   "repo-reply"      { reply, removed? } for an add, or a removal of removed
-// reply is Model.reply()'s. A failure keeps what is shown.
+// reply is Model.coreReply()'s. A failure keeps what is shown.
 function reduce(ext, event) {
   var r = event.reply
   switch (event.type) {
@@ -182,10 +136,10 @@ function reduce(ext, event) {
       return copy(ext, { busy: withKey(ext.busy, event.pkgName, event.action), errors: without(ext.errors, event.pkgName) })
     case "action-reply":
       var busy = without(ext.busy, event.pkgName)
-      if (r.state !== "ok") return copy(ext, { busy: busy, errors: withKey(ext.errors, event.pkgName, r.message || Model.problem(r, "").title) })
-      // Core answers an uninstall of an extension no repo offers with null,
-      // as Suwayomi does: the row goes.
-      var node = ext.core ? r.data.extension : r.data.updateExtension && r.data.updateExtension.extension
+      if (r.state !== "ok") return copy(ext, { busy: busy, errors: withKey(ext.errors, event.pkgName, r.message || Model.problem(r, "", "core").title) })
+      // Core answers an uninstall of an extension no repo offers with null:
+      // the row goes.
+      var node = r.data.extension
       var list = ext.extensions.filter(function(e) { return e.pkgName !== event.pkgName || node })
       list = list.map(function(e) { return e.pkgName === event.pkgName ? toExtension(event.config, node) : e })
       return copy(ext, { busy: busy, extensions: list })
@@ -194,15 +148,14 @@ function reduce(ext, event) {
     case "update-all-reply":
       var done = copy(ext, { busy: event.pkgNames.reduce(without, ext.busy) })
       if (r.state !== "ok") {
-        var why = r.message || Model.problem(r, "").title
+        var why = r.message || Model.problem(r, "", "core").title
         return copy(done, { errors: event.pkgNames.reduce(function(m, p) { return withKey(m, p, why) }, ext.errors) })
       }
       var nodes = {}
-      var updated = ext.core ? r.data.extensions : r.data.updateExtensions.extensions
-      updated.forEach(function(n) { nodes[n.pkgName] = n })
+      r.data.extensions.forEach(function(n) { nodes[n.pkgName] = n })
       return copy(done, { extensions: ext.extensions.map(function(e) { return nodes[e.pkgName] ? toExtension(event.config, nodes[e.pkgName]) : e }) })
     case "repo-reply":
-      if (r.state !== "ok") return copy(ext, { repoError: r.message || Model.problem(r, "").title })
+      if (r.state !== "ok") return copy(ext, { repoError: r.message || Model.problem(r, "", "core").title })
       if (event.removed) {
         return copy(ext, { repoError: "", repos: ext.repos.filter(function(p) { return p.url !== event.removed.url }) })
       }
@@ -213,29 +166,6 @@ function reduce(ext, event) {
 }
 
 function loaded(ext, data, config) {
-  if (ext.core) return coreLoaded(ext, data, config)
-  switch (ext.step) {
-    case "stores":
-      var repos = data.extensionStores.nodes.map(toRepo)
-      var preset = data.metas.nodes.length > 0
-      return copy(ext, { repos: repos, step: repos.length || preset ? "fetch" : "preset" })
-    case "preset":
-      return copy(ext, { step: "mark" })
-    case "mark":
-      return copy(ext, { step: "fetch" })
-    case "fetch":
-      var f = data.fetchExtensions
-      return copy(ext, {
-        state: "ok",
-        step: null,
-        repos: f.extensionStores.map(toRepo),
-        extensions: f.extensions.map(function(n) { return toExtension(config, n) })
-      })
-  }
-  return ext
-}
-
-function coreLoaded(ext, data, config) {
   switch (ext.step) {
     case "stores":
       return copy(ext, { step: data.metas.length ? "fetch" : "repos" })
@@ -270,7 +200,7 @@ function group(e) {
 // available extensions, each by name. filter: { query, allLanguages,
 // showNsfw }.
 //   NSFW extensions hide unless showNsfw; MIXED ones show, marked.
-//   Available ones show only for a repo the server still has (it keeps
+//   Available ones show only for a repo core still has (it keeps
 //   removed repos' extensions) and, unless allLanguages, only in English
 //   or "all". Installed ones show in every language.
 //   query matches a name or repo, ignoring case.
@@ -335,15 +265,13 @@ function actionFor(ext, row, command) {
 
 // --- An installed extension's details: its sources ---
 
-var DETAILS_QUERY = "query($pkg: String!) { extension(pkgName: $pkg) { source { nodes { id displayName lang isConfigurable } } } }"
-
 // details.state: "loading" | "ok" | a failed connection state. sources:
 // [{ id, name, lang, configurable }], fields Browse.sources() gives too,
 // so BrowseView's settings panel takes one as it is.
-// ext: on core the details come from the extension list, ready at once.
+// ext: the details come from the extension list, ready at once.
 function details(pkgName, ext) {
   var d = { pkgName: pkgName, state: "loading", message: "", sources: [], cursor: 0 }
-  var e = ext && ext.core ? find(ext, pkgName) : null
+  var e = ext ? find(ext, pkgName) : null
   if (!e) return d
   // core: true sends the settings panel to core's routes (Widgets.loadPayload).
   var sources = (e.sources || []).map(function(n) { return { id: String(n.id), name: String(n.displayName || n.id), lang: String(n.lang || ""), configurable: n.isConfigurable === true, core: true } })
@@ -351,23 +279,14 @@ function details(pkgName, ext) {
   return copy(d, { state: "ok", sources: sources })
 }
 
-// null when the details need no request.
+// The details need no request: core lists an extension's sources with it.
 function detailsPayload(d) {
-  if (d.state !== "loading") return null
-  return { query: DETAILS_QUERY, variables: { pkg: d.pkgName } }
+  return null
 }
 
-// event.type: "reply" { reply } | "move" { delta }.
+// event.type: "move" { delta }.
 function reduceDetails(d, event) {
   switch (event.type) {
-    case "reply":
-      var r = event.reply
-      if (r.state !== "ok") return copy(d, { state: r.state, message: r.message })
-      var nodes = (r.data.extension && r.data.extension.source && r.data.extension.source.nodes) || []
-      var sources = nodes.map(function(n) {
-        return { id: String(n.id), name: String(n.displayName || n.id), lang: String(n.lang || ""), configurable: n.isConfigurable === true }
-      }).sort(function(a, b) { return a.name.localeCompare(b.name) })
-      return copy(d, { state: "ok", message: "", sources: sources, cursor: Math.min(d.cursor, Math.max(0, sources.length - 1)) })
     case "move":
       return copy(d, { cursor: Math.max(0, Math.min(d.sources.length - 1, d.cursor + event.delta)) })
   }
