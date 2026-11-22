@@ -1,4 +1,4 @@
-// Migrate on miharchy-core (MIHARCHY_BACKEND=core, #394): the same data from core's routes.
+// Migrate on miharchy-core: the loads and writes build their data from core's routes.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const Mi = require("./load")("Migrate.js");
@@ -34,7 +34,7 @@ test("on core the old manga comes from manga.get with its tracks, in OLD_QUERY's
   assert.deepEqual(core.sent[0].body, { id: 1 });
   assert.deepEqual(node.categories.nodes, [{ id: 3 }, { id: 5 }]);
   assert.deepEqual(node.trackRecords.nodes, [{ id: 70, trackerId: 2, tracker: { name: "AniList" } }]);
-  assert.deepEqual(Mi.oldPayload(node, false, true).variables.downloads, [12], "the same downloads as on Suwayomi");
+  assert.deepEqual(Mi.downloaded(node), [12]);
 });
 
 test("on core the target is fetched with manga.refresh, and a library target merges", () => {
@@ -51,22 +51,11 @@ test("on core the target is fetched with manga.refresh, and a library target mer
   assert.equal(run(Mi.targetLoad, empty.send, true, 40)[0].message, "The source returned no chapters for Eleceed.");
 });
 
-// The old manga as both servers give it: OLD_QUERY's node, and core's through oldLoad.
-const suwayomiOld = {
-  id: 1, title: "Eleceed", categories: { nodes: [{ id: 3 }, { id: 5 }] }, meta: OLD.meta,
-  chapters: { nodes: OLD.chapters.map(({ mangaId, ...c }) => c) },
-  trackRecords: { nodes: [{ id: 70, trackerId: 2, tracker: { name: "AniList" } }] }
-};
 const coreOld = () => run(Mi.oldLoad, fakeCore({ "manga.get": ok({ manga: OLD }), "track.list": ok({ tracks: [{ id: 70, mangaId: 1, trackerId: 2 }] }), "tracker.list": TRACKERS }).send, true, 1)[1];
 
-test("the plan and the moving tracks are the same on both servers", () => {
+test("the plan from the old manga's chapters marks what the target lacks", () => {
   const target = [chapter(41, 40, 1), chapter(42, 40, 2), chapter(43, 40, 3)];
-  const node = coreOld();
-  assert.deepEqual(Mi.plan(node.chapters.nodes, target), Mi.plan(suwayomiOld.chapters.nodes, target));
-  assert.deepEqual(Mi.plan(node.chapters.nodes, target), { read: [41, 42], bookmark: [42] });
-  const merge = { meta: [], trackRecords: { nodes: [{ tracker: { name: "Kitsu" } }] } };
-  assert.deepEqual(Mi.oldPayload(node, true, true), Mi.oldPayload(suwayomiOld, true, true));
-  assert.deepEqual(Mi.targetPayload(node, 40, { read: [41], bookmark: [] }, true, merge).variables, Mi.targetPayload(suwayomiOld, 40, { read: [41], bookmark: [] }, true, merge).variables);
+  assert.deepEqual(Mi.plan(coreOld().chapters.nodes, target), { read: [41, 42], bookmark: [42] });
 });
 
 const everything = () => ({ "chapter.update": ok({ chapters: [] }), "meta.set": ok({ metas: [] }), "track.bind": ok({ track: {} }), "manga.update": ok({ mangas: [] }), "download.delete": ok({ chapters: [] }) });
@@ -94,6 +83,15 @@ test("on core a merge keeps the target's categories, mode and trackers, and skip
   assert.deepEqual(noTracks.routes(), ["meta.set", "manga.update"], "t off: no track.bind");
 });
 
+test("on core a kept copy with no reading mode takes the old one, and a manga with no mode sets none", () => {
+  const bare = fakeCore(everything());
+  run(Mi.writeTarget, bare.send, true, coreOld(), 40, { read: [], bookmark: [] }, true, { meta: [], trackRecords: { nodes: [] } });
+  assert.deepEqual(bare.routes(), ["meta.set", "track.bind", "manga.update"]);
+  const noMode = fakeCore(everything());
+  run(Mi.writeTarget, noMode.send, true, Object.assign({}, coreOld(), { meta: [] }), 40, { read: [], bookmark: [] }, false, null);
+  assert.deepEqual(noMode.routes(), ["manga.update"]);
+});
+
 test("on core a failed step stops the chain before the target joins the library", () => {
   const routes = everything();
   routes["track.bind"] = fail("notFound", "There is no track 70.");
@@ -115,9 +113,16 @@ test("on core the old manga leaves the library, then loses its downloads; nothin
   const copy = fakeCore(everything());
   run(Mi.writeOld, copy.send, true, coreOld(), false, true);
   assert.deepEqual(copy.routes(), ["download.delete"], "c with d: the old manga stays, its downloads go");
+  const keep = fakeCore(everything());
+  run(Mi.writeOld, keep.send, true, coreOld(), true, false);
+  assert.deepEqual(keep.routes(), ["manga.update"], "m without d: the downloads stay");
+  const bare = fakeCore(everything());
+  const noDownloads = Object.assign({}, coreOld(), { chapters: { nodes: [chapter(11, 1, 1)] } });
+  assert.deepEqual(run(Mi.writeOld, bare.send, true, noDownloads, false, true), [null], "c with d on a manga with nothing downloaded");
+  assert.deepEqual(bare.sent, []);
 });
 
-test("on core the library, the source names and the highest chapters build Suwayomi's data", () => {
+test("on core the library, the source names and the highest chapters build the data the pure functions read", () => {
   const core = fakeCore({
     "library.list": ok({ mangas: [{ id: 1, title: "Eleceed", sourceId: "10", source: { displayName: "MangaDex (EN)" } }, { id: 2, title: "Gone", sourceId: "99", source: null }], categories: [] }),
     "meta.get": ok({ metas: [{ scope: "global", owner: 0, key: M.SOURCE_NAMES_META, value: "{\"99\":\"Old Source\"}" }] }),
@@ -131,7 +136,7 @@ test("on core the library, the source names and the highest chapters build Suway
   assert.deepEqual(Mi.withHighest([{ id: 2 }, { id: 1 }], high.data).map((m) => m.highest), [-1, 120.5]);
 });
 
-test("on core a stalled manga's chapter check is one manga.refresh, and its reply decides as on Suwayomi", () => {
+test("on core a stalled manga's chapter check is one manga.refresh, and its reply decides", () => {
   const source = { id: "3", name: "Weeb Central (EN)", lang: "en", core: true };
   let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [source] }]);
   b = Mi.reduceBatch(b, 0, { type: "request" });

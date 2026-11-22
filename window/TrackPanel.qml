@@ -16,10 +16,10 @@ Rectangle {
   required property Theme theme
   property var config: null
   property string configPath: ""
-  // miharchy-core's, for a manga that is core's (ADR 0010).
+  // miharchy-core's (ADR 0010): the only server the panel talks to.
   property var coreConfig: null
   property string coreConfigPath: ""
-  // Whether the panel open is a core manga's.
+  // shell.qml sets this; the panel no longer reads it.
   property bool core: false
   // False once the manga detail closes, which closes the panel too.
   property bool active: false
@@ -32,7 +32,7 @@ Rectangle {
   readonly property bool open: panel !== null
   readonly property bool editing: open && ["query", "progress", "start", "finish"].indexOf(panel.mode) !== -1
   readonly property bool picking: open && panel.mode === "pick"
-  readonly property var problem: open ? Model.problem(panel, core ? coreConfigPath : configPath, core ? "core" : "") : null
+  readonly property var problem: open ? Model.problem(panel, coreConfigPath, "core") : null
   readonly property string hint: !open ? ""
     : picking ? "j k move   enter choose   esc back   "
     : "j k trackers   enter find the manga   s status   c chapters   S score   d started   D finished   p private   o open   y copy link   x stop tracking   esc close   "
@@ -47,19 +47,16 @@ Rectangle {
   height: Math.min(parent.height - theme.fontSize * 4, body.implicitHeight + theme.fontSize * 2)
 
   onActiveChanged: if (!active) close()
-  onConfigChanged: if (!core) close()
-  onCoreConfigChanged: if (core) close()
+  onCoreConfigChanged: close()
 
   function send(payload, done) {
-    return Session.send(core ? coreConfig : config, payload, done)
+    return Session.send(coreConfig, payload, done)
   }
 
-  // core: the manga is miharchy-core's.
+  // onCore: shell.qml passes it; the manga is always miharchy-core's.
   function show(manga, onCore) {
-    var c = onCore === true
-    if (!manga || !(c ? coreConfig : config)) return
-    core = c
-    panel = Trackers.panel(manga.id, manga.title, c)
+    if (!manga || !coreConfig) return
+    panel = Trackers.panel(manga.id, manga.title, true)
     var seq = ++loadSeq
     Trackers.panelLoad(send, panel, function(reply) {
       if (seq === view.loadSeq && view.panel) view.panel = Trackers.act(view.panel, { type: "loaded", reply: reply }).panel

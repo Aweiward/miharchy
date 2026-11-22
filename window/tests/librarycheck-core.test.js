@@ -1,4 +1,4 @@
-// The library check on miharchy-core (MIHARCHY_BACKEND=core, #394): QUERY's data from core's routes.
+// The library check on miharchy-core: the data problems() and mergeCopies() read, built from core's routes.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const L = require("./load")("LibraryCheck.js");
@@ -51,8 +51,8 @@ const routes = (over) => ({
   ...over
 });
 
-// The same library as Suwayomi's QUERY gives it.
-function suwayomiData() {
+// The same library written out by hand in the shape load() builds.
+function expectedData() {
   const ext = { pkgName: "eu.kanade.tachiyomi.extension.all.mangadex", name: "MangaDex", hasUpdate: true };
   return {
     mangas: { nodes: LIB.map((m) => ({
@@ -78,11 +78,11 @@ test("on core the check reads the library, source names, extensions, the last ru
   assert.deepEqual(core.sent[2].body, { cached: true }, "no repo fetch each time Settings shows");
 });
 
-test("on core the check finds the same problems as on Suwayomi, every kind", () => {
+test("the check finds every kind of problem on what load builds, as on the same data written by hand", () => {
   const [reply] = run(L.load, fakeCore(routes()).send, true);
   const strip = (list) => list.map(({ dismissals, ...p }) => p);
   const onCore = L.problems(reply.data, NOW);
-  assert.deepEqual(strip(onCore), strip(L.problems(suwayomiData(), NOW)));
+  assert.deepEqual(strip(onCore), strip(L.problems(expectedData(), NOW)));
   const kinds = onCore.map((p) => p.kind + ":" + p.mangaId + (p.dismissed ? " dismissed" : ""));
   for (const k of ["missing:2", "failed:3", "empty:4", "extension:1", "duplicate:1", "duplicate:5", "stalled:6 dismissed", "failed:7"]) assert.ok(kinds.includes(k), k + " in " + kinds);
   assert.equal(onCore.find((p) => p.kind === "missing").source, "Old Source", "named from the source names meta");
@@ -112,7 +112,6 @@ test("on core a dismiss is one meta.set per batch, keeping each manga's other ki
   assert.equal(p.route, "meta.set");
   assert.deepEqual(p.body.metas.map((m) => [m.scope, m.owner, m.key]), [["manga", 2, L.DISMISSED_META], ["manga", 6, L.DISMISSED_META]]);
   assert.deepEqual(JSON.parse(p.body.metas[1].value), { stalled: NOW, extension: NOW });
-  assert.deepEqual(L.dismissPayload(list, NOW, false, false).variables.m0, { mangaId: 2, key: L.DISMISSED_META, value: p.body.metas[0].value }, "the same value as on Suwayomi");
 });
 
 test("on core the merge prompt reads both copies from the database, with category and tracker names", () => {
