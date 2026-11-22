@@ -72,14 +72,6 @@ Rectangle {
   readonly property string resume: detail ? Chapters.resumeLabel(detail.chapters, next) : ""
   readonly property var optionRows: Chapters.rows(prefs, detail ? Chapters.scanlators(detail.chapters) : [])
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
-  // ponytail: what core does not serve yet, by key, with the issue that moves it.
-  // Why this manga's downloads stay off, or "": the Downloads view shows
-  // the other server's queue (shell.qml).
-  property string downloadsGate: ""
-  readonly property var downloadIds: ({ "manga.download": true, "manga.downloads": true, "manga.deleteDownload": true })
-  // The shell sets this to hold the Migrate keys, which answer with it.
-  property string migrateGate: ""
-  readonly property var migrateIds: ({ "manga.migrate": true, "manga.duplicateMigrate": true })
   readonly property string hint: dupesOpen ? "j k move   enter open   M migrate to this   a add anyway   esc cancel   "
     : picking ? "j k move   space in or out   esc close   "
     : optionsOpen ? "j k move   enter change   esc close   "
@@ -204,7 +196,7 @@ Rectangle {
   }
 
   function downloadsLeft(items) {
-    if (detail && !downloadsGate && items.some(function(i) { return i.mangaId === view.detail.mangaId })) reload()
+    if (detail && items.some(function(i) { return i.mangaId === view.detail.mangaId })) reload()
   }
 
   function sendDownloads(payload) {
@@ -297,14 +289,6 @@ Rectangle {
 
   function run(id) {
     note = ""
-    if (migrateGate && migrateIds[id]) {
-      note = migrateGate
-      return
-    }
-    if (downloadsGate && downloadIds[id]) {
-      note = downloadsGate
-      return
-    }
     switch (id) {
       case "manga.openWeb":
       case "manga.copyLink":

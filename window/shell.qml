@@ -32,11 +32,8 @@ ShellRoot {
   settings.watchFiles: false
 
   // Suwayomi's server.json: Setup's move reads a Suwayomi install from it.
-  readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
+  readonly property string suwayomiConfigPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
   // miharchy-core is the only server (ADR 0010, #373).
-  // ponytail: pass 1 of #373's slice 2; pass 2 drops these and their gates.
-  readonly property string downloadsElsewhere: ""
-  readonly property string migrateElsewhere: ""
   readonly property string coreConfigPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
   property var coreConfig: null
   // The library and categories on miharchy-core.
@@ -943,7 +940,7 @@ ShellRoot {
           visible: root.view === "setup"
           theme: theme
           config: root.coreConfig
-          configPath: root.configPath
+          suwayomiConfigPath: root.suwayomiConfigPath
           coreConfigPath: root.coreConfigPath
           home: Quickshell.env("HOME")
           onKey: function(event) { event.accepted = root.handleKey(event) }
@@ -997,8 +994,6 @@ ShellRoot {
             else root.fetchLibrary()
           }
           queue: downloadsView.queue.items
-          migrateGate: ""
-          downloadsGate: ""
           onDownloads: function(reply) { downloadsView.apply(reply) }
           libraryManga: root.coreConnection.manga
           onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false) }

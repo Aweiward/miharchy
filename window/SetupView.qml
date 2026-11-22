@@ -20,7 +20,7 @@ Item {
   // Setup's server reads and writes: core's config.
   property var config: null
   // Suwayomi's server.json: the probe checks it, and the move reads it.
-  property string configPath: ""
+  property string suwayomiConfigPath: ""
   property string home: ""
   property string coreConfigPath: ""
 
@@ -68,7 +68,7 @@ Item {
   }
 
   function check() {
-    if (!setup.job) start("probe", Setup.probeCommand(configPath, "", Quickshell.shellDir, false, coreConfigPath))
+    if (!setup.job) start("probe", Setup.probeCommand(suwayomiConfigPath, "", Quickshell.shellDir, false, coreConfigPath))
   }
 
   function post(payload, done) {
@@ -102,7 +102,7 @@ Item {
     setup = Setup.reduce(setup, { type: "start", id: "move" })
     if (!config) return setup = Setup.reduce(setup, { type: "move", reply: { state: "no-config", message: "" } })
     post(Setup.movePayload({
-      serverConfig: configPath,
+      serverConfig: suwayomiConfigPath,
       serverRoot: Storage.root({ HOME: home, MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT") }),
       home: home
     }), function(reply) {
