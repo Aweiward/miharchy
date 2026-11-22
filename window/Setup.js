@@ -411,7 +411,7 @@ function parseServer(data) {
 // setup.syncthing: parseSyncthing(), null before its check.
 // setup.move: core's move.status, null before its first reply.
 function initial(core) {
-  return { core: !!core, probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {}, phones: null, syncthing: null, move: null }
+  return { core: true, probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {}, phones: null, syncthing: null, move: null }
 }
 
 // The server reply Setup reads: the two global metas it needs.

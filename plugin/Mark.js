@@ -239,9 +239,8 @@ function entries(upNext, rows, core) {
 
 // The launcher's arguments for a row, with a trailing "core": a window
 // started before #373 still reads it.
-function target(command, mangaId, chapterId, core) {
-  var args = [command, String(mangaId), String(chapterId)]
-  return core ? args.concat(["core"]) : args
+function target(command, mangaId, chapterId) {
+  return [command, String(mangaId), String(chapterId), "core"]
 }
 
 function move(list, cursor, dy) {
