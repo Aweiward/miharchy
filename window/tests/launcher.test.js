@@ -219,3 +219,25 @@ test("a peek that started its window, or gave up, leaves no start marker behind"
   assert.equal(launches(calls).length, 1);
   assert.deepEqual(fs.readdirSync(path.join(calls.runtime, "miharchy")), []);
 });
+
+// The mark under MIHARCHY_BACKEND=core names core's ids with a trailing "core" (#386).
+test("open-chapter with core hands core's chapter to the running window by openChapterOn", () => {
+  const calls = run(["open-chapter", "5", "9", "core"], { STUB_LIST: RUNNING, STUB_IPC_RC: "0" });
+  assert.equal(calls[0], "quickshell ipc -p " + dir + " call miharchy openChapterOn 5 9 core | MIHARCHY_OPEN_CHAPTER=");
+  assert.deepEqual(launches(calls), []);
+});
+
+test("open-chapter with core and no window running starts one on core's chapter", () => {
+  const calls = run(["open-chapter", "5", "9", "core"]);
+  assert.deepEqual(launches(calls), ["quickshell -n -p " + dir + " | MIHARCHY_OPEN_CHAPTER=5 9 core"]);
+});
+
+test("peek-open with core opens core's chapter in the running window by peekOpenOn", () => {
+  const calls = run(["peek-open", "5", "9", "core"], { STUB_LIST: RUNNING, STUB_IPC_RC: "0" });
+  assert.ok(calls.includes("quickshell ipc -p " + dir + " call miharchy peekOpenOn 5 9 core | MIHARCHY_OPEN_CHAPTER="), calls.join("\n"));
+});
+
+test("peek-open with core and no window running starts a peek on core's chapter", () => {
+  const calls = run(["peek-open", "5", "9", "core"], { STUB_LIST_AFTER: RUNNING, STUB_VIEW: "1" });
+  assert.deepEqual(launches(calls), ["quickshell -n -p " + dir + " | MIHARCHY_OPEN_CHAPTER= view= peek=5 9 core"]);
+});

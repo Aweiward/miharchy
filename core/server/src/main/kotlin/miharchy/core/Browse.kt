@@ -21,6 +21,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import tachiyomi.domain.chapter.service.ChapterRecognition
@@ -100,12 +101,17 @@ class Browse(private val db: Database, private val host: Host, private val exten
         },
         "manga.get" to { input -> buildJsonObject { put("manga", detail(input.id("id"))) } },
         "manga.refresh" to { input -> refresh(input.id("id")) },
-        // By manga (mangaIds) or by chapter (ids), as Downloads.autoDeleteQuery asks.
+        // By manga (mangaIds) or by chapter (ids), as Downloads.autoDeleteQuery asks. unread and since (upload time in ms)
+        // narrow it, so the bar mark's poll reads only the recent unread chapters (#386).
         "chapter.list" to { input ->
             val (key, col) = if ("ids" in input) "ids" to "ch.id" else "mangaIds" to "ch.manga_id"
             val ids = (input[key] as? JsonArray)?.map { it.jsonPrimitive.longOrNull ?: throw ApiError(Kind.invalid, "$key holds numbers.") }
                 ?: throw ApiError(Kind.invalid, "The request needs mangaIds or ids, a list of ids.")
-            buildJsonObject { put("chapters", JsonArray(db.run { c -> chapterRows(c, among(col), idList(ids)) })) }
+            val unread = input["unread"]?.let { (it as? JsonPrimitive)?.booleanOrNull ?: throw ApiError(Kind.invalid, "unread is true or false.") } ?: false
+            val since = input["since"]?.let { (it as? JsonPrimitive)?.longOrNull ?: throw ApiError(Kind.invalid, "since is a time in ms.") }
+            val where = among(col) + (if (unread) " AND ch.user_read = 0" else "") + (if (since != null) " AND ch.remote_date_upload > ?" else "")
+            val args = listOfNotNull<Any>(idList(ids), since).toTypedArray()
+            buildJsonObject { put("chapters", JsonArray(db.run { c -> chapterRows(c, where, *args) })) }
         },
         "chapter.pages" to { input -> chapterPages(input.id("id")) },
     )

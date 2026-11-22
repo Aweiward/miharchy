@@ -70,6 +70,7 @@ test("under the switch the core steps follow Suwayomi's service; without it the 
   assert.deepEqual(S.steps(S.initial(true)).map((s) => s.id).slice(0, 6), ["packages", "server", "coreBuild", "coreService", "move", "flaresolverr"]);
   const req = S.steps(S.initial(true)).filter((s) => s.required).map((s) => s.id);
   assert.deepEqual(req, ["packages", "server", "coreBuild", "coreService"]);
+  assert.ok(!S.steps(S.initial(true)).some((s) => s.id === "helper"), "nothing runs the helper under the switch");
 });
 
 test("core builds from a copy of core/ and sync/, installs outside the plugin, and restarts a running core", () => {
@@ -184,6 +185,6 @@ test("on core the reads and writes are core routes, with the real paths for the 
   assert.equal(S.savePayload("flaresolverr", { code: 0 }, "", true), null);
   let s = S.reduce(finish(S.initial(true), "probe", READY + CORE_UP), { type: "move", reply: IDLE });
   s = S.reduce(s, { type: "server", reply: core(200, { metas: [] }) });
-  assert.deepEqual(S.offers(s), ["move:todo", "syncFolder:todo", "helper:todo", "launcher:todo", "peekKey:todo"]);
+  assert.deepEqual(S.offers(s), ["move:todo", "syncFolder:todo", "launcher:todo", "peekKey:todo"]);
   assert.deepEqual(S.offerPayload(s), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.setupOffered", value: S.offers(s).join(",") }] } });
 });

@@ -363,9 +363,13 @@ function again(p, s) {
 
 // "<mangaId> <chapterId>", as the launcher's open-chapter passes it in
 // MIHARCHY_OPEN_CHAPTER -> { mangaId, chapterId }, or null.
+// "<mangaId> <chapterId>", with " core" for miharchy-core's ids (#386).
 function chapterTarget(text) {
-  var m = /^\s*(\d+)\s+(\d+)\s*$/.exec(text || "")
-  return m ? { mangaId: Number(m[1]), chapterId: Number(m[2]) } : null
+  var m = /^\s*(\d+)\s+(\d+)(\s+core)?\s*$/.exec(text || "")
+  if (!m) return null
+  var t = { mangaId: Number(m[1]), chapterId: Number(m[2]) }
+  if (m[3]) t.core = true
+  return t
 }
 
 function viewIndex(id) {

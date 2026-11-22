@@ -132,6 +132,16 @@ class BrowseTest {
                     assertEquals("true", kept["isRead"].toString())
                     assertEquals("4", kept["lastPageRead"].toString())
 
+                    // The bar mark's poll: unread only, uploaded after since (#386).
+                    db.run { c -> c.createStatement().use { it.executeUpdate("UPDATE chapter SET remote_date_upload = CASE WHEN remote_url = '/c/4' THEN 5000 ELSE 1000 END") } }
+                    suspend fun urls(extra: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) = r.call("chapter.list", buildJsonObject {
+                        putJsonArray("mangaIds") { add(kotlinx.serialization.json.JsonPrimitive(id)) }; extra()
+                    })["chapters"]!!.jsonArray.map { it.jsonObject["url"]!!.jsonPrimitive.content }
+                    assertEquals(listOf("/c/4", "/c/3"), urls { put("unread", true) })
+                    assertEquals(listOf("/c/4"), urls { put("unread", true); put("since", 2000) })
+                    assertEquals(listOf("/c/4", "/c/2", "/c/3"), urls { put("unread", false) })
+                    r.expect(Kind.invalid, "chapter.list", buildJsonObject { putJsonArray("mangaIds") { add(kotlinx.serialization.json.JsonPrimitive(id)) }; put("since", "soon") })
+
                     // An empty chapter list is a source failure and changes nothing.
                     FixtureSite.chapters = emptyList()
                     r.expect(Kind.source, "manga.refresh", buildJsonObject { put("id", id) })
