@@ -31,10 +31,6 @@ Item {
   // ponytail: what core does not serve yet, by key, with the issue that moves it.
   readonly property var coreGates: ({
     "library.update": "Checking for new chapters is not on miharchy-core yet (#368)",
-    "library.download": "Downloads are not on miharchy-core yet (#367)",
-    "library.deleteDownloads": "Downloads are not on miharchy-core yet (#367)",
-    "library.removeWithDownloads": "Downloads are not on miharchy-core yet (#367)",
-    "nextChapters.upNext": "Downloads are not on miharchy-core yet (#367)",
     "view.check": "The library check is not on miharchy-core yet (#394)",
     "migrate.batch": "Migrate is not on miharchy-core yet (#394)"
   })
@@ -185,7 +181,7 @@ Item {
       if (reply.state !== "ok") return view.report(reply)
       var chapters = Browse.toChapters(Library.chapterNodes(reply.data))
       if (action === "read" || action === "unread") return view.mark(chapters, action, ids)
-      var payload = Downloads.removePayload(chapters, view.queue)
+      var payload = Downloads.removePayload(chapters, view.queue, core)
       if (action === "removeDeleting") {
         if (!payload) return remove()
         // The manga leave only once their downloads are gone.

@@ -15,6 +15,9 @@ Item {
 
   required property Theme theme
   property var config: null
+  // "core" with MIHARCHY_BACKEND=core (shell.qml): the Library and Up next it opens from are core's.
+  property string backend: ""
+  readonly property bool core: backend === "core"
   // The download queue's items: a queued chapter is not queued again.
   property var queueItems: []
   // { label, manga: [{ id, title }] } while the menu shows, else null.
@@ -55,7 +58,7 @@ Item {
   function openUpNext() {
     var cfg = config
     if (!cfg) return
-    Session.send(cfg, UpNext.payload(), function(reply) {
+    UpNext.load(function(payload, done) { Session.send(cfg, payload, done) }, core, function(reply) {
       if (reply.state !== "ok") return
       view.openFor(NextChapters.upNextSet(UpNext.list(reply.data, false, Date.now())))
     })
@@ -82,7 +85,7 @@ Item {
       if (i === manga.length) return view.pick(cfg, row, count)
       var m = manga[i++]
       view.note = "Fetching chapters: " + i + " of " + manga.length
-      Session.send(cfg, NextChapters.refreshPayload(m.id), function(reply) {
+      Session.send(cfg, NextChapters.refreshPayload(m.id, view.core), function(reply) {
         if (reply.state !== "ok") view.lastRun = NextChapters.failed(view.lastRun, m, reply.message || reply.state)
         step()
       })
@@ -95,10 +98,10 @@ Item {
       view.lastRun = NextChapters.queued(view.lastRun, [])
       view.note = text
     }
-    Session.send(cfg, NextChapters.readPayload(lastRun.mangaIds), function(reply) {
+    NextChapters.readLoad(function(payload, done) { Session.send(cfg, payload, done) }, core, lastRun.mangaIds, function(reply) {
       if (reply.state !== "ok") return end(reply.message || reply.state)
       var list = NextChapters.pick(reply.data, row, count, view.queueItems)
-      var payload = Downloads.enqueuePayload(list)
+      var payload = Downloads.enqueuePayload(list, view.core)
       var failures = view.lastRun.failures.length
       if (!payload) return end("Nothing to download" + (failures ? "; " + failures + " manga could not fetch chapters" : ""))
       Session.send(cfg, payload, function(done) {

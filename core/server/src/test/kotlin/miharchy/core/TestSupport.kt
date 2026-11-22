@@ -2,6 +2,7 @@ package miharchy.core
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import java.util.concurrent.Executors
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import yomi.host.Host
@@ -23,7 +24,11 @@ object TestHost {
 
 /** A local HTTP server. [handle] answers a path, or null for 404. */
 class Site(val handle: (HttpExchange) -> ByteArray?) : AutoCloseable {
+    // A thread per request: with the default one thread, a handler a test holds (a cancelled download's
+    // late request) would starve every request after it.
+    private val pool = Executors.newCachedThreadPool()
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+        executor = pool
         createContext("/") { ex ->
             val body = handle(ex)
             ex.sendResponseHeaders(if (body == null) 404 else 200, if (body == null) -1 else body.size.toLong())
@@ -33,7 +38,10 @@ class Site(val handle: (HttpExchange) -> ByteArray?) : AutoCloseable {
         start()
     }
     val url = "http://127.0.0.1:${server.address.port}"
-    override fun close() = server.stop(0)
+    override fun close() {
+        server.stop(0)
+        pool.shutdownNow()
+    }
 }
 
 /** A repo of one extension, [pkg], served from a local [Site], with jars signed at test time. */

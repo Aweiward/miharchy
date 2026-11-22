@@ -129,6 +129,10 @@ class DownloadsTest {
 
                     // The order survives a restart, stopped.
                     downloads.routes.call("download.reorder", buildJsonObject { put("chapterId", html); put("to", 0) })
+                    // A whole order skips ids that left the queue and keeps the ones it leaves out.
+                    val whole = downloads.routes.call("download.reorder", buildJsonObject { put("order", JsonArray(listOf(ok, empty).map(::JsonPrimitive))) })
+                    assertEquals(listOf(empty, html), whole.queue().map { it.chapterId() })
+                    downloads.routes.call("download.reorder", buildJsonObject { put("order", JsonArray(listOf(JsonPrimitive(html)))) })
                     downloads = Downloads(db, browse, extensions, root)
                     val restarted = downloads.routes.call("download.queue")
                     assertEquals("STOPPED", restarted["state"]!!.jsonPrimitive.content)
@@ -142,7 +146,9 @@ class DownloadsTest {
                     assertEquals(before, synchronized(requests) { requests.size }, "no request reached the site")
 
                     // Delete takes the file and the flag.
-                    val deleted = downloads.routes.call("download.delete", ids(ok))["chapters"]!!.jsonArray.single().jsonObject
+                    val deletedReply = downloads.routes.call("download.delete", ids(ok))
+                    assertEquals(listOf(html, empty), deletedReply.queue().map { it.chapterId() }, "the reply carries the status")
+                    val deleted = deletedReply["chapters"]!!.jsonArray.single().jsonObject
                     assertEquals("false", deleted["isDownloaded"].toString())
                     assertTrue(!Files.exists(dir.resolve("Chapter 1.cbz")))
 

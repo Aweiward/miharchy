@@ -277,12 +277,14 @@ Rectangle {
   // Once per chapter opened: a retry or a page fetch again queues nothing
   // new. The queue shows any failure; the reader says nothing.
   property int aheadFor: -1
+  // The Downloads view shows the other server's queue (shell.qml): this
+  // chapter's server queues and deletes nothing.
+  property bool downloadsOff: false
   function downloadAhead() {
-    // ponytail: no downloads on core until #367.
-    if (onCore) return
+    if (downloadsOff) return
     if (reader.state !== "ok" || Reader.chapterId(reader) === aheadFor) return
     aheadFor = Reader.chapterId(reader)
-    var payload = Downloads.enqueuePayload(Reader.ahead(reader, values.downloadAhead))
+    var payload = Downloads.enqueuePayload(Reader.ahead(reader, values.downloadAhead), onCore)
     if (payload) send(payload, function() {})
   }
 
@@ -307,14 +309,13 @@ Rectangle {
 
   // The chapter left counts as read: its save may still be on the way.
   function leave() {
-    // ponytail: no downloads to delete on core until #367.
-    if (onCore) return
+    if (downloadsOff) return
     var target = Reader.deleteTarget(reader, Downloads.deleteSlots(values.deleteAfterRead))
     if (target === null) return
     var read = [Reader.chapterId(reader)]
     exitStep("write")
-    send(Downloads.autoDeleteQuery([target]), function(reply) {
-      var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, view.deleteBookmarked, read) : null
+    Downloads.autoDeleteLoad(function(payload, done) { view.send(payload, done) }, onCore, [target], function(reply) {
+      var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, view.deleteBookmarked, read, view.onCore) : null
       if (!payload) return view.exitStep("wrote")
       view.send(payload, function() {
         view.deleted()

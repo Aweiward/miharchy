@@ -79,10 +79,11 @@ Rectangle {
   readonly property var optionRows: Chapters.rows(prefs, detail ? Chapters.scanlators(detail.chapters) : [])
   readonly property var notice: detail ? Browse.notice(detail, configPath) : null
   // ponytail: what core does not serve yet, by key, with the issue that moves it.
+  // Why this manga's downloads stay off, or "": the Downloads view shows
+  // the other server's queue (shell.qml).
+  property string downloadsGate: ""
+  readonly property var downloadIds: ({ "manga.download": true, "manga.downloads": true, "manga.deleteDownload": true })
   readonly property var coreGates: ({
-    "manga.download": "Downloads are not on miharchy-core yet (#367)",
-    "manga.downloads": "Downloads are not on miharchy-core yet (#367)",
-    "manga.deleteDownload": "Downloads are not on miharchy-core yet (#367)",
     "manga.track": "Tracking is not on miharchy-core yet (#371)",
     "manga.migrate": "Migrate is not on miharchy-core yet (#394)",
     "manga.duplicateMigrate": "Migrate is not on miharchy-core yet (#394)"
@@ -215,7 +216,7 @@ Rectangle {
   }
 
   function downloadsLeft(items) {
-    if (detail && !onCore && items.some(function(i) { return i.mangaId === view.detail.mangaId })) reload()
+    if (detail && !downloadsGate && items.some(function(i) { return i.mangaId === view.detail.mangaId })) reload()
   }
 
   function sendDownloads(payload) {
@@ -277,7 +278,7 @@ Rectangle {
       return
     }
     downloadsOpen = false
-    sendDownloads(Downloads.enqueuePayload(list))
+    sendDownloads(Downloads.enqueuePayload(list, onCore))
   }
 
   onWritingChanged: {
@@ -310,6 +311,10 @@ Rectangle {
     note = ""
     if (onCore && coreGates[id]) {
       note = coreGates[id]
+      return
+    }
+    if (downloadsGate && downloadIds[id]) {
+      note = downloadsGate
       return
     }
     switch (id) {
@@ -393,7 +398,7 @@ Rectangle {
         anchor = -1
         break
       case "manga.download":
-        sendDownloads(Downloads.enqueuePayload(Downloads.marked(shown, cursor, anchor)))
+        sendDownloads(Downloads.enqueuePayload(Downloads.marked(shown, cursor, anchor), onCore))
         break
       case "manga.downloads":
         downloadsOpen = true
@@ -435,7 +440,7 @@ Rectangle {
         endEdit()
         break
       case "manga.deleteDownload":
-        sendDownloads(Downloads.removePayload(Downloads.marked(shown, cursor, anchor), queue))
+        sendDownloads(Downloads.removePayload(Downloads.marked(shown, cursor, anchor), queue, onCore))
         break
       case "manga.markRead":
       case "manga.markUnread":

@@ -14,6 +14,11 @@ Item {
 
   property var config: null
   property string query: ""
+  // On miharchy-core (config.backend "core"): the topic, in place of query.
+  property string topic: ""
+  // Whether the socket was made for core: its subprotocol is fixed at
+  // make(). One LiveSocket never changes server.
+  property bool socketCore: false
   property bool running: false
   // A result has come since the socket opened: the stream carries every
   // change from here on.
@@ -50,9 +55,21 @@ Item {
     if (socket) socket.active = false
   }
 
+  // Read at call time: onConfigChanged runs before a binding on config updates.
+  function core() {
+    return !!config && config.backend === "core"
+  }
+
   function connect() {
     if (!socket) socket = make()
     if (!socket) return
+    if (core()) {
+      // Core takes the secret as the first message: no login, no token.
+      wanted = true
+      socket.url = Live.coreUrl(config)
+      socket.active = true
+      return
+    }
     var s = ++seq
     Session.token(config, stale, function(failure, t) {
       if (s !== live.seq) return
@@ -75,14 +92,16 @@ Item {
   // which this file cannot import.
   function make() {
     var ws
+    socketCore = core()
     try {
-      ws = Qt.createQmlObject("import QtWebSockets\nWebSocket { requestedSubprotocols: [\"" + Live.PROTOCOL + "\"] }", live, "LiveSocket")
+      ws = Qt.createQmlObject("import QtWebSockets\nWebSocket { " + (socketCore ? "" : "requestedSubprotocols: [\"" + Live.PROTOCOL + "\"]") + " }", live, "LiveSocket")
     } catch (e) {
       console.warn("Live updates need qt6-websockets:", e.message || e)
       return null
     }
     ws.statusChanged.connect(function(status) {
-      if (status === 1 && live.wanted) ws.sendTextMessage(Live.initMessage(live.token))
+      if (status === 1 && live.wanted && live.socketCore) Live.coreOpen(live.config.secret, live.topic).forEach(function(m) { ws.sendTextMessage(m) })
+      else if (status === 1 && live.wanted) ws.sendTextMessage(Live.initMessage(live.token))
       if ((status === 3 || status === 4) && live.wanted) live.later()
     })
     ws.textMessageReceived.connect(received)
@@ -90,7 +109,7 @@ Item {
   }
 
   function received(text) {
-    var m = Live.parse(text)
+    var m = socketCore ? Live.parseCore(text, topic) : Live.parse(text)
     switch (m.type) {
       case "ack":
         socket.sendTextMessage(Live.subscribeMessage(query, Math.random()))

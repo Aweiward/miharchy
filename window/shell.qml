@@ -37,6 +37,8 @@ ShellRoot {
   // moved so far (Extensions) talk to miharchy-core through core.json, and
   // the rest stay on Suwayomi. Users never set it; #373 flips the default.
   readonly property bool coreBackend: Quickshell.env("MIHARCHY_BACKEND") === "core"
+  // A view on the server the Downloads view does not show says this.
+  readonly property string downloadsElsewhere: "Downloads from Updates move to miharchy-core with #382"
   readonly property string coreConfigPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
   property var coreConfig: null
   // The library and categories on miharchy-core, beside connection's on
@@ -256,7 +258,7 @@ ShellRoot {
     var core = coreBackend
     loadUpNext(function(reply) {
       if (reply.state !== "ok") return library(reply)
-      var list = UpNext.list(reply.data, root.downloadedOnly && !core, Date.now())
+      var list = UpNext.list(reply.data, root.downloadedOnly, Date.now())
       if (!next) root.upNextOrder = list.map(function(e) { return e.mangaId })
       var target = next ? root.nextInOrder(list, reader.open && reader.onCore === core ? reader.reader.mangaId : null) : list[0]
       if (!target) library()
@@ -314,7 +316,7 @@ ShellRoot {
     if (!upNextConfig()) return
     loadUpNext(function(reply) {
       if (!reader.open || reader.onCore !== core || reader.reader.mangaId !== mangaId) return
-      var next = reply.state === "ok" ? root.nextInOrder(UpNext.list(reply.data, root.downloadedOnly && !core, Date.now()), mangaId) : null
+      var next = reply.state === "ok" ? root.nextInOrder(UpNext.list(reply.data, root.downloadedOnly, Date.now()), mangaId) : null
       if (next && next.mangaId === mangaId) next = null
       var manga = next ? ((core ? root.coreConnection : root.connection).manga || []).filter(function(m) { return m.id === next.mangaId })[0] : null
       reader.upNext = next ? { target: next, title: manga ? manga.title : "Manga " + next.mangaId } : null
@@ -397,7 +399,7 @@ ShellRoot {
   // "unread" or "bookmark" (a toggle). The trackers hear of a mark read, and
   // every view showing read state or bookmarks reloads.
   // core: the chapters are miharchy-core's (the detail's on core): no
-  // trackers or downloads there yet, and no Suwayomi view to refresh.
+  // trackers there yet, and no Suwayomi view to refresh.
   function markChapters(chapters, action, mangaIds, core) {
     if (core === true) return markOnCore(chapters, action, mangaIds)
     var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters) : Chapters.markPayload(chapters, action === "read")
@@ -422,12 +424,18 @@ ShellRoot {
     })
   }
 
+  // ponytail: no trackers on core until #371.
   function markOnCore(chapters, action, mangaIds) {
     var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters, true) : Chapters.markPayload(chapters, action === "read", true)
     if (!payload || !coreConfig) return
+    var marked = chapters.filter(function(c) { return !c.read }).map(function(c) { return c.id })
     Session.send(coreConfig, payload, function(reply) {
-      if (mangaDetail.open && mangaDetail.onCore && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
-      root.fetchLibrary(true)
+      if (reply.state === "ok" && action === "read" && root.settingsState.values.deleteAfterMarkRead) root.deleteRead(marked, refresh, true)
+      else refresh()
+      function refresh() {
+        if (mangaDetail.open && mangaDetail.onCore && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
+        root.fetchLibrary(true)
+      }
     })
   }
 
@@ -438,10 +446,13 @@ ShellRoot {
 
   // Deletes the downloads of the read chapters that Downloads.autoDeletePayload
   // lets go, then calls done, whatever happened.
-  function deleteRead(chapterIds, done) {
-    send(Downloads.autoDeleteQuery(chapterIds), function(reply) {
-      var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, root.settingsState.values.deleteBookmarked, []) : null
-      if (payload) root.send(payload, done)
+  // core: the chapters are miharchy-core's.
+  function deleteRead(chapterIds, done, core) {
+    var cfg = core === true ? coreConfig : config
+    var on = function(payload, d) { Session.send(cfg, payload, d) }
+    Downloads.autoDeleteLoad(on, core === true, chapterIds, function(reply) {
+      var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, root.settingsState.values.deleteBookmarked, [], core === true) : null
+      if (payload) on(payload, done)
       else done()
     })
   }
@@ -836,15 +847,15 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "library" && screen === "grid"
           theme: theme
-          // With the switch on, the Library is miharchy-core's: no Suwayomi
-          // queue or downloads reach it.
+          // With the switch on, the Library is miharchy-core's, as the
+          // Downloads view is.
           config: root.coreBackend ? root.coreConfig : root.config
           configPath: root.coreBackend ? root.coreConfigPath : root.configPath
           backend: root.coreBackend ? "core" : ""
           connection: root.coreBackend ? root.coreConnection : root.connection
-          downloadedOnly: !root.coreBackend && root.downloadedOnly
+          downloadedOnly: root.downloadedOnly
           categoriesHint: categoriesView.hint
-          queue: root.coreBackend ? [] : downloadsView.queue.items
+          queue: downloadsView.queue.items
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds, libraryView.core) }
@@ -949,11 +960,13 @@ ShellRoot {
           config: root.config
           configPath: root.configPath
           active: visible
-          queue: downloadsView.queue.items
+          // Updates is Suwayomi's until #382; the Downloads view follows the switch.
+          queue: root.coreBackend ? [] : downloadsView.queue.items
+          downloadsGate: root.coreBackend ? root.downloadsElsewhere : ""
           categories: root.connection.categories
           onRead: function(manga, chapters, chapterId, peek) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, peek) }
           onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
-          onDownloads: function(reply) { downloadsView.apply(reply) }
+          onDownloads: function(reply) { if (!root.coreBackend) downloadsView.apply(reply) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
         }
 
@@ -1012,8 +1025,11 @@ ShellRoot {
             if (inLibrary) root.addedToLibrary(mangaId)
             else if (root.config) root.fetchLibrary()
           }
-          queue: onCore ? [] : downloadsView.queue.items
-          onDownloads: function(reply) { downloadsView.apply(reply) }
+          // The Downloads view's server only: a chapter id means nothing to the other.
+          readonly property bool downloadsHere: onCore === root.coreBackend
+          queue: downloadsHere ? downloadsView.queue.items : []
+          downloadsGate: downloadsHere ? "" : root.downloadsElsewhere
+          onDownloads: function(reply) { if (downloadsHere) downloadsView.apply(reply) }
           libraryManga: onCore ? root.coreConnection.manga : root.connection.manga
           onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false, mangaDetail.onCore) }
           onMark: function(chapters, action, mangaId, core) { root.markChapters(chapters, action, [mangaId], core) }
@@ -1114,6 +1130,7 @@ ShellRoot {
         theme: theme
         config: onCore ? root.coreConfig : root.config
         configPath: onCore ? root.coreConfigPath : root.configPath
+        downloadsOff: onCore !== root.coreBackend
         values: root.settingsState.values
         onKey: function(event) { event.accepted = root.handleKey(event) }
         onEditEnded: keyRoot.forceActiveFocus()
@@ -1136,8 +1153,10 @@ ShellRoot {
         id: downloadsView
         anchors.fill: parent
         theme: theme
-        config: root.config
-        configPath: root.configPath
+        // With the switch on, the queue is miharchy-core's.
+        config: root.coreBackend ? root.coreConfig : root.config
+        configPath: root.coreBackend ? root.coreConfigPath : root.configPath
+        backend: root.coreBackend ? "core" : ""
         flareOn: root.settingsState.values.flareSolverrEnabled === true
         lastRun: nextChapters.lastRun
         onLeftQueue: function(items) {
@@ -1151,7 +1170,9 @@ ShellRoot {
         id: nextChapters
         anchors.fill: parent
         theme: theme
-        config: root.config
+        // The Library and Up next it opens from follow the switch.
+        config: root.coreBackend ? root.coreConfig : root.config
+        backend: root.coreBackend ? "core" : ""
         queueItems: downloadsView.queue.items
         onDownloads: function(reply) { downloadsView.apply(reply) }
         onQueued: {

@@ -44,7 +44,11 @@ function brief(m) {
   return { id: m.id, title: m.title }
 }
 
-function refreshPayload(mangaId) {
+// core (the last argument of the payloads and loads here): miharchy-core's
+// routes (ADR 0010). A load's send(payload, done) is Session.send on that
+// server's config.
+function refreshPayload(mangaId, core) {
+  if (core) return { route: "manga.refresh", body: { id: mangaId } }
   return { query: "mutation($id: Int!) { fetchChapters(input: { mangaId: $id }) { chapters { id } } }", variables: { id: mangaId } }
 }
 
@@ -55,6 +59,26 @@ function readPayload(mangaIds) {
       + " chapters { nodes { id name chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder } } } } }",
     variables: { keys: Prefs.keys(Library.CHAPTER_PREFS), ids: mangaIds }
   }
+}
+
+// readPayload()'s reply from either server. Core: the manga's chapters, then
+// the global and the manga's own chapter prefs in one meta.get.
+function readLoad(send, core, mangaIds, done) {
+  if (!core) return send(readPayload(mangaIds), done)
+  send({ route: "chapter.list", body: { mangaIds: mangaIds } }, function(ch) {
+    if (ch.state !== "ok") return done(ch)
+    var keys = Prefs.keys(Library.CHAPTER_PREFS)
+    send({ route: "meta.get", body: { queries: [{ scope: "global", keys: keys }, { scope: "manga", owners: mangaIds, keys: keys }] } }, function(meta) {
+      if (meta.state !== "ok") return done(meta)
+      var own = function(id) { return meta.data.metas.filter(function(m) { return m.scope === "manga" && m.owner === id }) }
+      done({ state: "ok", data: {
+        metas: { nodes: meta.data.metas.filter(function(m) { return m.scope === "global" }) },
+        mangas: { nodes: mangaIds.map(function(id) {
+          return { id: id, meta: own(id), chapters: { nodes: ch.data.chapters.filter(function(c) { return c.mangaId === id }) } }
+        }) }
+      } })
+    })
+  })
 }
 
 // data: readPayload()'s reply. The chapters to queue: not on disk and not
@@ -127,6 +151,19 @@ function settlePayload(run) {
   }
 }
 
+// settlePayload()'s reply from either server. Core: the queue, then the
+// run's chapters by id.
+function settleLoad(send, core, run, done) {
+  if (!core) return send(settlePayload(run), done)
+  send({ route: "download.queue" }, function(q) {
+    if (q.state !== "ok") return done(q)
+    send({ route: "chapter.list", body: { ids: run.queued } }, function(ch) {
+      if (ch.state !== "ok") return done(ch)
+      done({ state: "ok", data: { downloadStatus: { queue: q.data.queue }, chapters: { nodes: ch.data.chapters } } })
+    })
+  })
+}
+
 // data: settlePayload()'s reply. Each run chapter outside the window's
 // queue is "disk" when the server has it on disk, taken out ("out") when
 // its queue no longer holds it either, else unchanged: the live queue
@@ -139,6 +176,19 @@ function settle(marks, run, items, data) {
     if (c.isDownloaded) next[c.id] = "disk"
     else if (queued.indexOf(c.id) === -1) next[c.id] = "out"
   })
+  return next
+}
+
+// The run's chapters among items, which left the queue: core sends no
+// DEQUEUED, so each is "disk" or "out" by chapter.list's isDownloaded
+// (chapters) once that reply is in.
+function goneIds(run, items) {
+  return run ? items.map(function(i) { return i.chapterId }).filter(function(id) { return run.queued.indexOf(id) !== -1 }) : []
+}
+
+function goneMarks(marks, chapters) {
+  var next = Object.assign({}, marks)
+  chapters.forEach(function(c) { next[c.id] = c.isDownloaded ? "disk" : "out" })
   return next
 }
 
@@ -198,6 +248,10 @@ if (typeof module !== "undefined") {
     upNextSet: upNextSet,
     refreshPayload: refreshPayload,
     readPayload: readPayload,
+    readLoad: readLoad,
+    settleLoad: settleLoad,
+    goneIds: goneIds,
+    goneMarks: goneMarks,
     pick: pick,
     start: start,
     failed: failed,

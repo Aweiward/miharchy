@@ -33,6 +33,15 @@ function reason(message) {
   return { kind: "other", text: shortened(m.trim() || "Unknown error") }
 }
 
+// miharchy-core's error { kind, message } as reason() gives it. The text
+// decides first ("HTTP 404" comes as kind network), then core's kind.
+function coreReason(error) {
+  var r = reason(error && error.message)
+  var kind = error && error.kind
+  if (r.kind !== "other" || (kind !== "cloudflare" && kind !== "network")) return r
+  return KINDS.filter(function(k) { return k.kind === kind }).map(function(k) { return { kind: k.kind, text: k.text } })[0]
+}
+
 // What the user can do about it, or "". flareOn: the server's
 // flareSolverrEnabled, the half of Setup's FlareSolverr step the window
 // can see without Setup's probe.
@@ -44,6 +53,7 @@ function hint(r, flareOn) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+    coreReason: coreReason,
     KINDS: KINDS,
     MAX_TEXT: MAX_TEXT,
     reason: reason,

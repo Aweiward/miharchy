@@ -40,6 +40,9 @@ function initial() {
 
 // Every download mutation answers with the status, under its own name.
 function statusIn(data) {
+  // miharchy-core's routes and topic: the plain status, { state, queue }.
+  // Not Array.isArray: a list that crossed a QML signal is no JS array.
+  if (data.queue) return data
   if (data.downloadStatus) return data.downloadStatus
   for (var k in data) if (data[k] && data[k].downloadStatus) return data[k].downloadStatus
   return null
@@ -56,7 +59,9 @@ function item(d) {
     state: d.state,
     progress: Number(d.progress) || 0,
     tries: d.tries,
-    sourceMissing: d.manga.source === null
+    sourceMissing: d.manga.source === null,
+    // miharchy-core keeps why a download failed: { kind, message }.
+    error: d.error || null
   }
 }
 
@@ -85,6 +90,8 @@ function changed(items, updates) {
 function reduce(q, event) {
   if (event.type === "live") {
     var l = event.data.downloadStatusChanged
+    // Core's topic sends the whole status each time.
+    if (!l && event.data && event.data.queue) return queueOf(event.data.state === "STARTED", event.data.queue.map(item))
     if (!l) return q
     return queueOf(l.state === "STARTED", l.initial ? l.initial.map(item) : changed(q.items, l.updates || []))
   }
@@ -127,8 +134,19 @@ function ids(chapters) {
 }
 
 // Queues the chapters not on disk yet, or null when all are.
-function enqueuePayload(chapters) {
+// core (the last argument of each payload here): miharchy-core's
+// download routes (ADR 0010), each answering with the status.
+function statusPayload(core) {
+  return core ? { route: "download.queue" } : { query: STATUS_QUERY }
+}
+
+function clearPayload(core) {
+  return core ? { route: "download.clear" } : CLEAR_PAYLOAD
+}
+
+function enqueuePayload(chapters, core) {
   var todo = chapters.filter(function(c) { return !c.downloaded })
+  if (core) return todo.length ? { route: "download.enqueue", body: { ids: ids(todo) } } : null
   return todo.length ? { query: ENQUEUE_MUTATION, variables: { ids: ids(todo) } } : null
 }
 
@@ -140,10 +158,12 @@ function find(items, chapterId) {
 // Takes the chapters out of the queue and off the disk, or null when none
 // is queued or downloaded. Only queued ids are dequeued: the server waits
 // 30 s for any other id and then fails.
-function removePayload(chapters, items) {
+function removePayload(chapters, items, core) {
   var queued = chapters.filter(function(c) { return find(items, c.id) })
   var held = chapters.filter(function(c) { return c.downloaded || find(items, c.id) })
   if (!held.length) return null
+  // Core's delete dequeues first and takes any id.
+  if (core) return deletePayload(ids(held), true)
   if (!queued.length) return deletePayload(ids(held))
   return { query: REMOVE_MUTATION, variables: { queued: ids(queued), ids: ids(held) } }
 }
@@ -160,6 +180,27 @@ function deleteSlots(setting) {
 var KEEP_KEY = "miharchy.keepDownloads"
 
 // What an automatic delete needs to know of each chapter.
+// autoDeleteQuery()'s reply from either server: send(payload, done) is
+// Session.send on that server's config. Core takes the chapters by id and
+// the library's categories with their metas, in two routes.
+function autoDeleteLoad(send, core, chapterIds, done) {
+  if (!core) return send(autoDeleteQuery(chapterIds), done)
+  send({ route: "chapter.list", body: { ids: chapterIds } }, function(ch) {
+    if (ch.state !== "ok") return done(ch)
+    send({ route: "library.list" }, function(lib) {
+      if (lib.state !== "ok") return done(lib)
+      var metas = {}
+      lib.data.categories.forEach(function(c) { metas[c.id] = c.meta || [] })
+      var cats = {}
+      lib.data.mangas.forEach(function(m) { cats[m.id] = m.categories })
+      done({ state: "ok", data: { chapters: { nodes: ch.data.chapters.map(function(c) {
+        return { id: c.id, isRead: c.isRead, isBookmarked: c.isBookmarked, isDownloaded: c.isDownloaded,
+          manga: { categories: { nodes: (cats[c.mangaId] || []).map(function(id) { return { meta: metas[id] || [] } }) } } }
+      }) } } })
+    })
+  })
+}
+
 function autoDeleteQuery(chapterIds) {
   return {
     query: "query($ids: [Int!]!) { chapters(filter: { id: { in: $ids } }) { nodes { id isRead isBookmarked isDownloaded"
@@ -183,23 +224,27 @@ function keeps(manga) {
 // check of those categories reads the chapters from before a mark read,
 // so it never keeps one; here it does. readIds: chapters read whose save
 // may not have reached the server yet. null when none goes.
-function autoDeletePayload(data, deleteBookmarked, readIds) {
+function autoDeletePayload(data, deleteBookmarked, readIds, core) {
   var gone = data.chapters.nodes.filter(function(c) {
     return c.isDownloaded && (c.isRead || readIds.indexOf(c.id) !== -1) && (deleteBookmarked || !c.isBookmarked) && !keeps(c.manga)
   })
-  return gone.length ? deletePayload(ids(gone)) : null
+  return gone.length ? deletePayload(ids(gone), core) : null
 }
 
-function deletePayload(chapterIds) {
+function deletePayload(chapterIds, core) {
+  if (core) return { route: "download.delete", body: { ids: chapterIds } }
   return { query: DELETE_MUTATION, variables: { ids: chapterIds } }
 }
 
-function dequeuePayload(chapterId) {
+function dequeuePayload(chapterId, core) {
+  if (core) return { route: "download.dequeue", body: { ids: [chapterId] } }
   return { query: DEQUEUE_MUTATION, variables: { ids: [chapterId] } }
 }
 
 // chapterIds: failed downloads, all in the queue (see removePayload).
-function retryPayload(chapterIds) {
+// Core requeues a failed chapter in its place, keeping its tries.
+function retryPayload(chapterIds, core) {
+  if (core) return chapterIds.length ? { route: "download.enqueue", body: { ids: chapterIds } } : null
   return chapterIds.length ? { query: RETRY_MUTATION, variables: { ids: chapterIds } } : null
 }
 
@@ -231,8 +276,10 @@ function sorted(q, key) {
 // per item out of place, all in one request; null when nothing moves.
 // Only the last move answers with the status, so a long queue does not
 // come back once per move.
-function orderPayload(q, order) {
+function orderPayload(q, order, core) {
   var now = chapterIds(q.items)
+  // Core takes the whole order in one route.
+  if (core) return order.some(function(id, i) { return now[i] !== id }) ? { route: "download.reorder", body: { order: order } } : null
   var moves = []
   order.forEach(function(id, to) {
     if (now[to] === id) return
@@ -244,7 +291,8 @@ function orderPayload(q, order) {
   return { query: "mutation { " + moves.join(" { clientMutationId } ") + " { " + STATUS + " } }" }
 }
 
-function togglePayload(q) {
+function togglePayload(q, core) {
+  if (core) return { route: q.running ? "download.stop" : "download.start" }
   return { query: q.running ? STOP_MUTATION : START_MUTATION }
 }
 
@@ -264,13 +312,15 @@ function progressText(item) {
 // leaves the queue loses its reason, so a new failure is probed again.
 // A manga with no source needs no probe. -> { reasons, probe: the chapter
 // ids to probe now }.
-function failed(items, reasons) {
+// core: miharchy-core's items, which carry their error, so none is probed.
+function failed(items, reasons, core) {
   var next = {}
   var probe = []
   items.forEach(function(i) {
     if (i.state !== "ERROR") return
     var id = i.chapterId
     if (reasons[id] !== undefined) next[id] = reasons[id]
+    else if (i.error || core) next[id] = Failure.coreReason(i.error)
     else if (i.sourceMissing) next[id] = Failure.reason("Source not installed")
     else {
       next[id] = null
@@ -303,10 +353,11 @@ function probed(reasons, chapterId, reply) {
 
 // A queue row's status: progressText, and on a failed row its reason and
 // hint once known.
-function statusText(item, reason, flareOn) {
+// core: no hint, since both point at Suwayomi's Setup and library check.
+function statusText(item, reason, flareOn, core) {
   var text = progressText(item)
   if (item.state !== "ERROR" || !reason) return text
-  var hint = Failure.hint(reason, flareOn)
+  var hint = core ? "" : Failure.hint(reason, flareOn)
   return text + "   " + reason.text + (hint ? "   " + hint : "")
 }
 
@@ -323,6 +374,9 @@ if (typeof module !== "undefined") {
     STATUS_QUERY: STATUS_QUERY,
     LIVE_QUERY: LIVE_QUERY,
     CLEAR_PAYLOAD: CLEAR_PAYLOAD,
+    statusPayload: statusPayload,
+    clearPayload: clearPayload,
+    autoDeleteLoad: autoDeleteLoad,
     initial: initial,
     reduce: reduce,
     omitted: omitted,

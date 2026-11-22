@@ -546,3 +546,137 @@ test("on core, History loads the cleared cutoff and history.list, hides and clea
   H.load((p, done) => suwa.push(p), false, () => {});
   assert.deepEqual(suwa, [{ query: H.QUERY }]);
 });
+
+const D = load("Downloads.js");
+const N = load("NextChapters.js");
+const LV = load("Live.js");
+const F = load("Failure.js");
+
+const coreItem = (id, state, extra) => Object.assign({ state, progress: 0.5, tries: 1, error: null,
+  chapter: { id, name: "Ch. " + id, mangaId: 3, chapterNumber: id, uploadDate: 1000 }, manga: { id: 3, title: "A", source: { id: "7" } } }, extra);
+
+test("on core, the Downloads view reads the plain status from routes and the topic", () => {
+  const reply = { state: "ok", data: { state: "STARTED", queue: [coreItem(1, "DOWNLOADING"), coreItem(2, "ERROR", { error: { kind: "source", message: "timeout" } })] } };
+  const q = D.reduce(D.initial(), { type: "reply", reply });
+  assert.equal(q.running, true);
+  assert.deepEqual(q.items.map((i) => [i.chapterId, i.state]), [[1, "DOWNLOADING"], [2, "ERROR"]]);
+  const live = D.reduce(q, { type: "live", data: { state: "STOPPED", queue: [coreItem(2, "ERROR")] } });
+  assert.equal(live.running, false);
+  assert.deepEqual(live.items.map((i) => i.chapterId), [2]);
+  assert.equal(D.omitted({ state: "STOPPED", queue: [] }), false);
+  // The reason comes with the item: nothing is probed.
+  const f = D.failed(q.items, {}, true);
+  assert.deepEqual(f.probe, []);
+  assert.deepEqual(f.reasons[2], { kind: "network", text: "No connection to the source" });
+  assert.deepEqual(D.failed([D.reduce(D.initial(), { type: "reply", reply: { state: "ok", data: { state: "STOPPED", queue: [coreItem(5, "ERROR")] } } }).items[0]], {}, true).reasons[5], { kind: "other", text: "Unknown error" });
+  // The delete reply carries the status too.
+  assert.equal(D.statusText(q.items[1], f.reasons[2], false, true), D.progressText(q.items[1]) + "   No connection to the source", "no Suwayomi hint on core");
+  const del = D.reduce(q, { type: "reply", reply: { state: "ok", data: { state: "STOPPED", queue: [], chapters: [{ id: 1, isDownloaded: false }] } } });
+  assert.deepEqual(del.items, []);
+});
+
+test("on core, every download payload is a route", () => {
+  const chapters = [{ id: 1, downloaded: false }, { id: 2, downloaded: true }];
+  const items = D.reduce(D.initial(), { type: "reply", reply: { state: "ok", data: { state: "STARTED", queue: [coreItem(1, "QUEUED"), coreItem(9, "QUEUED")] } } });
+  assert.deepEqual(D.statusPayload(true), { route: "download.queue" });
+  assert.deepEqual(D.statusPayload(false), { query: D.STATUS_QUERY });
+  assert.deepEqual(D.clearPayload(true), { route: "download.clear" });
+  assert.deepEqual(D.enqueuePayload(chapters, true), { route: "download.enqueue", body: { ids: [1] } });
+  assert.equal(D.enqueuePayload([chapters[1]], true), null);
+  assert.deepEqual(D.removePayload(chapters, items.items, true), { route: "download.delete", body: { ids: [1, 2] } });
+  assert.equal(D.removePayload([{ id: 5, downloaded: false }], items.items, true), null);
+  assert.deepEqual(D.dequeuePayload(1, true), { route: "download.dequeue", body: { ids: [1] } });
+  assert.deepEqual(D.retryPayload([2], true), { route: "download.enqueue", body: { ids: [2] } });
+  assert.deepEqual(D.togglePayload(items, true), { route: "download.stop" });
+  assert.deepEqual(D.togglePayload({ running: false }, true), { route: "download.start" });
+  assert.deepEqual(D.orderPayload(items, [9, 1], true), { route: "download.reorder", body: { order: [9, 1] } });
+  assert.equal(D.orderPayload(items, [1, 9], true), null);
+  assert.ok(D.enqueuePayload(chapters).query, "Suwayomi keeps its mutation");
+});
+
+test("on core, delete after read loads chapters and the categories' metas, and deletes by route", () => {
+  const sent = [];
+  const replies = {
+    "chapter.list": { chapters: [
+      { id: 1, mangaId: 3, isRead: true, isBookmarked: false, isDownloaded: true },
+      { id: 2, mangaId: 4, isRead: true, isBookmarked: false, isDownloaded: true },
+      { id: 3, mangaId: 3, isRead: false, isBookmarked: false, isDownloaded: true }
+    ] },
+    "library.list": { categories: [{ id: 7, meta: [{ key: D.KEEP_KEY, value: "true" }] }], mangas: [{ id: 3, categories: [] }, { id: 4, categories: [7] }] }
+  };
+  let reply;
+  D.autoDeleteLoad((p, done) => { sent.push(p.route); done({ state: "ok", data: replies[p.route] }); }, true, [1, 2, 3], (r) => { reply = r; });
+  assert.deepEqual(sent, ["chapter.list", "library.list"]);
+  // Manga 4's category keeps its downloads; chapter 3 is unread.
+  assert.deepEqual(D.autoDeletePayload(reply.data, false, [], true), { route: "download.delete", body: { ids: [1] } });
+  assert.deepEqual(D.autoDeletePayload(reply.data, false, [3], true), { route: "download.delete", body: { ids: [1, 3] } });
+  let down;
+  D.autoDeleteLoad((p, done) => done(p.route === "library.list" ? { state: "down" } : { state: "ok", data: replies[p.route] }), true, [1], (r) => { down = r; });
+  assert.equal(down.state, "down");
+  const suwa = [];
+  D.autoDeleteLoad((p) => suwa.push(p), false, [1], () => {});
+  assert.deepEqual(suwa, [D.autoDeleteQuery([1])]);
+});
+
+test("on core, a next-chapters run refreshes, reads and settles through routes", () => {
+  assert.deepEqual(N.refreshPayload(3, true), { route: "manga.refresh", body: { id: 3 } });
+  const replies = {
+    "chapter.list": { chapters: [
+      { id: 1, mangaId: 3, name: "Ch. 1", chapterNumber: 1, uploadDate: 1, isRead: false, isBookmarked: false, lastPageRead: 0, isDownloaded: false, scanlator: null, sourceOrder: 1 },
+      { id: 2, mangaId: 4, name: "Ch. 1", chapterNumber: 1, uploadDate: 1, isRead: false, isBookmarked: false, lastPageRead: 0, isDownloaded: true, scanlator: null, sourceOrder: 1 }
+    ] },
+    "meta.get": { metas: [] },
+    "download.queue": { state: "STARTED", queue: [coreItem(5, "QUEUED")] }
+  };
+  const sent = [];
+  const send = (p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); };
+  let read;
+  N.readLoad(send, true, [3, 4], (r) => { read = r; });
+  assert.deepEqual(sent.map((p) => p.route), ["chapter.list", "meta.get"]);
+  assert.deepEqual(sent[0].body, { mangaIds: [3, 4] });
+  assert.deepEqual(read.data.mangas.nodes.map((m) => [m.id, m.chapters.nodes.map((c) => c.id)]), [[3, [1]], [4, [2]]]);
+  assert.deepEqual(N.pick(read.data, { id: "unread" }, 0, []).map((c) => c.id), [1], "a chapter on disk is not queued again");
+  let settled;
+  N.settleLoad(send, true, { queued: [1, 2, 5] }, (r) => { settled = r; });
+  assert.deepEqual(sent.slice(2).map((p) => p.route), ["download.queue", "chapter.list"]);
+  assert.deepEqual(sent[3].body, { ids: [1, 2, 5] });
+  // Core sends no DEQUEUED: a run chapter that left the queue settles at once.
+  const run = { queued: [1, 2, 5] };
+  assert.deepEqual(N.goneIds(run, [{ chapterId: 1 }, { chapterId: 9 }]), [1]);
+  assert.deepEqual(N.goneIds(null, [{ chapterId: 1 }]), []);
+  const gone = N.goneMarks({ 1: "seen", 2: "seen" }, [{ id: 1, isDownloaded: false }, { id: 2, isDownloaded: true }]);
+  assert.deepEqual(gone, { 1: "out", 2: "disk" });
+  assert.deepEqual(N.tally(run, [{ chapterId: 5, state: "QUEUED" }], gone), { onDisk: 1, queued: 1, failed: [] });
+  // Out of the window's queue: on disk, still queued on core, or taken out.
+  assert.deepEqual(N.settle({}, { queued: [1, 2, 5] }, [], settled.data), { 1: "out", 2: "disk" });
+});
+
+test("on core, the live socket sends the secret, then subscribes to its topic", () => {
+  assert.equal(LV.coreUrl(core), "ws://127.0.0.1:4591/api/live");
+  assert.deepEqual(LV.coreOpen("c0ffee", "downloads").map((m) => JSON.parse(m)), [{ secret: "c0ffee" }, { subscribe: "downloads" }]);
+  assert.deepEqual(LV.parseCore(JSON.stringify({ topic: "downloads", data: { state: "STOPPED", queue: [] } }), "downloads"), { type: "data", data: { state: "STOPPED", queue: [] } });
+  assert.deepEqual(LV.parseCore(JSON.stringify({ topic: "other", data: {} }), "downloads"), { type: "none" });
+  assert.deepEqual(LV.parseCore(JSON.stringify({ type: "pong" }), "downloads"), { type: "none" });
+  assert.deepEqual(LV.parseCore(JSON.stringify({ topic: "downloads", error: { kind: "notFound", message: "There is no topic downloads." } }), "downloads"), { type: "ended", message: "There is no topic downloads." });
+  assert.deepEqual(LV.parseCore("not json", "downloads"), { type: "none" });
+});
+
+test("core's error kinds map to the window's failure reasons", () => {
+  assert.equal(F.coreReason({ kind: "cloudflare", message: "https://x shows a Cloudflare challenge." }).kind, "cloudflare");
+  assert.equal(F.coreReason({ kind: "cloudflare", message: "blocked" }).kind, "cloudflare");
+  assert.deepEqual(F.coreReason({ kind: "network", message: "The source did not answer within 30 s." }), { kind: "network", text: "No connection to the source" });
+  assert.equal(F.coreReason({ kind: "network", message: "The site answered HTTP 404." }).kind, "notFound");
+  assert.equal(F.coreReason({ kind: "webview", message: "This source needs a WebView." }).kind, "other");
+  assert.equal(F.coreReason({ kind: "source", message: "java.net.UnknownHostException: Unable to resolve host \"api.mangadex.org\"" }).kind, "network");
+  assert.equal(F.coreReason({ kind: "notFound", message: "Source not installed" }).kind, "sourceMissing");
+  assert.deepEqual(F.coreReason(null), { kind: "other", text: "Unknown error" });
+  assert.deepEqual(F.coreReason({ kind: "source", message: "Page 2 of MangaDex is not an image." }), { kind: "other", text: "Page 2 of MangaDex is not an image." });
+});
+
+test("on core, the detail reads a delete's chapters beside the status", () => {
+  const d = { chapters: [{ id: 1, downloaded: true }, { id: 2, downloaded: true }] };
+  const next = B.reduceDetail(d, { type: "downloads-reply", reply: { state: "ok", data: { state: "STOPPED", queue: [], chapters: [{ id: 1, isDownloaded: false }] } } });
+  assert.deepEqual(next.chapters.map((c) => c.downloaded), [false, true]);
+  const enq = B.reduceDetail(d, { type: "downloads-reply", reply: { state: "ok", data: { state: "STARTED", queue: [] } } });
+  assert.deepEqual(enq.chapters.map((c) => c.downloaded), [true, true]);
+});

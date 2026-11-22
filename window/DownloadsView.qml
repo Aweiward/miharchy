@@ -19,6 +19,9 @@ Rectangle {
   required property Theme theme
   property var config: null
   property string configPath: ""
+  // "core" with MIHARCHY_BACKEND=core (shell.qml): the queue is miharchy-core's.
+  property string backend: ""
+  readonly property bool core: backend === "core"
   property bool open: false
   property var queue: Downloads.initial()
   property int cursor: 0
@@ -39,7 +42,7 @@ Rectangle {
   readonly property bool summaryShown: NextChapters.shown(lastRun)
   readonly property var tally: lastRun ? NextChapters.tally(lastRun, queue.items, marks) : null
 
-  readonly property var problem: Model.problem(queue, configPath)
+  readonly property var problem: Model.problem(queue, configPath, backend)
   // The first X arms "cancel all"; shell.qml disarms it on any other key.
   property bool armed: false
   readonly property string hint: armed ? "X again to cancel every download, any other key keeps them"
@@ -59,8 +62,11 @@ Rectangle {
     seq++
     queue = Downloads.initial()
     reasons = {}
-    send({ query: Downloads.STATUS_QUERY })
+    if (!config && core) queue = { state: "no-config", message: "", running: false, items: [] }
+    send(Downloads.statusPayload(core))
   }
+  // A missing core.json leaves config null from the start, so onConfigChanged never fires.
+  Component.onCompleted: if (core && !config) queue = { state: "no-config", message: "", running: false, items: [] }
 
   onLastRunChanged: {
     if (lastRun && lastRun.state === "refreshing") {
@@ -75,12 +81,22 @@ Rectangle {
     var gone = Downloads.left(queue.items, next.items)
     queue = next
     cursor = Math.max(summaryShown ? -1 : 0, Math.min(cursor, queue.items.length - 1))
-    var f = Downloads.failed(queue.items, reasons)
+    var f = Downloads.failed(queue.items, reasons, core)
     reasons = f.reasons
     f.probe.forEach(probe)
     var live = event.type === "live" && event.data.downloadStatusChanged
     follow(live && !live.initial ? live.updates || [] : [])
+    if (core) settleGone(NextChapters.goneIds(lastRun, gone))
     if (gone.length) leftQueue(gone)
+  }
+
+  // Core: a run chapter that left the queue is on disk or taken out.
+  function settleGone(ids) {
+    if (!ids.length || !config) return
+    var run = lastRun
+    Session.send(config, { route: "chapter.list", body: { ids: ids } }, function(reply) {
+      if (reply.state === "ok" && run === view.lastRun) view.marks = NextChapters.goneMarks(view.marks, reply.data.chapters)
+    })
   }
 
   function follow(updates) {
@@ -95,7 +111,8 @@ Rectangle {
     if (settling || !config) return
     settling = true
     var run = lastRun
-    Session.send(config, NextChapters.settlePayload(run), function(reply) {
+    var cfg = config
+    NextChapters.settleLoad(function(payload, done) { Session.send(cfg, payload, done) }, core, run, function(reply) {
       view.settling = false
       if (reply.state !== "ok" || run !== view.lastRun || view.notified) return
       view.marks = NextChapters.settle(view.marks, run, view.queue.items, reply.data)
@@ -108,7 +125,7 @@ Rectangle {
 
   // A retried chapter loses its reason, so its next failure is probed again.
   function retry(chapterIds) {
-    var payload = Downloads.retryPayload(chapterIds)
+    var payload = Downloads.retryPayload(chapterIds, core)
     if (!payload) return
     var r = Object.assign({}, reasons)
     chapterIds.forEach(function(id) { delete r[id] })
@@ -142,7 +159,7 @@ Rectangle {
   // The cursor stays on its download wherever the new order puts it.
   function reorder(order) {
     var item = queue.items[cursor]
-    var payload = Downloads.orderPayload(queue, order)
+    var payload = Downloads.orderPayload(queue, order, core)
     if (!payload) return
     cursor = order.indexOf(item.chapterId)
     send(payload)
@@ -175,14 +192,14 @@ Rectangle {
         reorder(Downloads.sorted(queue, id === "downloads.sortNumber" ? "chapterNumber" : "uploadDate"))
         break
       case "downloads.clear":
-        if (armed) send(Downloads.CLEAR_PAYLOAD)
+        if (armed) send(Downloads.clearPayload(core))
         armed = !armed && queue.items.length > 0
         break
       case "downloads.dequeue":
-        if (item) send(Downloads.dequeuePayload(item.chapterId))
+        if (item) send(Downloads.dequeuePayload(item.chapterId, core))
         break
       case "downloads.toggle":
-        send(Downloads.togglePayload(queue))
+        send(Downloads.togglePayload(queue, core))
         break
     }
   }
@@ -193,6 +210,7 @@ Rectangle {
     id: live
     config: view.config
     query: Downloads.LIVE_QUERY
+    topic: "downloads"
     running: view.config !== null && Downloads.live(view.queue, view.open)
     onResult: function(data) {
       view.update({ type: "live", data: data })
@@ -326,7 +344,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: view.theme.fontSize * 0.5
         anchors.verticalCenter: parent.verticalCenter
-        text: Downloads.statusText(row.modelData, view.reasons[row.modelData.chapterId], view.flareOn)
+        text: Downloads.statusText(row.modelData, view.reasons[row.modelData.chapterId], view.flareOn, view.core)
         color: row.modelData.state === "ERROR" ? view.theme.urgent : row.current ? view.theme.selectedText : view.theme.muted
         font.family: view.theme.fontFamily
         font.pixelSize: view.theme.fontSmall
