@@ -113,7 +113,7 @@ class Shikimori(client: OkHttpClient, prefs: TrackerPrefs) :
         COMPLETED -> "Completed"
         ON_HOLD -> "On hold"
         DROPPED -> "Dropped"
-        REREADING -> "Repeating"
+        REREADING -> "Rereading"
         else -> null
     }
 

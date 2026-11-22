@@ -48,11 +48,11 @@ class MangaUpdates(client: OkHttpClient, prefs: TrackerPrefs) :
     }
 
     override fun getStatus(status: Long): String? = when (status) {
-        READING_LIST -> "Reading list"
-        WISH_LIST -> "Wish list"
-        COMPLETE_LIST -> "Complete list"
-        ON_HOLD_LIST -> "On hold list"
-        UNFINISHED_LIST -> "Unfinished list"
+        READING_LIST -> "Reading List"
+        WISH_LIST -> "Wish List"
+        COMPLETE_LIST -> "Complete List"
+        ON_HOLD_LIST -> "On Hold List"
+        UNFINISHED_LIST -> "Unfinished List"
         else -> null
     }
 

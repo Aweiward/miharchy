@@ -3,6 +3,12 @@ package miharchy.core
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import eu.kanade.tachiyomi.data.track.anilist.Anilist
+import eu.kanade.tachiyomi.data.track.bangumi.Bangumi
+import eu.kanade.tachiyomi.data.track.kitsu.Kitsu
+import eu.kanade.tachiyomi.data.track.mangabaka.MangaBaka
+import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates
+import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeList
+import eu.kanade.tachiyomi.data.track.shikimori.Shikimori
 import yomi.host.startHost
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
@@ -32,7 +38,10 @@ fun main() {
     val updates = Updates(db, { browse.refresh(it) })
     val trackerStore = TrackerStore(db)
     val http = okhttp3.OkHttpClient()
-    val trackers = Trackers(db, listOf(Anilist(http, trackerStore.of(2))))
+    val trackers = Trackers(db, listOf(
+        MyAnimeList(http, trackerStore.of(1)), Anilist(http, trackerStore.of(2)), Kitsu(http, trackerStore.of(3)), Shikimori(http, trackerStore.of(4)),
+        Bangumi(http, trackerStore.of(5)), MangaUpdates(http, trackerStore.of(7)), MangaBaka(http, trackerStore.of(11)),
+    ))
     val slices = listOf(extensions.routes, browse.routes, library.routes, downloads.routes, updates.routes, trackers.routes)
     // A + B silently keeps one of two routes with the same name.
     check(slices.sumOf { it.size } == slices.flatMap { it.keys }.toSet().size) { "two slices define the same route" }
