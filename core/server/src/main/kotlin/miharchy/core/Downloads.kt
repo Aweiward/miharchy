@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +51,8 @@ class Downloads(private val db: Database, private val browse: Browse, private va
     @Volatile private var current: Long? = null
     @Volatile private var progress = 0.0
     private val state = MutableStateFlow<JsonElement>(JsonNull)
+    // One status at a time, so an older one never lands after a newer one. Before init, which publishes.
+    private val publishing = Mutex()
 
     /** The status: the whole of it on subscribe, then each change. */
     val status: StateFlow<JsonElement> get() = state
@@ -131,17 +134,24 @@ class Downloads(private val db: Database, private val browse: Browse, private va
         withContext(Dispatchers.IO) { files.forEach { Files.deleteIfExists(inside(root, it)) } }
     }
 
-    /** Downloads the first QUEUED chapter until none is left; then the downloader stops, as Suwayomi's does. */
+    /**
+     * Downloads the first QUEUED chapter until none is left; then the downloader stops. The pick and the stop
+     * happen under [ops], so an enqueue either lands before the pick or finds no worker and starts one.
+     */
     private suspend fun loop() {
-        while (running) {
-            val next = db.run { c ->
-                c.query("SELECT chapter_id FROM download_queue WHERE state = 'QUEUED' ORDER BY position LIMIT 1") { it.getLong(1) }.firstOrNull()
-                    .also { current = it; progress = 0.0 }
-            }
-            if (next == null) {
-                running = false
-                break
-            }
+        while (true) {
+            val next = ops.withLock {
+                val id = if (!running) null else db.run { c ->
+                    c.query("SELECT chapter_id FROM download_queue WHERE state = 'QUEUED' ORDER BY position LIMIT 1") { it.getLong(1) }.firstOrNull()
+                }
+                current = id
+                progress = 0.0
+                if (id == null) {
+                    running = false
+                    worker = null
+                }
+                id
+            } ?: break
             publish()
             try {
                 download(next)
@@ -183,16 +193,19 @@ class Downloads(private val db: Database, private val browse: Browse, private va
                     publish()
                 }
             }
-            withContext(Dispatchers.IO) { Files.move(part, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE) }
-            // Dequeued while the last page wrote: the file goes, and the chapter stays not downloaded.
-            val kept = db.run { c ->
-                c.transaction {
-                    val queued = c.update("DELETE FROM download_queue WHERE chapter_id = ?", id) == 1
-                    if (queued) c.update("UPDATE chapter SET download_path = ? WHERE id = ?", rel, id)
-                    queued
+            // The move and its row go together: a cancel here would leave a file no row points to.
+            withContext(NonCancellable + Dispatchers.IO) {
+                Files.move(part, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                // Dequeued while the last page wrote: the file goes, and the chapter stays not downloaded.
+                val kept = db.run { c ->
+                    c.transaction {
+                        val queued = c.update("DELETE FROM download_queue WHERE chapter_id = ?", id) == 1
+                        if (queued) c.update("UPDATE chapter SET download_path = ? WHERE id = ?", rel, id)
+                        queued
+                    }
                 }
+                if (!kept) Files.deleteIfExists(file)
             }
-            if (!kept) withContext(Dispatchers.IO) { Files.deleteIfExists(file) }
         } finally {
             // Blocking on purpose: a withContext in a cancelled coroutine throws before it runs.
             Files.deleteIfExists(part)
@@ -214,7 +227,7 @@ class Downloads(private val db: Database, private val browse: Browse, private va
         }
     }
 
-    private suspend fun publish() {
+    private suspend fun publish() = publishing.withLock {
         state.value = statusJson()
     }
 

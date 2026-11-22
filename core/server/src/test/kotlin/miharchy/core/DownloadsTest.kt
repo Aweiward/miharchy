@@ -19,7 +19,11 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.double
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -69,10 +73,13 @@ class DownloadsTest {
     @Test
     fun theQueueDownloadsKeepsReasonsAndReadsOffline() = runBlocking {
         val requests = mutableListOf<String>()
+        // Set, it holds every second page, so a download waits half done.
+        val hold = AtomicReference<CountDownLatch?>(null)
         Site { ex ->
             synchronized(requests) { requests += ex.requestURI.path }
             when (ex.requestURI.path) {
-                "/p0.png", "/p1.png" -> png
+                "/p0.png" -> png
+                "/p1.png" -> png.also { hold.get()?.await(20, TimeUnit.SECONDS) }
                 "/error.html" -> "<html>blocked</html>".toByteArray()
                 else -> null
             }
@@ -138,6 +145,27 @@ class DownloadsTest {
                     val deleted = downloads.routes.call("download.delete", ids(ok))["chapters"]!!.jsonArray.single().jsonObject
                     assertEquals("false", deleted["isDownloaded"].toString())
                     assertTrue(!Files.exists(dir.resolve("Chapter 1.cbz")))
+
+                    // Stop and dequeue cancel a running download: no .part and no .cbz stay.
+                    fun parts() = Files.walk(root).use { s -> s.filter { it.toString().endsWith(".part") }.count() }
+                    suspend fun halfDone() = withTimeout(20_000) {
+                        downloads.status.first { s -> s is JsonObject && s.queue().any { it.chapterId() == ok && it["progress"]!!.jsonPrimitive.double == 0.5 } }
+                    }
+                    for (cancel in listOf("download.stop", "download.dequeue")) {
+                        val latch = CountDownLatch(1).also(hold::set)
+                        downloads.routes.call("download.enqueue", ids(ok))
+                        halfDone()
+                        val after = downloads.routes.call(cancel, ids(ok))
+                        latch.countDown()
+                        assertEquals(if (cancel == "download.stop") listOf("QUEUED") else emptyList(), after.queue().filter { it.chapterId() == ok }.map { it["state"]!!.jsonPrimitive.content }, cancel)
+                        assertEquals(0L, parts(), cancel)
+                        assertTrue(!Files.exists(dir.resolve("Chapter 1.cbz")), cancel)
+                    }
+                    hold.set(null)
+
+                    // Enqueues that land as the worker stops never leave a queue that says STARTED and waits.
+                    repeat(300) { downloads.routes.call("download.enqueue", ids(empty)) }
+                    assertEquals("STOPPED", downloads.idle()["state"]!!.jsonPrimitive.content)
                     assertEquals(0, downloads.routes.call("download.clear").queue().size)
                     downloads.routes.expect(Kind.notFound, "download.enqueue", ids(999))
                     downloads.routes.expect(Kind.notFound, "download.reorder", buildJsonObject { put("chapterId", ok); put("to", 0) })
