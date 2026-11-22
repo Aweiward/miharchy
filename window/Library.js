@@ -311,25 +311,18 @@ function continueChapter(chapters, chapterPrefs) {
 }
 
 // The actions on selected manga (Mihon's library selection) take their
-// chapters from one query; Browse.toChapters() gives them the shape the
+// chapters from one route; Browse.toChapters() gives them the shape the
 // chapter actions read.
-var CHAPTERS_QUERY = "query($ids: [Int!]) { chapters(filter: { mangaId: { in: $ids } }) {"
-  + " nodes { id name chapterNumber uploadDate isRead isBookmarked lastPageRead isDownloaded scanlator sourceOrder } } }"
-var REMOVE_MUTATION = "mutation($ids: [Int!]!) { updateMangas(input: { ids: $ids, patch: { inLibrary: false } }) { mangas { id inLibrary } } }"
-var CATEGORIES_MUTATION = "mutation($ids: [Int!]!, $add: [Int!]!, $remove: [Int!]!) {"
-  + " updateMangasCategories(input: { ids: $ids, patch: { addToCategories: $add, removeFromCategories: $remove } }) { mangas { id } } }"
-
-// core (the last argument of each payload here): miharchy-core's routes (ADR 0010).
+// core (the last argument of each payload here) is unused: the routes are
+// miharchy-core's (ADR 0010).
 function chaptersPayload(mangaIds, core) {
-  if (core) return { route: "chapter.list", body: { mangaIds: mangaIds } }
-  return { query: CHAPTERS_QUERY, variables: { ids: mangaIds } }
+  return { route: "chapter.list", body: { mangaIds: mangaIds } }
 }
 
 // Takes the manga out of the library. Their chapters, read state and
 // downloads stay, as in Mihon.
 function removePayload(mangaIds, core) {
-  if (core) return { route: "manga.update", body: { ids: mangaIds, inLibrary: false } }
-  return { query: REMOVE_MUTATION, variables: { ids: mangaIds } }
+  return { route: "manga.update", body: { ids: mangaIds, inLibrary: false } }
 }
 
 // Mihon's change category dialog for many manga: each user category is
@@ -346,8 +339,7 @@ function categoryRows(categories, manga) {
 // out once all are in it.
 function categoryPayload(row, mangaIds, core) {
   var out = row.state === "all"
-  if (core) return { route: "manga.update", body: out ? { ids: mangaIds, removeFromCategories: [row.id] } : { ids: mangaIds, addToCategories: [row.id] } }
-  return { query: CATEGORIES_MUTATION, variables: { ids: mangaIds, add: out ? [] : [row.id], remove: out ? [row.id] : [] } }
+  return { route: "manga.update", body: out ? { ids: mangaIds, removeFromCategories: [row.id] } : { ids: mangaIds, addToCategories: [row.id] } }
 }
 
 // Where Mihon puts a manga added to the library, from the default category
@@ -363,19 +355,15 @@ function defaultCategory(setting, categories) {
 // Default: a manga that left the library keeps its old categories on the
 // server.
 function moveToPayload(mangaId, to, categories, core) {
-  if (core) return { route: "manga.update", body: { ids: [mangaId], clearCategories: true, addToCategories: to > 0 ? [to] : [] } }
-  return {
-    query: CATEGORIES_MUTATION,
-    variables: { ids: [mangaId], add: to > 0 ? [to] : [], remove: categories.map(function(c) { return c.id }).filter(function(id) { return id !== to }) }
-  }
+  return { route: "manga.update", body: { ids: [mangaId], clearCategories: true, addToCategories: to > 0 ? [to] : [] } }
+}
+
+// chaptersPayload's reply -> its chapters.
+function chapterNodes(data) {
+  return data.chapters
 }
 
 // "the manga" for one, "3 manga" for more: what an armed x or X acts on.
-// chaptersPayload's reply -> its chapter nodes.
-function chapterNodes(data) {
-  return Array.isArray(data.chapters) ? data.chapters : data.chapters.nodes
-}
-
 function count(n) {
   return n === 1 ? "the manga" : n + " manga"
 }

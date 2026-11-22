@@ -25,7 +25,7 @@ Item {
 
   required property Theme theme
   property var config: null
-  // "core" with MIHARCHY_BACKEND=core (shell.qml): config and connection are miharchy-core's.
+  // Set by shell.qml: config and connection are miharchy-core's.
   property string backend: ""
   readonly property bool core: backend === "core"
   property string configPath: ""
@@ -91,7 +91,7 @@ Item {
   signal editEnded()
   // R and U: shell.qml's one mark path, which Updates shares.
   signal mark(var chapters, string action, var mangaIds)
-  // A download mutation's reply, which carries the queue.
+  // A download route's reply, which carries the queue.
   signal downloads(var reply)
   // A change reached the server: shell.qml fetches the library again.
   signal edited()
