@@ -305,7 +305,7 @@ function parseSyncthing(text) {
 // configPath: Suwayomi's server.json. coreConfigPath: core.json, or "" (no core facts).
 function probeCommand(configPath, syncDir, windowDir, skipAur, coreConfigPath) {
   var repo = windowDir.replace(/\/window$/, "")
-  return job("probe", PROBE, [configPath, syncDir, desktopEntry(windowDir), repo + "/server/miharchy-server.service", skipAur ? "1" : "", coreConfigPath ? repo : "", coreConfigPath || ""])
+  return job("probe", PROBE, [configPath, syncDir, desktopEntry(windowDir), "", skipAur ? "1" : "", coreConfigPath ? repo : "", coreConfigPath || ""])
 }
 
 // The job a confirmed or committed step runs.

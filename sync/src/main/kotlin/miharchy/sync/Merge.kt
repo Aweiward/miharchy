@@ -205,3 +205,24 @@ private fun MangaState.changedFrom(base: MangaState) =
         tracks != base.tracks ||
         notes != base.notes ||
         (chapters.keys + base.chapters.keys).any { chapter(it) != base.chapter(it) }
+
+/** Whether [library] shows this change, so apply can tell what landed. */
+fun Change.isAppliedTo(library: Library): Boolean {
+    fun chapter(c: ChapterChange) = library.manga[c.manga]?.chapters?.get(c.chapterUrl)
+    return when (this) {
+        is CreateCategory -> name in library.categories
+        is ImportManga -> library.manga[manga]?.inLibrary == true
+        is AddToLibrary -> library.manga[manga]?.inLibrary == true
+        is RemoveFromLibrary -> library.manga[manga]?.inLibrary == false
+        is SetCategories -> library.manga[manga]?.categories == categories
+        is MarkRead -> chapter(this)?.read == true
+        is MarkUnread -> chapter(this)?.read == false
+        is AddBookmark -> chapter(this)?.bookmark == true
+        is RemoveBookmark -> chapter(this)?.bookmark == false
+        is SetLastPage -> chapter(this)?.lastPageRead == page
+        is BindTrack -> library.manga[manga]?.tracks?.get(tracker) == track
+        is UpdateTrack -> library.manga[manga]?.tracks?.get(tracker) == track
+        is UnbindTrack -> library.manga[manga]?.tracks?.containsKey(tracker) != true
+        is SetNotes -> library.manga[manga]?.notes == notes
+    }
+}
