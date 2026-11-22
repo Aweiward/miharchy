@@ -278,11 +278,6 @@ function details(pkgName, ext) {
   return copy(d, { state: "ok", sources: sources })
 }
 
-// The details need no request: core lists an extension's sources with it.
-function detailsPayload(d) {
-  return null
-}
-
 // event.type: "move" { delta }.
 function reduceDetails(d, event) {
   switch (event.type) {
@@ -345,7 +340,6 @@ if (typeof module !== "undefined") {
     status: status,
     find: find,
     details: details,
-    detailsPayload: detailsPayload,
     reduceDetails: reduceDetails,
     detailsHeader: detailsHeader,
     detailsAction: detailsAction

@@ -189,7 +189,6 @@ test("on core, details come from the list with no request, and settings open on 
   const s = loaded();
   const d = E.details(MANGADEX.pkgName, s);
   assert.equal(d.state, "ok");
-  assert.equal(E.detailsPayload(d), null);
   assert.deepEqual(d.sources.map((x) => x.name), ["MangaDex (EN)", "MangaDex (JA)"]);
   const opened = E.detailsAction(s, d, "extension.settings").settings;
   assert.deepEqual(opened, { id: "1", name: "MangaDex (EN)", lang: "en", configurable: true });
