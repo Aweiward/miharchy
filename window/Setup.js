@@ -17,6 +17,12 @@ var FLARE_IMAGE = "ghcr.io/flaresolverr/flaresolverr@sha256:c80ae007ce2ccdcd217a
 // so the helper builds and installs here, never in the plugin's sync/.
 var HELPER_DIR = ".local/share/miharchy/helper"
 var UNIT_FILE = ".config/systemd/user/miharchy-server.service"
+// miharchy-core (MIHARCHY_BACKEND=core, #385): built from the plugin's core/
+// and sync/ into CORE_DIR, which its user unit runs.
+var CORE_DIR = ".local/share/miharchy/core-app"
+var CORE_UNIT_FILE = ".config/systemd/user/miharchy-core.service"
+// The sync helper's state, which the move hands to core.
+var HELPER_STATE = ".local/share/miharchy/sync"
 var SERVER_CONF = ".local/share/miharchy/suwayomi/server.conf"
 var DESKTOP_FILE = ".local/share/applications/miharchy.desktop"
 var BINDINGS_FILE = ".config/hypr/bindings.lua"
@@ -45,12 +51,31 @@ var STEPS = [
   { id: "peekKey", title: "Peek key", kind: "run", prompt: "Add the peek keys missing from your Hyprland bindings: " + PEEK_KEY + " shows and hides a peek, " + NEXT_KEY + " moves it to the next manga?" }
 ]
 
+// Under MIHARCHY_BACKEND=core: build core, run its unit, then move the
+// Suwayomi install into it, after Suwayomi's own service.
+var CORE_STEPS = STEPS.slice(0, 2).concat([
+  { id: "coreBuild", title: "miharchy-core", kind: "run", required: true, prompt: "Build miharchy-core now? It takes a few minutes." },
+  { id: "coreService", title: "miharchy-core service", kind: "run", required: true, prompt: "Install and start the miharchy-core user service?" },
+  { id: "move", title: "Move from Suwayomi (optional)", kind: "run", prompt: "Copy the library, settings, extensions and downloads from Suwayomi into miharchy-core? Suwayomi stays as it is." }
+], STEPS.slice(2))
+
+// The steps this window shows.
+function steps(s) {
+  return s.core ? CORE_STEPS : STEPS
+}
+
 // sha256 over every file in a sync/ folder except build output, so a
 // rebuild is due exactly when the sources or build files change.
 var FINGERPRINT = "fingerprint() { (cd \"$1\" && find . -path ./build -prune -o -path ./.gradle -prune -o -path ./.kotlin -prune -o -type f -print | LC_ALL=C sort | xargs -d '\\n' sha256sum | sha256sum | cut -c1-64); }"
 
+// sha256 over the plugin's core/ and sync/, build output pruned at any
+// depth (core/server/build too). FINGERPRINT stays as it is: it names the
+// installed helper's sources.
+var CORE_FINGERPRINT = "corefingerprint() { (cd \"$1\" && find core sync -type d \\( -name build -o -name .gradle -o -name .kotlin \\) -prune -o -type f -print | LC_ALL=C sort | xargs -d '\\n' sha256sum | sha256sum | cut -c1-64); }"
+
 // $1 is the server.json path, $2 the plugin's sync/, $3 desktopEntry(),
-// $4 the plugin's server unit, $5 "1" to skip the AUR query.
+// $4 the plugin's server unit, $5 "1" to skip the AUR query; under the
+// switch $6 is the plugin's folder and $7 core.json, else both are empty.
 // Each line prints one fact; parseProbe reads them.
 var PROBE = [
   FINGERPRINT,
@@ -71,7 +96,16 @@ var PROBE = [
   "echo \"helperInstalled $(test -x \"$HOME/" + HELPER_DIR + "/bin/miharchy-sync\" && cat \"$HOME/" + HELPER_DIR + "/source.sha256\")\"",
   "printf '%s' \"$3\" | cmp -s - \"$HOME/" + DESKTOP_FILE + "\" && echo launcher",
   HAS_PEEK_KEY + " \"$HOME/" + BINDINGS_FILE + "\" && echo peekKey",
-  HAS_NEXT_KEY + " \"$HOME/" + BINDINGS_FILE + "\" && echo nextKey"
+  HAS_NEXT_KEY + " \"$HOME/" + BINDINGS_FILE + "\" && echo nextKey",
+  CORE_FINGERPRINT,
+  "[ -n \"$6\" ] && {",
+  "  echo \"coreSource $(corefingerprint \"$6\")\"",
+  "  echo \"coreInstalled $(test -x \"$HOME/" + CORE_DIR + "/bin/miharchy-core\" && cat \"$HOME/" + CORE_DIR + "/source.sha256\")\"",
+  "  echo \"coreUnit $(systemctl --user is-enabled miharchy-core 2>/dev/null) $(systemctl --user is-active miharchy-core 2>/dev/null)\"",
+  "  cmp -s \"$6/core/server/miharchy-core.service\" \"$HOME/" + CORE_UNIT_FILE + "\" && echo coreUnitCurrent",
+  "  test -s \"$7\" && echo coreConfig",
+  "}",
+  "true"
 ].join("\n")
 
 // $1 is bindLine() for the peek key, $2 for the next key. A bind the user
@@ -109,6 +143,35 @@ var BUILD_SCRIPT = [
   "echo \"Installed the sync helper in $helper.\""
 ].join("\n")
 
+// $1 is the plugin's folder. Builds a copy of core/ and sync/ (core's
+// build includes ../sync), as the helper build does, then restarts a
+// running core so it runs the new build.
+var CORE_BUILD_SCRIPT = [
+  CORE_FINGERPRINT,
+  "work=$HOME/.local/share/miharchy/core-src",
+  "app=$HOME/" + CORE_DIR,
+  "rm -rf \"$work\" \"$app.new\" && mkdir -p \"$work\" || exit",
+  "tar -C \"$1\" --exclude=build --exclude=.gradle --exclude=.kotlin -cf - core sync | tar -C \"$work\" -xf - || exit",
+  "cd \"$work/core\" && sh ./gradlew --no-daemon --console=plain :server:installDist || exit",
+  "cp -r server/build/install/miharchy-core \"$app.new\" && corefingerprint \"$work\" > \"$app.new/source.sha256\" || exit",
+  "rm -rf \"$app\" && mv \"$app.new\" \"$app\" || exit",
+  "systemctl --user try-restart miharchy-core.service",
+  "echo \"Installed miharchy-core in $app.\""
+].join("\n")
+
+// $1 is the plugin's unit, $2 core.json. Core writes core.json on its
+// first start, so the step waits for it.
+var CORE_UNIT_SCRIPT = [
+  "unit=$HOME/" + CORE_UNIT_FILE,
+  "changed=no",
+  "if ! cmp -s \"$1\" \"$unit\"; then install -D -m 644 \"$1\" \"$unit\" && systemctl --user daemon-reload || exit; changed=yes; fi",
+  "systemctl --user enable --now miharchy-core.service || exit",
+  "[ $changed = yes ] && systemctl --user restart miharchy-core.service",
+  "for i in $(seq 60); do test -s \"$2\" && echo \"miharchy-core is running; it wrote $2.\" && exit 0; sleep 1; done",
+  "echo \"miharchy-core did not write $2 within 60 s. See: journalctl --user -u miharchy-core\"",
+  "exit 1"
+].join("\n")
+
 // docker start makes a rerun reuse the container; the loop waits for the
 // first answer so the step only reports done once FlareSolverr serves.
 var FLARE_SCRIPT = [
@@ -139,6 +202,8 @@ var LIMITS = {
   flaresolverr: [1048576, 1800],
   syncFolder: [16384, 10],
   helper: [4194304, 1800],
+  coreBuild: [4194304, 1800],
+  coreService: [65536, 120],
   phoneBackups: [65536, 120],
   peekKey: [65536, 30],
   launcher: [16384, 10]
@@ -277,8 +342,10 @@ function parseSyncthing(text) {
   return f
 }
 
-function probeCommand(configPath, syncDir, windowDir, skipAur) {
-  return job("probe", PROBE, [configPath, syncDir, desktopEntry(windowDir), windowDir.replace(/\/window$/, "") + "/server/miharchy-server.service", skipAur ? "1" : ""])
+// coreConfigPath: core.json under the switch, else "" (no core facts).
+function probeCommand(configPath, syncDir, windowDir, skipAur, coreConfigPath) {
+  var repo = windowDir.replace(/\/window$/, "")
+  return job("probe", PROBE, [configPath, syncDir, desktopEntry(windowDir), repo + "/server/miharchy-server.service", skipAur ? "1" : "", coreConfigPath ? repo : "", coreConfigPath || ""])
 }
 
 // The job a confirmed or committed step runs.
@@ -298,6 +365,8 @@ function stepCommand(id, ctx) {
     case "flaresolverr": return command(FLARE_SCRIPT)
     case "syncFolder": return command("test -d \"$1\" || { echo \"$1 is not a folder.\"; exit 1; }", [ctx.folder])
     case "helper": return command(BUILD_SCRIPT, [ctx.syncDir])
+    case "coreBuild": return command(CORE_BUILD_SCRIPT, [ctx.windowDir.replace(/\/window$/, "")])
+    case "coreService": return command(CORE_UNIT_SCRIPT, [ctx.windowDir.replace(/\/window$/, "") + "/core/server/miharchy-core.service", ctx.coreConfigPath])
     case "phoneBackups":
       // Syncthing to install or start: in the terminal. Otherwise accept the phone.
       if (ctx.install) return command("omarchy-launch-floating-terminal-with-presentation \"$1\"", [ctx.install])
@@ -328,7 +397,7 @@ function javaMajor(line) {
 
 // The probe's output -> facts. docker is false when the command is absent.
 function parseProbe(text) {
-  var f = { java: 0, suwayomi: false, websockets: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", aurSuwayomi: "", launcher: false, peekKey: false, nextKey: false, unitCurrent: false, basicAuth: false }
+  var f = { coreSource: "", coreInstalled: "", coreUnitEnabled: false, coreUnitActive: false, coreUnitCurrent: false, coreConfig: false, java: 0, suwayomi: false, websockets: false, config: false, unitEnabled: false, unitActive: false, docker: false, container: false, javac: false, helperSource: "", helperInstalled: "", aurSuwayomi: "", launcher: false, peekKey: false, nextKey: false, unitCurrent: false, basicAuth: false }
   String(text).split("\n").forEach(function(line) {
     var sp = line.indexOf(" ")
     var key = sp === -1 ? line : line.slice(0, sp)
@@ -355,6 +424,14 @@ function parseProbe(text) {
     if (key === "helperSource") f.helperSource = rest.trim()
     if (key === "helperInstalled") f.helperInstalled = rest.trim()
     if (key === "aurSuwayomi") f.aurSuwayomi = rest.trim()
+    if (key === "coreSource") f.coreSource = rest.trim()
+    if (key === "coreInstalled") f.coreInstalled = rest.trim()
+    if (key === "coreUnit") {
+      f.coreUnitEnabled = words.indexOf("enabled") !== -1
+      f.coreUnitActive = words.indexOf("active") !== -1
+    }
+    if (key === "coreUnitCurrent") f.coreUnitCurrent = true
+    if (key === "coreConfig") f.coreConfig = true
   })
   return f
 }
@@ -364,7 +441,8 @@ var OFFERED_META = Settings.META_PREFIX + "setupOffered"
 // A GraphQL reply (Model.reply) to SERVER_QUERY -> { flare, syncFolder,
 // offered, version }.
 function parseServer(data) {
-  var metas = (data.metas && data.metas.nodes) || []
+  // Core's meta.get answers a plain list.
+  var metas = Array.isArray(data.metas) ? data.metas : (data.metas && data.metas.nodes) || []
   var value = function(key) {
     var m = metas.filter(function(n) { return n.key === key })[0]
     return m ? String(m.value) : ""
@@ -386,8 +464,25 @@ function warning(s) {
 // setup.results: step id -> parseJob() of its last run.
 // setup.phones: parsePhones() of the sync folder, null before the phone check.
 // setup.syncthing: parseSyncthing(), null before its check.
-function initial() {
-  return { probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {}, phones: null, syncthing: null }
+// setup.core: under MIHARCHY_BACKEND=core, so the core steps show and the
+// server reads and writes go to core.
+// setup.move: core's move.status, null before its first reply.
+function initial(core) {
+  return { core: !!core, probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {}, phones: null, syncthing: null, move: null }
+}
+
+// The server reply Setup reads: Suwayomi's SERVER_QUERY, or on core the
+// two global metas it needs.
+function serverPayload(core) {
+  if (core) return { route: "meta.get", body: { scope: "global", keys: [Settings.META_PREFIX + "syncFolder", OFFERED_META] } }
+  return { query: SERVER_QUERY }
+}
+
+var MOVE_STATUS = { route: "move.status", body: {} }
+
+// paths: { serverConfig, serverRoot, home }, the real ones the window uses.
+function movePayload(paths) {
+  return { route: "move.start", body: { serverConfig: paths.serverConfig, serverRoot: paths.serverRoot, helperSync: paths.home + "/" + HELPER_STATE } }
 }
 
 function copy(s, changes) {
@@ -403,6 +498,7 @@ function copy(s, changes) {
 //   "server"   { reply } with reply from Model.reply()
 //   "confirm"  { id } the user asked to run a step
 //   "cancel"   the user declined
+//   "move"     { reply } from core's move.start or move.status
 function reduce(s, event) {
   switch (event.type) {
     case "start":
@@ -428,12 +524,28 @@ function reduce(s, event) {
       return copy(s, { confirm: event.id })
     case "cancel":
       return copy(s, { confirm: null })
+    case "move":
+      var m = event.reply
+      var move = m.state === "ok" ? m.data : { state: "failed", step: null, report: null, error: { message: m.message || m.state } }
+      // A move core runs holds the jobs, so nothing else starts meanwhile.
+      if (move.state === "running") return copy(s, { move: move, job: s.job || "move" })
+      return copy(s, { move: move, job: s.job === "move" ? null : s.job })
   }
   return s
 }
 
+// The step a server step waits on: Suwayomi's service, or core's.
+function serverStep(s) {
+  return s.core ? "coreService" : "server"
+}
+
+function moveDetail(r) {
+  if (!r) return ""
+  return "Moved " + r.manga + " manga, " + r.extensions + " extensions, " + r.settings + " settings, " + r.metas + " preferences and " + r.downloads + " downloads." + (r.skipped && r.skipped.length ? " Skipped: " + r.skipped.join("; ") : "")
+}
+
 function step(id) {
-  for (var i = 0; i < STEPS.length; i++) if (STEPS[i].id === id) return STEPS[i]
+  for (var i = 0; i < CORE_STEPS.length; i++) if (CORE_STEPS[i].id === id) return CORE_STEPS[i]
   return null
 }
 
@@ -473,10 +585,11 @@ function installing(s) {
 
 // A step's status: { state, detail } with state
 // "checking" | "running" | "done" | "todo" | "outdated" | "waiting" | "unavailable".
-// A step may add prompt (its y/n question), command (shown to the user) or qr.
+// A step may add prompt (its y/n question), command (shown to the user), qr,
+// or label, the short word its row shows in place of the state's.
 function status(s, id) {
   var is = function(state, detail) { return { state: state, detail: detail } }
-  if (s.job === id) return is("running", "")
+  if (s.job === id) return is("running", id === "move" && s.move && s.move.step ? "Moving: " + s.move.step + "." : "")
   if (!s.probe) return is("checking", "")
   var p = s.probe
   switch (id) {
@@ -497,13 +610,33 @@ function status(s, id) {
       if (p.config && p.unitEnabled && p.unitActive && !p.unitCurrent) return is("outdated", "The plugin's server unit changed. Press Enter to run server/miharchy-server again; it keeps your credentials.")
       if (p.config && p.unitEnabled && p.unitActive) return is("done", "miharchy-server is enabled and running.")
       return is("todo", "Press Enter to run server/miharchy-server. It creates the credentials and enables the user service.")
+    case "coreBuild":
+      if (!p.javac) return is("waiting", "Building needs a JDK. Install it with: sudo pacman -S jdk-openjdk. Then press Enter to check again.")
+      if (p.coreInstalled && p.coreInstalled === p.coreSource) return is("done", "Installed in ~/" + CORE_DIR + ".")
+      if (p.coreInstalled) return is("outdated", "The plugin's core/ or sync/ changed since the last build. Press Enter to build it again; a running core restarts.")
+      return is("todo", "Press Enter to build miharchy-core into ~/" + CORE_DIR + ". The first build downloads Gradle and libraries.")
+    case "coreService":
+      // An out-of-date build still runs; only a missing one blocks.
+      if (!p.coreInstalled) return is("waiting", "Needs miharchy-core built first.")
+      var running = p.coreUnitEnabled && p.coreUnitActive && p.coreConfig
+      if (running && !p.coreUnitCurrent) return is("outdated", "The plugin's miharchy-core unit changed. Press Enter to install it again.")
+      if (running) return is("done", "miharchy-core is enabled and running.")
+      return is("todo", "Press Enter to install the miharchy-core user service and start it. It creates core.json on its first start.")
+    case "move":
+      if (!p.config) return { state: "unavailable", label: "nothing to move", detail: "No Suwayomi install to move: there is no server.json." }
+      if (status(s, "coreService").state !== "done") return is("waiting", "Needs miharchy-core running first.")
+      var mv = s.move
+      if (mv && mv.state === "done") return is("done", moveDetail(mv.report))
+      if (mv && mv.state === "failed") return is("todo", "The move stopped" + (mv.step ? " at " + mv.step : "") + ": " + (mv.error ? mv.error.message : "") + " Press Enter to try again.")
+      return is("todo", "Press Enter to copy your Suwayomi library into miharchy-core. Suwayomi must be running; the move only reads it.")
     case "flaresolverr":
+      if (s.core) return { state: "unavailable", label: "not on core", detail: "miharchy-core does not use FlareSolverr yet (#361)." }
       if (!p.docker) return is("unavailable", "Docker is not installed. Cloudflare sources will show \"needs FlareSolverr\".")
       if (status(s, "server").state !== "done" || !s.server) return is("waiting", "Needs the server running first.")
       if (flareDone(s)) return is("done", "The " + CONTAINER + " container runs on 127.0.0.1:8191 and Suwayomi uses it.")
       return is("todo", "Press Enter to start the " + CONTAINER + " container on 127.0.0.1:8191 and turn FlareSolverr on in Suwayomi. Cloudflare sources need it.")
     case "syncFolder":
-      if (status(s, "server").state !== "done" || !s.server) return is("waiting", "Needs the server running first.")
+      if (status(s, serverStep(s)).state !== "done" || !s.server) return is("waiting", "Needs the server running first.")
       if (s.server.syncFolder) return is("done", s.server.syncFolder)
       return is("todo", "Press Enter to choose the folder Mihon and Miharchy exchange backups through.")
     case "phoneBackups":
@@ -582,6 +715,8 @@ function action(s, id) {
   var st = status(s, id).state
   if (st === "checking") return null
   var kind = step(id).kind
+  // A second move would write Suwayomi's values over core's since then.
+  if (id === "move" && st === "done") return "check"
   if (kind === "check" && status(s, id).prompt) return "confirm"
   if (kind === "install") return st === "todo" ? "confirm" : "check"
   if (kind === "install" || kind === "check" || st === "waiting" || st === "unavailable") return "check"
@@ -591,7 +726,7 @@ function action(s, id) {
 // True once checked and some required step is not done.
 function incomplete(s) {
   if (!s.probe) return false
-  return STEPS.some(function(st) { return st.required && status(s, st.id).state !== "done" })
+  return steps(s).some(function(st) { return st.required && status(s, st.id).state !== "done" })
 }
 
 // The optional steps that are due, one key each: "launcher:todo", or for
@@ -602,7 +737,7 @@ function incomplete(s) {
 function offers(s) {
   if (!s.probe || !s.server || (s.server.syncFolder && !s.phones)) return []
   var keys = []
-  STEPS.forEach(function(st) {
+  steps(s).forEach(function(st) {
     if (st.required) return
     var state = status(s, st.id).state
     if (state === "todo") keys.push(st.id + ":todo")
@@ -629,6 +764,7 @@ function unoffered(s) {
 // Records what is due now as offered, so a step the user skips stays quiet
 // until it changes.
 function offerPayload(s) {
+  if (s.core) return { route: "meta.set", body: { metas: [{ scope: "global", key: OFFERED_META, value: offers(s).join(",") }] } }
   return {
     query: "mutation($key: String!, $value: String!) { setGlobalMeta(input: { meta: { key: $key, value: $value } }) { meta { key } } }",
     variables: { key: OFFERED_META, value: offers(s).join(",") }
@@ -637,14 +773,16 @@ function offerPayload(s) {
 
 // The step the cursor starts on: the first one not done, or the first.
 function next(s) {
-  for (var i = 0; i < STEPS.length; i++) if (status(s, STEPS[i].id).state !== "done") return i
+  var list = steps(s)
+  for (var i = 0; i < list.length; i++) if (status(s, list[i].id).state !== "done") return i
   return 0
 }
 
 // The server write a successful run calls for, or null. FlareSolverr goes
 // through the Settings row so its whenOn fallback rides along.
-function savePayload(id, result, folder) {
+function savePayload(id, result, folder, core) {
   if (result.code !== 0) return null
+  if (core) return id === "syncFolder" ? Settings.savePayload({ key: "syncFolder", store: "meta" }, folder, true) : null
   if (id === "flaresolverr") {
     var row = Settings.ROWS.filter(function(r) { return r.key === "flareSolverrEnabled" })[0]
     var p = Settings.savePayload(row, true)
@@ -661,6 +799,11 @@ if (typeof module !== "undefined") {
     CONTAINER: CONTAINER,
     HELPER_DIR: HELPER_DIR,
     STEPS: STEPS,
+    CORE_DIR: CORE_DIR,
+    steps: steps,
+    serverPayload: serverPayload,
+    MOVE_STATUS: MOVE_STATUS,
+    movePayload: movePayload,
     SERVER_QUERY: SERVER_QUERY,
     command: command,
     LIMITS: LIMITS,

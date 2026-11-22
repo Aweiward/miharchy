@@ -8,19 +8,25 @@ import "Settings.js" as Settings
 import "Session.js" as Session
 import "Commands.js" as Commands
 import "Runtime.js" as Runtime
+import "Storage.js" as Storage
 
-// The setup screen: one row per Setup.STEPS entry. It owns the one Process
+// The setup screen: one row per Setup.steps() entry. It owns the one Process
 // that runs checks and confirmed steps, and sends its own server reads and
 // writes. The window's dispatcher hands it keys through run().
 Item {
   id: view
 
   required property Theme theme
+  // Setup's server reads and writes: core's config under MIHARCHY_BACKEND=core.
   property var config: null
+  // Suwayomi's server.json: the probe checks it, and the move reads it.
   property string configPath: ""
   property string home: ""
+  property string backend: ""
+  readonly property bool core: backend === "core"
+  property string coreConfigPath: ""
 
-  property var setup: Setup.initial()
+  property var setup: Setup.initial(core)
   property int cursor: 0
   property bool editing: false
   property string message: ""
@@ -34,7 +40,8 @@ Item {
   // The window runs from the repo's window/, beside server/ and sync/.
   readonly property string serverScript: Quickshell.shellPath("../server/miharchy-server")
   readonly property string syncDir: Quickshell.shellPath("../sync")
-  readonly property var current: Setup.STEPS[cursor]
+  readonly property var steps: Setup.steps(setup)
+  readonly property var current: steps[cursor]
   readonly property var currentStatus: Setup.status(setup, current.id)
 
   signal key(var event)
@@ -42,6 +49,8 @@ Item {
   signal needed()
   // A step changed the server's config or settings.
   signal wrote()
+  // The move filled core's library and settings.
+  signal moved()
   signal editEnded()
 
   // A click moves the cursor as j and k do; a double click then sends Enter.
@@ -64,7 +73,7 @@ Item {
 
   function check() {
     // The AUR is asked once; a recheck while installing skips it.
-    if (!setup.job) start("probe", Setup.probeCommand(configPath, syncDir, Quickshell.shellDir, !!(setup.probe && setup.probe.aurSuwayomi)))
+    if (!setup.job) start("probe", Setup.probeCommand(configPath, syncDir, Quickshell.shellDir, !!(setup.probe && setup.probe.aurSuwayomi), core ? coreConfigPath : ""))
   }
 
   function post(payload, done) {
@@ -72,11 +81,41 @@ Item {
   }
 
   function readServer() {
-    if (config) post({ query: Setup.SERVER_QUERY }, function(reply) {
+    if (!config) return
+    post(Setup.serverPayload(core), function(reply) {
       view.setup = Setup.reduce(view.setup, { type: "server", reply: reply })
       view.checkPhones()
       view.offer()
     })
+    // A move core runs goes on while the window is closed: read where it stands.
+    if (core) readMove()
+  }
+
+  function readMove() {
+    post(Setup.MOVE_STATUS, function(reply) {
+      var was = view.setup.move && view.setup.move.state
+      view.setup = Setup.reduce(view.setup, { type: "move", reply: reply })
+      if (was === "running" && view.setup.move.state === "done") view.moved()
+    })
+  }
+
+  function startMove() {
+    setup = Setup.reduce(setup, { type: "start", id: "move" })
+    post(Setup.movePayload({
+      serverConfig: configPath,
+      serverRoot: Storage.root({ HOME: home, MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT") }),
+      home: home
+    }), function(reply) {
+      view.setup = Setup.reduce(view.setup, { type: "move", reply: reply })
+    })
+  }
+
+  // Core runs the move as a job: follow it until it ends.
+  Timer {
+    interval: 1000
+    repeat: true
+    running: view.core && view.setup.job === "move"
+    onTriggered: view.readMove()
   }
 
   // The sync folder lives in server meta, so the phone check follows the
@@ -136,7 +175,7 @@ Item {
       if (Setup.incomplete(setup)) needed()
       return
     }
-    var save = Setup.savePayload(id, setup.results[id], folder)
+    var save = Setup.savePayload(id, setup.results[id], folder, core)
     if (save) {
       post(save, function(reply) {
         if (reply.state !== "ok") view.message = "Saving to the server failed: " + (reply.message || reply.state) + "."
@@ -144,7 +183,7 @@ Item {
         view.readServer()
       })
     }
-    if (id === "server") wrote()
+    if (id === "server" || id === "coreService") wrote()
     check()
   }
 
@@ -159,7 +198,7 @@ Item {
     switch (id) {
       case "setup.up":
       case "setup.down":
-        cursor = Commands.moveCursor(cursor, id === "setup.up" ? -1 : 1, Setup.STEPS.length)
+        cursor = Commands.moveCursor(cursor, id === "setup.up" ? -1 : 1, steps.length)
         break
       case "setup.activate":
         var act = Setup.action(setup, current.id)
@@ -172,7 +211,8 @@ Item {
         }
         break
       case "setup.confirm":
-        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup), install: Setup.status(setup, setup.confirm).command || "" }))
+        if (setup.confirm === "move") return startMove()
+        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir, coreConfigPath: coreConfigPath, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup), install: Setup.status(setup, setup.confirm).command || "" }))
         break
       case "setup.cancel":
         if (editing) endEdit()
@@ -230,7 +270,7 @@ Item {
       width: Math.min(parent.width, view.theme.fontSize * 60)
 
       Repeater {
-        model: Setup.STEPS
+        model: view.steps
 
         Rectangle {
           id: row
@@ -265,7 +305,7 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
-            text: ({ todo: "to do", outdated: "out of date", unavailable: "no docker" })[row.status] || row.status
+            text: Setup.status(view.setup, row.modelData.id).label || ({ todo: "to do", outdated: "out of date", unavailable: "no docker" })[row.status] || row.status
             color: row.status === "todo" || row.status === "outdated" ? view.theme.urgent : row.status === "done" ? view.theme.accent : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize

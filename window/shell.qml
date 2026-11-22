@@ -1058,13 +1058,23 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "setup"
           theme: theme
-          config: root.config
+          config: root.coreBackend ? root.coreConfig : root.config
           configPath: root.configPath
+          backend: root.coreBackend ? "core" : ""
+          coreConfigPath: root.coreConfigPath
           home: Quickshell.env("HOME")
           onKey: function(event) { event.accepted = root.handleKey(event) }
           offers: Setup.offersOnStart({ MIHARCHY_PEEK: Quickshell.env("MIHARCHY_PEEK"), MIHARCHY_OPEN_CHAPTER: Quickshell.env("MIHARCHY_OPEN_CHAPTER"), MIHARCHY_OPEN_VIEW: Quickshell.env("MIHARCHY_OPEN_VIEW") })
           onNeeded: if (root.view === "library") root.view = "setup"
-          onWrote: configFile.reload()
+          onWrote: {
+            configFile.reload()
+            if (root.coreBackend) coreConfigFile.reload()
+          }
+          onMoved: {
+            root.fetchLibrary(true)
+            libraryView.reload()
+            root.loadSettings()
+          }
           onEditEnded: keyRoot.forceActiveFocus()
         }
 

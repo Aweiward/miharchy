@@ -72,7 +72,8 @@ class MoveTest {
     private fun dump(db: Database) = runBlocking {
         db.run { c ->
             listOf("manga", "chapter", "category", "manga_category", "history", "metas", "extension_store").associateWith { t ->
-                c.query("SELECT * FROM $t") { r -> (1..r.metaData.columnCount).joinToString("|") { r.getString(it) ?: "null" } }.sorted()
+                // The move's own report changes with each run.
+                c.query("SELECT * FROM $t") { r -> (1..r.metaData.columnCount).joinToString("|") { r.getString(it) ?: "null" } }.filterNot { "miharchy.moveReport" in it }.sorted()
             }
         }
     }
@@ -205,6 +206,12 @@ class MoveTest {
                             assertEquals("done", again["state"]!!.jsonPrimitive.content, again.toString())
                             assertEquals(0, again["report"]!!.jsonObject["downloads"]!!.jsonPrimitive.content.toInt())
                             assertEquals(before, dump(db))
+                        }
+                        // After a restart, move.status still says done, with the last report.
+                        Move(db, downloadsSlice, data, data.resolve("sync")) { _, _ -> error("no call") }.use { restarted ->
+                            val s = restarted.routes.call("move.status")
+                            assertEquals("done", s["state"]!!.jsonPrimitive.content, s.toString())
+                            assertEquals(0, s["report"]!!.jsonObject["downloads"]!!.jsonPrimitive.content.toInt())
                         }
                     }
                 }
