@@ -186,6 +186,10 @@ class MyAnimeListTrackerTest {
                 val oauth = Json.parseToJsonElement(store["token"]!!).jsonObject
                 assertEquals(listOf(mal.access.get(), mal.refresh.get()), listOf("access_token", "refresh_token").map { oauth[it]!!.jsonPrimitive.content })
 
+                // A restart: a new store and tracker read the login back from core.db and call MAL with it.
+                val restarted = Trackers(db, listOf(MyAnimeList(http, TrackerStore(db).of(1)))).routes
+                assertEquals(2L, restarted.getValue("track.search")(obj("trackerId" to 1, "query" to "id:2")).o()["results"]!!.jsonArray.single().jsonObject["remoteId"]!!.jsonPrimitive.long)
+
                 val search = call("track.search", obj("trackerId" to 1, "query" to "berserk")).o()["results"]!!.jsonArray
                 // The light novel is left out.
                 assertEquals(listOf(2L, 7L), search.map { it.jsonObject["remoteId"]!!.jsonPrimitive.long })

@@ -3,7 +3,7 @@
 // app/src/main/graphql/mihon/graphql/shikimori/*.graphql. Licensed under Apache-2.0.
 // Changes: plain GraphQL requests over OkHttp instead of Apollo; okhttp3.HttpUrl instead of Android's Uri; no rate
 // limiter (ponytail: Shikimori allows 5 requests a second and 90 a minute, and core sends a few per user action);
-// Suwayomi's registered client, secret and redirect (Suwayomi-Server's ShikimoriApi), whose page shows the code.
+// Suwayomi's registered client, secret and redirect (Suwayomi-Server's ShikimoriApi), whose redirect leaves the callback in the address bar.
 
 package eu.kanade.tachiyomi.data.track.shikimori
 
@@ -172,7 +172,7 @@ class ShikimoriApi(
         private const val OAUTH_URL = "$BASE_URL/oauth/token"
         private const val LOGIN_URL = "$BASE_URL/oauth/authorize"
 
-        // Suwayomi's registered client (Suwayomi-Server's ShikimoriApi), whose redirect shows the code to paste.
+        // Suwayomi's registered client (Suwayomi-Server's ShikimoriApi), whose redirect leaves the callback in the address bar.
         private const val REDIRECT_URL = "https://suwayomi.org/tracker-oauth"
 
         private const val CLIENT_ID = "qTrMBF5HtM_33Pv2Vm2fFmEaBUI_c3LvohyJ0beQ9pA"

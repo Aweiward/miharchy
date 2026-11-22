@@ -219,6 +219,9 @@ class TrackersTest {
                 assertTrue(authUrl.startsWith("https://anilist.co/api/v2/oauth/authorize?client_id=16186"), authUrl)
                 assertEquals(Kind.invalid, refused("tracker.login", obj("trackerId" to 2, "callbackUrl" to "https://suwayomi.org/tracker-oauth#access_token=wrong-$token")).kind)
                 call("tracker.login", obj("trackerId" to 2, "callbackUrl" to "https://suwayomi.org/tracker-oauth#access_token=$token&token_type=Bearer&expires_in=31536000"))
+                // A restart: a new store and tracker read the login back from core.db and call AniList with it.
+                val restarted = Trackers(db, listOf(Anilist(http, TrackerStore(db).of(2)))).routes
+                assertEquals(1, restarted.getValue("track.search")(obj("trackerId" to 2, "query" to "one piece")).o()["results"]!!.jsonArray.size)
                 val m = manga(db, chapters = 12, read = 5)
                 assertEquals(30013L, call("track.search", obj("trackerId" to 2, "query" to "one piece")).o()["results"]!!.jsonArray[0].jsonObject["remoteId"]!!.jsonPrimitive.long)
                 val bound = call("track.bind", obj("mangaId" to m, "trackerId" to 2, "remoteId" to 30013)).o().track()

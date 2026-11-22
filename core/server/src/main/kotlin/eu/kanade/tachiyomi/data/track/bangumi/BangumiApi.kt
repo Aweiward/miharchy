@@ -2,7 +2,7 @@
 // app/src/main/java/eu/kanade/tachiyomi/data/track/bangumi/BangumiApi.kt and dto/BGMCollectionResponse.kt,
 // dto/BGMSearch.kt. Licensed under Apache-2.0.
 // Changes: okhttp3 HttpUrl instead of android Uri; no Dispatchers.IO hop (core's calls already run off the
-// request threads); Suwayomi's registered client, whose redirect page shows the address the user pastes back
+// request threads); Suwayomi's registered client, whose redirect leaves the callback in the address bar
 // (client id, secret and redirect as in Suwayomi-Server's BangumiApi); no rate limiter (Mihon has none).
 
 package eu.kanade.tachiyomi.data.track.bangumi

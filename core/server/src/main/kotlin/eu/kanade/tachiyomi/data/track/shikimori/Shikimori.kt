@@ -125,7 +125,7 @@ class Shikimori(client: OkHttpClient, prefs: TrackerPrefs) :
 
     override fun authUrl(): String = ShikimoriApi.authUrl()
 
-    /** The address Suwayomi's redirect page shows ends in ?code=. */
+    /** The callback, left in the address bar by Suwayomi's redirect page, ends in ?code=. */
     override suspend fun authCallback(url: String) {
         val code = callbackParameter(url, "code") ?: return
         login(code)

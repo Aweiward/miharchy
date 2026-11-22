@@ -2,8 +2,8 @@
 // app/src/main/java/eu/kanade/tachiyomi/data/track/mangabaka/MangaBakaApi.kt and dto/*.kt
 // Licensed under Apache-2.0. Changes: okhttp3 HttpUrl instead of android Uri; java.time instead of kotlinx-datetime;
 // no Dispatchers.IO hop (core's calls already run off the request threads); the User-Agent names Miharchy; no
-// rate limiter (Mihon has none); Suwayomi's registered client and redirect, whose page shows the address the user
-// pastes back (client id, redirect and scopes as in Suwayomi-Server's MangaBakaApi); no state parameter, as
+// rate limiter (Mihon has none); Suwayomi's registered client and redirect, whose redirect leaves the callback in the
+// address bar (client id, redirect and scopes as in Suwayomi-Server's MangaBakaApi); no state parameter, as
 // Suwayomi's login address has none; the PKCE verifier is kept in this instance, and the same one serves every
 // authUrl until [endLogin].
 

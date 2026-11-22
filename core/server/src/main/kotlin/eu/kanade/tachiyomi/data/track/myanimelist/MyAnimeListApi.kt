@@ -2,7 +2,7 @@
 // app/src/main/java/eu/kanade/tachiyomi/data/track/myanimelist/MyAnimeListApi.kt and MyAnimeListUtils.kt
 // Licensed under Apache-2.0. Changes: okhttp3 HttpUrl instead of Android Uri; the PKCE verifier lives in the
 // instance and stays the same until the login ends (core asks for the login address on every tracker.list);
-// Suwayomi's registered client, whose redirect page shows the address the user pastes back.
+// Suwayomi's registered client, whose redirect leaves the callback in the address bar.
 
 package eu.kanade.tachiyomi.data.track.myanimelist
 
@@ -271,7 +271,7 @@ class MyAnimeListApi(
     }
 
     companion object {
-        // Suwayomi's registered client (Suwayomi-Server's MyAnimeListApi), whose redirect shows the address to paste.
+        // Suwayomi's registered client (Suwayomi-Server's MyAnimeListApi), whose redirect leaves the callback in the address bar.
         // It sends no redirect_uri, so neither does this.
         private const val CLIENT_ID = "3fda277931a4f9bc01fa4a715ce8b91d"
 

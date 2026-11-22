@@ -3,7 +3,7 @@
 // app/src/main/graphql/mihon/graphql/anilist/*.graphql. Licensed under Apache-2.0.
 // Changes: plain GraphQL requests over OkHttp instead of Apollo; java.time instead of kotlinx-datetime; no rate
 // limiter (ponytail: AniList allows 90 requests a minute, and core sends a few per user action); Suwayomi's
-// registered client, whose page shows the address the user pastes back.
+// registered client, whose redirect leaves the callback in the address bar.
 
 package eu.kanade.tachiyomi.data.track.anilist
 
@@ -186,7 +186,7 @@ class AnilistApi(
     }
 
     companion object {
-        // Suwayomi's registered client (Suwayomi-Server's AnilistApi), whose redirect shows the address to paste.
+        // Suwayomi's registered client (Suwayomi-Server's AnilistApi), whose redirect leaves the callback in the address bar.
         private const val CLIENT_ID = "16186"
         const val API_URL = "https://graphql.anilist.co/"
 
@@ -243,7 +243,7 @@ internal fun JsonObject.toTrack(trackId: Long): Track {
                 "DROPPED" -> Anilist.DROPPED
                 "PLANNING" -> Anilist.PLAN_TO_READ
                 "REPEATING" -> Anilist.REREADING
-                else -> throw NotImplementedError("Unknown status: ${mediaList.string("status")}")
+                else -> throw Exception("Unknown status: ${mediaList.string("status")}")
             }
             score = (mediaList["scoreRaw"] as? kotlinx.serialization.json.JsonPrimitive)?.doubleOrNull ?: 0.0
             last_chapter_read = mediaList.int("progress")?.toDouble() ?: 0.0
@@ -297,7 +297,7 @@ internal fun Track.toApiStatus(): String = when (status) {
     Anilist.DROPPED -> "DROPPED"
     Anilist.PLAN_TO_READ -> "PLANNING"
     Anilist.REREADING -> "REPEATING"
-    else -> throw NotImplementedError("Unknown status: $status")
+    else -> throw Exception("Unknown status: $status")
 }
 
 internal fun Track.toApiScore(scoreType: String): String = when (scoreType) {
@@ -323,5 +323,5 @@ internal fun Track.toApiScore(scoreType: String): String = when (scoreType) {
     }
     // 10 point decimal
     "POINT_10_DECIMAL" -> (score / 10).toString()
-    else -> throw NotImplementedError("Unknown score type")
+    else -> throw Exception("Unknown score type")
 }
