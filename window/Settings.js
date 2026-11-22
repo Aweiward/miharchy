@@ -5,8 +5,9 @@
 // it; shell.qml sends the payloads built here and feeds replies back.
 //
 // A row: { key, label, type: "bool" | "choice" | "text" | "folder" | "category", default, store }.
-//   store "server": a Suwayomi server setting named key (settings/setSettings).
-//   store "meta":   a Miharchy preference in Suwayomi global meta under
+//   store "server": a Suwayomi server setting named key (settings/setSettings),
+//                   or on miharchy-core core's setting (settings.get/settings.set).
+//   store "meta":   a Miharchy preference in the server's global meta under
 //                   META_PREFIX + key, stored as a string.
 //   choice rows add options: [{ value, label }]; text rows add pattern and
 //   hint for validation, and may add blank, the text an empty value shows;
@@ -262,6 +263,15 @@ function initial() {
   return { state: "loading", message: "", values: defaults() }
 }
 
+// core (MIHARCHY_BACKEND=core, #385): server rows are core's settings
+// (settings.get/settings.set, global metas on core) and meta rows core's
+// global metas. A load is two requests, sent one after the other.
+function loadPayloads(core) {
+  if (!core) return [loadPayload()]
+  var keys = ROWS.filter(function(r) { return r.store === "meta" }).map(function(r) { return META_PREFIX + r.key })
+  return [{ route: "settings.get", body: {} }, { route: "meta.get", body: { scope: "global", keys: keys } }]
+}
+
 function loadPayload() {
   var fields = ROWS.filter(function(r) { return r.store === "server" }).map(function(r) { return r.key })
   return { query: "{ settings { " + fields.join(" ") + " } metas { nodes { key value } } }" }
@@ -269,11 +279,13 @@ function loadPayload() {
 
 // The mutation that stores value for row. Its reply carries the stored
 // value back, so reduce() reads saves and loads alike.
-function savePayload(row, value) {
-  if (row.store === "meta") return Prefs.savePayload(row.key, value)
+function savePayload(row, value, core) {
+  if (row.store === "meta") return Prefs.savePayload(row.key, value, undefined, core)
   var s = {}
   s[row.key] = value
   if (value === true && row.whenOn) for (var k in row.whenOn) s[k] = row.whenOn[k]
+  // Core has no server settings to keep out of backups, and refuses an unknown key.
+  if (core) return { route: "settings.set", body: { settings: s } }
   for (var w in row.with) s[w] = row.with[w]
   return {
     query: "mutation($s: PartialSettingsTypeInput!) { setSettings(input: { settings: $s }) { settings { " + row.key + " } } }",
@@ -296,7 +308,8 @@ function option(row, value) {
 function valuesIn(data) {
   var found = {}
   var server = data.settings || (data.setSettings && data.setSettings.settings) || {}
-  var metas = (data.metas && data.metas.nodes) || (data.setGlobalMeta ? [data.setGlobalMeta.meta] : [])
+  // Core's meta.get and meta.set answer a plain list.
+  var metas = Array.isArray(data.metas) ? data.metas : (data.metas && data.metas.nodes) || (data.setGlobalMeta ? [data.setGlobalMeta.meta] : [])
   var meta = {}
   metas.forEach(function(m) { if (m) meta[m.key] = m.value })
   ROWS.forEach(function(r) {
@@ -314,19 +327,34 @@ function valuesIn(data) {
 function reduce(settings, event) {
   switch (event.type) {
     case "config-missing":
-      return { state: "no-config", message: "", values: settings.values }
+      return keep(settings, { state: "no-config", message: "", values: settings.values })
     case "request":
-      return { state: "loading", message: "", values: settings.values }
+      return keep(settings, { state: "loading", message: "", values: settings.values })
     case "response":
       var r = event.reply
-      if (r.state !== "ok") return { state: r.state, message: r.message, values: settings.values }
+      if (r.state !== "ok") return keep(settings, { state: r.state, message: r.message, values: settings.values })
       var values = {}
       for (var k in settings.values) values[k] = settings.values[k]
       var found = valuesIn(r.data)
       for (var f in found) values[f] = found[f]
-      return { state: "ok", message: "", values: values }
+      var next = { state: "ok", message: "", values: values }
+      // Core names the rows it stores but does not act on yet (settings.get, settings.set).
+      var unapplied = Array.isArray(r.data.unapplied) ? r.data.unapplied : settings.unapplied
+      if (unapplied) next.unapplied = unapplied
+      return next
   }
   return settings
+}
+
+function keep(settings, next) {
+  if (settings.unapplied) next.unapplied = settings.unapplied
+  return next
+}
+
+// A save core refused for its value (a backup folder that is not a folder):
+// the row shows why, and the view stays as it was.
+function refused(reply) {
+  return reply.state === "error" && reply.kind === "invalid"
 }
 
 // A category row's values, in Mihon's order: always ask, Default, then
@@ -424,6 +452,8 @@ if (typeof module !== "undefined") {
     ROWS: ROWS,
     initial: initial,
     loadPayload: loadPayload,
+    loadPayloads: loadPayloads,
+    refused: refused,
     savePayload: savePayload,
     reduce: reduce,
     activate: activate,

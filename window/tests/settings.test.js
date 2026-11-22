@@ -287,3 +287,51 @@ test("Catch-up is a meta choice, 3 by default, with Off; a stored 2 comes back",
   assert.equal(s.values.catchUp, "2");
   assert.deepEqual(S.savePayload(row("catchUp"), "5").variables, { key: "miharchy.catchUp", value: "5" });
 });
+
+// miharchy-core (MIHARCHY_BACKEND=core, #385).
+const core = (status, body) => ({ type: "response", reply: M.coreReply(status, JSON.stringify(body)) });
+
+test("on core a load is settings.get, then a global meta.get of the meta rows", () => {
+  assert.equal(S.loadPayloads(false).length, 1);
+  assert.deepEqual(S.loadPayloads(false)[0], S.loadPayload());
+  const [settings, metas] = S.loadPayloads(true);
+  assert.deepEqual(settings, { route: "settings.get", body: {} });
+  assert.equal(metas.route, "meta.get");
+  assert.equal(metas.body.scope, "global");
+  assert.deepEqual(metas.body.keys, S.ROWS.filter((r) => r.store === "meta").map((r) => "miharchy." + r.key));
+});
+
+test("on core a server row saves with settings.set, keeps whenOn and drops with", () => {
+  assert.deepEqual(S.savePayload(row("flareSolverrEnabled"), true, true), {
+    route: "settings.set", body: { settings: { flareSolverrEnabled: true, flareSolverrAsResponseFallback: true } }
+  });
+  assert.deepEqual(S.savePayload(row("backupPath"), "/b", true), { route: "settings.set", body: { settings: { backupPath: "/b" } } });
+  // Suwayomi still gets its extra.
+  assert.equal(S.savePayload(row("backupPath"), "/b").variables.s.autoBackupIncludeServerSettings, false);
+});
+
+test("on core a meta row saves with meta.set", () => {
+  assert.deepEqual(S.savePayload(row("syncFolder"), "/s", true), {
+    route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.syncFolder", value: "/s" }] }
+  });
+});
+
+test("core's replies fill the values, and its unapplied rows stay across a failed save", () => {
+  let s = S.reduce(S.initial(), core(200, { settings: { globalUpdateInterval: 24, downloadsPath: "/d" }, unapplied: ["downloadsPath"] }));
+  assert.equal(s.state, "ok");
+  assert.equal(s.values.globalUpdateInterval, 24);
+  assert.deepEqual(s.unapplied, ["downloadsPath"]);
+  s = S.reduce(s, core(200, { metas: [{ scope: "global", owner: 0, key: "miharchy.syncFolder", value: "/s" }] }));
+  assert.equal(s.values.syncFolder, "/s");
+  assert.deepEqual(s.unapplied, ["downloadsPath"], "a meta reply has no unapplied list");
+  s = S.reduce(s, { type: "request" });
+  s = S.reduce(s, { type: "response", reply: M.coreReply(0, "") });
+  assert.equal(s.state, "down");
+  assert.deepEqual(s.unapplied, ["downloadsPath"]);
+});
+
+test("a value core refuses is the row's error, not the view's", () => {
+  assert.ok(S.refused(M.coreReply(400, JSON.stringify({ error: { kind: "invalid", message: "/x is not a folder." } }))));
+  assert.ok(!S.refused(M.coreReply(0, "")));
+  assert.ok(!S.refused(M.coreReply(500, JSON.stringify({ error: { kind: "internal", message: "boom" } }))));
+});

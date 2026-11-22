@@ -140,7 +140,13 @@ class SettingsTest {
             covers.resolve("2-def").writeBytes(ByteArray(200))
             covers.resolve("3-ghi").writeBytes(ByteArray(100))
             covers.resolve("3.part").writeBytes(ByteArray(50))
+            val downloads = Files.createDirectories(work.resolve("downloads/S/M"))
+            downloads.resolve("c.cbz").writeBytes(ByteArray(1000))
+            val sizes = Settings(db, covers).routes.call("storage.get")
+            assertEquals(1000, sizes.getValue("downloads").jsonPrimitive.int)
+            assertEquals(300, sizes.getValue("cache").jsonPrimitive.int, "the covers a clear would free")
             assertEquals(300, Settings(db, covers).routes.call("cache.clear").getValue("freed").jsonPrimitive.int)
+            assertEquals(0, Settings(db, covers).routes.call("storage.get").getValue("cache").jsonPrimitive.int)
             assertEquals(listOf("1-abc", "3.part"), covers.listDirectoryEntries().map { it.name }.sorted())
             assertEquals(0, Settings(db, work.resolve("none")).routes.call("cache.clear").getValue("freed").jsonPrimitive.int)
         }

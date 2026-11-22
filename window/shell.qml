@@ -62,6 +62,9 @@ ShellRoot {
   property int settingsCursor: 0
   property bool settingsEditing: false
   property string settingsError: ""
+  // A save core refused: { key, message }, shown under that row until the next save.
+  property var settingsRefusal: ({ key: "", message: "" })
+  property int settingsSeq: 0
   // Only the latest library request may update the connection.
   property int requestSeq: 0
   // { mangaId, chapterId } to read once the config loads, or null.
@@ -170,12 +173,17 @@ ShellRoot {
     if (coreConfig) {
       fetchLibrary(true)
       libraryView.reload()
+      loadSettings()
       // A launcher peek that came before core.json; a peek-open's row is Suwayomi's (#386).
       if (pendingPeek && !Model.chapterTarget(pendingPeek)) peek(pendingPeek === "next")
       return
     }
     coreRequestSeq++
     coreConnection = Model.reduce(coreConnection, { type: "config-missing" })
+    // Without the switch Settings is Suwayomi's, and this file's empty path reads as missing.
+    if (!coreBackend) return
+    settingsSeq++
+    settingsState = Settings.reduce(settingsState, { type: "config-missing" })
   }
 
   Timer {
@@ -195,11 +203,11 @@ ShellRoot {
     if (!config) {
       requestSeq++
       connection = Model.reduce(connection, { type: "config-missing" })
-      settingsState = Settings.reduce(settingsState, { type: "config-missing" })
+      if (!coreBackend) settingsState = Settings.reduce(settingsState, { type: "config-missing" })
       return
     }
     fetchLibrary()
-    sendSettings(Settings.loadPayload())
+    if (!coreBackend) loadSettings()
     if (!coreBackend) libraryView.reload()
     var peekTarget = Model.chapterTarget(pendingPeek)
     if (pendingChapter) openChapter(pendingChapter)
@@ -355,15 +363,45 @@ ShellRoot {
   }
 
   // Loads and saves alike: every reply carries the values it touched.
-  function sendSettings(payload) {
+  // Settings' server: miharchy-core's under the switch (#385), Suwayomi's otherwise.
+  function settingsConfig() {
+    return coreBackend ? coreConfig : config
+  }
+
+  // The load: one request on Suwayomi, two on core, each after the last
+  // succeeded, so a later success never hides an earlier failure.
+  function loadSettings() {
+    var cfg = settingsConfig()
+    if (!cfg) {
+      settingsState = Settings.reduce(settingsState, { type: "config-missing" })
+      return
+    }
+    var list = Settings.loadPayloads(coreBackend)
+    var seq = ++settingsSeq
     settingsState = Settings.reduce(settingsState, { type: "request" })
-    Session.send(config, payload, function(reply) {
-      root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
-    })
+    var next = function(i) {
+      Session.send(cfg, list[i], function(reply) {
+        if (seq !== root.settingsSeq) return
+        root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
+        if (reply.state === "ok" && i + 1 < list.length) next(i + 1)
+      })
+    }
+    next(0)
   }
 
   function saveSetting(row, value) {
-    if (config) sendSettings(Settings.savePayload(row, value))
+    var cfg = settingsConfig()
+    if (!cfg) return
+    settingsRefusal = { key: "", message: "" }
+    settingsState = Settings.reduce(settingsState, { type: "request" })
+    Session.send(cfg, Settings.savePayload(row, value, coreBackend), function(reply) {
+      // Core refuses a value its rules do not take: the row says why, and the view stays.
+      if (Settings.refused(reply)) {
+        root.settingsRefusal = { key: row.key, message: reply.message }
+        reply = { state: "ok", message: "", data: {}, kind: "" }
+      }
+      root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
+    })
   }
 
   // A folder row saves once the folder exists, checked as Setup checks it.
@@ -481,18 +519,26 @@ ShellRoot {
     })
   }
 
-  // ponytail: the default category setting holds a Suwayomi category id
-  // until #385 moves Settings, so on core it is not applied: the picker
-  // asks when there are categories, else the manga stays in Default.
+  // Mihon's default category on core. Under the switch the setting is
+  // core's (#385), so it holds a core category id.
   function addedOnCore(mangaId) {
-    if (coreConnection.categories.length && mangaDetail.open && mangaDetail.onCore && mangaDetail.detail.mangaId === mangaId) mangaDetail.run("manga.categories")
-    fetchLibrary(true)
+    var cats = coreConnection.categories
+    var to = coreBackend ? Library.defaultCategory(settingsState.values.defaultCategory, cats) : (cats.length ? -1 : 0)
+    if (to === -1 && mangaDetail.open && mangaDetail.onCore && mangaDetail.detail.mangaId === mangaId) mangaDetail.run("manga.categories")
+    if (to === -1 || !cats.length) return fetchLibrary(true)
+    Session.send(coreConfig, Library.moveToPayload(mangaId, to, cats, true), function(reply) {
+      libraryView.report(reply)
+      mangaDetail.reload()
+      root.fetchLibrary(true)
+    })
   }
 
   // Mihon's default category: a manga the detail adds goes to the chosen
   // category, or the detail's categories picker opens to ask.
   function addedToLibrary(mangaId) {
-    var to = Library.defaultCategory(settingsState.values.defaultCategory, connection.categories)
+    // Under the switch the setting holds a core id, which may name another
+    // category on Suwayomi: ask instead.
+    var to = coreBackend ? (connection.categories.length ? -1 : 0) : Library.defaultCategory(settingsState.values.defaultCategory, connection.categories)
     if (to === -1 && mangaDetail.open && mangaDetail.detail.mangaId === mangaId) mangaDetail.run("manga.categories")
     if (to === -1 || !connection.categories.length) return fetchLibrary()
     send(Library.moveToPayload(mangaId, to, connection.categories), function(reply) {
@@ -543,9 +589,9 @@ ShellRoot {
       libraryView.reload()
       updatesView.load()
     }
+    loadSettings()
     if (!config) return
     fetchLibrary()
-    sendSettings(Settings.loadPayload())
     if (!coreBackend) updatesView.load()
   }
 
@@ -735,7 +781,7 @@ ShellRoot {
           break
         }
         var srow = Settings.ROWS[settingsCursor]
-        var act = Settings.activate(srow, settingsState.values[srow.key], connection.categories)
+        var act = Settings.activate(srow, settingsState.values[srow.key], (coreBackend ? coreConnection : connection).categories)
         if ("run" in act) {
           run(act.run)
         } else if ("save" in act) {
@@ -767,11 +813,11 @@ ShellRoot {
           libraryView.reload()
           updatesView.load()
         }
+        loadSettings()
+        settingsView.reload()
         if (config) {
           fetchLibrary()
-          sendSettings(Settings.loadPayload())
           if (!coreBackend) libraryView.reload()
-          settingsView.loadTrackers()
           if (!coreBackend) updatesView.load()
           if (view === "check") checkView.load()
         }
@@ -921,20 +967,22 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "settings"
           theme: theme
-          config: root.config
-          trackerConfig: root.coreBackend ? root.coreConfig : root.config
-          trackerConfigPath: root.coreBackend ? root.coreConfigPath : "server.json"
-          trackersCore: root.coreBackend
+          config: root.settingsConfig()
+          configPath: root.coreBackend ? root.coreConfigPath : root.configPath
+          backend: root.coreBackend ? "core" : ""
+          unapplied: root.settingsState.unapplied || []
+          refusal: root.settingsRefusal
           values: root.settingsState.values
-          categories: root.connection.categories
+          categories: (root.coreBackend ? root.coreConnection : root.connection).categories
           cursor: root.settingsCursor
           editing: root.settingsEditing
-          problem: Model.problem(root.settingsState, root.configPath)
+          problem: Model.problem(root.settingsState, root.coreBackend ? root.coreConfigPath : root.configPath, root.coreBackend ? "core" : "")
           editError: root.settingsError
           health: syncView.health
           onHealthWanted: syncView.refreshHealth()
           checkCount: checkView.countText
-          onCheckWanted: checkView.load()
+          // The library check stays on Suwayomi until #394, so Settings does not start it on core.
+          onCheckWanted: if (!root.coreBackend) checkView.load()
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onPicked: function(index) { root.settingsCursor = index }
           onEditEnded: keyRoot.forceActiveFocus()
@@ -1132,7 +1180,7 @@ ShellRoot {
           // The modes on follow, in the accent color, as Mihon's banners.
           // Styled for that color; the states and Settings.modes are constant text.
           textFormat: Text.StyledText
-          text: [({ loading: "connecting", ok: "connected", "no-config": "no server config", down: "server down", unauthorized: "unauthorized", error: "server error" })[root.connection.state]].concat(Settings.modes(root.settingsState.values).map(function(m) { return "<font color='" + theme.accent + "'>" + m + "</font>" })).join("&nbsp;&nbsp;&nbsp;")
+          text: [({ loading: "connecting", ok: "connected", "no-config": "no server config", down: "server down", unauthorized: "unauthorized", error: "server error" })[(root.coreBackend ? root.coreConnection : root.connection).state]].concat(Settings.modes(root.settingsState.values).map(function(m) { return "<font color='" + theme.accent + "'>" + m + "</font>" })).join("&nbsp;&nbsp;&nbsp;")
           color: root.connection.state === "ok" || root.connection.state === "loading" ? theme.muted : theme.urgent
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall

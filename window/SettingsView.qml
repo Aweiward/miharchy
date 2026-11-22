@@ -21,13 +21,16 @@ Item {
   id: view
 
   required property Theme theme
+  // Settings' server: miharchy-core's with MIHARCHY_BACKEND=core (#385), so
+  // every row, the trackers, storage and the backup talk to core.
   property var config: null
-  // The trackers' and the backup row's server: miharchy-core under
-  // MIHARCHY_BACKEND=core, while the rest of Settings stays on Suwayomi until #385.
-  property var trackerConfig: config
-  property string trackerConfigPath: "server.json"
-  // Set by the switch, so a missing core.json says so instead of loading.
-  property bool trackersCore: false
+  property string configPath: "server.json"
+  property string backend: ""
+  readonly property bool core: backend === "core"
+  // Rows core stores but does not act on yet (settings.get's unapplied).
+  property var unapplied: []
+  // A save core refused: { key, message }.
+  property var refusal: ({ key: "", message: "" })
   property var trackers: Trackers.initial()
   readonly property bool loginEditing: Trackers.editing(trackers)
   readonly property string loginStep: loginEditing ? trackers.login.step : ""
@@ -48,6 +51,7 @@ Item {
   property var storage: null
   property string storageNote: ""
   property bool clearing: false
+  property bool measuring: false
   // Taken when the clear starts, so freed is what it removed.
   property var storageBefore: null
   // A string, so a settings load that keeps the folder measures nothing.
@@ -93,8 +97,8 @@ Item {
     measure()
   }
   onDownloadsPathChanged: if (visible) measure()
-  onTrackerConfigChanged: {
-    trackers = Trackers.initial(trackersCore)
+  onConfigChanged: {
+    trackers = Trackers.initial(core)
     loadTrackers()
   }
 
@@ -102,22 +106,18 @@ Item {
     return Session.send(config, payload, done)
   }
 
-  function sendTracker(payload, done) {
-    return Session.send(trackerConfig, payload, done)
-  }
-
   // Never during a login: reading the trackers makes a new MyAnimeList
   // link, and the old one the browser holds stops working.
   function loadTrackers() {
     if (!visible || trackers.login) return
     // The state names its server, so its payloads match the one it talks to.
-    if (trackers.core !== trackersCore) trackers = Trackers.initial(trackersCore)
-    if (!trackerConfig) {
-      if (trackersCore) trackers = Trackers.reduce(trackers, { type: "no-config" })
+    if (trackers.core !== core) trackers = Trackers.initial(core)
+    if (!config) {
+      if (core) trackers = Trackers.reduce(trackers, { type: "no-config" })
       return
     }
     trackers = Trackers.reduce(trackers, { type: "request" })
-    sendTracker(Trackers.listPayload(trackersCore), function(reply) {
+    send(Trackers.listPayload(core), function(reply) {
       view.trackers = Trackers.reduce(view.trackers, { type: "list", reply: reply })
     })
   }
@@ -132,7 +132,7 @@ Item {
     if (!payload) return
     var answer = trackers.login.step === "link" ? "link" : "reply"
     trackers = Trackers.reduce(trackers, { type: "sent" })
-    sendTracker(payload, function(reply) {
+    send(payload, function(reply) {
       view.trackers = Trackers.reduce(view.trackers, { type: answer, reply: reply })
       var l = view.trackers.login
       if (answer === "link" && l && l.step === "paste") {
@@ -142,13 +142,50 @@ Item {
     })
   }
 
+  // r: the trackers and the storage rows read their server again.
+  function reload() {
+    loadTrackers()
+    if (!visible) return
+    storageNote = ""
+    measure()
+  }
+
   function measure() {
+    if (core) return measureOnCore()
     if (du.running) return
     du.command = Storage.command(storageDirs)
     du.running = true
   }
 
+  function measureOnCore() {
+    if (measuring) return
+    if (!config) {
+      storageNote = Model.problem({ state: "no-config" }, configPath, backend).title
+      return
+    }
+    measuring = true
+    send(Storage.SIZES_PAYLOAD, function(reply) {
+      view.measuring = false
+      if (reply.state === "ok") view.storage = reply.data
+      else view.storageNote = reply.message || Model.problem(reply, view.configPath, view.backend).title
+    })
+  }
+
+  function clearOnCore() {
+    clearing = true
+    storageNote = ""
+    send(Storage.CORE_CLEAR_PAYLOAD, function(reply) {
+      view.clearing = false
+      view.storageNote = reply.state === "ok" ? "Freed " + Storage.format(reply.data.freed) : reply.message || Model.problem(reply, view.configPath, view.backend).title
+      view.measure()
+    })
+  }
+
   function clearCache() {
+    if (core) {
+      if (config && !clearing && !measuring && storage) clearOnCore()
+      return
+    }
     if (!config || clearing || du.running || !storage) return
     clearing = true
     storageBefore = storage
@@ -156,7 +193,7 @@ Item {
     send(Storage.clearPayload(), function(reply) {
       if (reply.state !== "ok" || !Storage.cleared(reply.data)) {
         view.clearing = false
-        view.storageNote = reply.state !== "ok" ? reply.message || Model.problem(reply, "server.json").title : "The server could not empty the cache."
+        view.storageNote = reply.state !== "ok" ? reply.message || Model.problem(reply, view.configPath).title : "The server could not empty the cache."
         return
       }
       view.measure()
@@ -166,8 +203,8 @@ Item {
   function createBackup() {
     if (backupJob.running || backup.state === "running") return
     backup = Backup.reduce(backup, { type: "start" })
-    // Core writes to its own backup folder row, not this view's Suwayomi one, until #385.
-    if (trackersCore) return backupOnCore()
+    // Core takes its own backup folder and parts rows.
+    if (core) return backupOnCore()
     backupJob.command = Backup.command(devHelper, Backup.folder(values.backupPath, {
       HOME: Quickshell.env("HOME"),
       MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT")
@@ -177,8 +214,8 @@ Item {
 
   function backupOnCore() {
     var done = function(reply) { view.backup = Backup.reduce(view.backup, { type: "reply", reply: reply }) }
-    if (!trackerConfig) return done({ state: "no-config" })
-    Session.send(trackerConfig, Backup.PAYLOAD, done)
+    if (!config) return done({ state: "no-config" })
+    send(Backup.PAYLOAD, done)
   }
 
   Process {
@@ -287,10 +324,13 @@ Item {
               rightPadding: view.theme.fontSize * 0.75
               bottomPadding: view.theme.fontSize * 0.5
               readonly property bool failed: row.editingThis && view.editError !== ""
-              visible: failed || (row.current && !view.editing && !!row.modelData.note)
+              // A save core refused, under its row until the next save.
+              readonly property bool refused: !view.editing && view.refusal.key === row.modelData.key
+              readonly property string note: [row.modelData.note || "", (view.unapplied.indexOf(row.modelData.key) >= 0 ? "miharchy-core keeps this value but does not use it yet." : "")].filter(function(n) { return n }).join(" ")
+              visible: failed || refused || (row.current && !view.editing && !!note)
               wrapMode: Text.Wrap
-              text: failed ? view.editError : row.modelData.note || ""
-              color: failed ? view.theme.urgent : view.theme.selectedText
+              text: failed ? view.editError : refused ? view.refusal.message : note
+              color: failed || refused ? view.theme.urgent : view.theme.selectedText
               font.family: view.theme.fontFamily
               font.pixelSize: view.theme.fontSmall
             }
@@ -364,7 +404,7 @@ Item {
           textFormat: Text.PlainText
           leftPadding: view.theme.fontSize * 0.75
           bottomPadding: view.theme.fontSize * 0.5
-          text: "Storage   downloads " + (view.storage ? Storage.format(view.storage.downloads) : "measuring")
+          text: "Storage   downloads " + (view.storage ? Storage.format(view.storage.downloads) : view.storageNote ? "not measured" : "measuring")
           color: view.theme.accent
           font.family: view.theme.fontFamily
           font.pixelSize: view.theme.fontSmall
@@ -400,7 +440,7 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
-            text: view.clearing ? "clearing" : (view.storageNote ? view.storageNote + "   " : "") + (view.storage ? Storage.format(view.storage.cache) : "measuring")
+            text: view.clearing ? "clearing" : (view.storageNote ? view.storageNote + "   " : "") + (view.storage ? Storage.format(view.storage.cache) : view.storageNote ? "not measured" : "measuring")
             color: parent.current ? view.theme.selectedText : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
@@ -512,7 +552,7 @@ Item {
           readOnly: true
           selectByMouse: true
           wrapMode: TextEdit.WrapAnywhere
-          text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, view.trackerConfigPath, view.trackersCore ? "core" : "") || { title: "" }).title : Trackers.note(view.trackers)
+          text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, view.configPath, view.backend) || { title: "" }).title : Trackers.note(view.trackers)
           color: view.trackers.error || (view.trackers.login && view.trackers.login.error) ? view.theme.urgent : view.theme.muted
           selectionColor: view.theme.accent
           font.family: view.theme.fontFamily

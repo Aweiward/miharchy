@@ -53,6 +53,7 @@ The first routes of each slice. A slice may add routes; it keeps these names.
 | #375 settings | `settings.get`, `settings.set`, `cache.clear` |
 | #372 move from Suwayomi | `move.start`, `move.status` |
 | #384 sync and backup views | `sync.health`, `backup.check` |
+| #385 settings and setup | `storage.get` |
 
 ## Considered Options
 

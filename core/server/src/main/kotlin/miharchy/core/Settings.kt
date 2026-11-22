@@ -68,7 +68,8 @@ val SETTINGS: List<Setting> = listOf(
     bool("excludeCompleted", true, applied = true),
     // A refresh always fetches the details.
     bool("updateMangas", false, applied = false),
-    // ponytail: stored only; the download queue writes to <core data>/downloads until Settings moves (#385).
+    // ponytail: stored only; the download queue writes to <core data>/downloads. A live folder first needs the queue's
+    // start-up sweep of *.part files kept to core's own files, and a plan for download_path marks under the old root.
     path("downloadsPath", applied = false),
     // Core always writes .cbz files.
     bool("downloadAsCbz", false, applied = false),
@@ -111,11 +112,13 @@ fun backupFolder(c: Connection, default: Path): Path = setting(c, "backupPath").
  * `settings.get`, `settings.set` and `cache.clear` (#375, ADR 0010). [covers] is the cover cache, core's only cache:
  * chapter pages are read from the source or from a download, never kept.
  */
-class Settings(private val db: Database, private val covers: Path) {
+class Settings(private val db: Database, private val covers: Path, private val downloads: Path = covers.resolveSibling("downloads")) {
     val routes: Map<String, Route> = mapOf(
         "settings.get" to { _ -> db.run { c -> reply(c) } },
         "settings.set" to { input -> set(input) },
         "cache.clear" to { _ -> buildJsonObject { put("freed", clearCovers()) } },
+        // Settings' storage rows (#385): the window cannot know core's data folder, so core measures it.
+        "storage.get" to { _ -> storage() },
     )
 
     /** `{ settings: { key: value } }`, some or all keys; all are checked before any is stored. */
@@ -156,10 +159,22 @@ class Settings(private val db: Database, private val covers: Path) {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { clearOutside(library) }
     }
 
-    private fun clearOutside(library: Set<String>): Long {
-        if (!covers.isDirectory()) return 0L
+    /** `{ downloads, cache }` in bytes: the downloads folder, and the covers `cache.clear` would delete. */
+    private suspend fun storage(): JsonElement {
+        val library = db.run { c -> c.query("SELECT id FROM manga WHERE user_favorite_at IS NOT NULL") { it.getLong(1).toString() }.toSet() }
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val downloaded = if (downloads.isDirectory()) Files.walk(downloads).use { s -> s.filter { it.isRegularFile() }.mapToLong { runCatching { Files.size(it) }.getOrDefault(0L) }.sum() } else 0L
+            buildJsonObject { put("downloads", downloaded); put("cache", outside(library).sumOf { runCatching { Files.size(it) }.getOrDefault(0L) }) }
+        }
+    }
+
+    private fun outside(library: Set<String>): List<Path> {
+        if (!covers.isDirectory()) return emptyList()
         // A cover file is `<manga id>-<hash of its URL>`.
         return Files.list(covers).use { s -> s.filter { it.isRegularFile() && !it.name.endsWith(".part") && it.name.substringBefore('-') !in library }.toList() }
-            .sumOf { f -> runCatching { Files.size(f).also { Files.delete(f) } }.getOrDefault(0L) }
+    }
+
+    private fun clearOutside(library: Set<String>): Long {
+        return outside(library).sumOf { f -> runCatching { Files.size(f).also { Files.delete(f) } }.getOrDefault(0L) }
     }
 }
