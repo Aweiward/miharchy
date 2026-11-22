@@ -51,13 +51,15 @@ var STEPS = [
   { id: "peekKey", title: "Peek key", kind: "run", prompt: "Add the peek keys missing from your Hyprland bindings: " + PEEK_KEY + " shows and hides a peek, " + NEXT_KEY + " moves it to the next manga?" }
 ]
 
-// Under MIHARCHY_BACKEND=core: build core, run its unit, then move the
-// Suwayomi install into it, after Suwayomi's own service. Core syncs, and
-// so does the mark through it (#386), so the sync helper step goes.
-var CORE_STEPS = STEPS.slice(0, 2).concat([
+// On core, the default (#373): build core, run its unit, move a Suwayomi
+// install into it, then stop Suwayomi's service. No Suwayomi is installed.
+// Core syncs, and so does the mark through it (#386), so the sync helper
+// step goes.
+var CORE_STEPS = STEPS.slice(0, 1).concat([
   { id: "coreBuild", title: "miharchy-core", kind: "run", required: true, prompt: "Build miharchy-core now? It takes a few minutes." },
   { id: "coreService", title: "miharchy-core service", kind: "run", required: true, prompt: "Install and start the miharchy-core user service?" },
-  { id: "move", title: "Move from Suwayomi (optional)", kind: "run", prompt: "Copy the library, extensions and downloads from Suwayomi into miharchy-core, and replace core's settings and preferences with Suwayomi's? Suwayomi stays as it is." }
+  { id: "move", title: "Move from Suwayomi (optional)", kind: "run", prompt: "Copy the library, extensions and downloads from Suwayomi into miharchy-core, and replace core's settings and preferences with Suwayomi's? Suwayomi stays as it is." },
+  { id: "suwayomiOff", title: "Stop Suwayomi (optional)", kind: "run", prompt: "Stop and disable Suwayomi's miharchy-server service? Its package and data stay." }
 ], STEPS.slice(2).filter(function(st) { return st.id !== "helper" }))
 
 // The steps this window shows.
@@ -85,7 +87,7 @@ var PROBE = [
   // While Suwayomi-Server is missing: the AUR's version, so the install can
   // warn about one newer than Miharchy checked (ADR 0007). "?" when yay
   // cannot tell; skipped on rechecks ($5 = 1).
-  "command -v suwayomi-server >/dev/null || [ \"$5\" = 1 ] || { v=$(timeout 20 yay -Si suwayomi-server-bin 2>/dev/null | while IFS=: read -r k val; do case $k in Version*) echo $val;; esac; done); v=${v%-*}; echo \"aurSuwayomi ${v:-?}\"; }",
+  "command -v suwayomi-server >/dev/null || [ \"$5\" = 1 ] || [ -n \"$6\" ] || { v=$(timeout 20 yay -Si suwayomi-server-bin 2>/dev/null | while IFS=: read -r k val; do case $k in Version*) echo $val;; esac; done); v=${v%-*}; echo \"aurSuwayomi ${v:-?}\"; }",
   "test -e /usr/lib/qt6/qml/QtWebSockets/qmldir && echo websockets",
   "test -s \"$1\" && echo config",
   "echo \"unit $(systemctl --user is-enabled miharchy-server 2>/dev/null) $(systemctl --user is-active miharchy-server 2>/dev/null)\"",
@@ -205,6 +207,7 @@ var LIMITS = {
   helper: [4194304, 1800],
   coreBuild: [4194304, 1800],
   coreService: [65536, 120],
+  suwayomiOff: [16384, 30],
   phoneBackups: [65536, 120],
   peekKey: [65536, 30],
   launcher: [16384, 10]
@@ -367,6 +370,7 @@ function stepCommand(id, ctx) {
     case "syncFolder": return command("test -d \"$1\" || { echo \"$1 is not a folder.\"; exit 1; }", [ctx.folder])
     case "helper": return command(BUILD_SCRIPT, [ctx.syncDir])
     case "coreBuild": return command(CORE_BUILD_SCRIPT, [ctx.windowDir.replace(/\/window$/, "")])
+    case "suwayomiOff": return command("systemctl --user disable --now miharchy-server.service && echo \"Stopped and disabled miharchy-server.\"")
     case "coreService": return command(CORE_UNIT_SCRIPT, [ctx.windowDir.replace(/\/window$/, "") + "/core/server/miharchy-core.service", ctx.coreConfigPath])
     case "phoneBackups":
       // Syncthing to install or start: in the terminal. Otherwise accept the phone.
@@ -558,11 +562,12 @@ function flareDone(s) {
 }
 
 // The packages a stock Omarchy lacks, as the probe found them.
-function missingPackages(p) {
+// core: no Suwayomi (#373).
+function missingPackages(p, core) {
   var m = []
   if (p.java < 21) m.push({ pkg: "jdk-openjdk", label: "jdk-openjdk (Java 21 or newer)" })
   if (!p.websockets) m.push({ pkg: "qt6-websockets", label: "qt6-websockets" })
-  if (!p.suwayomi) m.push({ pkg: "suwayomi-server-bin", label: "suwayomi-server-bin", aur: true })
+  if (!p.suwayomi && !core) m.push({ pkg: "suwayomi-server-bin", label: "suwayomi-server-bin", aur: true })
   return m
 }
 
@@ -583,7 +588,7 @@ function andList(xs) {
 // missing: Setup rechecks until they are in.
 function installing(s) {
   var r = s.results.packages
-  return !!(r && r.code === 0 && s.probe && missingPackages(s.probe).length)
+  return !!(r && r.code === 0 && s.probe && missingPackages(s.probe, s.core).length)
 }
 
 // A step's status: { state, detail } with state
@@ -598,8 +603,8 @@ function status(s, id) {
   var p = s.probe
   switch (id) {
     case "packages":
-      var missing = missingPackages(p)
-      if (!missing.length) return is("done", "Java " + p.java + ", Suwayomi-Server and Qt WebSockets are installed.")
+      var missing = missingPackages(p, s.core)
+      if (!missing.length) return is("done", "Java " + p.java + (s.core ? "" : ", Suwayomi-Server") + " and Qt WebSockets are installed.")
       var names = andList(missing.map(function(m) { return m.pkg }))
       var prompt = "Install " + names + " in a terminal?"
       if (!p.suwayomi && Session.newerThanApproved(p.aurSuwayomi)) prompt = "The AUR has Suwayomi-Server " + p.aurSuwayomi + "; Miharchy is checked with " + Session.APPROVED_SUWAYOMI + ", and login may fail. Install " + names + " anyway?"
@@ -635,6 +640,11 @@ function status(s, id) {
       if (mv.state === "done") return is("done", moveDetail(mv.report))
       if (mv.state === "failed") return is("todo", "The move stopped" + (mv.step ? " at " + mv.step : "") + ": " + (mv.error ? mv.error.message : "") + " Press Enter to try again.")
       return is("todo", "Press Enter to copy your Suwayomi library into miharchy-core. Suwayomi must be running; the move only reads it.")
+    case "suwayomiOff":
+      if (!p.unitEnabled && !p.unitActive) return { state: "unavailable", label: "not running", detail: "Suwayomi's miharchy-server service is not enabled or running." }
+      // Never before the move: it reads Suwayomi.
+      if (p.config && status(s, "move").state !== "done") return is("waiting", "Needs the move first.")
+      return is("todo", "Press Enter to stop and disable Suwayomi's miharchy-server service. miharchy-core replaces it; the package and the data stay, so you can start it again by hand.")
     case "flaresolverr":
       if (s.core) return { state: "unavailable", label: "not on core", detail: "miharchy-core does not use FlareSolverr yet (#361)." }
       if (!p.docker) return is("unavailable", "Docker is not installed. Cloudflare sources will show \"needs FlareSolverr\".")
@@ -823,6 +833,9 @@ if (typeof module !== "undefined") {
     installing: installing,
     desktopEntry: desktopEntry,
     runCommand: runCommand,
+    stepCommand: stepCommand,
+    missingPackages: missingPackages,
+    PROBE: PROBE,
     parseJob: parseJob,
     parseProbe: parseProbe,
     initial: initial,

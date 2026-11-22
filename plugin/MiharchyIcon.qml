@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Shapes
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Burst and cross: the bar mark from icons/mark.py (paths pasted from its output).
@@ -8,9 +9,9 @@ import qs.Ui
 Item {
   id: root
   property real iconSize: Style.font.icon
-  property color color: Color.foreground
+  property color color: Commons.Color.foreground
   property color rayColor: color
-  property color badgeColor: Color.urgent
+  property color badgeColor: Commons.Color.urgent
   property bool warning: false
 
   width: iconSize
@@ -52,12 +53,12 @@ Item {
     color: root.badgeColor
     anchors.right: parent.right
     anchors.bottom: parent.bottom
-    borderSpec: Border.flat(Color.popups.background, 1)
+    borderSpec: Border.flat(Commons.Color.popups.background, 1)
     Text {
       textFormat: Text.PlainText
       anchors.centerIn: parent
       text: "!"
-      color: Color.background
+      color: Commons.Color.background
       font.family: Style.font.family
       font.pixelSize: Math.max(6, parent.height * 0.72)
       font.bold: true

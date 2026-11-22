@@ -36,7 +36,7 @@ The sync helper builds once per checkout: `sync/gradlew -p sync installDist` →
 
 ## miharchy-core
 
-The views moved to miharchy-core (ADR 0010) run with `MIHARCHY_BACKEND=core` in front of `drive.sh`, one more allowed `VAR=...` prefix. `window_env` points the window at this run's `$RUN/core/core.json`, so no other variable is needed.
+The window and the mark run on miharchy-core by default (#373). `MIHARCHY_BACKEND=suwayomi` in front of `drive.sh`, one more allowed `VAR=...` prefix, drives the Suwayomi path while its code remains; `MIHARCHY_BACKEND=core` from older recipes is the same as no prefix. `window_env` points the window at this run's `$RUN/core/core.json`, so no other variable is needed.
 
 ```
 .claude/skills/verify-miharchy/scripts/core.sh start    # builds core/ if needed; "ready: miharchy-core on 127.0.0.1:<port> …"

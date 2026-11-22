@@ -64,12 +64,12 @@ function fakeCore() {
 
 const tree = (dir) => fs.readdirSync(dir, { recursive: true }).sort().map((f) => f + " " + fs.statSync(path.join(dir, f)).mtimeMs);
 
-test("under the switch the core steps follow Suwayomi's service; without it the steps are as before", () => {
+test("on core no Suwayomi step is required; without it the steps are as before", () => {
   assert.deepEqual(S.steps(S.initial()).map((s) => s.id), S.STEPS.map((s) => s.id));
-  assert.ok(!S.STEPS.some((s) => ["coreBuild", "coreService", "move"].includes(s.id)));
-  assert.deepEqual(S.steps(S.initial(true)).map((s) => s.id).slice(0, 6), ["packages", "server", "coreBuild", "coreService", "move", "flaresolverr"]);
+  assert.ok(!S.STEPS.some((s) => ["coreBuild", "coreService", "move", "suwayomiOff"].includes(s.id)));
+  assert.deepEqual(S.steps(S.initial(true)).map((s) => s.id).slice(0, 6), ["packages", "coreBuild", "coreService", "move", "suwayomiOff", "flaresolverr"]);
   const req = S.steps(S.initial(true)).filter((s) => s.required).map((s) => s.id);
-  assert.deepEqual(req, ["packages", "server", "coreBuild", "coreService"]);
+  assert.deepEqual(req, ["packages", "coreBuild", "coreService"]);
   assert.ok(!S.steps(S.initial(true)).some((s) => s.id === "helper"), "nothing runs the helper under the switch");
 });
 
@@ -187,4 +187,25 @@ test("on core the reads and writes are core routes, with the real paths for the 
   s = S.reduce(s, { type: "server", reply: core(200, { metas: [] }) });
   assert.deepEqual(S.offers(s), ["move:todo", "syncFolder:todo", "launcher:todo", "peekKey:todo"]);
   assert.deepEqual(S.offerPayload(s), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.setupOffered", value: S.offers(s).join(",") }] } });
+});
+
+// #373: a fresh Omarchy gets no Suwayomi; an upgrade stops it only after the move.
+test("on core the packages leave out Suwayomi-Server, and the probe skips the AUR query", () => {
+  const p = S.parseProbe("java openjdk version \"21.0.2\"\nwebsockets\n");
+  assert.deepEqual(S.missingPackages(p, true), []);
+  assert.deepEqual(S.missingPackages(p).map((m) => m.pkg), ["suwayomi-server-bin"]);
+  const s = Object.assign(S.initial(true), { probe: p });
+  assert.equal(S.status(s, "packages").state, "done");
+  assert.doesNotMatch(S.status(s, "packages").detail, /Suwayomi/);
+  assert.match(S.PROBE, /\|\| \[ -n "\$6" \] \|\| \{ v=\$\(timeout 20 yay/);
+});
+
+test("Suwayomi's service stops only after the move, or with nothing to move; with no service there is nothing to stop", () => {
+  const at = (probe, move) => S.status(Object.assign(S.initial(true), { probe: S.parseProbe(probe), move }), "suwayomiOff");
+  const core = "coreInstalled x\ncoreSource x\ncoreUnit enabled active\ncoreUnitCurrent\ncoreConfig\n";
+  assert.equal(at(core, null).state, "unavailable");
+  assert.equal(at(core + "config\nunit enabled active\n", { state: "idle" }).state, "waiting");
+  assert.equal(at(core + "config\nunit enabled active\n", { state: "done", report: null }).state, "todo");
+  assert.equal(at(core + "unit enabled active\n", null).state, "todo", "no server.json: nothing to move");
+  assert.deepEqual(S.stepCommand("suwayomiOff", {}).slice(-2, -1)[0].includes("systemctl --user disable --now miharchy-server.service"), true);
 });

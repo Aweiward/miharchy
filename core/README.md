@@ -18,7 +18,7 @@ MIHARCHY_CORE_DATA=/tmp/core/data MIHARCHY_CORE_CONFIG=/tmp/core/core.json MIHAR
   server/build/install/miharchy-core/bin/miharchy-core
 ```
 
-Only the window under the developer switch `MIHARCHY_BACKEND=core` calls core, and `stable` leaves out `core/` until the switch-over (#373). `server/miharchy-core.service` is the user unit. Under the switch, Setup builds a copy of `core/` and `sync/` into `~/.local/share/miharchy/core-app` (its fingerprint covers both, build output pruned), installs the unit, waits for `core.json`, and offers the move (#385). A rebuild restarts a running core.
+miharchy-core is the default server since #373 (`MIHARCHY_BACKEND=suwayomi` goes back), and `stable` ships `core/` and `sync/`. `server/miharchy-core.service` is the user unit. Setup builds a copy of `core/` and `sync/` into `~/.local/share/miharchy/core-app` (its fingerprint covers both, build output pruned), installs the unit, waits for `core.json`, and offers the move (#385). After the move, or with nothing to move, it offers to stop and disable Suwayomi's `miharchy-server` unit; the package and the data stay. Setup on core installs no Suwayomi-Server. A rebuild restarts a running core.
 
 ## Extension repos (#364)
 

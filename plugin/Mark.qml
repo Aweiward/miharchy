@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Mark.js" as Mark
 import "../window/Model.js" as Model
@@ -17,7 +18,7 @@ Panel {
   id: root
   moduleName: "miharchy"
 
-  readonly property bool core: Quickshell.env("MIHARCHY_BACKEND") === "core"
+  readonly property bool core: Quickshell.env("MIHARCHY_BACKEND") !== "suwayomi"
   readonly property string backend: core ? "core" : ""
   readonly property string configPath: core ? (Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json")
     : (Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json")
@@ -274,7 +275,7 @@ Panel {
         iconSize: icon.opticalSize
         color: icon.foreground
         rayColor: root.sync.state === "running" ? "#9ece6a" : color
-        badgeColor: root.bar ? root.bar.urgent : Color.urgent
+        badgeColor: root.bar ? root.bar.urgent : Commons.Color.urgent
         warning: Mark.down(root.mark)
       }
     }
@@ -328,7 +329,7 @@ Panel {
         Text {
           textFormat: Text.PlainText
           text: "Miharchy"
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.title
         }
@@ -339,7 +340,7 @@ Panel {
           visible: root.sync.state !== "idle"
           wrapMode: Text.Wrap
           text: Sync.oneLine(root.sync)
-          color: root.sync.state === "failed" ? Color.urgent : Color.muted
+          color: root.sync.state === "failed" ? Commons.Color.urgent : Commons.Color.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -350,7 +351,7 @@ Panel {
           visible: text !== ""
           wrapMode: Text.Wrap
           text: root.health.state === "ready" ? Sync.healthPopupLine(root.health.health, root.now) : ""
-          color: Color.urgent
+          color: Commons.Color.urgent
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -361,7 +362,7 @@ Panel {
           visible: text !== ""
           wrapMode: Text.Wrap
           text: Mark.warning(root.mark)
-          color: Color.urgent
+          color: Commons.Color.urgent
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -382,7 +383,7 @@ Panel {
               textFormat: Text.PlainText
               visible: entry.modelData.section !== ""
               text: entry.modelData.section
-              color: Color.muted
+              color: Commons.Color.muted
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
             }
@@ -406,7 +407,7 @@ Panel {
                   width: parent.width
                   elide: Text.ElideRight
                   text: entry.modelData.title
-                  color: Color.popups.text
+                  color: Commons.Color.popups.text
                   font.family: Style.font.family
                   font.pixelSize: Style.font.body
                 }
@@ -423,7 +424,7 @@ Panel {
                     anchors.rightMargin: Style.spacing.md
                     elide: Text.ElideRight
                     text: entry.modelData.chapter
-                    color: Color.muted
+                    color: Commons.Color.muted
                     font.family: Style.font.family
                     font.pixelSize: Style.font.bodySmall
                   }
@@ -433,7 +434,7 @@ Panel {
                     textFormat: Text.PlainText
                     anchors.right: parent.right
                     text: entry.modelData.side
-                    color: Color.muted
+                    color: Commons.Color.muted
                     font.family: Style.font.family
                     font.pixelSize: Style.font.bodySmall
                   }
@@ -457,7 +458,7 @@ Panel {
           visible: root.notice !== null
           wrapMode: Text.Wrap
           text: root.notice ? root.notice.title : ""
-          color: Mark.down(root.mark) ? Color.urgent : Color.popups.text
+          color: Mark.down(root.mark) ? Commons.Color.urgent : Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.body
         }
@@ -468,7 +469,7 @@ Panel {
           visible: root.notice !== null && root.notice.detail !== ""
           wrapMode: Text.Wrap
           text: root.notice ? root.notice.detail : ""
-          color: Color.muted
+          color: Commons.Color.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -477,7 +478,7 @@ Panel {
           textFormat: Text.PlainText
           visible: root.notice === null && root.more > 0
           text: root.more + " more in the window"
-          color: Color.muted
+          color: Commons.Color.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -485,7 +486,7 @@ Panel {
         Text {
           textFormat: Text.PlainText
           text: "enter read   w window   s sync   r refresh"
-          color: Color.muted
+          color: Commons.Color.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
         }
