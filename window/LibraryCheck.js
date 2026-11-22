@@ -14,13 +14,6 @@ var FAILED_AFTER = 14 * DAY
 var STALLED_AFTER = 183 * DAY
 var SIMILAR = 0.9
 
-var QUERY = "{ mangas(condition: { inLibrary: true }) { nodes { id title status updateStrategy sourceId unreadCount chaptersLastFetchedAt"
-  + " source { id displayName extension { pkgName name hasUpdate } } chapters { totalCount } lastReadChapter { id }"
-  + " latestUploadedChapter { uploadDate } latestFetchedChapter { fetchedAt } meta { key value } } }"
-  + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } }"
-  + " lastUpdateTimestamp { timestamp } settings { excludeUnreadChapters excludeNotStarted excludeCompleted }"
-  + " libraryUpdateStatus { mangaUpdates { status manga { id } } } }"
-
 // The server's library update skips these by design (Updates.SKIP_FILTERS),
 // so an old fetch on them is no failure.
 function skipped(m, settings) {
@@ -69,7 +62,7 @@ function dismissals(meta) {
   }
 }
 
-// A QUERY node -> the manga as the kinds read it, every time in ms.
+// A node of load()'s mangas -> the manga as the kinds read it, every time in ms.
 function toManga(n, names) {
   var ext = n.source && n.source.extension
   var uploaded = Number(n.latestUploadedChapter && n.latestUploadedChapter.uploadDate) || 0
@@ -122,7 +115,7 @@ function duplicates(manga) {
   return out
 }
 
-// QUERY data -> every problem, each manga's in KINDS order:
+// load()'s data -> every problem, each manga's in KINDS order:
 // { key, kind, mangaId, title, sourceId, source, reason, pkgName, others,
 // dismissals, dismissed }. A stalled dismiss lapses once a chapter newer
 // than it arrives; the others hold while the problem does.
@@ -261,9 +254,8 @@ function migrateList(targets, list) {
   return out
 }
 
-// Dismisses the problems (undo: brings them back) in one write, a
-// setMangaMeta per manga that keeps its other kinds, or on core one
-// meta.set. null for none.
+// Dismisses the problems (undo: brings them back) in one write, one
+// meta.set for every manga, each keeping its other kinds. null for none.
 function dismissPayload(list, now, undo, core) {
   var maps = {}
   var ids = []
@@ -276,29 +268,16 @@ function dismissPayload(list, now, undo, core) {
     else maps[p.mangaId][p.kind] = now
   })
   if (!ids.length) return null
-  if (core) return { route: "meta.set", body: { metas: ids.map(function(id) { return { scope: "manga", owner: id, key: DISMISSED_META, value: JSON.stringify(maps[id]) } }) } }
-  var vars = {}
-  var params = []
-  var fields = []
-  ids.forEach(function(id, i) {
-    vars["m" + i] = { mangaId: id, key: DISMISSED_META, value: JSON.stringify(maps[id]) }
-    params.push("$m" + i + ": MangaMetaTypeInput!")
-    fields.push("m" + i + ": setMangaMeta(input: { meta: $m" + i + " }) { meta { key value } }")
-  })
-  return { query: "mutation(" + params.join(", ") + ") { " + fields.join(" ") + " }", variables: vars }
+  return { route: "meta.set", body: { metas: ids.map(function(id) { return { scope: "manga", owner: id, key: DISMISSED_META, value: JSON.stringify(maps[id]) } }) } }
 }
 
 // Enter on a duplicate merges a pair: the row's manga and the first it
 // duplicates. With three copies, a second merge takes the third.
-var MERGE_FIELDS = "{ id title sourceId source { displayName } categories { nodes { id name } } chapters { nodes { isRead } } trackRecords { nodes { tracker { name } } } }"
-var MERGE_QUERY = "query($a: Int!, $b: Int!) { a: manga(id: $a) " + MERGE_FIELDS + " b: manga(id: $b) " + MERGE_FIELDS
-  + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
-
 function mergeVariables(problem) {
   return { a: problem.mangaId, b: problem.others[0] }
 }
 
-// MERGE_QUERY data -> both copies as the prompt shows them.
+// mergeLoad's data -> both copies as the prompt shows them.
 function mergeCopies(data) {
   var names = Model.parseNames(data)
   var name = function(n) { return String(n.name) }
@@ -347,9 +326,8 @@ function mergeJob(copies, keep) {
   }
 }
 
-// On miharchy-core (MIHARCHY_BACKEND=core, #394) these build QUERY's and
-// MERGE_QUERY's data from core's routes, so problems() and mergeCopies()
-// work on either server. send(payload, done) as Session.send gives it.
+// load() and mergeLoad() build the data problems() and mergeCopies() read
+// from miharchy-core's routes. send(payload, done) as Session.send gives it.
 
 function ok(data) {
   return { state: "ok", message: "", data: data, kind: "" }
@@ -375,11 +353,10 @@ function names(meta) {
   return { nodes: meta.metas.map(function(m) { return { value: m.value } }) }
 }
 
-// done(reply): QUERY's data. The library from library.list, each source's
+// done(reply): the data problems() reads. The library from library.list, each source's
 // extension from extension.list, the last run's failures and time from
 // update.status, the skip filters from settings.get.
 function load(send, core, done) {
-  if (!core) return send({ query: QUERY }, done)
   all(send, [{ route: "library.list" }, NAMES_PAYLOAD, { route: "extension.list", body: { cached: true } }, { route: "update.status" }, { route: "settings.get" }], function(failed, r) {
     if (failed) return done(failed)
     var bySource = {}
@@ -405,11 +382,10 @@ function load(send, core, done) {
   })
 }
 
-// done(reply): MERGE_QUERY's data for the pair, from the server's database
+// done(reply): the data mergeCopies() reads for the pair, from the server's database
 // only (manga.get answers with a source gone).
 function mergeLoad(send, core, problem, done) {
   var v = mergeVariables(problem)
-  if (!core) return send({ query: MERGE_QUERY, variables: v }, done)
   all(send, [{ route: "manga.get", body: { id: v.a } }, { route: "manga.get", body: { id: v.b } }, { route: "track.list", body: { mangaIds: [v.a, v.b] } },
     { route: "tracker.list" }, { route: "category.list" }, NAMES_PAYLOAD], function(failed, r) {
     if (failed) return done(failed)
@@ -434,7 +410,6 @@ if (typeof module !== "undefined") {
     load: load,
     mergeLoad: mergeLoad,
     DISMISSED_META: DISMISSED_META,
-    QUERY: QUERY,
     KINDS: KINDS,
     problems: problems,
     count: count,
@@ -444,7 +419,6 @@ if (typeof module !== "undefined") {
     selectedIds: selectedIds,
     targets: targets,
     dismissPayload: dismissPayload,
-    MERGE_QUERY: MERGE_QUERY,
     mergeVariables: mergeVariables,
     mergeCopies: mergeCopies,
     copyText: copyText,

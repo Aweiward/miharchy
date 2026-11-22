@@ -7,15 +7,11 @@
 // MigrateMangaUseCase does. The old manga is read from the server's
 // database only, never from its source, which may be gone. Pure, so
 // tests/migrate.test.js pins it; MigrateView.qml sends the payloads.
+// The loads and writes at the end take send(payload, done), as
+// Session.send gives it, and talk to miharchy-core's routes. They build
+// the data shapes (an old manga node, a fetched target, the library, the
+// highest chapters) that plan(), mergeInto() and the rest read.
 
-var OLD_QUERY = "query($id: Int!) { manga(id: $id) { id title categories { nodes { id } } meta { key value }"
-  + " chapters { nodes { id chapterNumber isRead isBookmarked isDownloaded } }"
-  + " trackRecords { nodes { id trackerId tracker { name } } } } }"
-var TARGET_MUTATION = "mutation($id: Int!) { fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: true }) {"
-  + " manga { id title inLibrary meta { key value } trackRecords { nodes { tracker { name } } } } chapters { id chapterNumber isRead isBookmarked } } }"
-var LIBRARY_QUERY = "{ mangas(condition: { inLibrary: true }, orderBy: TITLE) { nodes { id title sourceId source { displayName } } }"
-  + " metas(condition: { key: \"" + Model.SOURCE_NAMES_META + "\" }) { nodes { value } } }"
-var HIGHEST_QUERY = "query($ids: [Int!]) { mangas(filter: { id: { in: $ids } }) { nodes { id highestNumberedChapter { chapterNumber } } } }"
 var MODE_KEY = "miharchy.readingMode"
 // Mihon's BaseSmartSearchEngine.MIN_ELIGIBLE_THRESHOLD.
 var THRESHOLD = 0.4
@@ -55,43 +51,12 @@ function plan(oldChapters, targetChapters) {
   }
 }
 
-// old: an OLD_QUERY manga node. In the library first: Suwayomi adds a
-// manga that joins it to the categories flagged default, and the clear
-// that follows takes those off too, so the target ends in exactly the old
-// manga's categories, as Mihon's SetMangaCategories does.
-// withTracks: the old manga's tracks go along, as in Mihon's
-// MigrateMangaUseCase. bindTrackRecord copies each record to the target in
-// the server's database, replacing the target's own track on that tracker;
-// it never calls the tracker, so it needs no login and pushes nothing.
-// merge: mergeInto(the target), its own { meta, trackRecords } when it is
-// already a library manga, whatever led there. Its state wins: no
-// clear, so it keeps its categories and gains the old ones (it is in the
-// library already, so no default category joins); the old reading mode
-// only when it has none; the old tracks only on trackers it lacks.
-function targetPayload(old, targetId, p, withTracks, merge) {
-  var mode = merge && readingMode(merge) ? null : readingMode(old)
-  var tracks = withTracks ? movingTracks(old, merge) : []
-  var vars = { target: targetId, categories: old.categories.nodes.map(function(c) { return c.id }), read: p.read, bookmark: p.bookmark }
-  var params = ["$target: Int!", "$categories: [Int!]!", "$read: [Int!]!", "$bookmark: [Int!]!"]
-  var query = " library: updateManga(input: { id: $target, patch: { inLibrary: true } }) { manga { id } }"
-    + " categories: updateMangaCategories(input: { id: $target, patch: { " + (merge ? "" : "clearCategories: true, ") + "addToCategories: $categories } }) { manga { id } }"
-    + " read: updateChapters(input: { ids: $read, patch: { isRead: true } }) { chapters { id } }"
-    + " bookmark: updateChapters(input: { ids: $bookmark, patch: { isBookmarked: true } }) { chapters { id } }"
-  if (mode) {
-    vars.mode = { mangaId: targetId, key: MODE_KEY, value: mode.value }
-    params.push("$mode: MangaMetaTypeInput!")
-    query += " mode: setMangaMeta(input: { meta: $mode }) { meta { key } }"
-  }
-  tracks.forEach(function(t, i) {
-    vars["track" + i] = t.id
-    params.push("$track" + i + ": Int!")
-    query += " track" + i + ": bindTrackRecord(input: { mangaId: $target, trackRecordId: $track" + i + " }) { trackRecord { id } }"
-  })
-  return { query: "mutation(" + params.join(", ") + ") {" + query + " }", variables: vars }
-}
-
-// A TARGET_MUTATION manga -> targetPayload's merge, or null for a target
-// not in the library, which takes Mihon's plain Migrate.
+// A fetched target's manga -> writeTarget's merge: its own { meta,
+// trackRecords } when it is already a library manga, whatever led there,
+// or null for a target not in the library, which takes Mihon's plain
+// Migrate. Its state wins: no clear, so it keeps its categories and gains
+// the old ones (it is in the library already); the old reading mode only
+// when it has none; the old tracks only on trackers it lacks.
 function mergeInto(target) {
   return target.inLibrary ? { meta: target.meta, trackRecords: target.trackRecords } : null
 }
@@ -100,7 +65,7 @@ function readingMode(manga) {
   return (manga.meta || []).filter(function(m) { return m.key === MODE_KEY })[0]
 }
 
-// An OLD_QUERY manga node -> its tracks: [{ id, tracker }].
+// An old manga node -> its tracks: [{ id, tracker }].
 function trackRecords(old) {
   return ((old.trackRecords && old.trackRecords.nodes) || []).map(function(n) { return { id: n.id, tracker: String(n.tracker.name) } })
 }
@@ -114,20 +79,6 @@ function movingTracks(old, merge) {
 
 function downloaded(old) {
   return old.chapters.nodes.filter(function(c) { return c.isDownloaded }).map(function(c) { return c.id })
-}
-
-// Sent only after the target write succeeds, so a failure never leaves the
-// manga in neither place. replace: Migrate, not Copy. null when there is
-// nothing to do.
-function oldPayload(old, replace, deleteDownloads) {
-  var ids = deleteDownloads ? downloaded(old) : []
-  if (!replace && !ids.length) return null
-  var query = "mutation($id: Int!" + (ids.length ? ", $downloads: [Int!]!" : "") + ") {"
-  if (replace) query += " library: updateManga(input: { id: $id, patch: { inLibrary: false } }) { manga { id } }"
-  if (ids.length) query += " downloads: deleteDownloadedChapters(input: { ids: $downloads }) { chapters { id } }"
-  var vars = { id: old.id }
-  if (ids.length) vars.downloads = ids
-  return { query: query + " }", variables: vars }
 }
 
 function levenshtein(a, b) {
@@ -199,7 +150,7 @@ function withTargets(manga, sources, pinned) {
   return out.some(function(m) { return m.targets.length }) ? out : null
 }
 
-// HIGHEST_QUERY data -> the manga with highest, the chapter number a
+// highestLoad's data -> the manga with highest, the chapter number a
 // stalled one's target must pass; -1 with no chapters.
 function withHighest(manga, data) {
   var nodes = (data.mangas && data.mangas.nodes) || []
@@ -213,7 +164,7 @@ function withTarget(manga, to) {
   return manga.map(function(m) { return copy(m, { targets: String(m.sourceId) === to.id ? [] : [to] }) })
 }
 
-// LIBRARY_QUERY data -> each source with library manga, by name:
+// libraryLoad's data -> each source with library manga, by name:
 // { id, name, sourceName, missing, manga: [{ id, title }] }.
 function librarySources(data) {
   var names = Model.parseNames(data)
@@ -284,16 +235,11 @@ function checks(b) {
 // { type: "checked", reply }.
 // ponytail: prepare() fetches the target again on confirm; keep this reply
 // in the job if the second fetch shows.
-// core: the check fetches through manga.refresh, one request as on
-// Suwayomi, so expire() can still abort it.
+// The check fetches through manga.refresh, one request, so expire() can
+// still abort it.
 function checkPayload(b, index, core) {
   var id = b.search.groups[index].items[b.held[index].pick].id
-  return core ? { route: "manga.refresh", body: { id: id } } : { query: TARGET_MUTATION, variables: { id: id } }
-}
-
-// A fetch's data: TARGET_MUTATION's, or manga.refresh's { manga, chapters }.
-function fetched(data) {
-  return data.fetchMangaAndChapters || data
+  return { route: "manga.refresh", body: { id: id } }
 }
 
 function newest(chapters) {
@@ -330,7 +276,7 @@ function reduceBatch(b, index, event) {
     if (!h || h.state !== "loading") return b
     var r = event.reply
     if (r.state !== "ok" && b.at[index] + 1 >= b.manga[index].targets.length) return set(b, "held", index, copy(h, { state: "failed" }))
-    var more = r.state === "ok" && newest(fetched(r.data).chapters) > b.manga[index].highest
+    var more = r.state === "ok" && newest(r.data.chapters) > b.manga[index].highest
     var cleared = set(b, "held", index, null)
     return more ? set(cleared, "picks", index, h.pick) : advance(cleared, index)
   }
@@ -392,11 +338,6 @@ function jobs(b) {
   return out
 }
 
-// On miharchy-core (MIHARCHY_BACKEND=core, #394) these loads and writes
-// build the same data from core's routes, so plan(), mergeInto() and the
-// rest work on either server. Each takes send(payload, done), as
-// Session.send gives it, and core; without core it sends the GraphQL above.
-
 function ok(data) {
   return { state: "ok", message: "", data: data, kind: "" }
 }
@@ -417,9 +358,8 @@ function chain(send, payloads, done) {
   next()
 }
 
-// done(reply): LIBRARY_QUERY's data.
+// done(reply): { mangas: { nodes }, metas: { nodes: [{ value }] } }.
 function libraryLoad(send, core, done) {
-  if (!core) return send({ query: LIBRARY_QUERY }, done)
   send({ route: "library.list" }, function(lib) {
     if (lib.state !== "ok") return done(lib)
     send({ route: "meta.get", body: { scope: "global", keys: [Model.SOURCE_NAMES_META] } }, function(meta) {
@@ -429,9 +369,8 @@ function libraryLoad(send, core, done) {
   })
 }
 
-// done(reply): HIGHEST_QUERY's data for ids.
+// done(reply): { mangas: { nodes: [{ id, highestNumberedChapter }] } } for ids.
 function highestLoad(send, core, ids, done) {
-  if (!core) return send({ query: HIGHEST_QUERY, variables: { ids: ids } }, done)
   send({ route: "chapter.list", body: { mangaIds: ids } }, function(r) {
     if (r.state !== "ok") return done(r)
     done(ok({ mangas: { nodes: ids.map(function(id) {
@@ -443,7 +382,7 @@ function highestLoad(send, core, ids, done) {
 }
 
 // A core manga (manga.get's or manga.refresh's) with its track.list
-// records -> an OLD_QUERY node, inLibrary too. names: tracker id -> name.
+// records -> an old manga node, inLibrary too. names: tracker id -> name.
 function coreNode(m, tracks, names) {
   return {
     id: m.id,
@@ -472,10 +411,9 @@ function withTracks(send, manga, done) {
 }
 
 // The old manga from the server's database, never its source (manga.get
-// answers without one). done(failedReply or null, OLD_QUERY's manga).
+// answers without one). done(failedReply or null, the old manga node).
 function oldLoad(send, core, id, done) {
   var back = function(r, node) { r.state === "ok" ? done(null, node) : done(r) }
-  if (!core) return send({ query: OLD_QUERY, variables: { id: id } }, function(r) { back(r, r.data && r.data.manga) })
   send({ route: "manga.get", body: { id: id } }, function(r) {
     if (r.state !== "ok") return done(r)
     withTracks(send, r.data.manga, back)
@@ -483,10 +421,9 @@ function oldLoad(send, core, id, done) {
 }
 
 // The target fetched from its source with its chapters. done(failedReply
-// or null, { manga, chapters }: TARGET_MUTATION's). On core an empty
-// chapter list is the source's error, as manga.refresh gives it.
+// or null, { manga, chapters }). An empty chapter list is the source's
+// error, as manga.refresh gives it.
 function targetLoad(send, core, id, done) {
-  if (!core) return send({ query: TARGET_MUTATION, variables: { id: id } }, function(r) { r.state === "ok" ? done(null, fetched(r.data)) : done(r) })
   send({ route: "manga.refresh", body: { id: id } }, function(r) {
     if (r.state !== "ok") return done(r)
     withTracks(send, r.data.manga, function(t, node) {
@@ -496,11 +433,13 @@ function targetLoad(send, core, id, done) {
   })
 }
 
-// targetPayload's write. On core a chain that adds the target to the
-// library last, so one stopped midway leaves no second copy there.
-// done(reply).
+// The target's write: a chain that adds it to the library last, so one
+// stopped midway leaves no second copy there. old: an old manga node; p:
+// plan()'s; tracks: the old manga's tracks go along (bound in miharchy-core's
+// database, replacing the target's own on that tracker; no login, nothing
+// pushed); merge: mergeInto(the target). The old reading mode goes too, unless
+// merge has one. done(reply).
 function writeTarget(send, core, old, targetId, p, tracks, merge, done) {
-  if (!core) return send(targetPayload(old, targetId, p, tracks, merge), done)
   var mode = merge && readingMode(merge) ? null : readingMode(old)
   var list = []
   if (p.read.length) list.push({ route: "chapter.update", body: { ids: p.read, isRead: true } })
@@ -515,13 +454,10 @@ function writeTarget(send, core, old, targetId, p, tracks, merge, done) {
   chain(send, list, done)
 }
 
-// oldPayload's write, after the target's. done(reply), or done(null)
-// with nothing to do.
+// The old manga's write, after the target's, so a failure never leaves the
+// manga in neither place. replace: Migrate, not Copy. done(reply), or
+// done(null) with nothing to do.
 function writeOld(send, core, old, replace, deleteDownloads, done) {
-  if (!core) {
-    var payload = oldPayload(old, replace, deleteDownloads)
-    return payload ? send(payload, done) : done(null)
-  }
   var ids = deleteDownloads ? downloaded(old) : []
   var list = []
   if (replace) list.push({ route: "manga.update", body: { ids: [old.id], inLibrary: false } })
@@ -538,16 +474,10 @@ if (typeof module !== "undefined") {
     targetLoad: targetLoad,
     writeTarget: writeTarget,
     writeOld: writeOld,
-    fetched: fetched,
-    OLD_QUERY: OLD_QUERY,
-    TARGET_MUTATION: TARGET_MUTATION,
-    LIBRARY_QUERY: LIBRARY_QUERY,
     plan: plan,
-    targetPayload: targetPayload,
     mergeInto: mergeInto,
     trackRecords: trackRecords,
     movingTracks: movingTracks,
-    oldPayload: oldPayload,
     downloaded: downloaded,
     similarity: similarity,
     key: key,
@@ -556,7 +486,6 @@ if (typeof module !== "undefined") {
     withTargets: withTargets,
     withTarget: withTarget,
     withHighest: withHighest,
-    HIGHEST_QUERY: HIGHEST_QUERY,
     librarySources: librarySources,
     batch: batch,
     due: due,
