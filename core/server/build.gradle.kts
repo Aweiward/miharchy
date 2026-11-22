@@ -21,6 +21,9 @@ dependencies {
     // The tracker clients (#371) call their sites directly; the version the host pins.
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
     implementation("org.jsoup:jsoup:1.22.2")
+    // sync/'s merge and backup classes (ADR 0010), from the included build in settings.gradle.kts.
+    // Its newer kotlin-stdlib stays out, so core runs on the host's, which extensions link against.
+    implementation("miharchy:miharchy-sync") { exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib") }
     // Ktor logs through SLF4J; the same version as Ktor's slf4j-api. Logs go to stderr, so journald keeps them.
     runtimeOnly("org.slf4j:slf4j-simple:2.0.19")
     testImplementation("io.ktor:ktor-server-test-host:3.6.1")
