@@ -399,7 +399,7 @@ ShellRoot {
   // "unread" or "bookmark" (a toggle). The trackers hear of a mark read, and
   // every view showing read state or bookmarks reloads.
   // core: the chapters are miharchy-core's (the detail's on core): no
-  // trackers or downloads there yet, and no Suwayomi view to refresh.
+  // trackers there yet, and no Suwayomi view to refresh.
   function markChapters(chapters, action, mangaIds, core) {
     if (core === true) return markOnCore(chapters, action, mangaIds)
     var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters) : Chapters.markPayload(chapters, action === "read")

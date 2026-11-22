@@ -16,7 +16,8 @@ Item {
   property string query: ""
   // On miharchy-core (config.backend "core"): the topic, in place of query.
   property string topic: ""
-  // Whether the socket was made for core: its subprotocol is fixed at make().
+  // Whether the socket was made for core: its subprotocol is fixed at
+  // make(). One LiveSocket never changes server.
   property bool socketCore: false
   property bool running: false
   // A result has come since the socket opened: the stream carries every
@@ -60,10 +61,6 @@ Item {
   }
 
   function connect() {
-    if (socket && socketCore !== core()) {
-      socket.destroy()
-      socket = null
-    }
     if (!socket) socket = make()
     if (!socket) return
     if (core()) {
