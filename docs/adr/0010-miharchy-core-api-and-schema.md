@@ -47,7 +47,7 @@ The first routes of each slice. A slice may add routes; it keeps these names.
 | #367 downloads | `download.queue`, `download.enqueue`, `download.dequeue`, `download.reorder`, `download.start`, `download.stop`, `download.clear`, `download.delete`; topic `downloads` |
 | #368 update runs | `update.start`, `update.stop`, `update.status`; topic `updates` |
 | #369 sync | `sync.run`, `backup.export`, `backup.import` |
-| #371 trackers | `tracker.list`, `tracker.login`, `tracker.logout`, `track.search`, `track.bind`, `track.update`, `track.unbind` |
+| #371 trackers | `tracker.list`, `tracker.login`, `tracker.logout`, `track.search`, `track.bind`, `track.update`, `track.unbind`, `track.list`, `track.progress` |
 | #374 local manga | none: the local source is source `0` in the source routes |
 | #375 settings | `settings.get`, `settings.set`, `cache.clear` |
 

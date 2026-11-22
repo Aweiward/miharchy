@@ -2,7 +2,8 @@
 # Scratch miharchy-core for verification (ADR 0010), beside the scratch Suwayomi.
 #   core.sh start            build core/ if needed, start it on a free port (kept in $RUN/core/port),
 #                            data and core.json under $RUN/core; a second start keeps that data
-#   core.sh api <route> [json]  POST /api/<route>, the secret read from core.json and fed on stdin
+#   core.sh api <route> [json]  POST /api/<route>, the secret read from core.json, never on the command line
+#   core.sh api <route> -       the same, the body read from stdin: for a body that holds a password, token or callback
 #   core.sh seed             add the Keiyoushi repo and install MangaDex, so Browse has a source
 #   core.sh stop             stop the instance this run started (by PID file); the data stays
 #   core.sh wipe             stop it and delete $RUN/core
@@ -14,8 +15,11 @@ BIN=$REPO/core/server/build/install/miharchy-core/bin/miharchy-core
 
 api() {
   local port; port=$(cat "$CORE/port")
-  printf 'Authorization: Bearer %s' "$(jq -r .secret "$CORE/core.json")" \
-    | curl -s -m 120 -H @- -H 'content-type: application/json' -X POST "http://127.0.0.1:$port/api/$1" -d "${2:-}"
+  local body=(-d "${2:-}")
+  [ "${2:-}" = - ] && body=(--data-binary @-)
+  # The header comes from a pipe, so stdin stays free for the body.
+  curl -s -m 120 -H @<(printf 'Authorization: Bearer %s' "$(jq -r .secret "$CORE/core.json")") \
+    -H 'content-type: application/json' -X POST "http://127.0.0.1:$port/api/$1" "${body[@]}"
 }
 
 up() { [ -f "$CORE/port" ] && ss -ltn | grep -q ":$(cat "$CORE/port") "; }
@@ -52,5 +56,5 @@ case "${1:-}" in
     fi
     [ "$1" = wipe ] && rm -rf "$CORE"
     echo "stopped${1/stop/}; run dir $RUN" ;;
-  *) sed -n 2,9p "$0"; exit 1 ;;
+  *) sed -n 2,10p "$0"; exit 1 ;;
 esac
