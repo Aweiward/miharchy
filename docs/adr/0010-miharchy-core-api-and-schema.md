@@ -51,6 +51,7 @@ The first routes of each slice. A slice may add routes; it keeps these names.
 | #371 trackers | `tracker.list`, `tracker.login`, `tracker.logout`, `track.search`, `track.bind`, `track.update`, `track.unbind`, `track.list`, `track.progress` |
 | #374 local manga | none: the local source is source `0` in the source routes |
 | #375 settings | `settings.get`, `settings.set`, `cache.clear` |
+| #372 move from Suwayomi | `move.start`, `move.status` |
 
 ## Considered Options
 
