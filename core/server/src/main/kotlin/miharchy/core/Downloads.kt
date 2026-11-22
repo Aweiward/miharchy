@@ -69,17 +69,21 @@ class Downloads(private val db: Database, private val browse: Browse, private va
         "download.enqueue" to { input -> change { enqueue(input.longs("ids")); running = true } },
         "download.dequeue" to { input -> val ids = input.longs("ids"); change(ids) { dequeue(ids) } },
         "download.reorder" to { input ->
-            val id = input.long("chapterId")
-            val to = (input["to"] as? JsonPrimitive)?.intOrNull ?: throw ApiError(Kind.invalid, "to is a queue position from 0.")
-            change { reorder(id, to) }
+            if ("order" in input) change { reorder(input.longs("order")) }
+            else {
+                val id = input.long("chapterId")
+                val to = (input["to"] as? JsonPrimitive)?.intOrNull ?: throw ApiError(Kind.invalid, "to is a queue position from 0.")
+                change { reorder(id, to) }
+            }
         },
         "download.start" to { _ -> change { running = true } },
         "download.stop" to { _ -> change(stop = true) { running = false } },
         "download.clear" to { _ -> change(stop = true) { running = false; db.run { c -> c.update("DELETE FROM download_queue") } } },
         "download.delete" to { input ->
             val ids = input.longs("ids")
-            change(ids) { dequeue(ids); delete(ids) }
-            buildJsonObject { put("chapters", JsonArray(db.run { c -> chapterRows(c, among("ch.id"), idList(ids)) }.map { buildJsonObject { put("id", it["id"]!!); put("isDownloaded", it["isDownloaded"]!!) } })) }
+            // The status too, as every route here: the queue lost these chapters.
+            val status = change(ids) { dequeue(ids); delete(ids) }
+            JsonObject(status + ("chapters" to JsonArray(db.run { c -> chapterRows(c, among("ch.id"), idList(ids)) }.map { buildJsonObject { put("id", it["id"]!!); put("isDownloaded", it["isDownloaded"]!!) } })))
         },
     )
 
@@ -120,6 +124,18 @@ class Downloads(private val db: Database, private val browse: Browse, private va
             if (to < 0 || to > order.size) throw ApiError(Kind.invalid, "to is from 0 to ${order.size}.")
             order.add(to, id)
             c.batch("UPDATE download_queue SET position = ? WHERE chapter_id = ?", order.mapIndexed { i, ch -> listOf(i, ch) })
+        }
+    }
+
+    /**
+     * The whole queue in [order]. The window's copy can lag the queue, so ids no longer queued are skipped,
+     * and queued ids it does not name keep their order after the rest.
+     */
+    private suspend fun reorder(order: List<Long>) = db.run { c ->
+        c.transaction {
+            val now = c.query("SELECT chapter_id FROM download_queue ORDER BY position") { it.getLong(1) }
+            val named = order.distinct().filter { it in now }
+            c.batch("UPDATE download_queue SET position = ? WHERE chapter_id = ?", (named + (now - named.toSet())).mapIndexed { i, ch -> listOf(i, ch) })
         }
     }
 
