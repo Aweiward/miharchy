@@ -16,7 +16,7 @@
 // core stamps no History for an unread reset.
 // core (the last argument of each payload here) is unused: the routes are
 // miharchy-core's.
-function markPayload(chapters, read, core) {
+function markPayload(chapters, read) {
   var todo = chapters.filter(function(c) { return read ? !c.read : c.read || c.lastPage > 0 })
   if (!todo.length) return null
   var ids = todo.map(function(c) { return c.id })
@@ -25,7 +25,7 @@ function markPayload(chapters, read, core) {
 
 // One key toggles: Mihon's menu offers bookmark while any chapter lacks
 // one, else remove. null when nothing changes.
-function bookmarkPayload(chapters, core) {
+function bookmarkPayload(chapters) {
   var bookmarked = chapters.some(function(c) { return !c.bookmarked })
   var todo = chapters.filter(function(c) { return c.bookmarked !== bookmarked })
   return todo.length ? { route: "chapter.update", body: { ids: todo.map(function(c) { return c.id }), isBookmarked: bookmarked } } : null
@@ -34,7 +34,7 @@ function bookmarkPayload(chapters, core) {
 // A mark read asks for the tracker push: core's track.progress sends each
 // tracker the highest read chapter number, when it is above the tracker's.
 // null for no manga.
-function trackPayload(mangaIds, core) {
+function trackPayload(mangaIds) {
   if (!mangaIds.length) return null
   return { route: "track.progress", body: { mangaIds: unique(mangaIds) } }
 }
@@ -52,7 +52,7 @@ function afterMarkRead(setting) {
 
 // The data trackAsk reads, as done(reply). Core answers in three routes,
 // put together here in the shape trackAsk reads.
-function trackCheckLoad(send, core, mangaIds, done) {
+function trackCheckLoad(send, mangaIds, done) {
   if (!mangaIds.length) return done({ state: "ok", data: {} })
   var ids = unique(mangaIds)
   send({ route: "tracker.list" }, function(list) {

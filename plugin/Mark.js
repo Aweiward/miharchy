@@ -31,7 +31,7 @@ function initial() {
 // settings, from library.list, the library's recent unread chapters
 // (chapter.list's unread and since, so no read chapter crosses the wire
 // each minute) and one meta.get.
-function load(send, core, now, done) {
+function load(send, now, done) {
   send({ route: "library.list" }, function(lib) {
     if (lib.state !== "ok") return done(lib)
     var ids = lib.data.mangas.map(function(m) { return m.id })
@@ -134,7 +134,7 @@ function phoneCheckCommand(folder, baseline) {
 }
 
 // Core's phone baseline, in its data folder. env: { HOME, MIHARCHY_CORE_DATA }.
-function phoneBaseline(env, core) {
+function phoneBaseline(env) {
   return (env.MIHARCHY_CORE_DATA || env.HOME + "/.local/share/miharchy/core") + "/sync/phone-baseline.tachibk"
 }
 
@@ -179,8 +179,8 @@ function down(mark) {
 }
 
 // backend: "core", so a failure names miharchy-core.
-function tooltip(mark, backend) {
-  if (down(mark)) return "Miharchy: " + Model.problem(mark, "", backend).title
+function tooltip(mark) {
+  if (down(mark)) return "Miharchy: " + Model.problem(mark, "").title
   if (mark.state === "loading") return "Miharchy"
   return "Miharchy: " + (mark.count ? mark.count + " new chapter" + (mark.count === 1 ? "" : "s") : "no new chapters")
 }
@@ -192,8 +192,8 @@ var UP_NEXT_LIMIT = 3
 var DOWNLOADED_ONLY_KEY = "miharchy.downloadedOnly"
 
 // Up next's reply: UpNext.load's plus the Downloaded only meta.
-function loadUpNext(send, core, done) {
-  UpNext.load(send, true, function(r) {
+function loadUpNext(send, done) {
+  UpNext.load(send, function(r) {
     if (r.state !== "ok") return done(r)
     send({ route: "meta.get", body: { scope: "global", keys: [DOWNLOADED_ONLY_KEY] } }, function(meta) {
       if (meta.state !== "ok") return done(meta)
@@ -215,21 +215,21 @@ function reason(e, now) {
 // reply: loadUpNext()'s, null while it loads. -> the section's rows;
 // none while loading or after a failure, so the section hides. core: the
 // rows name core's ids, so the window opens them there (target()).
-function upNext(reply, now, core) {
+function upNext(reply, now) {
   if (!reply || reply.state !== "ok") return []
   var metas = (reply.data.metas && reply.data.metas.nodes) || []
   var downloadedOnly = metas.some(function(m) { return m.key === DOWNLOADED_ONLY_KEY && m.value === "true" })
   return UpNext.list(reply.data, downloadedOnly, now).slice(0, UP_NEXT_LIMIT).map(function(e) {
-    return { title: e.title, chapter: e.chapter, side: reason(e, now), open: target("peek-open", e.mangaId, e.chapterId, core) }
+    return { title: e.title, chapter: e.chapter, side: reason(e, now), open: target("peek-open", e.mangaId, e.chapterId) }
   })
 }
 
 // The popup's rows under one cursor: Up next, then the updates. section
 // heads the first row of each when Up next shows; without it the popup
 // looks as it did before Up next. open: the launcher's arguments.
-function entries(upNext, rows, core) {
+function entries(upNext, rows) {
   var updates = rows.map(function(row) {
-    return { section: "", title: row.title, chapter: row.chapter, side: row.date, open: target("open-chapter", row.mangaId, row.id, core) }
+    return { section: "", title: row.title, chapter: row.chapter, side: row.date, open: target("open-chapter", row.mangaId, row.id) }
   })
   if (!upNext.length) return updates
   var up = upNext.map(function(e, i) { return Object.assign({ section: i === 0 ? "Up next" : "" }, e) })
@@ -258,9 +258,9 @@ function follow(before, after, cursor) {
 }
 
 // { title, detail } in place of the popup's list, or null.
-function notice(mark, configPath, backend) {
+function notice(mark, configPath) {
   if (mark.state === "ok" && !mark.rows.length) return { title: "No new chapters", detail: "" }
-  return Updates.notice(mark, configPath, backend)
+  return Updates.notice(mark, configPath)
 }
 
 if (typeof module !== "undefined") {

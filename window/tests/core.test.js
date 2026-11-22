@@ -68,11 +68,11 @@ test("core's replies keep the connection states and carry the error kind", () =>
 
 test("a core view words its own failures", () => {
   const path = "/home/u/.config/miharchy/core.json";
-  assert.equal(M.problem({ state: "down" }, path, "core").title, "miharchy-core is not running");
-  assert.match(M.problem({ state: "down" }, path, "core").detail, /systemctl --user start miharchy-core/);
-  assert.match(M.problem({ state: "unauthorized" }, path, "core").detail, /secret in \/home\/u\/\.config\/miharchy\/core\.json/);
-  assert.match(M.problem({ state: "no-config" }, path, "core").detail, /core\.json is missing/);
-  assert.equal(M.problem({ state: "ok" }, path, "core"), null);
+  assert.equal(M.problem({ state: "down" }, path).title, "miharchy-core is not running");
+  assert.match(M.problem({ state: "down" }, path).detail, /systemctl --user start miharchy-core/);
+  assert.match(M.problem({ state: "unauthorized" }, path).detail, /secret in \/home\/u\/\.config\/miharchy\/core\.json/);
+  assert.match(M.problem({ state: "no-config" }, path).detail, /core\.json is missing/);
+  assert.equal(M.problem({ state: "ok" }, path), null);
 });
 
 test("a core request is one POST with the secret, and never a login", async () => {
@@ -120,7 +120,7 @@ const MANGADEX = ext({ name: "MangaDex", lang: "all", isInstalled: true, hasUpda
 const LIST = { repos: [{ indexUrl: KEY, name: "Keiyoushi" }], extensions: [MANGADEX, ext({ name: "Asura" })], errors: [] };
 
 test("on core, a first load adds Keiyoushi once, sets the flag, then lists", () => {
-  let s = E.reduce(E.initial(true), { type: "load" });
+  let s = E.reduce(E.initial(), { type: "load" });
   assert.deepEqual(E.next(s), { route: "meta.get", body: { scope: "global", keys: [E.PRESET_META] } });
   s = step(s, { metas: [] });
   assert.deepEqual(E.next(s), { route: "extensionRepo.list" });
@@ -139,15 +139,15 @@ test("on core, a first load adds Keiyoushi once, sets the flag, then lists", () 
 });
 
 test("on core, a set flag or a repo skips the preset", () => {
-  let s = step(E.reduce(E.initial(true), { type: "load" }), { metas: [{ scope: "global", owner: 0, key: E.PRESET_META, value: "true" }] });
+  let s = step(E.reduce(E.initial(), { type: "load" }), { metas: [{ scope: "global", owner: 0, key: E.PRESET_META, value: "true" }] });
   assert.deepEqual(E.next(s), { route: "extension.list" });
-  s = step(E.reduce(E.initial(true), { type: "load" }), { metas: [] });
+  s = step(E.reduce(E.initial(), { type: "load" }), { metas: [] });
   s = step(s, { repos: [{ indexUrl: KEY, name: "Keiyoushi" }] });
   assert.deepEqual(E.next(s), { route: "extension.list" });
 });
 
 function loaded(list = LIST) {
-  let s = step(E.reduce(E.initial(true), { type: "load" }), { metas: [{ key: E.PRESET_META, value: "true" }] });
+  let s = step(E.reduce(E.initial(), { type: "load" }), { metas: [{ key: E.PRESET_META, value: "true" }] });
   return step(s, list);
 }
 
@@ -158,11 +158,11 @@ test("on core, a repo that failed to fetch shows its message", () => {
 });
 
 test("on core, actions and repos use core's routes", () => {
-  assert.deepEqual(E.actionPayload("p", "install", true), { route: "extension.install", body: { pkgName: "p" } });
-  assert.deepEqual(E.actionPayload("p", "update", true), { route: "extension.update", body: { pkgName: "p" } });
-  assert.deepEqual(E.actionPayload("p", "uninstall", true), { route: "extension.remove", body: { pkgName: "p" } });
-  assert.deepEqual(E.addRepoPayload("https://r/index.min.json", true), { route: "extensionRepo.add", body: { url: "https://r/index.min.json" } });
-  assert.deepEqual(E.removeRepoPayload({ url: KEY }, true), { route: "extensionRepo.remove", body: { url: KEY } });
+  assert.deepEqual(E.actionPayload("p", "install"), { route: "extension.install", body: { pkgName: "p" } });
+  assert.deepEqual(E.actionPayload("p", "update"), { route: "extension.update", body: { pkgName: "p" } });
+  assert.deepEqual(E.actionPayload("p", "uninstall"), { route: "extension.remove", body: { pkgName: "p" } });
+  assert.deepEqual(E.addRepoPayload("https://r/index.min.json"), { route: "extensionRepo.add", body: { url: "https://r/index.min.json" } });
+  assert.deepEqual(E.removeRepoPayload({ url: KEY }), { route: "extensionRepo.remove", body: { url: KEY } });
   assert.deepEqual(E.updateAll(loaded()).payload, { route: "extension.updateAll", body: { pkgNames: [MANGADEX.pkgName] } });
 });
 
@@ -204,7 +204,7 @@ const SOURCES = [
 ];
 
 test("on core, the sources come from source.list and carry core", () => {
-  assert.deepEqual(B.sourcesPayload(true), { route: "source.list" });
+  assert.deepEqual(B.sourcesPayload(), { route: "source.list" });
   const s = B.sources(ok({ sources: SOURCES }), core, false, true);
   assert.equal(s.state, "ok");
   assert.deepEqual(s.sources[0], { id: "2499283573021220255", name: "MangaDex (EN)", lang: "en", icon: "https://raw.githubusercontent.com/k/icon.png", warning: "MIXED", supportsLatest: true, configurable: true, core: true });
@@ -247,7 +247,7 @@ test("on core, filters parse from the host's JSON and go back as every state", (
   assert.equal(p.state, "ok");
   assert.deepEqual(p.widgets.map((w) => w.kind), ["header", "sort", "choice", "separator", "group", "text"]);
   assert.deepEqual(p.widgets[4].children.map((w) => [w.kind, w.value]), [["tristate", "IGNORE"], ["bool", true]]);
-  assert.deepEqual(W.filterChanges(p.widgets, true), [], "nothing changed, nothing sent");
+  assert.deepEqual(W.filterChanges(p.widgets), [], "nothing changed, nothing sent");
 
   const rows = W.rows(p.widgets, { "4": true });
   const action = rows.find((r) => r.label === "Action");
@@ -255,11 +255,11 @@ test("on core, filters parse from the host's JSON and go back as every state", (
   w = W.activate(w, W.rows(w, { "2": true }).find((r) => r.label === "Ongoing")).widgets;
   w = W.setText(w, [5], "Oda");
   assert.equal(W.changedCount(w), 3);
-  assert.deepEqual(W.filterChanges(w, true), [
+  assert.deepEqual(W.filterChanges(w), [
     {}, { state: { index: 0, ascending: false } }, { state: 1 }, {},
     { filters: [{ state: 1 }, { state: true }] }, { state: "Oda" }
   ]);
-  assert.deepEqual(W.filterChanges(W.reset(w), true), []);
+  assert.deepEqual(W.filterChanges(W.reset(w)), []);
 });
 
 const SETTINGS = [
@@ -300,8 +300,8 @@ test("on core, settings parse from the host's JSON and save one by key", () => {
 
 test("on core, global choices live in core's global metas", () => {
   const table = [{ key: "pinnedSources", default: "[]" }];
-  assert.deepEqual(P.loadPayload(table, undefined, true), { route: "meta.get", body: { scope: "global", keys: ["miharchy.pinnedSources"] } });
-  assert.deepEqual(P.savePayload("pinnedSources", '["9"]', undefined, true), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.pinnedSources", value: '["9"]' }] } });
+  assert.deepEqual(P.loadPayload(table, undefined), { route: "meta.get", body: { scope: "global", keys: ["miharchy.pinnedSources"] } });
+  assert.deepEqual(P.savePayload("pinnedSources", '["9"]', undefined), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.pinnedSources", value: '["9"]' }] } });
   assert.deepEqual(P.read(table, { metas: [{ scope: "global", owner: 0, key: "miharchy.pinnedSources", value: '["9"]' }] }, P.defaults(table)), { pinnedSources: '["9"]' });
 });
 
@@ -312,7 +312,7 @@ const R = load("Reader.js");
 
 test("on core, a manga's choices load with the global ones, and the manga's win by scope", () => {
   const table = [{ key: "chapterSort", default: "source" }, { key: "chapterFilterRead", default: "off" }];
-  assert.deepEqual(P.loadPayload(table, 7, true), { route: "meta.get", body: { queries: [
+  assert.deepEqual(P.loadPayload(table, 7), { route: "meta.get", body: { queries: [
     { scope: "global", keys: ["miharchy.chapterSort", "miharchy.chapterFilterRead"] },
     { scope: "manga", owners: [7], keys: ["miharchy.chapterSort", "miharchy.chapterFilterRead"] }
   ] } });
@@ -322,18 +322,18 @@ test("on core, a manga's choices load with the global ones, and the manga's win 
     { scope: "global", owner: 0, key: "miharchy.chapterFilterRead", value: "include" }
   ];
   assert.deepEqual(P.read(table, { metas }, P.defaults(table)), { chapterSort: "number", chapterFilterRead: "include" });
-  assert.deepEqual(P.savePayload("notes", "good", 7, true), { route: "meta.set", body: { metas: [{ scope: "manga", owner: 7, key: "miharchy.notes", value: "good" }] } });
-  assert.deepEqual(P.resetPayload(table, [7, 8], true), { route: "meta.delete", body: { scope: "manga", owners: [7, 8], keys: ["miharchy.chapterSort", "miharchy.chapterFilterRead"] } });
-  assert.equal(P.resetPayload(table, [], true), null);
+  assert.deepEqual(P.savePayload("notes", "good", 7), { route: "meta.set", body: { metas: [{ scope: "manga", owner: 7, key: "miharchy.notes", value: "good" }] } });
+  assert.deepEqual(P.resetPayload(table, [7, 8]), { route: "meta.delete", body: { scope: "manga", owners: [7, 8], keys: ["miharchy.chapterSort", "miharchy.chapterFilterRead"] } });
+  assert.equal(P.resetPayload(table, []), null);
 });
 
 test("on core, marks are one chapter.update each", () => {
   const ch = [{ id: 1, read: false, lastPage: 0 }, { id: 2, read: true, lastPage: 4 }, { id: 3, read: true, lastPage: 0, bookmarked: true }];
-  assert.deepEqual(C.markPayload(ch, true, true), { route: "chapter.update", body: { ids: [1], isRead: true } });
-  assert.deepEqual(C.markPayload(ch, false, true), { route: "chapter.update", body: { ids: [2, 3], isRead: false, lastPageRead: 0 } });
-  assert.equal(C.markPayload([ch[0]], false, true), null);
-  assert.deepEqual(C.bookmarkPayload(ch, true), { route: "chapter.update", body: { ids: [1, 2], isBookmarked: true } });
-  assert.deepEqual(C.bookmarkPayload([ch[2]], true), { route: "chapter.update", body: { ids: [3], isBookmarked: false } });
+  assert.deepEqual(C.markPayload(ch, true), { route: "chapter.update", body: { ids: [1], isRead: true } });
+  assert.deepEqual(C.markPayload(ch, false), { route: "chapter.update", body: { ids: [2, 3], isRead: false, lastPageRead: 0 } });
+  assert.equal(C.markPayload([ch[0]], false), null);
+  assert.deepEqual(C.bookmarkPayload(ch), { route: "chapter.update", body: { ids: [1, 2], isBookmarked: true } });
+  assert.deepEqual(C.bookmarkPayload([ch[2]]), { route: "chapter.update", body: { ids: [3], isBookmarked: false } });
 });
 
 const MANGA = {
@@ -347,7 +347,7 @@ const MANGA = {
 };
 
 test("on core, the detail reads manga.get, refreshes once from a source, and toggles the library", () => {
-  let d = B.detail(1, true, true);
+  let d = B.detail(1, true);
   assert.deepEqual(B.detailPayload(d), { route: "manga.get", body: { id: 1 } });
   d = B.reduceDetail(d, { type: "reply", config: core, now: 0, reply: ok({ manga: MANGA }) });
   assert.deepEqual(B.detailPayload(d), { route: "manga.refresh", body: { id: 1 } }, "opened from a source: one refresh");
@@ -368,7 +368,7 @@ test("on core, the detail reads manga.get, refreshes once from a source, and tog
   assert.equal(d.manga.inLibrary, true);
 
   // A missing source: no extension lookup on core.
-  const gone = B.reduceDetail(B.detail(1, false, true), { type: "reply", config: core, now: 0, reply: ok({ manga: Object.assign({}, MANGA, { source: null }) }) });
+  const gone = B.reduceDetail(B.detail(1, false), { type: "reply", config: core, now: 0, reply: ok({ manga: Object.assign({}, MANGA, { source: null }) }) });
   assert.equal(gone.step, null);
   assert.equal(gone.manga.missing, true);
 });
@@ -381,7 +381,7 @@ test("on core, a Cloudflare page says core cannot pass it yet", () => {
 
 test("on core, the reader loads pages, saves, bookmarks and keeps its mode on core, and pushes the trackers on core", () => {
   const ch = B.toChapters(MANGA.chapters);
-  let r = R.open(1, ch, 12, "paged-rtl", false, "Fire Mage", false, true);
+  let r = R.open(1, ch, 12, "paged-rtl", false, "Fire Mage", false);
   assert.deepEqual(R.pagesPayload(r), { route: "chapter.pages", body: { id: 12 } });
   r = R.reduce(r, { type: "pages", config: core, now: 0, reply: ok({ pages: ["/api/page/12/0", "/api/page/12/1", "/api/page/12/2", "/api/page/12/3", "/api/page/12/4"], chapter: { id: 12, isRead: false, lastPageRead: 3 } }) });
   assert.equal(r.state, "ok");
@@ -394,7 +394,7 @@ test("on core, the reader loads pages, saves, bookmarks and keeps its mode on co
   assert.deepEqual(R.bookmarkPayload(r), { route: "chapter.update", body: { ids: [12], isBookmarked: true } });
   assert.deepEqual(R.modePayload(r), { route: "meta.set", body: { metas: [{ scope: "manga", owner: 1, key: "miharchy.readingMode", value: "paged-rtl" }] } });
   // Incognito saves nothing, on core too.
-  const quiet = R.reduce(R.open(1, ch, 12, "paged-rtl", true, "", false, true), { type: "pages", config: core, now: 0, reply: ok({ pages: ["/api/page/12/0"], chapter: { id: 12, isRead: false, lastPageRead: 0 } }) });
+  const quiet = R.reduce(R.open(1, ch, 12, "paged-rtl", true, "", false), { type: "pages", config: core, now: 0, reply: ok({ pages: ["/api/page/12/0"], chapter: { id: 12, isRead: false, lastPageRead: 0 } }) });
   assert.equal(R.savePayload(quiet), null);
 });
 
@@ -415,7 +415,7 @@ const coreCategories = [
 ];
 
 test("on core, the Library reads library.list into manga and categories", () => {
-  assert.deepEqual(M.libraryPayload(true), { route: "library.list" });
+  assert.deepEqual(M.libraryPayload(), { route: "library.list" });
   const fromCore = M.reduce(M.initial(), { type: "response", config: core, reply: { state: "ok", data: { categories: coreCategories, mangas: [coreManga] } } });
   assert.equal(fromCore.state, "ok");
   assert.deepEqual(fromCore.manga.map((m) => [m.id, m.title, m.categories, m.total, m.unread, m.tracks, m.source]), [[1, "Manga 1", [2], 3, 2, 0, "MangaDex (EN)"]]);
@@ -427,26 +427,26 @@ test("on core, the Library reads library.list into manga and categories", () => 
 });
 
 test("on core, the Library's and Categories' changes go to core's routes", () => {
-  assert.deepEqual(L.chaptersPayload([1, 2], true), { route: "chapter.list", body: { mangaIds: [1, 2] } });
+  assert.deepEqual(L.chaptersPayload([1, 2]), { route: "chapter.list", body: { mangaIds: [1, 2] } });
   assert.deepEqual(L.chapterNodes({ chapters: [{ id: 5 }] }), [{ id: 5 }]);
-  assert.deepEqual(L.removePayload([1], true), { route: "manga.update", body: { ids: [1], inLibrary: false } });
-  assert.deepEqual(L.categoryPayload({ id: 2, state: "all" }, [1], true), { route: "manga.update", body: { ids: [1], removeFromCategories: [2] } });
-  assert.deepEqual(L.categoryPayload({ id: 2, state: "some" }, [1], true), { route: "manga.update", body: { ids: [1], addToCategories: [2] } });
-  assert.deepEqual(L.moveToPayload(1, 0, [{ id: 2 }], true), { route: "manga.update", body: { ids: [1], clearCategories: true, addToCategories: [] } });
+  assert.deepEqual(L.removePayload([1]), { route: "manga.update", body: { ids: [1], inLibrary: false } });
+  assert.deepEqual(L.categoryPayload({ id: 2, state: "all" }, [1]), { route: "manga.update", body: { ids: [1], removeFromCategories: [2] } });
+  assert.deepEqual(L.categoryPayload({ id: 2, state: "some" }, [1]), { route: "manga.update", body: { ids: [1], addToCategories: [2] } });
+  assert.deepEqual(L.moveToPayload(1, 0, [{ id: 2 }]), { route: "manga.update", body: { ids: [1], clearCategories: true, addToCategories: [] } });
 
   const cats = [{ id: 2, name: "Drama", download: "UNSET", update: "UNSET", keep: false }, { id: 3, name: "Action", download: "UNSET", update: "UNSET", keep: false }];
-  assert.deepEqual(Cat.createPayload("New", true), { route: "category.create", body: { name: "New" } });
+  assert.deepEqual(Cat.createPayload("New"), { route: "category.create", body: { name: "New" } });
   assert.equal(Cat.createdId({ category: { id: 9 } }), 9);
-  assert.deepEqual(Cat.renamePayload(2, "X", true), { route: "category.update", body: { id: 2, name: "X" } });
-  assert.deepEqual(Cat.deletePayload(2, true), { route: "category.delete", body: { id: 2 } });
-  assert.deepEqual(Cat.includePayload(cats, 2, "update", true), { route: "category.update", body: { id: 2, includeInUpdate: "INCLUDE" } });
-  assert.deepEqual(Cat.keepPayload(cats, 3, true), { route: "meta.set", body: { metas: [{ scope: "category", owner: 3, key: "miharchy.keepDownloads", value: "true" }] } });
-  assert.deepEqual(Cat.movePayload(cats, 1, -1, true), { route: "category.reorder", body: { id: 3, position: 1 } });
-  assert.equal(Cat.movePayload(cats, 0, -1, true), null);
+  assert.deepEqual(Cat.renamePayload(2, "X"), { route: "category.update", body: { id: 2, name: "X" } });
+  assert.deepEqual(Cat.deletePayload(2), { route: "category.delete", body: { id: 2 } });
+  assert.deepEqual(Cat.includePayload(cats, 2, "update"), { route: "category.update", body: { id: 2, includeInUpdate: "INCLUDE" } });
+  assert.deepEqual(Cat.keepPayload(cats, 3), { route: "meta.set", body: { metas: [{ scope: "category", owner: 3, key: "miharchy.keepDownloads", value: "true" }] } });
+  assert.deepEqual(Cat.movePayload(cats, 1, -1), { route: "category.reorder", body: { id: 3, position: 1 } });
+  assert.equal(Cat.movePayload(cats, 0, -1), null);
 });
 
 test("on core, the detail's category toggle sends manga.update and reads core's reply", () => {
-  let d = Object.assign(B.detail(1, false, true), { manga: { inLibrary: true, categories: [2] } });
+  let d = Object.assign(B.detail(1, false), { manga: { inLibrary: true, categories: [2] } });
   assert.deepEqual(B.categoryPayload(d, 2), { route: "manga.update", body: { ids: [1], removeFromCategories: [2] } });
   assert.deepEqual(B.categoryPayload(d, 3), { route: "manga.update", body: { ids: [1], addToCategories: [3] } });
   d = B.reduceDetail(d, { type: "categories-reply", reply: { state: "ok", data: { mangas: [{ id: 1, categories: [2, 3] }] } } });
@@ -468,25 +468,25 @@ test("on core, Up next loads the library, its chapters and the global chapter pr
     "meta.get": { metas: [] }
   };
   let out;
-  U.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, true, (r) => { out = r; });
+  U.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, (r) => { out = r; });
   assert.deepEqual(sent.map((p) => p.route), ["library.list", "chapter.list", "meta.get"]);
   assert.deepEqual(sent[1].body, { mangaIds: [1, 2] });
   assert.equal(sent[2].body.scope, "global");
   const list = U.list(out.data, false, 1e6 * 1000);
   assert.deepEqual(list.map((e) => [e.mangaId, e.chapterId, e.tier, e.page, e.pages]), [[1, 11, 1, 3, 9]]);
   let failed;
-  U.load((p, done) => done(p.route === "chapter.list" ? { state: "down", message: "x" } : { state: "ok", data: replies[p.route] }), true, (r) => { failed = r; });
+  U.load((p, done) => done(p.route === "chapter.list" ? { state: "down", message: "x" } : { state: "ok", data: replies[p.route] }), (r) => { failed = r; });
   assert.equal(failed.state, "down");
   const empty = [];
   let none;
-  U.load((p, done) => { empty.push(p.route); done({ state: "ok", data: { mangas: [], categories: [] } }); }, true, (r) => { none = r; });
+  U.load((p, done) => { empty.push(p.route); done({ state: "ok", data: { mangas: [], categories: [] } }); }, (r) => { none = r; });
   assert.deepEqual(empty, ["library.list"]);
   assert.deepEqual(U.list(none.data, false, 1e6 * 1000), []);
 });
 
 test("on core, the reading card pages core's read history by offset", () => {
-  assert.deepEqual(RC.payload(null, true), { route: "history.list", body: { readOnly: true, limit: 200, offset: 0 } });
-  assert.deepEqual(RC.payload(200, true).body.offset, 200);
+  assert.deepEqual(RC.payload(null), { route: "history.list", body: { readOnly: true, limit: 200, offset: 0 } });
+  assert.deepEqual(RC.payload(200).body.offset, 200);
   const data = { chapters: [{ id: 1, isRead: true, lastReadAt: 500, manga: { id: 3, thumbnailUrl: "/api/cover/3", inLibrary: true, unreadCount: 2 } }], hasNextPage: true };
   assert.deepEqual(RC.rows(data), [{ at: 500, mangaId: 3, thumbnailUrl: "/api/cover/3", inLibrary: true, unread: 2 }]);
   assert.deepEqual(RC.pageInfo(data, 200), { hasNextPage: true, endCursor: 400 });
@@ -507,18 +507,18 @@ test("on core, History loads the cleared cutoff and history.list, hides and clea
     ] }
   };
   let reply;
-  H.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, true, (r) => { reply = r; });
+  H.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, (r) => { reply = r; });
   assert.deepEqual(sent, [{ route: "meta.get", body: { scope: "global", keys: [H.CLEARED_KEY] } }, { route: "history.list", body: { limit: 500 } }]);
   const h = H.reduce(H.initial(), { type: "reply", reply, config: core });
   assert.deepEqual(h.entries.map((e) => [e.mangaId, e.chapterId, e.page, e.at]), [[3, 12, 4, 300]]);
   assert.equal(h.entries[0].cover, "http://127.0.0.1:4591/api/cover/3");
-  assert.deepEqual(H.removePayload(h.entries[0], true), { route: "meta.set", body: { metas: [{ scope: "manga", owner: 3, key: H.HIDDEN_KEY, value: "300" }] } });
-  assert.deepEqual(H.clearPayload(h.entries, true), { route: "meta.set", body: { metas: [{ scope: "global", key: H.CLEARED_KEY, value: "300" }] } });
-  assert.equal(H.clearPayload([], true), null);
+  assert.deepEqual(H.removePayload(h.entries[0]), { route: "meta.set", body: { metas: [{ scope: "manga", owner: 3, key: H.HIDDEN_KEY, value: "300" }] } });
+  assert.deepEqual(H.clearPayload(h.entries), { route: "meta.set", body: { metas: [{ scope: "global", key: H.CLEARED_KEY, value: "300" }] } });
+  assert.equal(H.clearPayload([]), null);
   let failed;
-  H.load((p, done) => done(p.route === "history.list" ? { state: "down" } : { state: "ok", data: replies[p.route] }), true, (r) => { failed = r; });
+  H.load((p, done) => done(p.route === "history.list" ? { state: "down" } : { state: "ok", data: replies[p.route] }), (r) => { failed = r; });
   assert.equal(failed.state, "down");
-  assert.equal(H.notice(H.reduce(H.initial(), { type: "reply", reply: { state: "down" } }), "core.json", "", "core").title, "miharchy-core is not running");
+  assert.equal(H.notice(H.reduce(H.initial(), { type: "reply", reply: { state: "down" } }), "core.json", "").title, "miharchy-core is not running");
 });
 
 const D = load("Downloads.js");
@@ -538,11 +538,11 @@ test("on core, the Downloads view reads the plain status from routes and the top
   assert.equal(live.running, false);
   assert.deepEqual(live.items.map((i) => i.chapterId), [2]);
   // The reason comes with the item: nothing is probed.
-  const f = D.failed(q.items, {}, true);
+  const f = D.failed(q.items, {});
   assert.deepEqual(f.reasons[2], { kind: "network", text: "No connection to the source" });
-  assert.deepEqual(D.failed([D.reduce(D.initial(), { type: "reply", reply: { state: "ok", data: { state: "STOPPED", queue: [coreItem(5, "ERROR")] } } }).items[0]], {}, true).reasons[5], { kind: "other", text: "Unknown error" });
+  assert.deepEqual(D.failed([D.reduce(D.initial(), { type: "reply", reply: { state: "ok", data: { state: "STOPPED", queue: [coreItem(5, "ERROR")] } } }).items[0]], {}).reasons[5], { kind: "other", text: "Unknown error" });
   // The delete reply carries the status too.
-  assert.equal(D.statusText(q.items[1], f.reasons[2], false, true), D.progressText(q.items[1]) + "   No connection to the source", "no Suwayomi hint on core");
+  assert.equal(D.statusText(q.items[1], f.reasons[2], false), D.progressText(q.items[1]) + "   No connection to the source", "no Suwayomi hint on core");
   const del = D.reduce(q, { type: "reply", reply: { state: "ok", data: { state: "STOPPED", queue: [], chapters: [{ id: 1, isDownloaded: false }] } } });
   assert.deepEqual(del.items, []);
 });
@@ -550,18 +550,18 @@ test("on core, the Downloads view reads the plain status from routes and the top
 test("on core, every download payload is a route", () => {
   const chapters = [{ id: 1, downloaded: false }, { id: 2, downloaded: true }];
   const items = D.reduce(D.initial(), { type: "reply", reply: { state: "ok", data: { state: "STARTED", queue: [coreItem(1, "QUEUED"), coreItem(9, "QUEUED")] } } });
-  assert.deepEqual(D.statusPayload(true), { route: "download.queue" });
-  assert.deepEqual(D.clearPayload(true), { route: "download.clear" });
-  assert.deepEqual(D.enqueuePayload(chapters, true), { route: "download.enqueue", body: { ids: [1] } });
-  assert.equal(D.enqueuePayload([chapters[1]], true), null);
-  assert.deepEqual(D.removePayload(chapters, items.items, true), { route: "download.delete", body: { ids: [1, 2] } });
-  assert.equal(D.removePayload([{ id: 5, downloaded: false }], items.items, true), null);
-  assert.deepEqual(D.dequeuePayload(1, true), { route: "download.dequeue", body: { ids: [1] } });
-  assert.deepEqual(D.retryPayload([2], true), { route: "download.enqueue", body: { ids: [2] } });
-  assert.deepEqual(D.togglePayload(items, true), { route: "download.stop" });
-  assert.deepEqual(D.togglePayload({ running: false }, true), { route: "download.start" });
-  assert.deepEqual(D.orderPayload(items, [9, 1], true), { route: "download.reorder", body: { order: [9, 1] } });
-  assert.equal(D.orderPayload(items, [1, 9], true), null);
+  assert.deepEqual(D.statusPayload(), { route: "download.queue" });
+  assert.deepEqual(D.clearPayload(), { route: "download.clear" });
+  assert.deepEqual(D.enqueuePayload(chapters), { route: "download.enqueue", body: { ids: [1] } });
+  assert.equal(D.enqueuePayload([chapters[1]]), null);
+  assert.deepEqual(D.removePayload(chapters, items.items), { route: "download.delete", body: { ids: [1, 2] } });
+  assert.equal(D.removePayload([{ id: 5, downloaded: false }], items.items), null);
+  assert.deepEqual(D.dequeuePayload(1), { route: "download.dequeue", body: { ids: [1] } });
+  assert.deepEqual(D.retryPayload([2]), { route: "download.enqueue", body: { ids: [2] } });
+  assert.deepEqual(D.togglePayload(items), { route: "download.stop" });
+  assert.deepEqual(D.togglePayload({ running: false }), { route: "download.start" });
+  assert.deepEqual(D.orderPayload(items, [9, 1]), { route: "download.reorder", body: { order: [9, 1] } });
+  assert.equal(D.orderPayload(items, [1, 9]), null);
 });
 
 test("on core, delete after read loads chapters and the categories' metas, and deletes by route", () => {
@@ -575,18 +575,18 @@ test("on core, delete after read loads chapters and the categories' metas, and d
     "library.list": { categories: [{ id: 7, meta: [{ key: D.KEEP_KEY, value: "true" }] }], mangas: [{ id: 3, categories: [] }, { id: 4, categories: [7] }] }
   };
   let reply;
-  D.autoDeleteLoad((p, done) => { sent.push(p.route); done({ state: "ok", data: replies[p.route] }); }, true, [1, 2, 3], (r) => { reply = r; });
+  D.autoDeleteLoad((p, done) => { sent.push(p.route); done({ state: "ok", data: replies[p.route] }); }, [1, 2, 3], (r) => { reply = r; });
   assert.deepEqual(sent, ["chapter.list", "library.list"]);
   // Manga 4's category keeps its downloads; chapter 3 is unread.
-  assert.deepEqual(D.autoDeletePayload(reply.data, false, [], true), { route: "download.delete", body: { ids: [1] } });
-  assert.deepEqual(D.autoDeletePayload(reply.data, false, [3], true), { route: "download.delete", body: { ids: [1, 3] } });
+  assert.deepEqual(D.autoDeletePayload(reply.data, false, []), { route: "download.delete", body: { ids: [1] } });
+  assert.deepEqual(D.autoDeletePayload(reply.data, false, [3]), { route: "download.delete", body: { ids: [1, 3] } });
   let down;
-  D.autoDeleteLoad((p, done) => done(p.route === "library.list" ? { state: "down" } : { state: "ok", data: replies[p.route] }), true, [1], (r) => { down = r; });
+  D.autoDeleteLoad((p, done) => done(p.route === "library.list" ? { state: "down" } : { state: "ok", data: replies[p.route] }), [1], (r) => { down = r; });
   assert.equal(down.state, "down");
 });
 
 test("on core, a next-chapters run refreshes, reads and settles through routes", () => {
-  assert.deepEqual(N.refreshPayload(3, true), { route: "manga.refresh", body: { id: 3 } });
+  assert.deepEqual(N.refreshPayload(3), { route: "manga.refresh", body: { id: 3 } });
   const replies = {
     "chapter.list": { chapters: [
       { id: 1, mangaId: 3, name: "Ch. 1", chapterNumber: 1, uploadDate: 1, isRead: false, isBookmarked: false, lastPageRead: 0, isDownloaded: false, scanlator: null, sourceOrder: 1 },
@@ -598,13 +598,13 @@ test("on core, a next-chapters run refreshes, reads and settles through routes",
   const sent = [];
   const send = (p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); };
   let read;
-  N.readLoad(send, true, [3, 4], (r) => { read = r; });
+  N.readLoad(send, [3, 4], (r) => { read = r; });
   assert.deepEqual(sent.map((p) => p.route), ["chapter.list", "meta.get"]);
   assert.deepEqual(sent[0].body, { mangaIds: [3, 4] });
   assert.deepEqual(read.data.mangas.nodes.map((m) => [m.id, m.chapters.nodes.map((c) => c.id)]), [[3, [1]], [4, [2]]]);
   assert.deepEqual(N.pick(read.data, { id: "unread" }, 0, []).map((c) => c.id), [1], "a chapter on disk is not queued again");
   let settled;
-  N.settleLoad(send, true, { queued: [1, 2, 5] }, (r) => { settled = r; });
+  N.settleLoad(send, { queued: [1, 2, 5] }, (r) => { settled = r; });
   assert.deepEqual(sent.slice(2).map((p) => p.route), ["download.queue", "chapter.list"]);
   assert.deepEqual(sent[3].body, { ids: [1, 2, 5] });
   // Core sends no DEQUEUED: a run chapter that left the queue settles at once.
@@ -650,8 +650,8 @@ test("on core, the detail reads a delete's chapters beside the status", () => {
 
 test("on core, a check for new chapters is update.start, with categories only when named", () => {
   const Ups = load("Updates.js");
-  assert.deepEqual(Ups.checkPayload(null, true), { route: "update.start", body: {} });
-  assert.deepEqual(Ups.checkPayload([0, 4], true), { route: "update.start", body: { categories: [0, 4] } });
+  assert.deepEqual(Ups.checkPayload(null), { route: "update.start", body: {} });
+  assert.deepEqual(Ups.checkPayload([0, 4]), { route: "update.start", body: { categories: [0, 4] } });
 });
 
 test("on core, Updates loads its list from library.list, chapter.list, update.status and the skip metas", () => {
@@ -668,7 +668,7 @@ test("on core, Updates loads its list from library.list, chapter.list, update.st
     "meta.get": { metas: [{ scope: "global", owner: 0, key: "miharchy.excludeCompleted", value: "false" }] },
   };
   let out;
-  Ups.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, true, now, (r) => { out = r; });
+  Ups.load((p, done) => { sent.push(p); done({ state: "ok", data: replies[p.route] }); }, now, (r) => { out = r; });
   assert.deepEqual(sent.map((p) => p.route), ["library.list", "chapter.list", "update.status", "meta.get"]);
   assert.deepEqual(sent[1].body, { mangaIds: [1] });
   const u = Ups.reduce(Ups.initial(), { type: "list", reply: out, config: { url: "http://127.0.0.1:4591", secret: "s", backend: "core" }, now, prefs: { updatesFilterUnread: "include", updatesIncludedCategories: "[3]" } });
@@ -677,16 +677,16 @@ test("on core, Updates loads its list from library.list, chapter.list, update.st
   assert.deepEqual(u.skipReasons, ["unread chapters", "not started"]);
 
   let failed;
-  Ups.load((p, done) => done(p.route === "update.status" ? { state: "error", kind: "internal", message: "boom" } : { state: "ok", data: replies[p.route] }), true, now, (r) => { failed = r; });
+  Ups.load((p, done) => done(p.route === "update.status" ? { state: "error", kind: "internal", message: "boom" } : { state: "ok", data: replies[p.route] }), now, (r) => { failed = r; });
   assert.equal(failed.message, "boom");
   let empty;
-  Ups.load((p, done) => { assert.notEqual(p.route, "chapter.list"); done({ state: "ok", data: p.route === "library.list" ? { mangas: [] } : replies[p.route] }); }, true, now, (r) => { empty = r; });
+  Ups.load((p, done) => { assert.notEqual(p.route, "chapter.list"); done({ state: "ok", data: p.route === "library.list" ? { mangas: [] } : replies[p.route] }); }, now, (r) => { empty = r; });
   assert.deepEqual(empty.data.chapters.nodes, []);
 });
 
 test("on core, Updates follows the flat run status and stops with update.stop", () => {
   const Ups = load("Updates.js");
-  assert.deepEqual(Ups.stopPayload(true), { route: "update.stop" });
+  assert.deepEqual(Ups.stopPayload(), { route: "update.stop" });
   let u = Ups.reduce(Ups.initial(), { type: "checking" });
   // The start reply: core has no all-zero opening result.
   const running = Ups.reduce(u, { type: "live", data: { isRunning: true, finishedJobs: 0, totalJobs: 4, skippedMangasCount: 1, started: true } });
@@ -701,7 +701,7 @@ test("on core, Updates follows the flat run status and stops with update.stop", 
   assert.equal(done.stopped, null, "an end is no stop");
   // An instant run of nothing ends the check too.
   assert.equal(Ups.reduce(u, { type: "live", data: { isRunning: false, finishedJobs: 0, totalJobs: 0, skippedMangasCount: 0 } }).checking, false);
-  assert.equal(Ups.notice({ state: "no-config", rows: [] }, "/x/core.json", "core").title, M.problem({ state: "no-config" }, "/x/core.json", "core").title);
+  assert.equal(Ups.notice({ state: "no-config", rows: [] }, "/x/core.json").title, M.problem({ state: "no-config" }, "/x/core.json").title);
 });
 
 // #383: tracker logins and the tracking panel on core's routes.
@@ -724,8 +724,8 @@ const TRACKERS = [
 ];
 
 test("on core, Settings lists the trackers and logs in by callback and by password on core's routes", () => {
-  let s = T.initial(true);
-  assert.deepEqual(T.listPayload(true), { route: "tracker.list" });
+  let s = T.initial();
+  assert.deepEqual(T.listPayload(), { route: "tracker.list" });
   s = T.reduce(s, { type: "list", reply: ok({ trackers: TRACKERS }) });
   assert.deepEqual(s.list.map((t) => [t.id, t.loggedIn, t.authUrl !== ""]), [[1, false, true], [2, true, false], [7, false, false]]);
 
@@ -747,20 +747,20 @@ test("on core, Settings lists the trackers and logs in by callback and by passwo
   assert.equal(loggedIn.list[0].loggedIn, true);
 
   // Username and password.
-  let u = T.begin(T.reduce(T.initial(true), { type: "list", reply: ok({ trackers: TRACKERS }) }), 2);
+  let u = T.begin(T.reduce(T.initial(), { type: "list", reply: ok({ trackers: TRACKERS }) }), 2);
   u = T.reduce(T.reduce(u, { type: "commit", text: "reader" }), { type: "commit", text: "pw" });
   assert.deepEqual(T.loginPayload(u), { route: "tracker.login", body: { trackerId: 7, username: "reader", password: "pw" } });
 
   // Logout.
-  let o = T.begin(T.reduce(T.initial(true), { type: "list", reply: ok({ trackers: TRACKERS }) }), 1);
+  let o = T.begin(T.reduce(T.initial(), { type: "list", reply: ok({ trackers: TRACKERS }) }), 1);
   assert.deepEqual(T.loginPayload(o), { route: "tracker.logout", body: { trackerId: 2 } });
   o = T.reduce(T.reduce(o, { type: "sent" }), { type: "reply", reply: ok({ tracker: Object.assign({}, TRACKERS[1], { isLoggedIn: false }) }) });
   assert.equal(o.list[1].loggedIn, false);
 
   // No core.json: the section says so instead of loading for ever.
-  const none = T.reduce(T.initial(true), { type: "no-config" });
+  const none = T.reduce(T.initial(), { type: "no-config" });
   assert.equal(none.state, "no-config");
-  assert.equal(M.problem(none, "/x/core.json", "core").title, "No miharchy-core config");
+  assert.equal(M.problem(none, "/x/core.json").title, "No miharchy-core config");
 });
 
 test("on core, the tracking panel loads, searches, binds, updates and unbinds on core's routes", async () => {
@@ -770,7 +770,7 @@ test("on core, the tracking panel loads, searches, binds, updates and unbinds on
     "tracker.list": ok({ trackers: TRACKERS }),
     "track.list": (b) => { assert.deepEqual(b, { mangaIds: [5] }); return ok({ tracks: [record] }); }
   }, sent);
-  let p = T.panel(5, "Frieren", true);
+  let p = T.panel(5, "Frieren");
   const reply = await new Promise((resolve) => T.panelLoad(send, p, resolve));
   p = T.act(p, { type: "loaded", reply }).panel;
   // Logged in, or holding a track: AniList only.
@@ -800,13 +800,13 @@ test("on core, the tracking panel loads, searches, binds, updates and unbinds on
   assert.equal(p.rows[0].record, null);
 
   // A failed load keeps core's connection state.
-  const down = await new Promise((resolve) => T.panelLoad(routeSend({ "tracker.list": M.coreReply(0, "") }, []), T.panel(5, "", true), resolve));
-  assert.equal(T.act(T.panel(5, "", true), { type: "loaded", reply: down }).panel.state, "down");
+  const down = await new Promise((resolve) => T.panelLoad(routeSend({ "tracker.list": M.coreReply(0, "") }, []), T.panel(5, ""), resolve));
+  assert.equal(T.act(T.panel(5, ""), { type: "loaded", reply: down }).panel.state, "down");
 });
 
 test("on core, a mark read pushes or asks the trackers through core's routes", async () => {
-  assert.deepEqual(C.trackPayload([5, 6, 5], true), { route: "track.progress", body: { mangaIds: [5, 6] } });
-  assert.equal(C.trackPayload([], true), null);
+  assert.deepEqual(C.trackPayload([5, 6, 5]), { route: "track.progress", body: { mangaIds: [5, 6] } });
+  assert.equal(C.trackPayload([]), null);
   const sent = [];
   const send = routeSend({
     "tracker.list": ok({ trackers: TRACKERS }),
@@ -821,17 +821,17 @@ test("on core, a mark read pushes or asks the trackers through core's routes", a
       { id: 60, mangaId: 6, chapterNumber: 10, isRead: true }
     ] })
   }, sent);
-  const reply = await new Promise((resolve) => C.trackCheckLoad(send, true, [5, 6], resolve));
+  const reply = await new Promise((resolve) => C.trackCheckLoad(send, [5, 6], resolve));
   assert.equal(reply.state, "ok");
   assert.deepEqual(C.trackAsk(reply.data), { mangaIds: [5], chapter: 9 });
   assert.deepEqual(sent.map((x) => x.route), ["tracker.list", "track.list", "chapter.list"]);
-  const failed = await new Promise((resolve) => C.trackCheckLoad(routeSend({ "tracker.list": coreFail(500, "internal", "x") }, []), true, [5], resolve));
+  const failed = await new Promise((resolve) => C.trackCheckLoad(routeSend({ "tracker.list": coreFail(500, "internal", "x") }, []), [5], resolve));
   assert.notEqual(failed.state, "ok");
 });
 
 test("a core tracker request reaches core's route with the secret", async () => {
   const requests = install({ "tracker.list": () => ({ trackers: TRACKERS }) });
-  const reply = await new Promise((resolve) => S2.send(core, T.listPayload(true), resolve));
+  const reply = await new Promise((resolve) => S2.send(core, T.listPayload(), resolve));
   assert.equal(reply.data.trackers.length, 3);
   assert.equal(requests[0].url, "http://127.0.0.1:4591/api/tracker.list");
 });

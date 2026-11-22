@@ -140,7 +140,7 @@ Rectangle {
   // core: unused, the manga is miharchy-core's.
   function openManga(mangaId, fromSource, core) {
     dupes = []
-    detail = Browse.detail(mangaId, fromSource, onCore)
+    detail = Browse.detail(mangaId, fromSource)
     chapterPrefs.open(mangaId)
     scanlatorPrefs.open(mangaId)
     menuPrefs.load()
@@ -251,7 +251,7 @@ Rectangle {
     var text = notesField.text
     var cfg = config
     notesNote = "Saving"
-    send(Prefs.savePayload("notes", text, mangaId, onCore), function(reply) {
+    send(Prefs.savePayload("notes", text, mangaId), function(reply) {
       if (!view.detail || view.detail.mangaId !== mangaId || view.config !== cfg) return
       if (reply.state !== "ok") {
         view.notesNote = reply.message || reply.state
@@ -271,7 +271,7 @@ Rectangle {
       return
     }
     downloadsOpen = false
-    sendDownloads(Downloads.enqueuePayload(list, onCore))
+    sendDownloads(Downloads.enqueuePayload(list))
   }
 
   onWritingChanged: {
@@ -391,7 +391,7 @@ Rectangle {
         anchor = -1
         break
       case "manga.download":
-        sendDownloads(Downloads.enqueuePayload(Downloads.marked(shown, cursor, anchor), onCore))
+        sendDownloads(Downloads.enqueuePayload(Downloads.marked(shown, cursor, anchor)))
         break
       case "manga.downloads":
         downloadsOpen = true
@@ -433,7 +433,7 @@ Rectangle {
         endEdit()
         break
       case "manga.deleteDownload":
-        sendDownloads(Downloads.removePayload(Downloads.marked(shown, cursor, anchor), queue, onCore))
+        sendDownloads(Downloads.removePayload(Downloads.marked(shown, cursor, anchor), queue))
         break
       case "manga.markRead":
       case "manga.markUnread":

@@ -54,7 +54,7 @@ test("a job's output ends with its exit status, even when the script exits early
 
 test("a job its cap or deadline cut short fails", () => {
   assert.equal(S.parseJob("Building\n42 tasks").code, -1, "no status line: a digit-led line is no status");
-  const s = S.reduce(S.initial(true), { type: "finish", id: "launcher", text: "x".repeat(20000) + "\n0\n" });
+  const s = S.reduce(S.initial(), { type: "finish", id: "launcher", text: "x".repeat(20000) + "\n0\n" });
   assert.deepEqual(s.results.launcher, { code: -1, output: "The job printed more than 16384 bytes." });
 });
 
@@ -63,7 +63,7 @@ test("java versions parse, old and missing ones are not enough", () => {
   assert.equal(java("openjdk version \"21.0.2\" 2024-01-16"), 21);
   assert.equal(java("java version \"1.8.0_201\""), 8);
   assert.equal(java("sh: line 1: java: command not found"), 0);
-  assert.equal(S.status(finish(S.initial(true), "probe", "java java version \"1.8.0\"\nwebsockets\njavac\n"), "packages").state, "todo");
+  assert.equal(S.status(finish(S.initial(), "probe", "java java version \"1.8.0\"\nwebsockets\njavac\n"), "packages").state, "todo");
 });
 
 test("no step but packages installs anything, and none runs sudo itself", () => {
@@ -85,14 +85,14 @@ test("FlareSolverr runs as a restarting container bound to localhost", () => {
 });
 
 test("nothing is decided before the first check", () => {
-  const s = S.initial(true);
+  const s = S.initial();
   assert.ok(S.STEPS.every((st) => S.status(s, st.id).state === "checking"));
   assert.equal(S.incomplete(s), false);
   assert.ok(S.STEPS.every((st) => S.action(s, st.id) === null));
 });
 
 test("a set-up machine shows its required steps done and is complete", () => {
-  const s = finish(S.initial(true), "probe", READY);
+  const s = finish(S.initial(), "probe", READY);
   assert.deepEqual(states(s), DONE_STATES);
   assert.equal(S.incomplete(s), false);
   const loaded = server(s, []);
@@ -101,7 +101,7 @@ test("a set-up machine shows its required steps done and is complete", () => {
 });
 
 test("live updates need qt6-websockets, one of the packages", () => {
-  const s = finish(S.initial(true), "probe", READY.replace("websockets\n", ""));
+  const s = finish(S.initial(), "probe", READY.replace("websockets\n", ""));
   assert.equal(S.status(s, "packages").state, "todo");
   assert.equal(S.status(s, "packages").command, "omarchy-pkg-add qt6-websockets");
   assert.equal(S.incomplete(s), true, "Downloads and Updates stop changing without it");
@@ -110,7 +110,7 @@ test("live updates need qt6-websockets, one of the packages", () => {
 });
 
 test("a JRE without javac still needs the JDK, and the core build waits for it", () => {
-  const s = finish(S.initial(true), "probe", READY.replace("javac\n", ""));
+  const s = finish(S.initial(), "probe", READY.replace("javac\n", ""));
   assert.equal(S.status(s, "packages").state, "todo");
   assert.equal(S.status(s, "packages").command, "omarchy-pkg-add jdk-openjdk");
   assert.equal(S.status(s, "coreBuild").state, "waiting");
@@ -120,7 +120,7 @@ test("a JRE without javac still needs the JDK, and the core build waits for it",
 });
 
 test("missing pieces: each step says what to do, later steps wait", () => {
-  const s = finish(S.initial(true), "probe", "java sh: java: not found\nunit  \n");
+  const s = finish(S.initial(), "probe", "java sh: java: not found\nunit  \n");
   assert.deepEqual(states(s), { packages: "todo", coreBuild: "waiting", coreService: "waiting", move: "unavailable", suwayomiOff: "unavailable", flaresolverr: "unavailable", syncFolder: "waiting", phoneBackups: "waiting", launcher: "todo", peekKey: "todo" });
   assert.equal(S.incomplete(s), true);
   assert.equal(S.next(s), 0);
@@ -130,7 +130,7 @@ test("missing pieces: each step says what to do, later steps wait", () => {
 
 test("a stopped unit or a missing core.json leaves the service step to do", () => {
   for (const probe of [READY.replace("enabled active", "disabled inactive"), READY.replace("coreUnit enabled active", "coreUnit disabled inactive"), READY.replace("coreConfig\n", "")]) {
-    const s = finish(S.initial(true), "probe", probe);
+    const s = finish(S.initial(), "probe", probe);
     assert.equal(S.status(s, "coreService").state, "todo", probe);
     assert.equal(S.action(s, "coreService"), "confirm");
     assert.equal(S.incomplete(s), true);
@@ -138,7 +138,7 @@ test("a stopped unit or a missing core.json leaves the service step to do", () =
 });
 
 test("a run step waits for confirmation and blocks other actions while it runs", () => {
-  let s = finish(S.initial(true), "probe", READY.replace(/coreInstalled abc\n/, ""));
+  let s = finish(S.initial(), "probe", READY.replace(/coreInstalled abc\n/, ""));
   assert.equal(S.status(s, "coreBuild").state, "todo");
   s = S.reduce(s, { type: "confirm", id: "coreBuild" });
   assert.equal(s.confirm, "coreBuild");
@@ -153,10 +153,10 @@ test("a run step waits for confirmation and blocks other actions while it runs",
 });
 
 test("the sync folder is stored as miharchy.syncFolder meta and read back", () => {
-  const p = S.savePayload("syncFolder", { code: 0 }, "/home/u/Sync", true);
+  const p = S.savePayload("syncFolder", { code: 0 }, "/home/u/Sync");
   assert.deepEqual(p, { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.syncFolder", value: "/home/u/Sync" }] } });
-  assert.equal(S.savePayload("syncFolder", { code: 1 }, "/home/u/Sync", true), null, "a failed run writes nothing");
-  const s = server(finish(S.initial(true), "probe", READY), [{ key: "syncFolder", value: "/x" }, { key: "miharchy.syncFolder", value: "/home/u/Sync" }]);
+  assert.equal(S.savePayload("syncFolder", { code: 1 }, "/home/u/Sync"), null, "a failed run writes nothing");
+  const s = server(finish(S.initial(), "probe", READY), [{ key: "syncFolder", value: "/x" }, { key: "miharchy.syncFolder", value: "/home/u/Sync" }]);
   assert.deepEqual(S.status(s, "syncFolder"), { state: "done", detail: "/home/u/Sync" });
   assert.equal(S.action(s, "syncFolder"), "edit", "a done folder can still change");
 });
@@ -165,7 +165,7 @@ test("running setup twice changes nothing: a done machine stays done after anoth
   const done = READY + "launcher\npeekKey\nnextKey\n";
   const metas = [{ key: "miharchy.syncFolder", value: "/s" }];
   const phones = "phones 1\nnewest app.mihon_2026-10-09_05-31.tachibk\n\n0\n";
-  const once = finish(server(finish(S.initial(true), "probe", done), metas), "phones", phones);
+  const once = finish(server(finish(S.initial(), "probe", done), metas), "phones", phones);
   const twice = finish(server(finish(once, "probe", done), metas), "phones", phones);
   assert.deepEqual(states(twice), { packages: "done", coreBuild: "done", coreService: "done", move: "unavailable", suwayomiOff: "unavailable", flaresolverr: "unavailable", syncFolder: "done", phoneBackups: "done", launcher: "done", peekKey: "done" });
   assert.deepEqual(states(twice), states(once));
@@ -173,7 +173,7 @@ test("running setup twice changes nothing: a done machine stays done after anoth
 });
 
 test("a server that does not answer keeps the server-backed steps waiting", () => {
-  const s = S.reduce(finish(S.initial(true), "probe", READY), { type: "server", reply: M.coreReply(0, "") });
+  const s = S.reduce(finish(S.initial(), "probe", READY), { type: "server", reply: M.coreReply(0, "") });
   assert.equal(s.server, null);
   assert.equal(S.status(s, "syncFolder").state, "waiting");
 });
@@ -187,7 +187,7 @@ function fakeHome() {
 test("the launcher entry opens window/miharchy and a rerun or a moved plugin is detected", () => {
   const t = fakeHome();
   const file = path.join(t.home, ".local/share/applications/miharchy.desktop");
-  const probe = (windowDir) => finish(S.initial(true), "probe", run(S.probeCommand("/none", "/none", windowDir), t.env));
+  const probe = (windowDir) => finish(S.initial(), "probe", run(S.probeCommand("/none", "/none", windowDir), t.env));
   assert.equal(S.status(probe("/p/window"), "launcher").state, "todo");
   const r = S.parseJob(run(S.runCommand("launcher", { windowDir: "/p/window" }), t.env));
   assert.equal(r.code, 0, r.output);
@@ -207,7 +207,7 @@ const MACHINE = READY;
 const serverWith = (s, offered) => finish(server(s, [{ key: "miharchy.syncFolder", value: "/sync" }].concat(offered === undefined ? [] : [{ key: "miharchy.setupOffered", value: offered }])), "phones", "phones 1\nnewest app.mihon_2026-10-09_05-31.tachibk\n\n0\n");
 
 test("optional steps that are due get offered once, keyed by state", () => {
-  const s = serverWith(finish(S.initial(true), "probe", MACHINE));
+  const s = serverWith(finish(S.initial(), "probe", MACHINE));
   assert.equal(S.incomplete(s), false, "every required step is done");
   const due = ["launcher:todo", "peekKey:todo"];
   assert.deepEqual(S.offers(s), due);
@@ -216,20 +216,20 @@ test("optional steps that are due get offered once, keyed by state", () => {
 });
 
 test("a step already offered does not reopen Setup, a newly due one does", () => {
-  const seen = serverWith(finish(S.initial(true), "probe", MACHINE), "launcher:todo,peekKey:todo");
+  const seen = serverWith(finish(S.initial(), "probe", MACHINE), "launcher:todo,peekKey:todo");
   assert.deepEqual(S.unoffered(seen), []);
-  const changed = serverWith(finish(S.initial(true), "probe", MACHINE + "launcher\npeekKey\n"), "launcher:todo,peekKey:todo");
+  const changed = serverWith(finish(S.initial(), "probe", MACHINE + "launcher\npeekKey\n"), "launcher:todo,peekKey:todo");
   assert.deepEqual(S.unoffered(changed), ["peekKey:outdated"], "a step that changes state is offered once more");
 });
 
 test("nothing is offered before the server answers, and waiting or unavailable steps are never offered", () => {
-  assert.deepEqual(S.unoffered(finish(S.initial(true), "probe", MACHINE)), [], "no server reply yet");
-  const s = serverWith(finish(S.initial(true), "probe", READY.replace("javac\n", "")));
+  assert.deepEqual(S.unoffered(finish(S.initial(), "probe", MACHINE)), [], "no server reply yet");
+  const s = serverWith(finish(S.initial(), "probe", READY.replace("javac\n", "")));
   assert.deepEqual(S.offers(s), ["launcher:todo", "peekKey:todo"], "the move, Suwayomi's service and FlareSolverr are unavailable, so they are not offered");
 });
 
 test("a user with only the peek key is offered the step once more, for the next key", () => {
-  const s = serverWith(finish(S.initial(true), "probe", MACHINE + "peekKey\n"), "launcher:todo,peekKey:todo");
+  const s = serverWith(finish(S.initial(), "probe", MACHINE + "peekKey\n"), "launcher:todo,peekKey:todo");
   assert.equal(S.status(s, "peekKey").state, "outdated");
   assert.deepEqual(S.unoffered(s), ["peekKey:outdated"]);
 });
@@ -356,9 +356,9 @@ test("the phone check counts phone backups at the top of the sync folder and spo
 
 test("the phone backups step waits for the sync folder, then is done once a phone backup has landed", () => {
   const folder = [{ key: "miharchy.syncFolder", value: "/home/u/Sync/mihon-backups" }];
-  const ready = server(finish(S.initial(true), "probe", READY), []);
+  const ready = server(finish(S.initial(), "probe", READY), []);
   assert.deepEqual(S.status(ready, "phoneBackups"), { state: "waiting", detail: "Needs the sync folder first." });
-  const named = server(finish(S.initial(true), "probe", READY), folder);
+  const named = server(finish(S.initial(), "probe", READY), folder);
   assert.equal(S.status(named, "phoneBackups").state, "checking");
 
   const landed = finish(named, "phones", "phones 2\nnewest app.mihon_2026-10-09_05-31.tachibk\n\n0\n");
@@ -372,7 +372,7 @@ test("the phone backups step waits for the sync folder, then is done once a phon
 });
 
 test("Enter on the phone backups step checks again, and a phone with no backup yet is offered once", () => {
-  const named = server(finish(S.initial(true), "probe", READY), [{ key: "miharchy.syncFolder", value: "/s" }]);
+  const named = server(finish(S.initial(), "probe", READY), [{ key: "miharchy.syncFolder", value: "/s" }]);
   const none = finish(named, "phones", "phones 0\nnewest \n\n0\n");
   const landed = finish(named, "phones", "phones 1\nnewest app.mihon_2026-10-09_05-31.tachibk\n\n0\n");
   assert.equal(S.action(none, "phoneBackups"), "check");
@@ -383,21 +383,21 @@ test("Enter on the phone backups step checks again, and a phone with no backup y
 });
 
 test("the packages step is done once Java 21+ with javac and Qt WebSockets are in, and keeps Setup open until then", () => {
-  assert.deepEqual(S.status(finish(S.initial(true), "probe", READY), "packages"), { state: "done", detail: "Java 26 and Qt WebSockets are installed." });
-  const none = finish(S.initial(true), "probe", "java java version \"1.8.0\"\n");
+  assert.deepEqual(S.status(finish(S.initial(), "probe", READY), "packages"), { state: "done", detail: "Java 26 and Qt WebSockets are installed." });
+  const none = finish(S.initial(), "probe", "java java version \"1.8.0\"\n");
   assert.deepEqual(S.status(none, "packages"), { state: "todo",
     command: "omarchy-pkg-add jdk-openjdk qt6-websockets",
     prompt: "Install jdk-openjdk and qt6-websockets in a terminal?",
     detail: "Missing: jdk-openjdk (Java 21 or newer, with javac), qt6-websockets. Press Enter to install them through Omarchy in a terminal; you type your password there." });
   assert.equal(S.action(none, "packages"), "confirm");
   assert.equal(S.incomplete(none), true);
-  const onlyJava = finish(S.initial(true), "probe", READY.replace("26.0.2.1", "17.0.9"));
+  const onlyJava = finish(S.initial(), "probe", READY.replace("26.0.2.1", "17.0.9"));
   assert.equal(S.status(onlyJava, "packages").prompt, "Install jdk-openjdk in a terminal?");
   assert.equal(S.status(onlyJava, "packages").detail, "Missing: jdk-openjdk (Java 21 or newer, with javac). Press Enter to install it through Omarchy in a terminal; you type your password there.");
 });
 
 test("after the terminal opens, the step says it is installing and offers the terminal again", () => {
-  const none = finish(S.initial(true), "probe", "java java version \"1.8.0\"\n");
+  const none = finish(S.initial(), "probe", "java java version \"1.8.0\"\n");
   const launched = finish(none, "packages", "\n0\n");
   assert.equal(S.status(launched, "packages").detail, "Installing in the terminal. Setup checks again every 5 s; Enter opens the terminal again.");
   assert.equal(S.installing(launched), true);
@@ -411,8 +411,8 @@ test("y on the packages step opens Omarchy's terminal on exactly the missing pac
     const out = S.parseJob(run(S.runCommand("packages", { install: cmd }), { PATH: bin + ":/usr/bin:/bin", HOME: bin }));
     return [out.code, fs.readFileSync(path.join(bin, "launched"), "utf8")];
   };
-  const all = S.status(finish(S.initial(true), "probe", "java java version \"1.8.0\"\n"), "packages").command;
+  const all = S.status(finish(S.initial(), "probe", "java java version \"1.8.0\"\n"), "packages").command;
   assert.deepEqual(record(all), [0, "omarchy-pkg-add jdk-openjdk qt6-websockets"]);
-  const websocketsOnly = S.status(finish(S.initial(true), "probe", READY.replace("websockets\n", "")), "packages").command;
+  const websocketsOnly = S.status(finish(S.initial(), "probe", READY.replace("websockets\n", "")), "packages").command;
   assert.deepEqual(record(websocketsOnly), [0, "omarchy-pkg-add qt6-websockets"]);
 });

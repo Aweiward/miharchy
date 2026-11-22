@@ -19,7 +19,7 @@ function copy(o, changes) {
 
 // state: "loading" | "ok" | a failed connection state. login: the login
 // or logout under way, or null. error: the last one's failure.
-function initial(core) {
+function initial() {
   return { core: true, state: "loading", message: "", list: [], login: null, error: "" }
 }
 
@@ -27,7 +27,7 @@ function toTracker(n) {
   return { id: n.id, name: String(n.name), loggedIn: n.isLoggedIn === true, authUrl: n.authUrl ? String(n.authUrl) : "" }
 }
 
-function listPayload(core) {
+function listPayload() {
   return { route: "tracker.list" }
 }
 
@@ -173,7 +173,7 @@ function note(s) {
 // "searching" | "pick" (a list in pick) | "progress" (the chapters field).
 // pick: { kind: "results" | "status" | "score", items: [{ label, detail,
 // value }], cursor }. busy: a write is in flight.
-function panel(mangaId, title, core) {
+function panel(mangaId, title) {
   return { core: true, mangaId: mangaId, title: String(title || ""), state: "loading", message: "", rows: [], cursor: 0, mode: "list", pick: null, busy: false, error: "" }
 }
 

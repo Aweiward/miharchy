@@ -20,7 +20,7 @@ var CLEARED_KEY = "miharchy.historyClearedAt"
 // The history: send(payload, done) is Session.send on core's config. Core
 // (ADR 0010) takes the cleared cutoff from meta.get, then history.list's
 // newest 500.
-function load(send, core, done) {
+function load(send, done) {
   send({ route: "meta.get", body: { scope: "global", keys: [CLEARED_KEY] } }, function(meta) {
     if (meta.state !== "ok") return done(meta)
     send({ route: "history.list", body: { limit: 500 } }, function(list) {
@@ -89,11 +89,11 @@ function reduce(h, event) {
 // The cutoffs are the server's own lastReadAt, so the local clock never
 // decides what hides.
 // Both payloads are miharchy-core's meta.set (ADR 0010).
-function removePayload(entry, core) {
+function removePayload(entry) {
   return { route: "meta.set", body: { metas: [{ scope: "manga", owner: entry.mangaId, key: HIDDEN_KEY, value: String(entry.at) }] } }
 }
 
-function clearPayload(list, core) {
+function clearPayload(list) {
   return list.length ? { route: "meta.set", body: { metas: [{ scope: "global", key: CLEARED_KEY, value: String(list[0].at) }] } } : null
 }
 
@@ -128,11 +128,11 @@ function search(entries, query) {
 }
 
 // { title, detail } in place of the list, or null when entries show.
-function notice(h, configPath, query, backend) {
+function notice(h, configPath, query) {
   if (h.entries.length && search(h.entries, query).length) return null
   if (h.entries.length) return { title: "No history matches \"" + String(query).trim() + "\"", detail: "Esc clears the search." }
   if (h.state === "loading") return { title: "Loading the history", detail: "" }
-  var p = Model.problem(h, configPath, backend)
+  var p = Model.problem(h, configPath)
   if (p) return p
   return { title: "No history yet", detail: "Chapters you open show up here." }
 }

@@ -17,8 +17,8 @@ test("nothing to change sends nothing", () => {
 });
 
 test("the tracker push asks for each manga's progress once; no manga, no push", () => {
-  assert.deepEqual(Ch.trackPayload([5, 9, 5], true), { route: "track.progress", body: { mangaIds: [5, 9] } });
-  assert.equal(Ch.trackPayload([], true), null);
+  assert.deepEqual(Ch.trackPayload([5, 9, 5]), { route: "track.progress", body: { mangaIds: [5, 9] } });
+  assert.equal(Ch.trackPayload([]), null);
 });
 
 test("a manual mark read pushes, asks or leaves the trackers, by the setting", () => {
@@ -126,9 +126,9 @@ test("the resume label says Start until any chapter is read, then names the next
 });
 
 test("a bookmark sets every chapter when any is unset, else clears them all, and skips those already there", () => {
-  assert.deepEqual(Ch.bookmarkPayload([list[0], list[1]], true), { route: "chapter.update", body: { ids: [4], isBookmarked: true } });
-  assert.deepEqual(Ch.bookmarkPayload([list[1], list[3]], true).body, { ids: [3, 1], isBookmarked: false });
-  assert.equal(Ch.bookmarkPayload([], true), null);
+  assert.deepEqual(Ch.bookmarkPayload([list[0], list[1]]), { route: "chapter.update", body: { ids: [4], isBookmarked: true } });
+  assert.deepEqual(Ch.bookmarkPayload([list[1], list[3]]).body, { ids: [3, 1], isBookmarked: false });
+  assert.equal(Ch.bookmarkPayload([]), null);
 });
 
 const noSkip = { read: false, filtered: false, dupe: false };

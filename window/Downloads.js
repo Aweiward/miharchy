@@ -84,17 +84,17 @@ function ids(chapters) {
 
 // core (the last argument of each payload here) is unused: the routes are
 // miharchy-core's download routes (ADR 0010), each answering with the status.
-function statusPayload(core) {
+function statusPayload() {
   return { route: "download.queue" }
 }
 
 // Mihon's cancel all; core also stops the downloader.
-function clearPayload(core) {
+function clearPayload() {
   return { route: "download.clear" }
 }
 
 // Queues the chapters not on disk yet, or null when all are.
-function enqueuePayload(chapters, core) {
+function enqueuePayload(chapters) {
   var todo = chapters.filter(function(c) { return !c.downloaded })
   return todo.length ? { route: "download.enqueue", body: { ids: ids(todo) } } : null
 }
@@ -106,9 +106,9 @@ function find(items, chapterId) {
 
 // Takes the chapters out of the queue and off the disk, or null when none
 // is queued or downloaded. Core's delete dequeues first and takes any id.
-function removePayload(chapters, items, core) {
+function removePayload(chapters, items) {
   var held = chapters.filter(function(c) { return c.downloaded || find(items, c.id) })
-  return held.length ? deletePayload(ids(held), true) : null
+  return held.length ? deletePayload(ids(held)) : null
 }
 
 // Mihon's delete after reading, from the deleteAfterRead setting: how many
@@ -126,7 +126,7 @@ var KEEP_KEY = "miharchy.keepDownloads"
 // autoDeletePayload reads: send(payload, done) is Session.send on the core
 // config. Core takes the chapters by id and the library's categories with
 // their metas, in two routes.
-function autoDeleteLoad(send, core, chapterIds, done) {
+function autoDeleteLoad(send, chapterIds, done) {
   send({ route: "chapter.list", body: { ids: chapterIds } }, function(ch) {
     if (ch.state !== "ok") return done(ch)
     send({ route: "library.list" }, function(lib) {
@@ -158,24 +158,24 @@ function keeps(manga) {
 // check of those categories reads the chapters from before a mark read,
 // so it never keeps one; here it does. readIds: chapters read whose save
 // may not have reached the server yet. null when none goes.
-function autoDeletePayload(data, deleteBookmarked, readIds, core) {
+function autoDeletePayload(data, deleteBookmarked, readIds) {
   var gone = data.chapters.nodes.filter(function(c) {
     return c.isDownloaded && (c.isRead || readIds.indexOf(c.id) !== -1) && (deleteBookmarked || !c.isBookmarked) && !keeps(c.manga)
   })
-  return gone.length ? deletePayload(ids(gone), core) : null
+  return gone.length ? deletePayload(ids(gone)) : null
 }
 
-function deletePayload(chapterIds, core) {
+function deletePayload(chapterIds) {
   return { route: "download.delete", body: { ids: chapterIds } }
 }
 
-function dequeuePayload(chapterId, core) {
+function dequeuePayload(chapterId) {
   return { route: "download.dequeue", body: { ids: [chapterId] } }
 }
 
 // chapterIds: failed downloads, all in the queue.
 // Core requeues a failed chapter in its place, keeping its tries.
-function retryPayload(chapterIds, core) {
+function retryPayload(chapterIds) {
   return chapterIds.length ? { route: "download.enqueue", body: { ids: chapterIds } } : null
 }
 
@@ -205,12 +205,12 @@ function sorted(q, key) {
 
 // Puts the queue in order (chapter ids) with one download.reorder, or null
 // when nothing moves.
-function orderPayload(q, order, core) {
+function orderPayload(q, order) {
   var now = chapterIds(q.items)
   return order.some(function(id, i) { return now[i] !== id }) ? { route: "download.reorder", body: { order: order } } : null
 }
 
-function togglePayload(q, core) {
+function togglePayload(q) {
   return { route: q.running ? "download.stop" : "download.start" }
 }
 
@@ -228,7 +228,7 @@ function progressText(item) {
 // reasons: { chapterId: Failure.reason } for failed items only: an item that
 // is retried (no longer ERROR) or leaves the queue loses its reason, so a
 // new failure is labelled again. -> { reasons }.
-function failed(items, reasons, core) {
+function failed(items, reasons) {
   var next = {}
   items.forEach(function(i) {
     if (i.state !== "ERROR") return
@@ -240,7 +240,7 @@ function failed(items, reasons, core) {
 
 // A queue row's status: progressText, and on a failed row its reason once
 // known. flareOn and core are unused: core's reasons carry no hint.
-function statusText(item, reason, flareOn, core) {
+function statusText(item, reason, flareOn) {
   var text = progressText(item)
   if (item.state !== "ERROR" || !reason) return text
   return text + "   " + reason.text

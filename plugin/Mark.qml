@@ -20,7 +20,7 @@ Panel {
   readonly property bool core: true
   readonly property string backend: "core"
   readonly property string configPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
-  readonly property string phoneBaseline: Mark.phoneBaseline({ HOME: Quickshell.env("HOME"), MIHARCHY_CORE_DATA: Quickshell.env("MIHARCHY_CORE_DATA") }, core)
+  readonly property string phoneBaseline: Mark.phoneBaseline({ HOME: Quickshell.env("HOME"), MIHARCHY_CORE_DATA: Quickshell.env("MIHARCHY_CORE_DATA") })
   readonly property string launcher: decodeURIComponent(Qt.resolvedUrl("../window/miharchy").toString().replace(/^file:\/\//, ""))
   property var config: null
   property var mark: Mark.initial()
@@ -42,13 +42,13 @@ Panel {
   property double now: Date.now()
 
   readonly property var rows: mark.rows
-  readonly property var notice: Mark.notice(mark, configPath, backend)
+  readonly property var notice: Mark.notice(mark, configPath)
   readonly property int more: mark.count - rows.length
   // Up next's reply, null while it loads; asked for only when the popup
   // opens, never in the poll.
   property var upNextReply: null
   property int upNextSeq: 0
-  readonly property var entries: Mark.entries(Mark.upNext(upNextReply, now, core), rows, core)
+  readonly property var entries: Mark.entries(Mark.upNext(upNextReply, now), rows)
   property var lastEntries: []
   onEntriesChanged: {
     cursor = Mark.follow(lastEntries, entries, cursor)
@@ -69,7 +69,7 @@ Panel {
     upNextReply = null
     var cfg = config
     if (!cfg) return
-    Mark.loadUpNext(function(payload, done) { Session.send(cfg, payload, done) }, core, function(reply) {
+    Mark.loadUpNext(function(payload, done) { Session.send(cfg, payload, done) }, function(reply) {
       if (seq === root.upNextSeq) root.upNextReply = reply
     })
   }
@@ -102,7 +102,7 @@ Panel {
     if (!config) return
     var seq = ++pollSeq
     var cfg = config
-    Mark.load(function(payload, done) { Session.send(cfg, payload, done) }, core, Date.now(), function(reply) {
+    Mark.load(function(payload, done) { Session.send(cfg, payload, done) }, Date.now(), function(reply) {
       if (seq !== root.pollSeq) return
       root.mark = Mark.reduce(root.mark, { type: "reply", reply: reply, config: cfg, now: Date.now() })
       var n = Mark.notification(root.mark)
@@ -241,7 +241,7 @@ Panel {
     anchors.top: parent.top
     anchors.bottom: parent.bottom
     bar: root.bar
-    tooltipText: Mark.tooltip(root.mark, root.backend)
+    tooltipText: Mark.tooltip(root.mark)
     onPressed: function(button) { root.pressed(button) }
     // The rays turn green while a sync runs (icons/miharchy-active.svg).
     iconComponent: Component {
@@ -265,7 +265,7 @@ Panel {
     text: Mark.label(root.mark)
     fontSize: Style.font.bodySmall
     horizontalMargin: 3
-    tooltipText: Mark.tooltip(root.mark, root.backend)
+    tooltipText: Mark.tooltip(root.mark)
     onPressed: function(button) { root.pressed(button) }
   }
 

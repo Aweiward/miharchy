@@ -23,7 +23,7 @@ function metaKeys() {
 // Core (ADR 0010) takes three routes: library.list, then each library
 // manga's chapters and the global chapter prefs. done gets { state,
 // message?, data }.
-function load(send, core, done) {
+function load(send, done) {
   send({ route: "library.list" }, function(lib) {
     if (lib.state !== "ok") return done(lib)
     var ids = lib.data.mangas.map(function(m) { return m.id })

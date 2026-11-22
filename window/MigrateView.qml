@@ -129,7 +129,7 @@ Rectangle {
   }
 
   function fail(reply) {
-    var p = Model.problem(reply, configPath, "core")
+    var p = Model.problem(reply, configPath)
     busyText = p ? p.title + ". " + p.detail : reply.message
     step = "busy"
   }
@@ -139,7 +139,7 @@ Rectangle {
     var cfg = config
     busyText = "Loading sources"
     step = "busy"
-    send(Browse.sourcesPayload(true), function(reply) {
+    send(Browse.sourcesPayload(), function(reply) {
       if (s !== view.seq) return
       var src = Browse.sources(reply, cfg, view.showNsfw, false)
       if (src.state !== "ok") view.fail(src)
@@ -195,7 +195,7 @@ Rectangle {
     busyText = "Loading the library"
     step = "busy"
     var s = seq
-    Migrate.libraryLoad(send, true, function(reply) {
+    Migrate.libraryLoad(send, function(reply) {
       if (s !== view.seq) return
       if (reply.state !== "ok") return view.fail(reply)
       view.froms = Migrate.librarySources(reply.data)
@@ -217,7 +217,7 @@ Rectangle {
     if (!list.some(function(m) { return m.stalled })) return go(list)
     busyText = "Reading the manga"
     step = "busy"
-    Migrate.highestLoad(send, true, list.map(function(m) { return m.id }), function(reply) {
+    Migrate.highestLoad(send, list.map(function(m) { return m.id }), function(reply) {
       if (s !== view.seq) return
       if (reply.state !== "ok") return view.fail(reply)
       go(Migrate.withHighest(list, reply.data))
@@ -263,7 +263,7 @@ Rectangle {
     var s = seq
     var cfg = config
     Migrate.checks(batch).forEach(function(i) {
-      var payload = Migrate.checkPayload(view.batch, i, true)
+      var payload = Migrate.checkPayload(view.batch, i)
       view.batch = Migrate.reduceBatch(view.batch, i, { type: "check", now: Date.now() })
       view.batchXhrs[i] = send(payload, function(reply) {
         if (s !== view.seq) return
@@ -307,9 +307,9 @@ Rectangle {
   // fetches the target with its chapters. done(failedReply or null).
   function prepare(i, done) {
     var j = jobs[i]
-    Migrate.oldLoad(send, true, j.old.id, function(f1, oldNode) {
+    Migrate.oldLoad(send, j.old.id, function(f1, oldNode) {
       if (f1) return done(f1)
-      Migrate.targetLoad(view.send, true, j.target.id, function(f2, target) {
+      Migrate.targetLoad(view.send, j.target.id, function(f2, target) {
         if (f2) return done(f2)
         view.setJob(i, { oldNode: oldNode, chapters: target.chapters, plan: Migrate.plan(oldNode.chapters.nodes, target.chapters), merge: Migrate.mergeInto(target.manga) })
         done(null)
@@ -318,7 +318,7 @@ Rectangle {
   }
 
   function errorText(reply) {
-    var p = Model.problem(reply, configPath, "core")
+    var p = Model.problem(reply, configPath)
     return reply.message || (p ? p.title : reply.state)
   }
 
@@ -341,10 +341,10 @@ Rectangle {
     var write = function() {
       var p = view.jobs[i]
       var tracks = view.withTracks ? Migrate.movingTracks(p.oldNode, p.merge).length : 0
-      Migrate.writeTarget(view.send, true, p.oldNode, p.target.id, p.plan, view.withTracks, p.merge, function(reply) {
+      Migrate.writeTarget(view.send, p.oldNode, p.target.id, p.plan, view.withTracks, p.merge, function(reply) {
         if (reply.state !== "ok") return next("Failed: " + view.errorText(reply))
         var done = (p.merge ? "Merged. " : replace ? "Migrated. " : "Copied. ") + Migrate.planText(p.plan, p.chapters.length) + (tracks ? " " + tracks + (tracks === 1 ? " track" : " tracks") + " along." : "")
-        Migrate.writeOld(view.send, true, p.oldNode, replace, view.deleteDownloads, function(r) {
+        Migrate.writeOld(view.send, p.oldNode, replace, view.deleteDownloads, function(r) {
           if (!r || r.state === "ok") next(done, true)
           else next(done + " Failed on the old manga: " + view.errorText(r))
         })

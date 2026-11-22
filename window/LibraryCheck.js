@@ -256,7 +256,7 @@ function migrateList(targets, list) {
 
 // Dismisses the problems (undo: brings them back) in one write, one
 // meta.set for every manga, each keeping its other kinds. null for none.
-function dismissPayload(list, now, undo, core) {
+function dismissPayload(list, now, undo) {
   var maps = {}
   var ids = []
   list.forEach(function(p) {
@@ -356,7 +356,7 @@ function names(meta) {
 // done(reply): the data problems() reads. The library from library.list, each source's
 // extension from extension.list, the last run's failures and time from
 // update.status, the skip filters from settings.get.
-function load(send, core, done) {
+function load(send, done) {
   all(send, [{ route: "library.list" }, NAMES_PAYLOAD, { route: "extension.list", body: { cached: true } }, { route: "update.status" }, { route: "settings.get" }], function(failed, r) {
     if (failed) return done(failed)
     var bySource = {}
@@ -384,7 +384,7 @@ function load(send, core, done) {
 
 // done(reply): the data mergeCopies() reads for the pair, from the server's database
 // only (manga.get answers with a source gone).
-function mergeLoad(send, core, problem, done) {
+function mergeLoad(send, problem, done) {
   var v = mergeVariables(problem)
   all(send, [{ route: "manga.get", body: { id: v.a } }, { route: "manga.get", body: { id: v.b } }, { route: "track.list", body: { mangaIds: [v.a, v.b] } },
     { route: "tracker.list" }, { route: "category.list" }, NAMES_PAYLOAD], function(failed, r) {

@@ -29,7 +29,7 @@ Item {
   property var unapplied: []
   // A save core refused: { key, message }.
   property var refusal: ({ key: "", message: "" })
-  property var trackers: Trackers.initial(true)
+  property var trackers: Trackers.initial()
   readonly property bool loginEditing: Trackers.editing(trackers)
   readonly property string loginStep: loginEditing ? trackers.login.step : ""
   property var values: ({})
@@ -88,7 +88,7 @@ Item {
   }
   onDownloadsPathChanged: if (visible) measure()
   onConfigChanged: {
-    trackers = Trackers.initial(true)
+    trackers = Trackers.initial()
     loadTrackers()
   }
 
@@ -105,7 +105,7 @@ Item {
       return
     }
     trackers = Trackers.reduce(trackers, { type: "request" })
-    send(Trackers.listPayload(true), function(reply) {
+    send(Trackers.listPayload(), function(reply) {
       view.trackers = Trackers.reduce(view.trackers, { type: "list", reply: reply })
     })
   }
@@ -141,14 +141,14 @@ Item {
   function measure() {
     if (measuring) return
     if (!config) {
-      storageNote = Model.problem({ state: "no-config" }, configPath, backend).title
+      storageNote = Model.problem({ state: "no-config" }, configPath).title
       return
     }
     measuring = true
     send(Storage.SIZES_PAYLOAD, function(reply) {
       view.measuring = false
       if (reply.state === "ok") view.storage = reply.data
-      else view.storageNote = reply.message || Model.problem(reply, view.configPath, view.backend).title
+      else view.storageNote = reply.message || Model.problem(reply, view.configPath).title
     })
   }
 
@@ -158,7 +158,7 @@ Item {
     storageNote = ""
     send(Storage.CORE_CLEAR_PAYLOAD, function(reply) {
       view.clearing = false
-      view.storageNote = reply.state === "ok" ? "Freed " + Storage.format(reply.data.freed) : reply.message || Model.problem(reply, view.configPath, view.backend).title
+      view.storageNote = reply.state === "ok" ? "Freed " + Storage.format(reply.data.freed) : reply.message || Model.problem(reply, view.configPath).title
       view.measure()
     })
   }
@@ -484,7 +484,7 @@ Item {
           readOnly: true
           selectByMouse: true
           wrapMode: TextEdit.WrapAnywhere
-          text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, view.configPath, view.backend) || { title: "" }).title : Trackers.note(view.trackers)
+          text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, view.configPath) || { title: "" }).title : Trackers.note(view.trackers)
           color: view.trackers.error || (view.trackers.login && view.trackers.login.error) ? view.theme.urgent : view.theme.muted
           selectionColor: view.theme.accent
           font.family: view.theme.fontFamily

@@ -61,7 +61,7 @@ Item {
     error = ""
     send(payload, function(reply) {
       view.pending = false
-      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, "core.json", backend).title
+      if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, "core.json").title
       else if (done) done(reply.data)
       view.edited()
     })
@@ -93,7 +93,7 @@ Item {
       case "categories.moveUp":
       case "categories.moveDown":
         if (row) cursorId = row.id
-        mutate(Categories.movePayload(categories, cursor, id === "categories.moveUp" ? -1 : 1, core))
+        mutate(Categories.movePayload(categories, cursor, id === "categories.moveUp" ? -1 : 1))
         break
       case "categories.add":
         openField("add", "")
@@ -103,17 +103,17 @@ Item {
         break
       case "categories.remove":
         if (!row) break
-        if (wasArmed === row.id) mutate(Categories.deletePayload(row.id, core))
+        if (wasArmed === row.id) mutate(Categories.deletePayload(row.id))
         else armed = row.id
         break
       case "categories.autoDownload":
-        if (row) mutate(Categories.includePayload(categories, row.id, "download", core))
+        if (row) mutate(Categories.includePayload(categories, row.id, "download"))
         break
       case "categories.keepDownloads":
-        if (row) mutate(Categories.keepPayload(categories, row.id, core))
+        if (row) mutate(Categories.keepPayload(categories, row.id))
         break
       case "categories.update":
-        if (row) mutate(Categories.includePayload(categories, row.id, "update", core))
+        if (row) mutate(Categories.includePayload(categories, row.id, "update"))
         break
       case "categories.commit":
         var checked = Categories.checkName(field.text, categories, editing === "rename" && row ? row.id : undefined)
@@ -122,9 +122,9 @@ Item {
           break
         }
         if (editing === "add") {
-          mutate(Categories.createPayload(checked.name, core), function(data) { view.cursorId = Categories.createdId(data) })
+          mutate(Categories.createPayload(checked.name), function(data) { view.cursorId = Categories.createdId(data) })
         } else if (row) {
-          mutate(Categories.renamePayload(row.id, checked.name, core))
+          mutate(Categories.renamePayload(row.id, checked.name))
         }
         closeField()
         break

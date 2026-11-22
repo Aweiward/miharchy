@@ -57,7 +57,7 @@ function fakeCore() {
   fs.mkdirSync(home, { recursive: true });
   const env = { ...process.env, HOME: home, PATH: bin + ":" + process.env.PATH };
   const windowDir = path.join(plugin, "window");
-  const probe = (s, coreConfigPath) => finish(s || S.initial(true), "probe", run(S.probeCommand(path.join(home, "none.json"), path.join(plugin, "sync"), windowDir, true, coreConfigPath === undefined ? coreJson : coreConfigPath), env));
+  const probe = (s, coreConfigPath) => finish(s || S.initial(), "probe", run(S.probeCommand(path.join(home, "none.json"), path.join(plugin, "sync"), windowDir, true, coreConfigPath === undefined ? coreJson : coreConfigPath), env));
   const step = (id) => S.parseJob(run(S.runCommand(id, { windowDir, coreConfigPath: coreJson }), env));
   const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n") : []);
   return { plugin, home, coreJson, probe, step, calls, app: path.join(home, S.CORE_DIR, "bin/miharchy-core") };
@@ -68,8 +68,8 @@ const tree = (dir) => fs.readdirSync(dir, { recursive: true }).sort().map((f) =>
 test("one step list: core's steps in order, and only packages, the build and the service are required", () => {
   const ids = ["packages", "coreBuild", "coreService", "move", "suwayomiOff", "flaresolverr", "syncFolder", "phoneBackups", "launcher", "peekKey"];
   assert.deepEqual(S.STEPS.map((s) => s.id), ids);
-  for (const arg of [undefined, false, true]) assert.deepEqual(S.steps(S.initial(arg)).map((s) => s.id), ids);
-  assert.deepEqual(S.steps(S.initial(true)).filter((s) => s.required).map((s) => s.id), ["packages", "coreBuild", "coreService"]);
+  assert.deepEqual(S.steps(S.initial()).map((s) => s.id), ids);
+  assert.deepEqual(S.steps(S.initial()).filter((s) => s.required).map((s) => s.id), ["packages", "coreBuild", "coreService"]);
   assert.ok(!S.STEPS.some((s) => ["server", "helper"].includes(s.id)), "no Suwayomi server or sync helper step");
 });
 
@@ -122,27 +122,27 @@ test("without a core.json path the probe asks nothing about core", () => {
 });
 
 test("the core steps wait in order, and FlareSolverr is unavailable on core", () => {
-  let s = finish(S.initial(true), "probe", READY);
+  let s = finish(S.initial(), "probe", READY);
   assert.equal(S.status(s, "coreBuild").state, "todo");
   assert.equal(S.status(s, "coreService").state, "waiting");
   assert.equal(S.status(s, "move").state, "waiting");
   assert.equal(S.status(s, "flaresolverr").state, "unavailable");
   assert.equal(S.status(s, "flaresolverr").label, "not on core");
   assert.ok(S.incomplete(s));
-  s = finish(S.initial(true), "probe", READY + CORE_UP);
+  s = finish(S.initial(), "probe", READY + CORE_UP);
   assert.equal(S.status(s, "coreService").state, "done");
   assert.ok(!S.incomplete(s));
   // The sync folder waits on core, not on Suwayomi.
   assert.equal(S.status(s, "syncFolder").state, "waiting");
   s = S.reduce(s, { type: "server", reply: core(200, { metas: [{ scope: "global", owner: 0, key: "miharchy.syncFolder", value: "/s" }] }) });
   assert.equal(S.status(s, "syncFolder").state, "done");
-  assert.equal(S.status(finish(S.initial(true), "probe", READY.replace("config\n", "") + CORE_UP), "move").state, "unavailable");
+  assert.equal(S.status(finish(S.initial(), "probe", READY.replace("config\n", "") + CORE_UP), "move").state, "unavailable");
 });
 
 const IDLE = core(200, { state: "idle", step: null, report: null, error: null });
 
 test("the move runs on core, holds the other steps, and Enter on a done move only checks", () => {
-  let s = finish(S.initial(true), "probe", READY + CORE_UP);
+  let s = finish(S.initial(), "probe", READY + CORE_UP);
   assert.equal(S.status(s, "move").state, "checking", "nothing to offer before core says where the move stands");
   s = S.reduce(s, { type: "move", reply: IDLE });
   assert.equal(S.action(s, "move"), "confirm");
@@ -168,21 +168,21 @@ test("the move runs on core, holds the other steps, and Enter on a done move onl
   assert.equal(S.status(s, "move").detail, "The move stopped: Suwayomi did not answer. Press Enter to try again.");
   assert.equal(s.job, null);
   // Read on open: a move still running holds every step, even with another job's slot taken.
-  s = S.reduce(S.reduce(finish(S.initial(true), "probe", READY + CORE_UP), { type: "start", id: "phones" }), { type: "move", reply: core(200, { state: "running", step: "metas" }) });
+  s = S.reduce(S.reduce(finish(S.initial(), "probe", READY + CORE_UP), { type: "start", id: "phones" }), { type: "move", reply: core(200, { state: "running", step: "metas" }) });
   assert.equal(S.status(s, "move").state, "running");
   s = finish(s, "phones", "");
   assert.equal(S.action(s, "launcher"), null);
 });
 
 test("on core the reads and writes are core routes, with the real paths for the move", () => {
-  assert.deepEqual(S.serverPayload(true), { route: "meta.get", body: { scope: "global", keys: ["miharchy.syncFolder", "miharchy.setupOffered"] } });
+  assert.deepEqual(S.serverPayload(), { route: "meta.get", body: { scope: "global", keys: ["miharchy.syncFolder", "miharchy.setupOffered"] } });
   assert.deepEqual(S.MOVE_STATUS, { route: "move.status", body: {} });
   assert.deepEqual(S.movePayload({ serverConfig: "/h/.config/miharchy/server.json", serverRoot: "/h/.local/share/miharchy/suwayomi", home: "/h" }), {
     route: "move.start", body: { serverConfig: "/h/.config/miharchy/server.json", serverRoot: "/h/.local/share/miharchy/suwayomi", helperSync: "/h/.local/share/miharchy/sync" }
   });
-  assert.deepEqual(S.savePayload("syncFolder", { code: 0 }, "/s", true), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.syncFolder", value: "/s" }] } });
-  assert.equal(S.savePayload("flaresolverr", { code: 0 }, "", true), null);
-  let s = S.reduce(finish(S.initial(true), "probe", READY + CORE_UP), { type: "move", reply: IDLE });
+  assert.deepEqual(S.savePayload("syncFolder", { code: 0 }, "/s"), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.syncFolder", value: "/s" }] } });
+  assert.equal(S.savePayload("flaresolverr", { code: 0 }, ""), null);
+  let s = S.reduce(finish(S.initial(), "probe", READY + CORE_UP), { type: "move", reply: IDLE });
   s = S.reduce(s, { type: "server", reply: core(200, { metas: [] }) });
   assert.deepEqual(S.offers(s), ["move:todo", "syncFolder:todo", "launcher:todo", "peekKey:todo"]);
   assert.deepEqual(S.offerPayload(s), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.setupOffered", value: S.offers(s).join(",") }] } });
@@ -192,14 +192,14 @@ test("on core the reads and writes are core routes, with the real paths for the 
 test("the packages leave out Suwayomi-Server, and the probe has no AUR query", () => {
   const p = S.parseProbe("java openjdk version \"21.0.2\"\nwebsockets\njavac\n");
   assert.deepEqual(S.missingPackages(p), []);
-  const s = Object.assign(S.initial(true), { probe: p });
+  const s = Object.assign(S.initial(), { probe: p });
   assert.equal(S.status(s, "packages").state, "done");
   assert.doesNotMatch(S.status(s, "packages").detail, /Suwayomi/);
   assert.doesNotMatch(S.PROBE, /yay|aur|suwayomi/i);
 });
 
 test("Suwayomi's service stops only after the move, or with nothing to move; with no service there is nothing to stop", () => {
-  const at = (probe, move) => S.status(Object.assign(S.initial(true), { probe: S.parseProbe(probe), move }), "suwayomiOff");
+  const at = (probe, move) => S.status(Object.assign(S.initial(), { probe: S.parseProbe(probe), move }), "suwayomiOff");
   const core = "coreInstalled x\ncoreSource x\ncoreUnit enabled active\ncoreUnitCurrent\ncoreConfig\n";
   assert.equal(at(core, null).state, "unavailable");
   assert.equal(at(core + "config\nunit enabled active\n", { state: "idle" }).state, "waiting");
@@ -210,7 +210,7 @@ test("Suwayomi's service stops only after the move, or with nothing to move; wit
 
 test("a fresh Omarchy on core installs a JDK and Qt WebSockets through Omarchy, and no Suwayomi or AUR package", () => {
   for (const probe of ["", "java openjdk version \"21.0.2\"\n"]) {
-    const s = Object.assign(S.initial(true), { probe: S.parseProbe(probe) });
+    const s = Object.assign(S.initial(), { probe: S.parseProbe(probe) });
     const st = S.status(s, "packages");
     assert.equal(st.command, "omarchy-pkg-add jdk-openjdk qt6-websockets", JSON.stringify(probe) + ": a JRE without javac still needs the JDK");
     assert.doesNotMatch(st.command + st.prompt + st.detail, /suwayomi|aur|yay/i);

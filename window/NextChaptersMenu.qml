@@ -57,7 +57,7 @@ Item {
   function openUpNext() {
     var cfg = config
     if (!cfg) return
-    UpNext.load(function(payload, done) { Session.send(cfg, payload, done) }, true, function(reply) {
+    UpNext.load(function(payload, done) { Session.send(cfg, payload, done) }, function(reply) {
       if (reply.state !== "ok") return
       view.openFor(NextChapters.upNextSet(UpNext.list(reply.data, false, Date.now())))
     })
@@ -84,7 +84,7 @@ Item {
       if (i === manga.length) return view.pick(cfg, row, count)
       var m = manga[i++]
       view.note = "Fetching chapters: " + i + " of " + manga.length
-      Session.send(cfg, NextChapters.refreshPayload(m.id, true), function(reply) {
+      Session.send(cfg, NextChapters.refreshPayload(m.id), function(reply) {
         if (reply.state !== "ok") view.lastRun = NextChapters.failed(view.lastRun, m, reply.message || reply.state)
         step()
       })
@@ -97,10 +97,10 @@ Item {
       view.lastRun = NextChapters.queued(view.lastRun, [])
       view.note = text
     }
-    NextChapters.readLoad(function(payload, done) { Session.send(cfg, payload, done) }, true, lastRun.mangaIds, function(reply) {
+    NextChapters.readLoad(function(payload, done) { Session.send(cfg, payload, done) }, lastRun.mangaIds, function(reply) {
       if (reply.state !== "ok") return end(reply.message || reply.state)
       var list = NextChapters.pick(reply.data, row, count, view.queueItems)
-      var payload = Downloads.enqueuePayload(list, true)
+      var payload = Downloads.enqueuePayload(list)
       var failures = view.lastRun.failures.length
       if (!payload) return end("Nothing to download" + (failures ? "; " + failures + " manga could not fetch chapters" : ""))
       Session.send(cfg, payload, function(done) {

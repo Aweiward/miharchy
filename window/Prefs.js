@@ -28,13 +28,13 @@ function keys(table) {
 
 // The payloads are miharchy-core's meta routes (ADR 0010); core is kept
 // for the callers' sake.
-function loadPayload(table, mangaId, core) {
+function loadPayload(table, mangaId) {
   var global = { scope: "global", keys: keys(table) }
   if (mangaId === undefined) return { route: "meta.get", body: global }
   return { route: "meta.get", body: { queries: [global, { scope: "manga", owners: [mangaId], keys: keys(table) }] } }
 }
 
-function savePayload(key, value, mangaId, core) {
+function savePayload(key, value, mangaId) {
   var meta = mangaId === undefined ? { scope: "global" } : { scope: "manga", owner: mangaId }
   meta.key = PREFIX + key
   meta.value = String(value)
@@ -42,7 +42,7 @@ function savePayload(key, value, mangaId, core) {
 }
 
 // Drops the table's choices from each manga, or null for no manga.
-function resetPayload(table, mangaIds, core) {
+function resetPayload(table, mangaIds) {
   return mangaIds.length ? { route: "meta.delete", body: { scope: "manga", owners: mangaIds, keys: keys(table) } } : null
 }
 

@@ -17,7 +17,7 @@ var VIEWS = [
 var SOURCE_NAMES_META = "miharchy.sourceNames"
 
 // The library request: core's library.list (ADR 0010).
-function libraryPayload(core) {
+function libraryPayload() {
   return { route: "library.list" }
 }
 
@@ -241,9 +241,9 @@ function switcherIndex(list, id) {
 // What the library view shows for a connection and its shown category: null
 // for the cover grid, otherwise { title, detail }. narrowed: a search or a
 // filter may be what empties the category (Library.narrowed()).
-function notice(connection, configPath, shown, narrowed, backend) {
+function notice(connection, configPath, shown, narrowed) {
   if (connection.state === "loading") return connection.manga.length ? null : { title: "Loading the library", detail: "" }
-  var p = problem(connection, configPath, backend)
+  var p = problem(connection, configPath)
   if (p) return p
   if (!connection.manga.length) return { title: "Your library is empty", detail: "Manga you follow show up here." }
   if (shown && !shown.manga.length && narrowed) return { title: "No manga match", detail: "Esc clears the search. F changes the filters." }
@@ -253,7 +253,7 @@ function notice(connection, configPath, shown, narrowed, backend) {
 
 // { title, detail } for a failed connection, null for "loading" and "ok".
 // Any { state, message } works, so other views reuse it.
-function problem(connection, configPath, backend) {
+function problem(connection, configPath) {
   switch (connection.state) {
     case "no-config":
       return { title: "No miharchy-core config", detail: configPath + " is missing or invalid. Open Miharchy: its Setup builds and starts miharchy-core, which creates it." }

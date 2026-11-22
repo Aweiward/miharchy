@@ -170,7 +170,7 @@ test("a stalled manga takes a match only when its newest chapter number is highe
   b = answer(b, 0, reply("Eleceed"));
   assert.equal(Mi.chosen(b, 0), null, "held until its chapters are read");
   assert.deepEqual(Mi.checks(b), [0]);
-  assert.deepEqual(Mi.checkPayload(b, 0, true), { route: "manga.refresh", body: { id: 100 } });
+  assert.deepEqual(Mi.checkPayload(b, 0), { route: "manga.refresh", body: { id: 100 } });
   b = Mi.reduceBatch(b, 0, { type: "check" });
   assert.deepEqual(Mi.due(b), [], "one request at a time");
   assert.deepEqual(Mi.checks(b), []);

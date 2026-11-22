@@ -22,11 +22,11 @@ test("a rename may keep the category's own name or change its case, but not take
 });
 
 test("a move goes one place up or down, as a 1-based position after Default; none past either end", () => {
-  assert.deepEqual(K.movePayload(cats, 1, -1, true), { route: "category.reorder", body: { id: 2, position: 1 } });
-  assert.deepEqual(K.movePayload(cats, 1, 1, true), { route: "category.reorder", body: { id: 2, position: 3 } });
-  assert.equal(K.movePayload(cats, 0, -1, true), null);
-  assert.equal(K.movePayload(cats, 2, 1, true), null);
-  assert.equal(K.movePayload([], 0, 1, true), null);
+  assert.deepEqual(K.movePayload(cats, 1, -1), { route: "category.reorder", body: { id: 2, position: 1 } });
+  assert.deepEqual(K.movePayload(cats, 1, 1), { route: "category.reorder", body: { id: 2, position: 3 } });
+  assert.equal(K.movePayload(cats, 0, -1), null);
+  assert.equal(K.movePayload(cats, 2, 1), null);
+  assert.equal(K.movePayload([], 0, 1), null);
 });
 
 test("rows count the library manga in each category", () => {
@@ -40,14 +40,14 @@ test("rows count the library manga in each category", () => {
 
 test("p flags a category to keep its read downloads in its meta, and again lets them go", () => {
   const meta = (value) => ({ route: "meta.set", body: { metas: [{ scope: "category", owner: 4, key: "miharchy.keepDownloads", value }] } });
-  assert.deepEqual(K.keepPayload([{ id: 4, keep: false }], 4, true), meta("true"));
-  assert.deepEqual(K.keepPayload([{ id: 4, keep: true }], 4, true), meta("false"));
+  assert.deepEqual(K.keepPayload([{ id: 4, keep: false }], 4), meta("true"));
+  assert.deepEqual(K.keepPayload([{ id: 4, keep: true }], 4), meta("false"));
 });
 
 for (const [key, kind, field] of [["u", "update", "includeInUpdate"], ["d", "download", "includeInDownload"]]) {
   test(key + " cycles a category through unset, included in and excluded from " + kind + "s", () => {
     const states = ["UNSET", "INCLUDE", "EXCLUDE"].map((state) => [{ id: 4, name: "Action", [kind]: state }]);
-    assert.deepEqual(states.map((c) => K.includePayload(c, 4, kind, true)), ["INCLUDE", "EXCLUDE", "UNSET"].map((include) => (
+    assert.deepEqual(states.map((c) => K.includePayload(c, 4, kind)), ["INCLUDE", "EXCLUDE", "UNSET"].map((include) => (
       { route: "category.update", body: { id: 4, [field]: include } }
     )));
   });

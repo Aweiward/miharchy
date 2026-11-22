@@ -167,7 +167,7 @@ function initial() {
 
 // The view's list, from library.list, chapter.list, update.status and the
 // skip filters' metas.
-function load(send, core, now, done) {
+function load(send, now, done) {
   send({ route: "library.list" }, function(lib) {
     if (lib.state !== "ok") return done(lib)
     var ids = lib.data.mangas.map(function(m) { return m.id })
@@ -211,12 +211,12 @@ function fromCore(lib, ch, st, meta, now) {
 
 // categories: ids to update, or none for the whole library. The reply's
 // started says whether this call began the run.
-function checkPayload(categories, core) {
+function checkPayload(categories) {
   return { route: "update.start", body: categories ? { categories: categories } : {} }
 }
 
 // Mihon's cancel on the update notification.
-function stopPayload(core) {
+function stopPayload() {
   return { route: "update.stop" }
 }
 
@@ -368,9 +368,9 @@ function mangaIds(rows) {
 }
 
 // { title, detail } in place of the list, or null.
-function notice(u, configPath, backend) {
+function notice(u, configPath) {
   if (u.state === "loading") return u.rows.length ? null : { title: "Loading updates", detail: "" }
-  var p = Model.problem(u, configPath, backend)
+  var p = Model.problem(u, configPath)
   if (p) return p
   if (!u.rows.length && u.found) return { title: "No updates match the filters", detail: "Press F to change the filters." }
   if (!u.rows.length) return { title: "No new chapters", detail: "Press u to check the library for new chapters." }

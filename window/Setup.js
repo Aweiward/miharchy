@@ -410,12 +410,12 @@ function parseServer(data) {
 // setup.phones: parsePhones() of the sync folder, null before the phone check.
 // setup.syncthing: parseSyncthing(), null before its check.
 // setup.move: core's move.status, null before its first reply.
-function initial(core) {
+function initial() {
   return { core: true, probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {}, phones: null, syncthing: null, move: null }
 }
 
 // The server reply Setup reads: the two global metas it needs.
-function serverPayload(core) {
+function serverPayload() {
   return { route: "meta.get", body: { scope: "global", keys: [Settings.META_PREFIX + "syncFolder", OFFERED_META] } }
 }
 
@@ -490,7 +490,7 @@ function step(id) {
 
 // The packages a stock Omarchy lacks, as the probe found them.
 // No Suwayomi (#373).
-function missingPackages(p, core) {
+function missingPackages(p) {
   var m = []
   // Core builds from source (coreBuild), so it needs javac, not only Java.
   if (p.java < 21 || !p.javac) m.push({ pkg: "jdk-openjdk", label: "jdk-openjdk (Java 21 or newer, with javac)" })
@@ -511,7 +511,7 @@ function andList(xs) {
 // missing: Setup rechecks until they are in.
 function installing(s) {
   var r = s.results.packages
-  return !!(r && r.code === 0 && s.probe && missingPackages(s.probe, s.core).length)
+  return !!(r && r.code === 0 && s.probe && missingPackages(s.probe).length)
 }
 
 // A step's status: { state, detail } with state
@@ -526,7 +526,7 @@ function status(s, id) {
   var p = s.probe
   switch (id) {
     case "packages":
-      var missing = missingPackages(p, s.core)
+      var missing = missingPackages(p)
       if (!missing.length) return is("done", "Java " + p.java + " and Qt WebSockets are installed.")
       var names = andList(missing.map(function(m) { return m.pkg }))
       return { state: "todo", command: installCommand(missing), prompt: "Install " + names + " in a terminal?",
@@ -693,9 +693,9 @@ function next(s) {
 }
 
 // The server write a successful run calls for, or null.
-function savePayload(id, result, folder, core) {
+function savePayload(id, result, folder) {
   if (result.code !== 0) return null
-  return id === "syncFolder" ? Settings.savePayload({ key: "syncFolder", store: "meta" }, folder, true) : null
+  return id === "syncFolder" ? Settings.savePayload({ key: "syncFolder", store: "meta" }, folder) : null
 }
 
 if (typeof module !== "undefined") {

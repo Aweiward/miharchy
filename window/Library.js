@@ -315,13 +315,13 @@ function continueChapter(chapters, chapterPrefs) {
 // chapter actions read.
 // core (the last argument of each payload here) is unused: the routes are
 // miharchy-core's (ADR 0010).
-function chaptersPayload(mangaIds, core) {
+function chaptersPayload(mangaIds) {
   return { route: "chapter.list", body: { mangaIds: mangaIds } }
 }
 
 // Takes the manga out of the library. Their chapters, read state and
 // downloads stay, as in Mihon.
-function removePayload(mangaIds, core) {
+function removePayload(mangaIds) {
   return { route: "manga.update", body: { ids: mangaIds, inLibrary: false } }
 }
 
@@ -337,7 +337,7 @@ function categoryRows(categories, manga) {
 
 // Choosing a row puts every manga in that category, or takes every manga
 // out once all are in it.
-function categoryPayload(row, mangaIds, core) {
+function categoryPayload(row, mangaIds) {
   var out = row.state === "all"
   return { route: "manga.update", body: out ? { ids: mangaIds, removeFromCategories: [row.id] } : { ids: mangaIds, addToCategories: [row.id] } }
 }
@@ -354,7 +354,7 @@ function defaultCategory(setting, categories) {
 // Mihon moves an added manga to exactly that category, or to none for
 // Default: a manga that left the library keeps its old categories on the
 // server.
-function moveToPayload(mangaId, to, categories, core) {
+function moveToPayload(mangaId, to, categories) {
   return { route: "manga.update", body: { ids: [mangaId], clearCategories: true, addToCategories: to > 0 ? [to] : [] } }
 }
 

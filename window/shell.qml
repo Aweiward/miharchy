@@ -247,7 +247,7 @@ ShellRoot {
 
   function loadUpNext(done) {
     var cfg = upNextConfig()
-    UpNext.load(function(payload, d) { Session.send(cfg, payload, d) }, true, done)
+    UpNext.load(function(payload, d) { Session.send(cfg, payload, d) }, done)
   }
 
   // A chapter in the reader, as Updates opens one.
@@ -258,7 +258,7 @@ ShellRoot {
   function openOn(target, peek, core) {
     var cfg = coreConfig
     var seq = ++coreOpenSeq
-    var d = Browse.detail(target.mangaId, false, core)
+    var d = Browse.detail(target.mangaId, false)
     Session.send(cfg, Browse.detailPayload(d), function(reply) {
       if (seq !== root.coreOpenSeq) return
       d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
@@ -345,7 +345,7 @@ ShellRoot {
       settingsState = Settings.reduce(settingsState, { type: "config-missing" })
       return
     }
-    var list = Settings.loadPayloads(true)
+    var list = Settings.loadPayloads()
     var seq = ++settingsSeq
     settingsState = Settings.reduce(settingsState, { type: "request" })
     var next = function(i) {
@@ -363,7 +363,7 @@ ShellRoot {
     if (!cfg) return
     settingsRefusal = { key: "", message: "" }
     settingsState = Settings.reduce(settingsState, { type: "request" })
-    Session.send(cfg, Settings.savePayload(row, value, true), function(reply) {
+    Session.send(cfg, Settings.savePayload(row, value), function(reply) {
       // Core refuses a value its rules do not take: the row says why, and the view stays.
       if (Settings.refused(reply)) {
         root.settingsRefusal = { key: row.key, message: reply.message }
@@ -417,7 +417,7 @@ ShellRoot {
   }
 
   function markOnCore(chapters, action, mangaIds) {
-    var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters, true) : Chapters.markPayload(chapters, action === "read", true)
+    var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters) : Chapters.markPayload(chapters, action === "read")
     if (!payload || !coreConfig) return
     var marked = chapters.filter(function(c) { return !c.read }).map(function(c) { return c.id })
     Session.send(coreConfig, payload, function(reply) {
@@ -436,7 +436,7 @@ ShellRoot {
   }
 
   function pushTrackers(mangaIds, core) {
-    var track = Chapters.trackPayload(mangaIds, true)
+    var track = Chapters.trackPayload(mangaIds)
     var cfg = coreConfig
     if (track && cfg) Session.send(cfg, track, function() {})
   }
@@ -446,7 +446,7 @@ ShellRoot {
   function askTrackers(mangaIds, core) {
     var cfg = coreConfig
     if (!cfg) return
-    Chapters.trackCheckLoad(function(payload, d) { Session.send(cfg, payload, d) }, true, mangaIds, function(r) {
+    Chapters.trackCheckLoad(function(payload, d) { Session.send(cfg, payload, d) }, mangaIds, function(r) {
       var ask = r.state === "ok" ? Chapters.trackAsk(r.data) : null
       root.trackAsk = ask ? Object.assign(ask, { core: true }) : null
     })
@@ -457,8 +457,8 @@ ShellRoot {
   function deleteRead(chapterIds, done, core) {
     var cfg = coreConfig
     var on = function(payload, d) { Session.send(cfg, payload, d) }
-    Downloads.autoDeleteLoad(on, true, chapterIds, function(reply) {
-      var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, root.settingsState.values.deleteBookmarked, [], true) : null
+    Downloads.autoDeleteLoad(on, chapterIds, function(reply) {
+      var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, root.settingsState.values.deleteBookmarked, []) : null
       if (payload) on(payload, done)
       else done()
     })
@@ -471,7 +471,7 @@ ShellRoot {
     var to = Library.defaultCategory(settingsState.values.defaultCategory, cats)
     if (to === -1 && mangaDetail.open && mangaDetail.detail.mangaId === mangaId) mangaDetail.run("manga.categories")
     if (to === -1 || !cats.length) return fetchLibrary(true)
-    Session.send(coreConfig, Library.moveToPayload(mangaId, to, cats, true), function(reply) {
+    Session.send(coreConfig, Library.moveToPayload(mangaId, to, cats), function(reply) {
       libraryView.report(reply)
       mangaDetail.reload()
       root.fetchLibrary(true)
@@ -484,7 +484,7 @@ ShellRoot {
     if (!ccfg) return
     var cseq = ++coreRequestSeq
     coreConnection = Model.reduce(coreConnection, { type: "request" })
-    Session.send(ccfg, Model.libraryPayload(true), function(reply) {
+    Session.send(ccfg, Model.libraryPayload(), function(reply) {
       if (cseq === root.coreRequestSeq) root.coreConnection = Model.reduce(root.coreConnection, { type: "response", reply: reply, config: ccfg })
     })
   }
@@ -869,7 +869,7 @@ ShellRoot {
           categories: root.coreConnection.categories
           cursor: root.settingsCursor
           editing: root.settingsEditing
-          problem: Model.problem(root.settingsState, root.coreConfigPath, "core")
+          problem: Model.problem(root.settingsState, root.coreConfigPath)
           editError: root.settingsError
           health: syncView.health
           onHealthWanted: syncView.refreshHealth()

@@ -205,7 +205,7 @@ function setText(widgets, path, text) {
 // The filters a search sends: every state, as coreStates gives them, or []
 // when none changed. The host copies them over the source's fresh list by
 // position.
-function filterChanges(widgets, core) {
+function filterChanges(widgets) {
   return changedCount(widgets) ? coreStates(widgets) : []
 }
 

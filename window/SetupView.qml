@@ -26,7 +26,7 @@ Item {
   readonly property bool core: backend === "core"
   property string coreConfigPath: ""
 
-  property var setup: Setup.initial(core)
+  property var setup: Setup.initial()
   property int cursor: 0
   property bool editing: false
   property string message: ""
@@ -79,7 +79,7 @@ Item {
 
   function readServer() {
     if (!config) return
-    post(Setup.serverPayload(core), function(reply) {
+    post(Setup.serverPayload(), function(reply) {
       view.setup = Setup.reduce(view.setup, { type: "server", reply: reply })
       view.checkPhones()
       view.offer()
@@ -185,7 +185,7 @@ Item {
       if (Setup.incomplete(setup)) needed()
       return
     }
-    var save = Setup.savePayload(id, setup.results[id], folder, core)
+    var save = Setup.savePayload(id, setup.results[id], folder)
     if (save) {
       post(save, function(reply) {
         if (reply.state !== "ok") view.message = "Saving to the server failed: " + (reply.message || reply.state) + "."

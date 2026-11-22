@@ -587,8 +587,8 @@ test("download ahead takes the next unread chapters after the one open, in readi
   assert.deepEqual(R.ahead(r, "10").map((c) => c.id), [13, 15, 16], "no more than there are");
   assert.deepEqual(R.ahead(r, "0"), [], "off");
   const D = require("./load")("Downloads.js");
-  assert.deepEqual(D.enqueuePayload(R.ahead(r, "3"), true).body.ids, [13, 16], "the one on disk is not queued again");
-  assert.equal(D.enqueuePayload(R.ahead(R.open(5, list, 16, "paged-rtl"), "5"), true), null, "the last chapter queues nothing");
+  assert.deepEqual(D.enqueuePayload(R.ahead(r, "3")).body.ids, [13, 16], "the one on disk is not queued again");
+  assert.equal(D.enqueuePayload(R.ahead(R.open(5, list, 16, "paged-rtl"), "5")), null, "the last chapter queues nothing");
 });
 
 // Page sizes by URL, as ReaderView collects them; the pages at wideAt are

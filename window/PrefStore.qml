@@ -43,7 +43,7 @@ QtObject {
     if (!config) return
     var seq = ++loadSeq
     var scope = Prefs.scope(target)
-    send(Prefs.loadPayload(table, target, true), function(reply) {
+    send(Prefs.loadPayload(table, target), function(reply) {
       if (seq !== store.loadSeq || reply.state !== "ok") return
       var waiting = store.queue.concat(store.sending ? [store.sending] : []).some(function(e) { return e.scope === scope })
       if (!waiting) store.values = Prefs.read(store.table, reply.data, Prefs.defaults(store.table))
@@ -56,7 +56,7 @@ QtObject {
     for (var k in values) next[k] = values[k]
     changes.forEach(function(c) {
       next[c.key] = c.value
-      store.save(Prefs.scope(store.target), c.key, Prefs.savePayload(c.key, c.value, store.target, true))
+      store.save(Prefs.scope(store.target), c.key, Prefs.savePayload(c.key, c.value, store.target))
     })
     values = next
     pump()
@@ -65,8 +65,8 @@ QtObject {
   // The current choices become the global default; with mangaIds, those
   // manga drop their own choices to follow it.
   function saveDefault(mangaIds) {
-    table.forEach(function(c) { store.save("global", c.key, Prefs.savePayload(c.key, store.values[c.key], undefined, true)) })
-    var reset = Prefs.resetPayload(table, mangaIds || [], true)
+    table.forEach(function(c) { store.save("global", c.key, Prefs.savePayload(c.key, store.values[c.key], undefined)) })
+    var reset = Prefs.resetPayload(table, mangaIds || [])
     if (reset) save("global", "reset", reset)
     pump()
   }

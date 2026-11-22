@@ -18,7 +18,7 @@ const nodes = [
   { id: 4, name: "Shikimori", isLoggedIn: false, authUrl: "https://shikimori.one/oauth/authorize?client_id=q&redirect_uri=https%3A%2F%2Ftracker.example%2Ftracker-oauth&response_type=code" },
   { id: 5, name: "Bangumi", isLoggedIn: false, authUrl: "https://bgm.tv/oauth/authorize?client_id=b&response_type=code&redirect_uri=https%3A%2F%2Ftracker.example%2Ftracker-oauth" }
 ];
-const listed = (list) => T.reduce(T.initial(true), { type: "list", reply: ok({ trackers: list || nodes }) });
+const listed = (list) => T.reduce(T.initial(), { type: "list", reply: ok({ trackers: list || nodes }) });
 const at = (s, name) => s.list.findIndex((t) => t.name === name);
 const loggedIn = (n) => Object.assign({}, n, { isLoggedIn: true, authUrl: null });
 
@@ -27,7 +27,7 @@ test("the list holds every tracker the server offers, each logged out until it s
   assert.equal(s.state, "ok");
   assert.deepEqual(s.list.map((t) => t.name), ["MyAnimeList", "AniList", "Kitsu", "MangaUpdates", "Shikimori", "Bangumi"]);
   assert.deepEqual(s.list.map((_, i) => T.status(s, i)), Array(6).fill("not logged in"));
-  assert.deepEqual(T.listPayload(true), { route: "tracker.list" });
+  assert.deepEqual(T.listPayload(), { route: "tracker.list" });
   const failed = T.reduce(s, { type: "list", reply: down() });
   assert.equal(failed.state, "down");
   assert.equal(failed.list.length, 6, "a failed reload keeps the list");
@@ -163,11 +163,11 @@ const panelReply = (records, trackers) => {
     done(payload.route === "tracker.list"
       ? ok({ trackers: trackers || [trackersNode(1, "MyAnimeList", false), trackersNode(2, "AniList", true), trackersNode(3, "Kitsu", true), trackersNode(7, "MangaUpdates", false)] })
       : ok({ tracks: records }));
-  }, T.panel(5, "Berserk", true), (r) => { out = r; });
+  }, T.panel(5, "Berserk"), (r) => { out = r; });
   assert.deepEqual(sent, [{ route: "tracker.list" }, { route: "track.list", body: { mangaIds: [5] } }]);
   return out;
 };
-const open = (records, trackers) => T.act(T.panel(5, "Berserk", true), { type: "loaded", reply: panelReply(records, trackers) }).panel;
+const open = (records, trackers) => T.act(T.panel(5, "Berserk"), { type: "loaded", reply: panelReply(records, trackers) }).panel;
 const run = (p, event) => T.act(p, event);
 const onRow = (p, name) => run(p, { type: "move", delta: p.rows.findIndex((r) => r.tracker.name === name) - p.cursor }).panel;
 
@@ -320,7 +320,7 @@ test("the link is the track's page, on a logged-out tracker too", () => {
 });
 
 test("a panel load that fails carries the connection state", () => {
-  const p = T.act(T.panel(5, "x", true), { type: "loaded", reply: M.coreReply(401, JSON.stringify({ error: { kind: "unauthorized" } })) }).panel;
+  const p = T.act(T.panel(5, "x"), { type: "loaded", reply: M.coreReply(401, JSON.stringify({ error: { kind: "unauthorized" } })) }).panel;
   assert.equal(p.state, "unauthorized");
-  assert.ok(M.problem(p, "c", "core"));
+  assert.ok(M.problem(p, "c"));
 });

@@ -15,7 +15,7 @@ var PRESET_META = Settings.META_PREFIX + "repoPreset"
 // Model.problem() words failures. step: the load request in flight, see next().
 // repos: [{ url, name }] with url as core stores it, so removal must send this one.
 // busy / errors: per extension pkgName, the action in flight or its failure.
-function initial(core) {
+function initial() {
   return { state: "idle", message: "", step: null, repos: [], extensions: [], busy: {}, errors: {}, repoError: "", core: true }
 }
 
@@ -73,7 +73,7 @@ function next(ext) {
     case "repos":
       return { route: "extensionRepo.list" }
     case "preset":
-      return addRepoPayload(KEIYOUSHI, true)
+      return addRepoPayload(KEIYOUSHI)
     case "mark":
       return { route: "meta.set", body: { metas: [{ scope: "global", key: PRESET_META, value: "true" }] } }
     case "fetch":
@@ -84,16 +84,16 @@ function next(ext) {
 
 var CORE_ACTIONS = { install: "extension.install", update: "extension.update", uninstall: "extension.remove" }
 
-function addRepoPayload(url, core) {
+function addRepoPayload(url) {
   return { route: "extensionRepo.add", body: { url: url } }
 }
 
-function removeRepoPayload(repo, core) {
+function removeRepoPayload(repo) {
   return { route: "extensionRepo.remove", body: { url: repo.url } }
 }
 
 // action: "install" | "update" | "uninstall".
-function actionPayload(pkgName, action, core) {
+function actionPayload(pkgName, action) {
   return { route: CORE_ACTIONS[action], body: { pkgName: pkgName } }
 }
 
@@ -136,7 +136,7 @@ function reduce(ext, event) {
       return copy(ext, { busy: withKey(ext.busy, event.pkgName, event.action), errors: without(ext.errors, event.pkgName) })
     case "action-reply":
       var busy = without(ext.busy, event.pkgName)
-      if (r.state !== "ok") return copy(ext, { busy: busy, errors: withKey(ext.errors, event.pkgName, r.message || Model.problem(r, "", "core").title) })
+      if (r.state !== "ok") return copy(ext, { busy: busy, errors: withKey(ext.errors, event.pkgName, r.message || Model.problem(r, "").title) })
       // Core answers an uninstall of an extension no repo offers with null:
       // the row goes.
       var node = r.data.extension
@@ -148,14 +148,14 @@ function reduce(ext, event) {
     case "update-all-reply":
       var done = copy(ext, { busy: event.pkgNames.reduce(without, ext.busy) })
       if (r.state !== "ok") {
-        var why = r.message || Model.problem(r, "", "core").title
+        var why = r.message || Model.problem(r, "").title
         return copy(done, { errors: event.pkgNames.reduce(function(m, p) { return withKey(m, p, why) }, ext.errors) })
       }
       var nodes = {}
       r.data.extensions.forEach(function(n) { nodes[n.pkgName] = n })
       return copy(done, { extensions: ext.extensions.map(function(e) { return nodes[e.pkgName] ? toExtension(event.config, nodes[e.pkgName]) : e }) })
     case "repo-reply":
-      if (r.state !== "ok") return copy(ext, { repoError: r.message || Model.problem(r, "", "core").title })
+      if (r.state !== "ok") return copy(ext, { repoError: r.message || Model.problem(r, "").title })
       if (event.removed) {
         return copy(ext, { repoError: "", repos: ext.repos.filter(function(p) { return p.url !== event.removed.url }) })
       }

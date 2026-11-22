@@ -17,7 +17,7 @@ function loaded(kind, nodes) {
 }
 
 const filters = (nodes) => loaded("filters", nodes).widgets;
-const send = (w) => W.filterChanges(w, true);
+const send = (w) => W.filterChanges(w);
 
 test("a fresh filter list sends no changes", () => {
   assert.deepEqual(send(filters(F.mangadexFilters)), []);

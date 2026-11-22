@@ -17,7 +17,7 @@ var PAGE = 200
 var PREFS = [{ key: "readingCardCovers", default: "shown", options: ["shown", "hidden"] }]
 
 // after: core's offset (ADR 0010: history.list).
-function payload(after, core) {
+function payload(after) {
   return { route: "history.list", body: { readOnly: true, limit: PAGE, offset: after || 0 } }
 }
 

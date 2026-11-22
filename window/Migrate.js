@@ -237,7 +237,7 @@ function checks(b) {
 // in the job if the second fetch shows.
 // The check fetches through manga.refresh, one request, so expire() can
 // still abort it.
-function checkPayload(b, index, core) {
+function checkPayload(b, index) {
   var id = b.search.groups[index].items[b.held[index].pick].id
   return { route: "manga.refresh", body: { id: id } }
 }
@@ -359,7 +359,7 @@ function chain(send, payloads, done) {
 }
 
 // done(reply): { mangas: { nodes }, metas: { nodes: [{ value }] } }.
-function libraryLoad(send, core, done) {
+function libraryLoad(send, done) {
   send({ route: "library.list" }, function(lib) {
     if (lib.state !== "ok") return done(lib)
     send({ route: "meta.get", body: { scope: "global", keys: [Model.SOURCE_NAMES_META] } }, function(meta) {
@@ -370,7 +370,7 @@ function libraryLoad(send, core, done) {
 }
 
 // done(reply): { mangas: { nodes: [{ id, highestNumberedChapter }] } } for ids.
-function highestLoad(send, core, ids, done) {
+function highestLoad(send, ids, done) {
   send({ route: "chapter.list", body: { mangaIds: ids } }, function(r) {
     if (r.state !== "ok") return done(r)
     done(ok({ mangas: { nodes: ids.map(function(id) {
@@ -412,7 +412,7 @@ function withTracks(send, manga, done) {
 
 // The old manga from the server's database, never its source (manga.get
 // answers without one). done(failedReply or null, the old manga node).
-function oldLoad(send, core, id, done) {
+function oldLoad(send, id, done) {
   var back = function(r, node) { r.state === "ok" ? done(null, node) : done(r) }
   send({ route: "manga.get", body: { id: id } }, function(r) {
     if (r.state !== "ok") return done(r)
@@ -423,7 +423,7 @@ function oldLoad(send, core, id, done) {
 // The target fetched from its source with its chapters. done(failedReply
 // or null, { manga, chapters }). An empty chapter list is the source's
 // error, as manga.refresh gives it.
-function targetLoad(send, core, id, done) {
+function targetLoad(send, id, done) {
   send({ route: "manga.refresh", body: { id: id } }, function(r) {
     if (r.state !== "ok") return done(r)
     withTracks(send, r.data.manga, function(t, node) {
@@ -439,7 +439,7 @@ function targetLoad(send, core, id, done) {
 // database, replacing the target's own on that tracker; no login, nothing
 // pushed); merge: mergeInto(the target). The old reading mode goes too, unless
 // merge has one. done(reply).
-function writeTarget(send, core, old, targetId, p, tracks, merge, done) {
+function writeTarget(send, old, targetId, p, tracks, merge, done) {
   var mode = merge && readingMode(merge) ? null : readingMode(old)
   var list = []
   if (p.read.length) list.push({ route: "chapter.update", body: { ids: p.read, isRead: true } })
@@ -457,7 +457,7 @@ function writeTarget(send, core, old, targetId, p, tracks, merge, done) {
 // The old manga's write, after the target's, so a failure never leaves the
 // manga in neither place. replace: Migrate, not Copy. done(reply), or
 // done(null) with nothing to do.
-function writeOld(send, core, old, replace, deleteDownloads, done) {
+function writeOld(send, old, replace, deleteDownloads, done) {
   var ids = deleteDownloads ? downloaded(old) : []
   var list = []
   if (replace) list.push({ route: "manga.update", body: { ids: [old.id], inLibrary: false } })
