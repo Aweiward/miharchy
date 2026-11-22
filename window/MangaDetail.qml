@@ -84,7 +84,6 @@ Rectangle {
   property string downloadsGate: ""
   readonly property var downloadIds: ({ "manga.download": true, "manga.downloads": true, "manga.deleteDownload": true })
   readonly property var coreGates: ({
-    "manga.track": "Tracking is not on miharchy-core yet (#371)",
     "manga.migrate": "Migrate is not on miharchy-core yet (#394)",
     "manga.duplicateMigrate": "Migrate is not on miharchy-core yet (#394)"
   })

@@ -46,8 +46,10 @@ function bookmarkPayload(chapters, core) {
 // call pushes), so a mark read asks for the push. The server sends each
 // tracker the highest read chapter number, when it is above the tracker's.
 // null for no manga: an empty mutation is a GraphQL error.
-function trackPayload(mangaIds) {
+// core: miharchy-core's track.progress does the same push.
+function trackPayload(mangaIds, core) {
   if (!mangaIds.length) return null
+  if (core) return { route: "track.progress", body: { mangaIds: unique(mangaIds) } }
   var fields = unique(mangaIds).map(function(id) {
     return "m" + id + ": trackProgress(input: { mangaId: " + Number(id) + " }) { trackRecords { id lastChapterRead } }"
   })
@@ -75,6 +77,37 @@ function trackCheckPayload(mangaIds) {
       + " r" + n + ": chapters(condition: { mangaId: " + n + ", isRead: true }, order: [{ by: CHAPTER_NUMBER, byType: DESC }], first: 1) { nodes { chapterNumber } }"
   })
   return { query: "query { " + fields.join(" ") + " }" }
+}
+
+// trackCheckPayload's data, from either server: done(reply). Core answers
+// in three routes, put together here in the GraphQL shape trackAsk reads.
+function trackCheckLoad(send, core, mangaIds, done) {
+  var payload = trackCheckPayload(mangaIds)
+  if (!payload) return done({ state: "ok", data: {} })
+  if (!core) return send(payload, done)
+  var ids = unique(mangaIds)
+  send({ route: "tracker.list" }, function(list) {
+    if (list.state !== "ok") return done(list)
+    send({ route: "track.list", body: { mangaIds: ids } }, function(tracks) {
+      if (tracks.state !== "ok") return done(tracks)
+      send({ route: "chapter.list", body: { mangaIds: ids } }, function(ch) {
+        if (ch.state !== "ok") return done(ch)
+        var loggedIn = {}
+        list.data.trackers.forEach(function(t) { loggedIn[t.id] = t.isLoggedIn === true })
+        var data = {}
+        ids.forEach(function(id) {
+          var n = Number(id)
+          var top = ch.data.chapters.filter(function(c) { return c.mangaId === n && c.isRead })
+            .reduce(function(a, c) { return !a || c.chapterNumber > a.chapterNumber ? c : a }, null)
+          data["m" + n] = { id: n, trackRecords: { nodes: tracks.data.tracks.filter(function(t) { return t.mangaId === n }).map(function(t) {
+            return { lastChapterRead: t.lastChapterRead, tracker: { isLoggedIn: loggedIn[t.trackerId] === true } }
+          }) } }
+          data["r" + n] = { nodes: top ? [{ chapterNumber: top.chapterNumber }] : [] }
+        })
+        done({ state: "ok", data: data })
+      })
+    })
+  })
 }
 
 // trackCheckPayload's data -> { mangaIds, chapter } to ask about, or null.
@@ -308,6 +341,7 @@ if (typeof module !== "undefined") {
     trackPayload: trackPayload,
     afterMarkRead: afterMarkRead,
     trackCheckPayload: trackCheckPayload,
+    trackCheckLoad: trackCheckLoad,
     trackAsk: trackAsk,
     trackAskText: trackAskText,
     apply: apply,

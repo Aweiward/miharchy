@@ -454,11 +454,9 @@ function savePayload(r) {
 
 // The tracker push due after savePayload()'s reply: only for the save that
 // first marks the chapter read. Take it before "saving" records the save.
-// ponytail: no trackers on core until #371 and #383.
 function trackPayload(r) {
-  if (r.core) return null
   if (r.state !== "ok" || r.incognito || !r.read || r.wasRead || (r.saved && r.saved.read)) return null
-  return Chapters.trackPayload([r.mangaId])
+  return Chapters.trackPayload([r.mangaId], r.core)
 }
 
 // Mihon's delete after reading: once the chapter open is read here, the

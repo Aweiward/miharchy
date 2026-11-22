@@ -4,11 +4,15 @@
 // tracking panel on its detail). Pure, so tests/trackers.test.js pins it;
 // SettingsView.qml and TrackPanel.qml send the payloads built here.
 //
-// Suwayomi keeps every tracker token; Miharchy stores no credential. Every
-// read of a logged-out tracker builds a fresh authUrl, and MyAnimeList's
-// carries a new PKCE verifier that replaces the last one. So the login asks
-// for its link at Enter and nothing reads the trackers again until the
-// login ends.
+// The server keeps every tracker token; Miharchy stores no credential. On
+// Suwayomi every read of a logged-out tracker builds a fresh authUrl, and
+// MyAnimeList's carries a new PKCE verifier that replaces the last one. So
+// the login asks for its link at Enter and nothing reads the trackers again
+// until the login ends. miharchy-core keeps one link until the login ends,
+// and the same flow serves it.
+//
+// core: the server is miharchy-core (ADR 0010). Its routes answer with the
+// same field names as Suwayomi's nodes; the reducers read either shape.
 
 var TRACKER_FIELDS = "id name isLoggedIn authUrl"
 var LIST_QUERY = "{ trackers { nodes { " + TRACKER_FIELDS + " } } }"
@@ -40,16 +44,21 @@ function copy(o, changes) {
 
 // state: "loading" | "ok" | a failed connection state. login: the login
 // or logout under way, or null. error: the last one's failure.
-function initial() {
-  return { state: "loading", message: "", list: [], login: null, error: "" }
+function initial(core) {
+  return { core: core === true, state: "loading", message: "", list: [], login: null, error: "" }
+}
+
+// A list of nodes: core sends the array, Suwayomi { nodes }.
+function nodes(x) {
+  return Array.isArray(x) ? x : (x && x.nodes) || []
 }
 
 function toTracker(n) {
   return { id: n.id, name: String(n.name), loggedIn: n.isLoggedIn === true, authUrl: n.authUrl ? String(n.authUrl) : "" }
 }
 
-function listPayload() {
-  return { query: LIST_QUERY }
+function listPayload(core) {
+  return core ? { route: "tracker.list" } : { query: LIST_QUERY }
 }
 
 function withTracker(s, tracker) {
@@ -88,6 +97,13 @@ function begin(s, i) {
 function loginPayload(s) {
   var l = s.login
   if (!l) return null
+  if (s.core) {
+    if (l.step === "link") return { route: "tracker.list" }
+    if (l.step === "logout") return { route: "tracker.logout", body: { trackerId: l.trackerId } }
+    if (l.step !== "send") return null
+    if (l.oauth) return { route: "tracker.login", body: { trackerId: l.trackerId, callbackUrl: l.callback } }
+    return { route: "tracker.login", body: { trackerId: l.trackerId, username: l.username, password: l.password } }
+  }
   if (l.step === "link") return { query: LINK_QUERY, variables: { id: l.trackerId } }
   if (l.step === "logout") return { query: LOGOUT_MUTATION, variables: { id: l.trackerId } }
   if (l.step !== "send") return null
@@ -116,14 +132,18 @@ function reduce(s, event) {
       return copy(s, { state: "loading", message: "" })
     case "list":
       if (event.reply.state !== "ok") return copy(s, { state: event.reply.state, message: event.reply.message })
-      return copy(s, { state: "ok", message: "", list: ((event.reply.data.trackers && event.reply.data.trackers.nodes) || []).map(toTracker) })
+      return copy(s, { state: "ok", message: "", list: nodes(event.reply.data.trackers).map(toTracker) })
     case "sent":
       if (!l) return s
       return copy(s, { login: copy(l, { step: l.step === "link" ? "linking" : "sending" }) })
     case "link":
       if (!l) return s
       if (event.reply.state !== "ok") return copy(s, { login: null, error: "Could not get the " + l.name + " login link: " + (event.reply.message || event.reply.state) })
-      var t = toTracker(event.reply.data.tracker)
+      // Core's link is its tracker list; Suwayomi's is the one tracker.
+      var d0 = event.reply.data
+      var found = d0.tracker || nodes(d0.trackers).filter(function(n) { return n.id === l.trackerId })[0]
+      if (!found) return copy(s, { login: null, error: "Could not get the " + l.name + " login link: the server has no such tracker." })
+      var t = toTracker(found)
       if (t.loggedIn || !t.authUrl) return copy(s, { login: null, list: withTracker(s, t) })
       return copy(s, { login: copy(l, { step: "paste", url: t.authUrl }) })
     case "commit":
@@ -143,12 +163,15 @@ function reduce(s, event) {
       if (event.reply.state !== "ok") {
         var why = event.reply.message || event.reply.state
         if (l.logout) return copy(s, { login: null, error: "Could not log out of " + l.name + ": " + why })
-        return copy(s, { login: retry(l, l.name + " did not accept the login: " + why + (l.oauth ? ". Press Esc, then Enter for a fresh link." : "")) })
+        // Core's refusal already names the tracker and ends in a full stop.
+        var refused = String(why).indexOf(l.name) === 0 ? String(why).replace(/\.$/, "") : l.name + " did not accept the login: " + why
+        return copy(s, { login: retry(l, refused + (l.oauth ? ". Press Esc, then Enter for a fresh link." : "")) })
       }
       var d = event.reply.data
-      var p = d.loginTrackerOAuth || d.loginTrackerCredentials || d.logoutTracker
-      var next = copy(s, { list: withTracker(s, toTracker(p.tracker)) })
-      if (!l.logout && !p.isLoggedIn) return copy(next, { login: retry(l, l.name + " did not accept the login.") })
+      var p = d.loginTrackerOAuth || d.loginTrackerCredentials || d.logoutTracker || d
+      var done = toTracker(p.tracker)
+      var next = copy(s, { list: withTracker(s, done) })
+      if (!l.logout && !done.loggedIn) return copy(next, { login: retry(l, l.name + " did not accept the login.") })
       return copy(next, { login: null, error: "" })
   }
   return s
@@ -187,12 +210,25 @@ function note(s) {
 // "searching" | "pick" (a list in pick) | "progress" (the chapters field).
 // pick: { kind: "results" | "status" | "score", items: [{ label, detail,
 // value }], cursor }. busy: a write is in flight.
-function panel(mangaId, title) {
-  return { mangaId: mangaId, title: String(title || ""), state: "loading", message: "", rows: [], cursor: 0, mode: "list", pick: null, busy: false, error: "" }
+function panel(mangaId, title, core) {
+  return { core: core === true, mangaId: mangaId, title: String(title || ""), state: "loading", message: "", rows: [], cursor: 0, mode: "list", pick: null, busy: false, error: "" }
 }
 
 function panelPayload(p) {
   return { query: PANEL_QUERY, variables: { id: p.mangaId } }
+}
+
+// The panel's data in PANEL_QUERY's shape, from either server: done(reply).
+// Core answers in two routes.
+function panelLoad(send, p, done) {
+  if (!p.core) return send(panelPayload(p), done)
+  send({ route: "tracker.list" }, function(list) {
+    if (list.state !== "ok") return done(list)
+    send({ route: "track.list", body: { mangaIds: [p.mangaId] } }, function(tracks) {
+      if (tracks.state !== "ok") return done(tracks)
+      done({ state: "ok", data: { trackers: { nodes: list.data.trackers }, manga: { trackRecords: { nodes: tracks.data.tracks } } } })
+    })
+  })
 }
 
 function toRecord(n) {
@@ -283,7 +319,8 @@ function write(p, payload) {
   return { panel: copy(p, { mode: "list", pick: null, busy: true, error: "" }), payload: payload }
 }
 
-function update(record, changes) {
+function update(p, record, changes) {
+  if (p.core) return { route: "track.update", body: copy({ recordId: record.id }, changes) }
   return { query: UPDATE_MUTATION, variables: { input: copy({ recordId: record.id }, changes) } }
 }
 
@@ -318,8 +355,9 @@ function act(p, event) {
     case "written":
       if (event.reply.state !== "ok") return stay(fail(p, event.reply))
       var d = event.reply.data
-      var w = (d.bindTrack || d.updateTrack || {}).trackRecord
-      var record = d.unbindTrack ? null : w ? toRecord(w) : undefined
+      // Core answers a bind or update with { track }, an unbind with { deleted }.
+      var w = (d.bindTrack || d.updateTrack || {}).trackRecord || d.track
+      var record = d.unbindTrack || d.deleted !== undefined ? null : w ? toRecord(w) : undefined
       return stay(copy(p, {
         busy: false,
         rows: p.rows.map(function(x) { return x.tracker.id === event.trackerId && record !== undefined ? copy(x, { record: record }) : x })
@@ -334,11 +372,13 @@ function act(p, event) {
     case "query":
       var q = String(event.text).trim()
       if (!q) return stay(copy(p, { error: "Enter a title to search for." }))
-      return { panel: copy(p, { mode: "searching", error: "" }), payload: { query: SEARCH_QUERY, variables: { id: row.tracker.id, query: q } } }
+      var search = p.core ? { route: "track.search", body: { trackerId: row.tracker.id, query: q } } : { query: SEARCH_QUERY, variables: { id: row.tracker.id, query: q } }
+      return { panel: copy(p, { mode: "searching", error: "" }), payload: search }
     case "results":
       if (p.mode !== "searching") return stay(p)
       if (event.reply.state !== "ok") return stay(copy(fail(p, event.reply), { mode: "list" }))
-      var found = (event.reply.data.searchTracker.trackSearches || []).map(function(m) {
+      var data = event.reply.data
+      var found = (data.results || (data.searchTracker && data.searchTracker.trackSearches) || []).map(function(m) {
         var year = /^\d{4}/.exec(String(m.startDate || ""))
         return { label: String(m.title), detail: [m.publishingType, year ? year[0] : "", m.totalChapters ? m.totalChapters + " chapters" : ""].filter(function(x) { return x }).join("   "), value: String(m.remoteId) }
       })
@@ -360,17 +400,20 @@ function act(p, event) {
       var n = Number(t)
       if (!r || p.mode !== "progress") return stay(p)
       if (!/^\d+(\.\d+)?$/.test(t)) return stay(copy(p, { error: "Enter the number of the last chapter read, such as 12." }))
-      return write(p, update(r, { lastChapterRead: n }))
+      return write(p, update(p, r, { lastChapterRead: n }))
     case "choose":
       if (p.mode !== "pick") return stay(p)
       var item = p.pick.items[p.pick.cursor]
       if (!item) return stay(p)
-      if (p.pick.kind === "results") return write(p, { query: BIND_MUTATION, variables: { mangaId: p.mangaId, trackerId: row.tracker.id, remoteId: item.value } })
-      if (p.pick.kind === "status") return write(p, update(r, { status: item.value }))
-      return write(p, update(r, { scoreString: item.value }))
+      if (p.pick.kind === "results") {
+        if (p.core) return write(p, { route: "track.bind", body: { mangaId: p.mangaId, trackerId: row.tracker.id, remoteId: item.value } })
+        return write(p, { query: BIND_MUTATION, variables: { mangaId: p.mangaId, trackerId: row.tracker.id, remoteId: item.value } })
+      }
+      if (p.pick.kind === "status") return write(p, update(p, r, { status: item.value }))
+      return write(p, update(p, r, { scoreString: item.value }))
     case "unbind":
       if (!r) return stay(p)
-      return write(p, { query: UNBIND_MUTATION, variables: { id: r.id } })
+      return write(p, p.core ? { route: "track.unbind", body: { recordId: r.id } } : { query: UNBIND_MUTATION, variables: { id: r.id } })
     case "start":
     case "finish":
       if (!r) return stay(copy(p, { error: "Find the manga on " + row.tracker.name + " first: Enter." }))
@@ -380,11 +423,11 @@ function act(p, event) {
       if (!r || (p.mode !== "start" && p.mode !== "finish")) return stay(p)
       var d = parseDate(event.text)
       if (d.error) return stay(copy(p, { error: d.error }))
-      return write(p, update(r, p.mode === "start" ? { startDate: String(d.ms) } : { finishDate: String(d.ms) }))
+      return write(p, update(p, r, p.mode === "start" ? { startDate: String(d.ms) } : { finishDate: String(d.ms) }))
     case "private":
       if (!r) return stay(copy(p, { error: "Find the manga on " + row.tracker.name + " first: Enter." }))
       if (!row.tracker.privacy) return stay(copy(p, { error: row.tracker.name + " has no private tracking." }))
-      return write(p, update(r, { private: !r.private }))
+      return write(p, update(p, r, { private: !r.private }))
   }
   return stay(p)
 }
@@ -418,6 +461,7 @@ if (typeof module !== "undefined") {
     note: note,
     panel: panel,
     panelPayload: panelPayload,
+    panelLoad: panelLoad,
     summary: summary,
     act: act,
     fieldStart: fieldStart,
