@@ -39,6 +39,9 @@ Rectangle {
   property var source: null
   // Only the latest start may set the chapter list.
   property int startSeq: 0
+  // One reading-mode save at a time; m presses during it send the newest mode after it (#338).
+  property bool modeSaving: false
+  property var modeAgain: null // the manga id of a save that waits
   // The settings panel (s) and its cursor.
   property bool panelOpen: false
   property int panelCursor: 0
@@ -204,6 +207,20 @@ Rectangle {
 
   function send(payload, done) {
     return Session.send(config, payload, done)
+  }
+
+  function saveMode() {
+    if (modeSaving) {
+      modeAgain = reader.mangaId
+      return
+    }
+    modeSaving = true
+    send(Reader.modePayload(reader), function() {
+      view.modeSaving = false
+      var again = view.reader && view.reader.mangaId === view.modeAgain
+      view.modeAgain = null
+      if (again) view.saveMode()
+    })
   }
 
   // manga: the manga detail's; chapters: newest first, as it lists them;
@@ -534,7 +551,7 @@ Rectangle {
         return
       case "reader.mode":
         reader = Reader.reduce(reader, { type: "mode" })
-        send(Reader.modePayload(reader), function() {})
+        saveMode()
         layoutStrip()
         return
       case "reader.nextChapter":
