@@ -1,4 +1,4 @@
-<a href="https://aweiward.github.io/miharchy/"><img src="site/banner.png" alt="Miharchy: a keyboard-first manga reader for Omarchy. Mihon-compatible extensions on the desktop, your library synced with Mihon on your phone." width="1280"></a>
+<a href="https://aweiward.github.io/miharchy/"><img src="site/banner.png" alt="Miharchy: a keyboard-first manga reader for Omarchy. Keiyoushi extensions on the desktop, your library synced with Mihon on your phone." width="1280"></a>
 
 # Miharchy
 

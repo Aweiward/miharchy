@@ -1,6 +1,6 @@
 # Miharchy
 
-Miharchy is a manga reader for Omarchy. It reads Mihon-compatible extensions and shares a library with Mihon on a phone.
+Miharchy is a manga reader for Omarchy. It reads Keiyoushi extensions and shares a library with Mihon on a phone.
 
 ## Language
 
