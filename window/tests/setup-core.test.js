@@ -233,4 +233,8 @@ test("FlareSolverr is done once its container runs and core uses it", () => {
   assert.equal(S.status(flare(s, true), "flaresolverr").state, "done");
   assert.equal(S.status(S.reduce(flare(s, true), { type: "flare", reply: core(500, { error: { kind: "other", message: "x" } }) }), "flaresolverr").state, "waiting");
   assert.deepEqual(S.FLARE_SETTINGS, { route: "settings.get", body: {} });
+  // The one-time offer waits for core's settings, so a due FlareSolverr step is in it.
+  let o = S.reduce(S.reduce(finish(S.initial(), "probe", up + "docker false\n"), { type: "move", reply: IDLE }), { type: "server", reply: core(200, { metas: [] }) });
+  assert.deepEqual(S.offers(o), []);
+  assert.ok(S.offers(flare(o, false)).includes("flaresolverr:todo"));
 });

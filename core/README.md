@@ -32,8 +32,8 @@ miharchy-core is the only server since #373, and `stable` ships `core/` and `syn
 - `manga.refresh` matches chapters by URL, so read state survives. A source that returns no chapters is an error and changes nothing.
 - A source that opens a WebView fails with the kind `webview`, because `Protocol.out` is never set in core. A Cloudflare challenge fails with `cloudflare`, unless FlareSolverr passes it.
 - FlareSolverr (#361, `FlareSolverr` in the host's `Network.kt`): with `flareSolverrEnabled` on, a challenged GET goes to the solver at `flareSolverrUrl` (`request.get`, 60 s). Core reads the three keys on each challenge, so a change works at once.
-  - The solver's cookies go into the host's cookie jar and its user agent becomes the site's override, both kept on disk. Core then sends the request again, so the reply is the site's own, with its status and content type.
-  - When the site still challenges (Cloudflare may also check the TLS fingerprint), the solver's page stands in, if `flareSolverrAsResponseFallback` is on: its status, and its content type or `text/html`.
+  - The solver's cookies go into the host's cookie jar and its user agent becomes the site's override, both kept on disk. Core then sends the request again. On a site that accepts them, the reply is the site's own, with its status and content type, and later requests skip the solver.
+  - When the site still challenges, the solver's page stands in, if `flareSolverrAsResponseFallback` is on: its status, and its content type or `text/html` (FlareSolverr 3.5.2 sends no headers). Manganato is such a site: Cloudflare there also checks the TLS fingerprint, so every challenged request costs a solve, about 12 s.
   - One solve runs at a time. A request that waited first tries the stored cookie. GET only; another method, a solver that fails or one that is off reports `cloudflare`, and the reason goes to core's log.
 
 ## Library (#366)

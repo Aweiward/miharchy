@@ -660,10 +660,11 @@ function incomplete(s) {
 }
 
 // The optional steps that are due, one key each: "launcher:todo". Empty until the probe and the server reply
-// are both in, since some steps depend on the server, and until the phone
-// check is in once a sync folder is set.
+// are both in, since some steps depend on the server, until the phone
+// check is in once a sync folder is set, and until core's settings are in
+// when Docker is there (the FlareSolverr step reads them).
 function offers(s) {
-  if (!s.probe || !s.server || (s.server.syncFolder && !s.phones)) return []
+  if (!s.probe || !s.server || (s.server.syncFolder && !s.phones) || (s.probe.docker && !s.flare)) return []
   var keys = []
   steps(s).forEach(function(st) {
     if (st.required) return
