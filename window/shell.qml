@@ -50,6 +50,8 @@ ShellRoot {
   readonly property var overlay: Overlays.top({ trackAsk: trackAsk, readingCard: readingCard, nextChapters: nextChapters, restoreView: restoreView, syncView: syncView, downloadsView: downloadsView, reader: reader, migrateView: migrateView, trackPanel: trackPanel, mangaDetail: mangaDetail, view: view, browseView: browseView, extensionsView: extensionsView, checkView: checkView, updatesView: updatesView, settingsEditing: settingsEditing, libraryView: libraryView, historyView: historyView, settingsView: settingsView, setupView: setupView, categoriesView: categoriesView })
   readonly property bool downloadedOnly: settingsState.values.downloadedOnly === true
   property var settingsState: Settings.initial()
+  // The folder core's local source reads (storage.get), for Browse's empty-listing notice.
+  property string localFolder: ""
   property int settingsCursor: 0
   property bool settingsEditing: false
   property string settingsError: ""
@@ -333,6 +335,7 @@ ShellRoot {
       settingsState = Settings.reduce(settingsState, { type: "config-missing" })
       return
     }
+    loadLocalFolder()
     var list = Settings.loadPayloads()
     var seq = ++settingsSeq
     settingsState = Settings.reduce(settingsState, { type: "request" })
@@ -344,6 +347,12 @@ ShellRoot {
       })
     }
     next(0)
+  }
+
+  function loadLocalFolder() {
+    var cfg = root.config
+    if (!cfg) return
+    Session.send(cfg, Storage.SIZES_PAYLOAD, function(reply) { root.localFolder = Storage.localFolderOf(reply) })
   }
 
   function saveSetting(row, value) {
@@ -358,6 +367,7 @@ ShellRoot {
         reply = { state: "ok", message: "", data: {}, kind: "" }
       }
       root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
+      if (row.key === "localSourcePath") root.loadLocalFolder()
     })
   }
 
@@ -885,7 +895,7 @@ ShellRoot {
           configPath: root.configPath
           active: root.view === "browse"
           showNsfw: root.settingsState.values.showNsfw
-          localFolder: Storage.localFolder({ HOME: Quickshell.env("HOME"), MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT") }, root.settingsState.values.localSourcePath)
+          localFolder: root.localFolder
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, true) }
