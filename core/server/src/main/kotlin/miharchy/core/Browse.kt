@@ -17,6 +17,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -82,6 +83,9 @@ suspend fun Host.call(req: JsonObject, seconds: Long = 120): JsonElement {
  */
 /** [downloads]: the downloads folder, whose .cbz files the reader reads with no network (#367). */
 class Browse(private val db: Database, private val host: Host, private val extensions: Extensions, private val covers: Path, private val downloads: Path) {
+    /** Gets the chapters each refresh queues for auto-download (#424). Main sets it to the download queue. */
+    var autoDownload: suspend (List<Long>) -> Unit = {}
+
     private val pages = object : LinkedHashMap<Long, List<JsonObject>>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, List<JsonObject>>) = size > 50
     }
@@ -279,6 +283,15 @@ class Browse(private val db: Database, private val host: Host, private val exten
                 val urls = list.map { it.s("url")!! }.toSet()
                 val gone = known.mapNotNull { it.s("url") }.filter { it !in urls }
                 c.prepareStatement("DELETE FROM chapter WHERE manga_id = ? AND remote_url = ?").use { p -> gone.forEach { p.setLong(1, id); p.setString(2, it); p.addBatch() }; p.executeBatch() }
+                val knownUrls = known.mapNotNull { it.s("url") }.toSet()
+                val added = c.query("SELECT id, remote_url FROM chapter WHERE manga_id = ?", id) { it.getLong(1) to it.getString(2) }
+                    .filter { it.second !in knownUrls }.map { it.first }
+                autoDownloads(c, id, added, known.firstOrNull()?.get("chapterNumber")?.jsonPrimitive?.doubleOrNull)
+            }
+        }.let { queue ->
+            // A failed auto-download never fails the refresh that found the chapters.
+            if (queue.isNotEmpty()) try { autoDownload(queue) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                System.err.println("miharchy-core: auto-download of $queue failed: $e")
             }
         }
         if (coverChanged) dropCovers(id)

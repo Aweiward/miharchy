@@ -36,6 +36,7 @@ fun main() {
     val browse = Browse(db, host, extensions, data.resolve("covers"), data.resolve("downloads"))
     val library = Library(db, extensions)
     val downloads = Downloads(db, browse, extensions, data.resolve("downloads"))
+    browse.autoDownload = downloads::auto
     val updates = Updates(db, { browse.refresh(it) })
     val trackerStore = TrackerStore(db)
     val http = okhttp3.OkHttpClient()

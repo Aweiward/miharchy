@@ -101,6 +101,10 @@ class Downloads(private val db: Database, private val browse: Browse, private va
         return statusJson()
     }
 
+    /** Auto-download (#424): queues [ids] and starts the downloader, as `download.enqueue`. */
+    // ponytail: starts at once, as Suwayomi; Mihon starts after the update run, the fix if sites rate-limit core.
+    internal suspend fun auto(ids: List<Long>) { change { enqueue(ids); running = true } }
+
     private suspend fun enqueue(ids: List<Long>) = db.run { c ->
         c.transaction {
             val found = c.query("SELECT id FROM chapter WHERE ${among("id")}", idList(ids)) { it.getLong(1) }.toSet()
