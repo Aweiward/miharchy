@@ -1,6 +1,7 @@
 package miharchy.core
 
 import kotlinx.coroutines.flow.first
+import miharchy.sync.decodeBackup
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonArray
@@ -287,5 +288,46 @@ class LocalTest {
         val names = listOf("010.jpg", "002.png", "001.jpg", "100.jpg")
         assertEquals(names.sorted(), names.sortedWith(NATURAL))
         assertEquals(listOf("1.jpg", "2.jpg", "10.jpg", "a1.jpg", "B2.jpg"), listOf("10.jpg", "B2.jpg", "2.jpg", "1.jpg", "a1.jpg").sortedWith(NATURAL))
+    }
+
+    @Test
+    fun aBackupCarriesLocalMangaAsMihonDoesAndAPhoneCoverStringFallsBackToTheFolder() = withCore { db, browse ->
+        fill()
+        val alpha = browse.routes.call("source.popular", body("page" to 1)).ids().first()
+        browse.routes.call("manga.refresh", buildJsonObject { put("id", alpha) })
+        db.run { c -> c.update("UPDATE manga SET user_favorite_at = 1 WHERE id = ?", alpha) }
+        val out = Files.createDirectories(work.resolve("backups"))
+        val file = Sync(db, work.resolve("sync"), "http://127.0.0.1", emptySet()).routes.call("backup.export", buildJsonObject { put("folder", out.toString()) })
+            .getValue("file").jsonPrimitive.content
+        val m = decodeBackup(Path.of(file).readBytes()).backupManga.single()
+        assertEquals(0L, m.source)
+        assertEquals("Alpha", m.url)
+        assertEquals(listOf("Alpha/Chapter 1", "Alpha/Chapter 2.cbz"), m.chapters.map { it.url }.sorted())
+        assertEquals(null, m.thumbnailUrl, "core's cover path means nothing on the phone")
+        // A cover string synced from the phone is no path here: the folder's own cover shows instead.
+        db.run { c -> c.update("UPDATE manga SET remote_cover = 'content://phone/Alpha/cover.jpg' WHERE id = ?", alpha) }
+        assertContentEquals(jpg(1), browse.images.getValue("cover")(listOf("$alpha")).bytes)
+    }
+
+    @Test
+    fun comicInfoFillsFieldsAsMihonsCopyFromComicInfo() = withCore { _, browse ->
+        root.resolve("Delta").createDirectories().also { d ->
+            d.resolve("ComicInfo.xml").writeText(comicInfo("Series" to "Delta", "Penciller" to "P1, P2", "Inker" to "P2, I", "Genre" to "Action", "Tags" to "Action, Tag"))
+            zip(d.resolve("b.cbz"), "1.png" to png(1), "ComicInfo.xml" to comicInfo("Title" to "Bee", "Translator" to "Team", "Year" to "2021", "Month" to "3").toByteArray())
+            zip(d.resolve("a.cbz"), "1.png" to png(2))
+            zip(d.resolve("Chapter 10.cbz"), "1.png" to png(3))
+        }
+        val id = browse.routes.call("source.popular", body("page" to 1)).ids().single()
+        val r = browse.routes.call("manga.refresh", buildJsonObject { put("id", id) })
+        val m = r["manga"]!!.jsonObject
+        assertEquals("P1, P2, I", m["artist"]!!.jsonPrimitive.content)
+        assertEquals(listOf("Action", "Tag"), m["genre"]!!.jsonArray.map { it.jsonPrimitive.content })
+        val chapters = r["chapters"]!!.jsonArray.map { it.jsonObject }
+        // Mihon's local order: the name in natural order, descending.
+        assertEquals(listOf("Chapter 10", "Bee", "a"), chapters.map { it["name"]!!.jsonPrimitive.content })
+        val bee = chapters[1]
+        assertEquals("Team", bee["scanlator"]!!.jsonPrimitive.content)
+        val date = java.time.Instant.ofEpochMilli(bee["uploadDate"]!!.jsonPrimitive.long).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        assertEquals(java.time.LocalDate.of(2021, 3, 1), date)
     }
 }

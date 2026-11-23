@@ -403,8 +403,10 @@ class Browse(
         val url = row.fields.s("thumbnailUrl") ?: throw ApiError(Kind.notFound, "Manga $id has no cover.")
         val file = covers.resolve("$id-${sha1(url).take(16)}")
         withContext(Dispatchers.IO) { if (Files.exists(file)) Files.readAllBytes(file) else null }?.let { return Image(it, sniff(it)) }
-        val image = if (row.source.toString() == LOCAL_SOURCE) local.image(url).let { Image(it, sniff(it)) }
-            else download(buildJsonObject { put("op", "download"); put("source", row.source.toString()); put("url", url) })
+        val image = if (row.source.toString() == LOCAL_SOURCE) {
+            val bytes = try { local.image(url) } catch (e: ApiError) { local.coverOf(row.fields.s("url").orEmpty())?.let { local.image(it) } ?: throw e }
+            Image(bytes, sniff(bytes))
+        } else download(buildJsonObject { put("op", "download"); put("source", row.source.toString()); put("url", url) })
         // An error page must not stay cached under this cover's URL.
         if (!image.contentType.startsWith("image/")) throw ApiError(Kind.source, "The cover of manga $id is not an image.")
         withContext(Dispatchers.IO) {

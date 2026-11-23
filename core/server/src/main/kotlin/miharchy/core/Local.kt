@@ -77,6 +77,9 @@ class Local(val folder: suspend () -> Path) {
     /** Whether the manga's folder is there, for the library update to skip a manga it cannot rescan. */
     suspend fun exists(url: String): Boolean = withContext(Dispatchers.IO) { runCatching { mangaDir(folder(), url) }.isSuccess }
 
+    /** The cover a manga's folder has now, for a stored cover string from elsewhere (the phone's sync) that is no path here. */
+    suspend fun coverOf(url: String): String? = withContext(Dispatchers.IO) { runCatching { cover(mangaDir(folder(), url)) }.getOrNull() }
+
     /** The bytes of a cover, from its stored url (see [cover]), or of a page: the chapter's url and the page's `imageUrl`. */
     suspend fun image(url: String): ByteArray = withContext(Dispatchers.IO) {
         val root = folder()
@@ -172,13 +175,16 @@ class Local(val folder: suspend () -> Path) {
         val info = readXml(dir.resolve("ComicInfo.xml"))
         val json = runCatching { Json.parseToJsonElement(Files.readString(dir.resolve("details.json"))).jsonObject }.getOrNull()
         fun text(k: String) = (json?.get(k) as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
-        val genre = info?.get("Genre") ?: (json?.get("genre") as? JsonArray)?.joinToString(",") { it.jsonPrimitive.content } ?: text("genre")
+        // Mihon's `copyFromComicInfo`: the genres from three fields, the artist from five.
+        fun joined(vararg keys: String) = keys.mapNotNull { info?.get(it) }.flatMap { it.split(", ") }.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            .joinToString(", ").takeIf { it.isNotEmpty() }
+        val genre = joined("Genre", "Tags", "Categories") ?: (json?.get("genre") as? JsonArray)?.joinToString(",") { it.jsonPrimitive.content } ?: text("genre")
         val title = info?.get("Series") ?: text("title") ?: dir.name
         val status = STATUSES[info?.get("PublishingStatusTachiyomi")] ?: (json?.get("status") as? JsonPrimitive)?.intOrNull ?: 0
         return buildJsonObject {
             put("manga", buildJsonObject {
                 put("url", url); put("title", title)
-                put("author", info?.get("Writer") ?: text("author")); put("artist", info?.get("Penciller") ?: text("artist"))
+                put("author", info?.get("Writer") ?: text("author")); put("artist", joined("Penciller", "Inker", "Colorist", "Letterer", "CoverArtist") ?: text("artist"))
                 put("description", info?.get("Summary") ?: text("description"))
                 put("genre", genre?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.joinToString(", "))
                 put("status", status); put("updateStrategy", "ALWAYS_UPDATE"); put("initialized", true)
@@ -188,23 +194,35 @@ class Local(val folder: suspend () -> Path) {
         }
     }
 
-    /** Newest first, as Mihon's local sort: the number descending, then the name in natural order descending. */
+    /**
+     * Mihon's `getChapterList`: the name in natural order, descending. A chapter's ComicInfo gives its title, number,
+     * scanlator (Translator) and date (Year, Month, Day); else the file's name and mtime.
+     */
     private fun chapters(dir: Path, title: String): List<JsonObject> {
-        class Chapter(val file: Path, val name: String, val given: Double?)
+        class Chapter(val file: Path, val name: String, val given: Double?, val scanlator: String?, val date: Long)
         val found = chapterFiles(dir).map { f ->
             val info = if (f.isDirectory()) null else readXml(f)
-            Chapter(f, info?.get("Title") ?: if (f.isDirectory()) f.name else f.nameWithoutExtension, info?.get("Number")?.toDoubleOrNull())
+            Chapter(
+                f, info?.get("Title") ?: if (f.isDirectory()) f.name else f.nameWithoutExtension, info?.get("Number")?.toDoubleOrNull(),
+                info?.get("Translator"), info?.let(::comicInfoDate) ?: mtime(f),
+            )
         }.sortedWith { a, b -> NATURAL.compare(b.name, a.name) }
-        // Read in name order, newest first, as ChapterRecognition wants the list; the numbers then give the real order.
         val numbers = ChapterRecognition.parseChapterNumbers(title, found.map { ChapterRecognition.Chapter(it.name, it.given ?: -1.0) })
             .map { n -> n.chapter?.let(ChapterRecognition::toDouble) ?: -1.0 }
-        return found.indices.sortedWith(compareByDescending<Int> { numbers[it] }.thenComparator { a, b -> NATURAL.compare(found[b].name, found[a].name) }).map { i ->
-            val c = found[i]
+        return found.mapIndexed { i, c ->
             buildJsonObject {
-                put("url", "${dir.name}/${c.file.name}"); put("name", c.name); put("chapterNumber", numbers[i])
-                put("scanlator", JsonNull); put("dateUpload", mtime(c.file)); put("memo", JsonObject(emptyMap()))
+                put("url", "${dir.name}/${c.file.name}"); put("name", c.name); put("chapterNumber", c.given ?: numbers[i])
+                put("scanlator", c.scanlator); put("dateUpload", c.date); put("memo", JsonObject(emptyMap()))
             }
         }
+    }
+
+    /** Mihon's rule: only with a year; a missing month or day is 1. The start of that day here. */
+    private fun comicInfoDate(info: Map<String, String>): Long? {
+        val year = info["Year"]?.toIntOrNull()?.takeIf { it > 0 } ?: return null
+        val month = (info["Month"]?.toIntOrNull() ?: 1).coerceIn(1, 12)
+        val day = (info["Day"]?.toIntOrNull() ?: 1).coerceIn(1, 31)
+        return runCatching { java.time.LocalDate.of(year, month, day).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull()
     }
 
     /** `ComicInfo.xml` in a folder, or inside a .cbz/.zip, as element name to text; null when it is missing or broken. */
