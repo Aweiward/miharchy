@@ -34,8 +34,9 @@ case "${1:-}" in
       case "$port" in 4590|4591) echo "picked a real port; run start again" >&2; exit 1;; esac
       echo "$port" > "$CORE/port"
     fi
+    # CORE_PRELOAD reaches only core's JVM: site/tools/start-at shifts its clock with libfaketime.
     ( cd /tmp && MIHARCHY_CORE_DATA=$CORE/data MIHARCHY_CORE_CONFIG=$CORE/core.json MIHARCHY_CORE_PORT=$(cat "$CORE/port") \
-        setsid -f "$BIN" >> "$CORE/core.log" 2>&1 < /dev/null )
+        setsid -f env ${CORE_PRELOAD:+LD_PRELOAD=$CORE_PRELOAD} "$BIN" >> "$CORE/core.log" 2>&1 < /dev/null )
     for _ in $(seq 120); do
       if up; then
         ss -ltnp | grep ":$(cat "$CORE/port") " | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2 > "$CORE/pid"

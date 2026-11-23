@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Scratch Suwayomi-Server, kept only as the source for Setup's move from Suwayomi (move.start) and for
-# site/tools' showcase run; the window and the mark talk to the scratch core (core.sh). `clean` serves every run.
+# Scratch Suwayomi-Server, kept only as the source for Setup's move from Suwayomi (move.start); the window and the mark talk to the scratch core (core.sh). `clean` serves every run.
 #   server.sh start    start it on a free port (kept in $RUN/port), write $RUN/server.json, wait until GraphQL answers
 #   server.sh doctor   read-only: is our instance up, on our port, answering with our credentials?
 #   server.sh restart  stop and start the same instance: same port, credentials and library
