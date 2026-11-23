@@ -64,7 +64,7 @@ fun indexUrlOf(input: String): String {
 /** Reads a repo's index.json. Anything in it is untrusted: it names files, addresses and code that runs here. */
 fun parseIndex(indexUrl: String, text: String): Pair<Store, List<Offer>> {
     val root = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull()
-        ?: throw ApiError(Kind.invalid, "$indexUrl is not a Mihon extension repo index.")
+        ?: throw ApiError(Kind.invalid, "$indexUrl is not an extension repo index in Keiyoushi's format.")
     fun JsonObject.s(k: String) = (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
     val key = root.s("signingKey")?.lowercase()?.takeIf { KEY.matches(it) }
         ?: throw ApiError(Kind.invalid, "$indexUrl lists no signing key, so its extensions cannot be checked.")

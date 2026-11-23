@@ -1,6 +1,6 @@
 # Miharchy
 
-A manga reader for Omarchy (Arch + Hyprland). It reads Mihon-compatible extensions through its own server, miharchy-core, and syncs with stock Mihon on a phone through backup files.
+A manga reader for Omarchy (Arch + Hyprland). It reads Keiyoushi extensions through its own server, miharchy-core, and syncs with stock Mihon on a phone through backup files.
 
 ## Read first
 
