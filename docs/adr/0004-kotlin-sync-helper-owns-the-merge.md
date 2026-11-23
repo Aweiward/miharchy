@@ -15,7 +15,7 @@ Core owns its database, so the split between `restoreBackup` and GraphQL mutatio
 - Lowered values (unread, bookmark removed, a lower last page) are set directly, with no reset to 0 first.
 - After the changes, core reads its library again and checks every change, as the helper does. A miss rolls the whole transaction back, so the baselines stay and the next sync retries.
 
-The helper and its Suwayomi path stay until #373 moves `sync/` into `core/`.
+Since #373 core is the only path. The CLI helper and its Suwayomi path are gone; `sync/` stays as the library core builds, so the merge is still Kotlin and still tested on its own.
 
 ## Considered Options
 

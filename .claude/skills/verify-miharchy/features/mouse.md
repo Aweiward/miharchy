@@ -29,10 +29,10 @@ Click a cover, double click it, then a chapter, then the reader's zones in both 
   [1500, function() { log("strip after wheel", [root.v.strip.contentY, reader.reader.page]); root.run("window.quit") }]
 ]
 ```
-In `paged-rtl` the left third reads on (page + 1); in `paged-ltr` the right third does. Read back the chapter's `lastPageRead` after the quit: it equals the last logged page. A list's wheel: `find` the ListView (`i.orientation !== undefined && i.count > 20`), `wheel(list, -600)`, log `contentY` 1.5 s later.
+In `paged-rtl` the left third reads on (page + 1); in `paged-ltr` the right third does. Read back the chapter's `lastPageRead` after the quit (`core.sh api chapter.list '{"ids":[<id>]}' | jq -c '.chapters[] | {id, lastPageRead}'`): it equals the last logged page. A list's wheel: `find` the ListView (`i.orientation !== undefined && i.count > 20`), `wheel(list, -600)`, log `contentY` 1.5 s later.
 
 ## Gotchas
 - `grab()` captures after the step returns: end the step with it.
-- The seeded library's manga have three or four chapters, too few to scroll; scroll Extensions (`Tab` on Browse, hundreds of rows), a source's grid, or Updates after the updates seed in `updates.md`.
+- A seeded manga's chapter count depends on what the source lists (the core seed's Berserk manga had 101 on 2026-11-22, another had none); for a long list, scroll Extensions (`Tab` on Browse, hundreds of rows), a source's grid, or Updates after the updates seed in `updates.md`.
 - Webtoon wheel scrolling is Qt's: about 40 px a notch.
 - A vertical wheel over global search's horizontal cover strips falls through to the list of sources (Qt 6.11, checked in a standalone ListView-in-ListView). With one source installed the list does not overflow, so install more before you prove that scroll in the window.

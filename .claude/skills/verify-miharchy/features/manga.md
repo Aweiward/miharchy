@@ -9,14 +9,14 @@ The manga detail's chapter list: mark read or unread, bookmark, mark every earli
 - `P` marks every chapter before the cursor in reading order read, among the chapters shown, without the one under it (Mihon's `markPreviousChapterRead`): below the cursor when the list is descending, above it when ascending. A chapter the filter hides stays as it is.
 - `F` opens the filter and sort panel. Filters: unread, downloaded, bookmarked, each off, include or exclude. Sorts: by source, chapter number, upload date. Choosing the current sort flips its direction; a new sort starts ascending (Mihon's `SetMangaChapterFlags`). Descending is newest first; source order breaks ties.
 - The `F` panel also lists the manga's scanlators (A to Z, ignoring case) between the filters and the sorts. Enter on one excludes it (`[-]`) or lets it back (`[ ]`), saved at once to manga meta `miharchy.excludedScanlators` as a JSON list (Mihon's `ScanlatorFilterDialog`). An excluded scanlator's chapters leave the list, the next-chapter pick, and the reader's chapter list even with skip filtered off; the chapter opened stays. Save as default never touches them. The panel scrolls when the rows run past the window.
-- The choices are per manga: manga meta `miharchy.chapterFilterUnread`, `chapterFilterDownloaded`, `chapterFilterBookmarked`, `chapterSort`, `chapterSortDirection`. The same keys in global meta are the default. "Save as default" writes the current five to global meta; "for every manga in the library" also drops those keys from every library manga (`deleteMangaMetas`), so they follow the default.
+- The choices are per manga: manga meta `miharchy.chapterFilterUnread`, `chapterFilterDownloaded`, `chapterFilterBookmarked`, `chapterSort`, `chapterSortDirection`. The same keys in global meta are the default. "Save as default" writes the current five to global meta; "for every manga in the library" also drops those keys from every library manga (`meta.delete`), so they follow the default.
 - The header shows the chapter count, how many the filter hides, and `Start: space` or `Resume chapter N: space`. Space opens the first unread chapter in reading order among those shown (Mihon's `getNextUnread`); the reader opens it at its `lastPageRead`.
-- The reader gets the chapters in the manga's chosen sort, read ascending, like Mihon's `ReaderViewModel` (`getChapterSort(manga, sortDescending = false)`), minus what the skip settings drop (`Chapters.readingOrder`, see `reader.md`). Proof: set `miharchy.chapterSort` to `uploadDate` with `setMangaMeta`, open a chapter from the detail, wait 2 s, and log `reader.reader.chapters` ids: they follow upload date, oldest first.
-- A mark read sends `trackProgress` for the manga after the mark succeeds when the setting "Update trackers when marking chapters read" (`miharchy.trackOnMarkRead`) is "always", the default; "ask" checks first and asks (`y update n keep`), "never" sends nothing. With "Delete downloads marked read" on, the chapters it marks read lose their downloads (`downloads.md`).
+- The reader gets the chapters in the manga's chosen sort, read ascending, like Mihon's `ReaderViewModel` (`getChapterSort(manga, sortDescending = false)`), minus what the skip settings drop (`Chapters.readingOrder`, see `reader.md`). Proof: set `miharchy.chapterSort` to `uploadDate` with `core.sh api meta.set '{"metas":[{"scope":"manga","owner":<id>,"key":"miharchy.chapterSort","value":"uploadDate"}]}'`, open a chapter from the detail, wait 2 s, and log `reader.reader.chapters` ids: they follow upload date, oldest first.
+- A mark read sends `track.progress` for the manga after the mark succeeds when the setting "Update trackers when marking chapters read" (`miharchy.trackOnMarkRead`) is "always", the default; "ask" checks first and asks (`y update n keep`), "never" sends nothing. With "Delete downloads marked read" on, the chapters it marks read lose their downloads (`downloads.md`).
 - `a` on a manga not in the library first looks for possible duplicates (Mihon's `GetDuplicateLibraryManga`, `Browse.duplicates`): library manga whose title contains this one's, ignoring case, from the library the window already loaded. With any, a panel lists them (scope `manga-duplicates`): Enter or a double click opens one, `M` migrates it to this manga (`migrateView.startWith`, straight to the confirm; Esc there closes), `a` adds anyway, Esc cancels. Its hint line takes clicks. Fixture: put WeebCentral's "One Piece (Color)" in the library, open WeebCentral's "One Piece" with `mangaDetail.openManga(id, true)`, press `a`.
 - Every mark and bookmark goes through `shell.qml` `markChapters(chapters, action, mangaIds)` (`window/Chapters.js` builds the payloads), which reloads the detail of a manga in `mangaIds`, Updates and the Library (its unread badge and bookmarked filter).
 - `d` / `x` download or delete the chapter under the cursor or the selection (`window/Downloads.js`).
-- `o` opens the manga's page on the source's site with `xdg-open` (Mihon's WebView); `y` copies the link with `wl-copy -- <url>` (Mihon's Share) and the hint starts with "Link copied". The link is `MangaType.realUrl`; without one the hint says the server has no link. Stub both commands on `PATH` (see `reader.md`).
+- `o` opens the manga's page on the source's site with `xdg-open` (Mihon's WebView); `y` copies the link with `wl-copy -- <url>` (Mihon's Share) and the hint starts with "Link copied". The link is `realUrl` in core's `manga.get`; without one the hint says the server has no link. Stub both commands on `PATH` (see `reader.md`).
 - `Y` copies the manga's title with `wl-copy -- <title>` ("Title copied"); `/` opens Browse's global search for the title (Mihon's title long press and tap). `BrowseView.searchEverywhere` loads the sources first when Browse has not shown yet. Esc there goes back to the source list, not to the manga.
 - `n` opens the notes editor (Mihon's `MangaNotesScreen`): Enter saves to manga meta `miharchy.notes`, Shift+Enter starts a new line, Esc drops the edit. The manga screen shows the notes under the description, rendered as Markdown. The driver's `key()` cannot send Shift; send real keys to the focused field with `vMouse.keyClick(Qt.Key_Return, Qt.ShiftModifier, -1)` and `vMouse.keyClickChar("x", Qt.NoModifier, -1)`. Sync carries them (`sync.md`).
 - `U` opens the download menu (Mihon's `DownloadDropdownMenu`, `Chapters.DOWNLOADS`): next chapter, next 2, 5, 10, 25, next N with a typed number (Enter on that row opens a field; anything but a whole number above 0 shows "Type a whole number above 0"), unread, bookmarked. `Chapters.toDownload`: "next N" tops up, as the Library's `d` menu (`downloads.md`): of the first N unread in reading order by the filters and excluded scanlators (downloaded filter and Downloaded only off), those not on disk and not in the queue, so a chapter on disk or queued counts toward N (Mihon takes the next N not on disk). Unread and bookmarked follow `MangaViewModel`: chapters not on disk and not in the queue, never an excluded scanlator's, and only those the filters show while skip filtered is on. A row with nothing to queue says "Nothing to download"; otherwise the menu closes. The menu opens on the row chosen last (global meta `miharchy.downloadMenuManga`, e.g. `next2`): log `mangaDetail.downloadsCursor` after a second `U`. Proof: stop the downloader, then log `downloadsView.queue.items` chapter ids after each row; set the field's text (`find(mangaDetail, function(i) { return i.cursorPosition !== undefined && i.width > 0 })`) before Enter.
@@ -25,10 +25,9 @@ The manga detail's chapter list: mark read or unread, bookmark, mark every earli
 Library → `Enter` on a manga.
 
 ## Driving it with drive.sh
-Give one chapter a page read first, so `u` has a reset to do (the page count exists only after the pages are fetched):
+On the core seed, give one chapter a page read first, so `u` has a reset to do:
 ```sh
-.claude/skills/verify-miharchy/scripts/gql.sh 'mutation($id:Int!){ fetchChapterPages(input:{chapterId:$id}){ pages } }' '{"id":<2nd chapter id>}' >/dev/null
-.claude/skills/verify-miharchy/scripts/gql.sh 'mutation($id:Int!){ updateChapter(input:{id:$id, patch:{lastPageRead:3}}){ chapter{ lastPageRead } } }' '{"id":<2nd chapter id>}'
+.claude/skills/verify-miharchy/scripts/core.sh api chapter.update '{"ids":[<2nd chapter id>],"lastPageRead":3}'
 ```
 ```js
 [
@@ -40,7 +39,7 @@ Give one chapter a page read first, so `u` has a reset to do (the page count exi
   [500,  function() { done() }]
 ]
 ```
-Read back: `.claude/skills/verify-miharchy/scripts/gql.sh 'query($id:Int!){ manga(id:$id){ unreadCount chapters{ nodes{ id isRead lastPageRead lastReadAt sourceOrder } } } }' '{"id":<manga id>}'`.
+Read back: `.claude/skills/verify-miharchy/scripts/core.sh api chapter.list '{"mangaIds":[<manga id>]}' | jq -c '[.chapters[] | [.id, .isRead, .lastPageRead, .lastReadAt, .sourceOrder]]'`, and `unreadCount` in `library.list`.
 
 Bookmark, filter, sort and resume. The panel rows run unread, downloaded, bookmarked, one row per scanlator (the seeded MangaDex manga have at least one), by source, by number, by upload date, save as default, save as default for every manga, so count the `j` presses from `mangaDetail.optionRows`. Indexes of `mangaDetail.shown` are what the cursor sees; `mangaDetail.optionRows` shows the choices:
 ```js
@@ -55,13 +54,13 @@ Bookmark, filter, sort and resume. The panel rows run unread, downloaded, bookma
   [1500, function() { done() }]
 ]
 ```
-Read back: `.claude/skills/verify-miharchy/scripts/gql.sh '{ manga(id:<id>){ meta { key value } chapters { nodes { id isBookmarked isRead } } } metas(filter:{key:{startsWith:"miharchy.chapter"}}){ nodes { key value } } }'`. Run the window a second time to see the choices come back from meta.
+Read back: `.claude/skills/verify-miharchy/scripts/core.sh api manga.get '{"id":<id>}' | jq -c '{meta: .manga.meta, chapters: [.manga.chapters[] | [.id, .isBookmarked, .isRead]]}'` and `core.sh api meta.get '{"scope":"global"}' | jq -c '[.metas[] | select(.key | startswith("miharchy.chapter"))]'`. Run the window a second time to see the choices come back from meta.
 
 ## Gotchas
 - `grab()` saves asynchronously; a `done()` in the same step quits before the file is written.
-- `updateChapters` stamps `lastReadAt` whenever the patch carries `lastPageRead`, which puts the chapter in History. So `u` resets only chapters with a page read; a mark read never sends `lastPageRead`.
-- Suwayomi clamps `lastPageRead` to `pageCount`, which is -1 until the pages are fetched.
-- A scratch server has no tracker logged in, so `trackProgress` answers with no records; prove the push with the document's reply, not a tracker.
-- The seeded MangaDex manga have three chapters each, and one of them numbers all three 1. Upload dates there run out of source order, which is what proves the date sort.
+- `chapter.update` stamps `lastReadAt` whenever the body carries `lastPageRead` and no `isRead: false`, which puts the chapter in History. So `u` resets only chapters with a page read; a mark read never sends `lastPageRead`.
+- Core does not clamp `lastPageRead` to the page count, so a seed needs no page fetch.
+- A scratch core has no tracker logged in, so `track.progress` skips every track and answers them unchanged; prove the push with the logging proxy (SKILL.md, Live updates), not a tracker.
+- The date sort needs a manga whose upload dates run out of source order: compare `uploadDate` with `sourceOrder` in `chapter.list` before you pick one.
 - A `grab()` followed in the same step by keys that open another manga captures the next screen, not this one.
 - The chapter choices load after the detail opens, so a capture right after `Enter` can show the default order for a moment.

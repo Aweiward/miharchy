@@ -1,31 +1,31 @@
 # Restore a backup
 
-The window restores one `.tachibk` file into the server, as Mihon's Restore backup does. The sync helper does the work: `miharchy-sync check <file>` lists what the backup needs and the server lacks, and `miharchy-sync restore <file>` restores it under `sync.lock` and streams progress as JSON lines.
+The window restores one `.tachibk` file into core, as Mihon's Restore backup does. Core does the work: `backup.check '{"file":"<path>"}'` lists what the backup needs and core lacks, and `backup.import '{"file":"<path>"}'` restores it, one at a time with syncs and backups, and answers `{"manga": <count>}`.
 
 ## Sub-features
 - The path field takes an absolute path or `~/...` and starts in the sync folder.
-- Before the restore: "Missing sources" and "Trackers not logged in", from `validateBackup`.
-- The restore: progress lines while it runs, then the result or the helper's message ("A sync is already running." while a sync holds the lock).
+- Before the restore: "Missing sources" and "Trackers not logged in", from `backup.check`'s `missingSources` and `missingTrackers`.
+- The restore: the result, or core's message ("A sync is already running." while a sync runs).
 - No baseline moves. The next sync counts the restored state as desktop changes.
 
 ## How to get to it (user POV)
 Palette (`:`) → "Restore a backup" → type the path → Enter checks → Enter restores. Esc closes at any step; a running restore goes on.
 
 ## Driving it with drive.sh
-The window runs the helper Setup installs under `$HOME`; `drive.sh` sets `HOME=$RUN/home`, so install the checkout's build there:
+`drive.sh` runs the window with `HOME=$RUN/home`, so put the fixture there:
 ```sh
-mkdir -p $RUN/home/.local/share/miharchy/helper
-cp -r sync/build/install/miharchy-sync/. $RUN/home/.local/share/miharchy/helper/
-cp <fixture>.tachibk $RUN/home/r.tachibk
+mkdir -p <RUN>/home
+cp <fixture>.tachibk <RUN>/home/r.tachibk
 .claude/skills/verify-miharchy/scripts/drive.sh steps.js 60
 ```
-Steps: `root.run("restore.open")`, set `restoreView.pathField.text = "~/r.tachibk"`, `key("Enter")`, wait for `restoreView.restore.step === "confirm"`, `key("Enter")`, wait for `"done"`. Log `restoreView.restore`.
+Steps: `root.run("restore.open")`, set `restoreView.pathField.text = "~/r.tachibk"`, `key("Enter")`, wait for `restoreView.restore.step === "confirm"`, `key("Enter")`, wait for `"done"`. Log `restoreView.restore`. A quick fixture is a backup core writes itself (`backup.export '{"folder":"<RUN>/stage"}'`, `sync.md`).
 
-For criterion "the next sync keeps it", drive the helper directly through `.claude/skills/verify-miharchy/scripts/qs.sh env $RUN/home/.local/share/miharchy/helper/bin/miharchy-sync <args>`:
-1. `sync --folder $RUN/folder` with phone backup P1, then `restore R`: the baselines' sha256 do not change.
-2. Put phone backup P2 (newer mtime) in the folder, where the phone removed a manga R touched and one R did not, then `sync`: the touched one stays in the library, the other leaves; a second `sync` prints "no changes".
+Read back with the same routes the window sends. Recipe that ran on 2026-11-22, on the core seed with a track record written into `core.db`: `core.sh api backup.check '{"file":"<RUN>/stage/miharchy-backup-<time>.tachibk"}'` gave `"missingSources":[],"missingTrackers":["AniList"]`, and `core.sh api backup.import '{"file":"<same>"}'` gave `{"manga":2}`.
+
+For criterion "the next sync keeps it", send the routes directly:
+1. `sync.run` with phone backup P1 in the folder (`sync.md`), then `backup.import` R: `sha256sum <RUN>/core/data/sync/*-baseline.tachibk` does not change.
+2. Put phone backup P2 (newer mtime) in the folder, where the phone removed a manga R touched and one R did not, then `sync.run`: the touched one stays in the library, the other leaves; a second `sync.run` with `"dryRun":true` answers `"changes":[]`.
 
 ## Gotchas
-- Build fixtures with the model classes in `sync/src/main/kotlin/eu/kanade/...` (see `sync/src/test`). A source id with no installed extension shows under "Missing sources"; a track on MyAnimeList (1) under "Trackers not logged in" on a fresh server.
-- Suwayomi's final `restoreStatus` resets `mangaProgress` and `totalManga` to 0, and its running count includes non-manga steps, so the result line names no count.
-- A small fixture restores in under a second, so the running step rarely shows a progress line in a capture; `restore` on the command line prints them.
+- Build fixtures with the model classes in `sync/src/main/kotlin/eu/kanade/...` (see `sync/src/test`). A source id with no installed extension shows under "Missing sources"; a track on a tracker core has but is not logged in to (AniList is 2) under "Trackers not logged in".
+- A small fixture restores in under a second, and core sends no progress lines, so the window shows the running step only briefly.

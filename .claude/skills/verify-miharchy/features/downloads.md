@@ -1,12 +1,12 @@
 # Download queue
 
-`D` on the Library or a manga (or the palette's "Download queue") opens the server's download queue over the window (`DownloadsView.qml`, decisions in `window/Downloads.js`). It loads `downloadStatus` once, then follows the `downloadStatusChanged` subscription while it shows, and also while anything waits in the queue (see the SKILL's live updates section). `D` is bound on the Library and a manga only, not on Updates. Other ways in: the manga detail's `d`/`x` and `U` download menu (`manga.md`), the reader's download ahead (`reader.md`), Updates `d`, and the next chapters of a set of manga below, which opens the queue when it queued anything.
+`D` on the Library or a manga (or the palette's "Download queue") opens core's download queue over the window (`DownloadsView.qml`, decisions in `window/Downloads.js`). It loads `download.queue` once, then follows core's `downloads` topic while it shows, and also while anything waits in the queue (see the SKILL's live updates section). `D` is bound on the Library and a manga only, not on Updates. Other ways in: the manga detail's `d`/`x` and `U` download menu (`manga.md`), the reader's download ahead (`reader.md`), Updates `d`, and the next chapters of a set of manga below, which opens the queue when it queued anything.
 
 ## Next chapters of a set of manga
 
-`d` on the Library opens the download menu (`NextChaptersMenu.qml`, shell id `nextChapters`, scope `next-chapters`) for the selection, or with none for the shown category tab; the palette's "Download next chapters of Up next" opens it for all of Up next. The menu starts on the row chosen last (global meta `miharchy.downloadMenuSet`). A row fetches each manga's chapters (`fetchChapters`), one at a time, then queues only the missing chapters among each manga's next N unread (by its chapter filters and excluded scanlators; Downloaded only ignored). A failed fetch uses the stored chapters and lands in `nextChapters.lastRun.failures` with the server's message. Rules in `docs/agents/library.md`.
+`d` on the Library opens the download menu (`NextChaptersMenu.qml`, shell id `nextChapters`, scope `next-chapters`) for the selection, or with none for the shown category tab; the palette's "Download next chapters of Up next" opens it for all of Up next. The menu starts on the row chosen last (global meta `miharchy.downloadMenuSet`). A row fetches each manga's chapters (`manga.refresh`), one at a time, then queues only the missing chapters among each manga's next N unread (by its chapter filters and excluded scanlators; Downloaded only ignored). A failed fetch uses the stored chapters and lands in `nextChapters.lastRun.failures` with core's message. Rules in `docs/agents/library.md`.
 
-Setup: `seed.sh --library 3`; `createCategory`, `updateMangasCategories` for two manga; download one manga's next chapter (enqueue, `startDownloader`, poll `isDownloaded`), then `stopDownloader`. To force failed fetches, uninstall the extension (`updateExtension(patch:{uninstall:true})`): every refresh then fails with "Missing source <id>". Up next drops a manga whose source is missing, so drive Up next with the extension installed, and give it a manga by marking one chapter read.
+Setup: the core seed with three library manga; `category.create`, then `manga.update` with `addToCategories` for two of them; download one manga's next chapter (`download.enqueue`, poll `chapter.list` until `isDownloaded`). To force failed fetches, uninstall the extension (`extension.remove '{"pkgName":"<pkg>"}'`): every refresh then fails with "The source <id> is not installed." Up next drops a manga whose source is missing, so drive Up next with the extension installed, and give it a manga by marking one chapter read.
 
 ```js
 [
@@ -25,22 +25,22 @@ Setup: `seed.sh --library 3`; `createCategory`, `updateMangasCategories` for two
 
 For Up next: `key(":")`, set the palette field's text (`find(palette, function(i) { return i.cursorPosition !== undefined })`) to "next chapters of up next", `key("Enter")`, then `key("Enter")` on the menu.
 
-Read back `{ downloadStatus { queue { chapter { id } } } chapters(filter:{mangaId:{in:[...]}}) { nodes { id isDownloaded } } metas(filter:{key:{startsWith:"miharchy.downloadMenu"}}) { nodes { key value } } }`: the queue (or `isDownloaded`, once the downloader ran) holds exactly `lastRun.queued`, the chapter downloaded first is not queued again, and the meta holds the row (`next2`). The enqueue starts the downloader, so MangaDex may finish a chapter before the read-back.
+Read back `core.sh api download.queue '{}' | jq -c '[.queue[].chapter.id]'`, `core.sh api chapter.list '{"mangaIds":[...]}' | jq -c '[.chapters[] | select(.isDownloaded) | .id]'` and `core.sh api meta.get '{"scope":"global","keys":["miharchy.downloadMenuSet"]}'`: the queue (or `isDownloaded`, once the downloader ran) holds exactly `lastRun.queued`, the chapter downloaded first is not queued again, and the meta holds the row (`next2`). The enqueue starts the downloader, so MangaDex may finish a chapter before the read-back.
 
 ## Keys
 
 - `j`/`k` move the cursor. `x` takes the download out of the queue. `Space` starts or pauses the downloader. `Esc`/`D` close.
 - `K`/`J` move the download up or down, `t` to the top, `b` to the bottom (Mihon's move actions). The cursor follows the download.
 - `n` sorts by chapter number, `u` by upload date: ascending, or descending when the queue already runs ascending (Mihon's sort menu offers both directions). The whole queue sorts; Mihon sorts within each source group.
-- `r` retries: on the run's summary line every failed chapter of the run, on a failed row that chapter (dequeue and enqueue in one request, so tries start over).
-- `X` asks first and the second `X` cancels every download (Mihon's cancel all): `clearDownloader`, which also stops the downloader. Any other key keeps the queue (`shell.qml` disarms on every other key, as for Updates' `x`). With the queue empty, `X` does nothing.
-- Every reorder is one request: one `reorderChapterDownload(chapterId, to)` per download out of place, run in order; only the last answers with the status. `to` counts from 0, and a `to` past the end fails the request, so `Downloads.moved` clamps.
+- `r` retries: on the run's summary line every failed chapter of the run, on a failed row that chapter (one `download.enqueue`; core puts a failed chapter back to `QUEUED` where it is, and it keeps its tries).
+- `X` asks first and the second `X` cancels every download (Mihon's cancel all): `download.clear`, which also stops the downloader. Any other key keeps the queue (`shell.qml` disarms on every other key, as for Updates' `x`). With the queue empty, `X` does nothing.
+- Every reorder is one `download.reorder` with the whole new order (`Downloads.orderPayload`); nothing is sent when nothing moves.
 
 ### The run's summary
 
 The queue shows the last run as a line above its rows ("Next 2 chapters of All: 2 on disk, 2 failed, 1 manga could not fetch chapters"), at cursor -1 (the queue opens there after a run), with each refresh failure under it. When none of the run's chapters is queued or downloading, the window runs `notify-send -a Miharchy -- <label> <counts>` once. Put a logging `notify-send` stub first on `PATH` (a literal `PATH=<stubdir>:/usr/local/bin:/usr/bin:... drive.sh ...`): never a real notification.
 
-Setup, local source only (no extension): `$RUN/server/local/{Good,Broken,Gone}/{ch1,ch2}/001.png` (Gone needs only `ch1`), `fetchSourceManga(source: "0", type: POPULAR)`, `updateMangas(inLibrary: true)`, `fetchChapters` for each. Download Broken's `ch1` (it counts toward "Next 2"), then delete the image in Broken's `ch2` and the whole `Gone` folder: Gone's refresh then fails with "No chapters found" and its stored `ch1` fails to download (not found); Broken's `ch2` fails with no pages; Good's two download.
+The recipe for this line used local-source fixtures (a manga whose folder is gone, one with a chapter with no images), and core has no local source yet (#374). Until it lands, a refresh failure comes from an uninstalled extension (above), and a download failure from a chapter whose source is gone (Failed rows). The steps stay:
 
 ```js
 [
@@ -58,47 +58,45 @@ Setup, local source only (no extension): `$RUN/server/local/{Good,Broken,Gone}/{
 ]
 ```
 
-Proof: the line reads 2 on disk, 2 failed, 1 manga; after `r` both failed chapters are `QUEUED` and the server log gains a new `downloadChapter(... tries= 0 ...)` warning for each; the stub logged one line. To prove the end needs no live update, drop the stream before the run: `var ls = downloadsView.children.find(function(c) { return c.query === Downloads.LIVE_QUERY }); ls.running = false; ls.close(); ls.subscribed = true` (the enqueue reply is then ignored too). The window sees none of the run's chapters (`tally.queued` 4); `ls.running = true; ls.restart()` brings the failed ones, the settle read marks the finished ones `disk`, and the stub logs one notification. `fetchChapters` on a missing local folder reads "No chapters found", which `Failure.reason` leaves as "other".
+Proof: the line's counts match the fixture; after `r` the failed chapters are `QUEUED` in `core.sh api download.queue '{}' | jq -c '[.queue[] | {id: .chapter.id, state, tries}]'`; the stub logged one line. To prove the end needs no live update, stop the topic before the run: `var ls = downloadsView.children.find(function(c) { return c.topic === "downloads" }); ls.running = false`. The window then sees none of the run's chapters; `ls.running = true` brings the failed ones back, the settle read marks the finished ones `disk`, and the stub logs one notification (from `LiveSocket.qml`: `onRunningChanged` closes or reconnects; this step has not run on core yet).
 
 ## Failed rows
 
-A failed download's row shows its reason after "failed" (`Downloads.statusText`, `window/Failure.js`): "Source not installed   see the library check, ! on the Library" for a manga whose extension is gone (no probe), else what one `fetchChapterPages` probe of the chapter says. Messages seen on Suwayomi v2.3.2243: `Chapter not found` (not found), `Source not installed: <source id>` (source missing), and an empty `pages` list for a chapter folder with no images (shown as "Chapter does not have any pages to download"). Cloudflare and network rows are node-tested only (`window/tests/failure.test.js`).
+A failed download's row shows its reason after "failed" (`Downloads.statusText`, `window/Failure.js`). The reason is the `error` core's queue carries for the chapter (`{ kind, message }`, read by `Failure.coreReason`); the window sends no probe. Messages seen on core on 2026-11-22: `Source not installed` (kind `notFound`) for a chapter whose extension is gone. Cloudflare and network rows are node-tested only (`window/tests/failure.test.js`).
 
-Setup, with the scratch server and `seed.sh --library 2`:
+Recipe that ran on 2026-11-22: `core.sh api extension.install '{"pkgName":"eu.kanade.tachiyomi.extension.en.weebcentral"}'`, `source.search` "Eleceed" on Weeb Central (`2131019126180322627`), `manga.refresh` it, `extension.remove` Weeb Central, then `download.enqueue` one of its chapters. Within seconds the read-back `core.sh api download.queue '{}' | jq -c '{state, queue: [.queue[] | {id: .chapter.id, state, tries, error}]}'` gave `{"state":"STOPPED","queue":[{"id":102,"state":"ERROR","tries":1,"error":{"kind":"notFound","message":"Source not installed"}}]}`.
 
-1. `seed.sh --hold-queue <MangaDex chapter ids>`, then uninstall MangaDex: `updateExtension(input: { id: "eu.kanade.tachiyomi.extension.all.mangadex", patch: { uninstall: true } })`.
-2. A local-source manga with two chapters: `$RUN/server/local/Broken/ch1/001.png` and `ch2/001.png`; `fetchSourceManga(source: "0", type: POPULAR)`, `updateManga(inLibrary: true)`, `fetchChapters`.
-3. Delete the `ch1` folder and the image in `ch2`, enqueue both, start the downloader. Every item turns `ERROR` (`tries` 3).
-
-Drive: `root.run("downloads.open")`, wait 4 s, log `Downloads.statusText(i, downloadsView.reasons[i.chapterId], downloadsView.flareOn)` per item and grab. Proof of one probe per failure: `grep -F 'ChapterMutation$fetchChapterPages' $RUN/server.log` gains one line per window start (the not-found chapter only; the source-missing ones never), and one more after `x` and a new enqueue of that chapter fails it again.
+Drive: `root.run("downloads.open")`, wait 4 s, log `Downloads.statusText(i, downloadsView.reasons[i.chapterId], downloadsView.flareOn)` per item and grab.
 
 ## Settings
 
-- "Save downloads as CBZ" is the server setting `downloadAsCbz` (Mihon's "Save as CBZ archive"). It applies to new downloads: the chapter lands as `<scanlator>_<name>.cbz` in the manga's folder under `$RUN/server/downloads/mangas/<source>/`, and `fetchChapterPages` still serves its pages. Proof: Enter on the row, `settings { downloadAsCbz }` reads `true`, download a chapter, `find` the `.cbz`.
+- "Save downloads as CBZ" is the setting `downloadAsCbz` (Mihon's "Save as CBZ archive"). Core stores it and does not act on it: it always writes a chapter as a `.cbz` under `$RUN/core/data/downloads`. Proof of the row: Enter on it, then `core.sh api settings.get '{}' | jq -c '{downloadAsCbz: .settings.downloadAsCbz, unapplied}'` reads `true` with `downloadAsCbz` in `unapplied`.
 
 ## Auto-download
 
-Mihon's "Auto-download" group, all Suwayomi server settings: "Auto-download new chapters" (`autoDownloadNewChapters`), "only for manga with no unread chapters" (`excludeEntryWithUnreadChapters`, the server's default is on), "skips re-uploaded chapters" (`autoDownloadIgnoreReUploads`: a new chapter numbered below the latest one). The server queues the new chapters a chapter fetch finds (a library update or `fetchChapters`), never on a manga's first fetch. `d` on Categories cycles a category's `includeInDownload` through unset, included and excluded (Mihon's include and exclude lists): once one is included, only manga in an included category download, and an excluded one always stays out. Neither `d` nor deleting a category touches the server setting any more. Not offered: `autoDownloadNewChaptersLimit`.
-
-Proof with a real new chapter: a local-source manga (`$RUN/server/local/<title>/<chapter>/001.png`, source `"0"`) in the library and in an included category; `fetchChapters` once, add a chapter folder, `fetchChapters` again, and `isDownloaded` turns true for the new chapter only. With the category excluded, the next new chapter stays off disk.
+Mihon's "Auto-download" group: "Auto-download new chapters" (`autoDownloadNewChapters`), "only for manga with no unread chapters" (`excludeEntryWithUnreadChapters`, default on), "skips re-uploaded chapters" (`autoDownloadIgnoreReUploads`). Core stores all three and has no auto-download yet, so `settings.get` lists them in `unapplied` and only the rows can be proven. `d` on Categories cycles a category's `includeInDownload` through unset, included and excluded (Mihon's include and exclude lists); read it back with `core.sh api category.list '{}' | jq -c '[.categories[] | {id, name, includeInDownload}]'`. Neither `d` nor deleting a category touches the setting. Not offered: `autoDownloadNewChaptersLimit`.
 
 ## Delete after reading
 
-Mihon's "Delete chapters" group. Suwayomi has none of it, so the window deletes, and `Downloads.autoDeletePayload` holds the rules both paths share (Mihon's `DownloadManager.getChaptersToDelete`): a chapter goes only when it is on disk and read, not bookmarked unless "Delete bookmarked chapters" is on, and its manga is in no category flagged with `p` in Categories (category meta `miharchy.keepDownloads` = `"true"`, Mihon's excluded categories). The rules read the server at delete time (`autoDeleteQuery`).
+Mihon's "Delete chapters" group. The window deletes, and `Downloads.autoDeletePayload` holds the rules both paths share (Mihon's `DownloadManager.getChaptersToDelete`): a chapter goes only when it is on disk and read, not bookmarked unless "Delete bookmarked chapters" is on, and its manga is in no category flagged with `p` in Categories (category meta `miharchy.keepDownloads` = `"true"`, Mihon's excluded categories). The rules read core at delete time (`autoDeleteQuery`).
 
 - "Delete after reading" (global meta `miharchy.deleteAfterRead`): Off, last read chapter, or the second to fifth to last. Once the chapter open in the reader is read there for the first time, the chapter that many slots back in reading order (`reader.chapters`, Mihon's `chapterList`) goes as the reader leaves the chapter (`Reader.deleteTarget`). Mihon defers the delete until the reader closes. The stored values `"false"`/`"true"` are those of the on/off row this replaced, so an old "on" reads as "last read chapter".
 - "Delete downloads marked read" (`miharchy.deleteAfterMarkRead`): after a mark read from the manga detail or Updates (`shell.qml` `markChapters` → `deleteRead`), the chapters that mark read go. Mihon's own check of excluded categories reads the chapters from before the mark, so it never keeps one there; Miharchy keeps them.
 - A manga in no category is in Default, which the Categories screen does not list, so Default cannot keep downloads.
 
-Proof. Set up with `gql.sh`: every chapter of both seeded manga downloaded (enqueue, `startDownloader`, poll `isDownloaded`), chapter 4 read and 6 bookmarked on manga 2, manga 1 in a category. With "second to last" on, reading chapter 5 to its end and leaving deletes 4 and keeps 5; `R` on bookmarked 6 keeps it; `R` on manga 1's chapter 1 keeps it while `p` flags the category, and `R` on chapter 2 deletes it once `p` clears the flag. Read back `chapters(filter:{id:{in:[...]}}){ nodes{ id isRead isBookmarked isDownloaded } }` and `category(id){ meta{ key value } }`.
+Proof. Set up with `core.sh api`: every chapter of two seeded manga downloaded (`download.enqueue`, poll `chapter.list` until `isDownloaded`), chapter 4 read (`chapter.update` with `isRead`) and 6 bookmarked (`isBookmarked`) on the second manga, the first manga in a category. With "second to last" on, reading chapter 5 to its end and leaving deletes 4 and keeps 5; `R` on bookmarked 6 keeps it; `R` on the first manga's chapter 1 keeps it while `p` flags the category, and `R` on chapter 2 deletes it once `p` clears the flag. Read back `core.sh api chapter.list '{"ids":[...]}' | jq -c '[.chapters[] | [.id, .isRead, .isBookmarked, .isDownloaded]]'` and `core.sh api category.list '{}' | jq -c '[.categories[] | {id, meta}]'`.
 
 ## Setup
 
-MangaDex finishes a chapter in seconds, so a queue to drive must be stopped. `seed.sh --hold-queue` deletes the chapters' downloads, queues them, stops the downloader after its delayed start (a stop sent before it does not hold), and fails unless the queue still holds every chapter a few seconds later:
+MangaDex finishes a chapter in seconds, so a queue to drive must be stopped. `download.enqueue` starts the downloader, so stop it right after; the chapter it was on goes back to `QUEUED`:
 
 ```sh
-.claude/skills/verify-miharchy/scripts/seed.sh --hold-queue 4,5,6
+.claude/skills/verify-miharchy/scripts/core.sh api download.enqueue '{"ids":[4,5,6]}'
+.claude/skills/verify-miharchy/scripts/core.sh api download.stop '{}'
+.claude/skills/verify-miharchy/scripts/core.sh api download.queue '{}' | jq -c '{state, queue: [.queue[].chapter.id]}'
 ```
+
+On an empty queue the last command must print `{"state":"STOPPED","queue":[4,5,6]}`; on 2026-11-22 it held all three, behind a failed chapter already queued. A chapter already on disk is not queued: `download.delete '{"ids":[...]}'` deletes it first.
 
 ## Drive
 
@@ -120,4 +118,4 @@ MangaDex finishes a chapter in seconds, so a queue to drive must be stopped. `se
 ]
 ```
 
-Read back: `.claude/skills/verify-miharchy/scripts/gql.sh '{ downloadStatus { state queue { chapter { id } } } }'` holds the last order, and `state` stays `STOPPED`: a reorder does not start the downloader.
+Read back: `.claude/skills/verify-miharchy/scripts/core.sh api download.queue '{}' | jq -c '{state, queue: [.queue[].chapter.id]}'` holds the last order, and `state` stays `STOPPED`: a reorder does not start the downloader.

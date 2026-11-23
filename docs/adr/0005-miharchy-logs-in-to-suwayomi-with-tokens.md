@@ -1,5 +1,7 @@
 # Miharchy logs in to Suwayomi with tokens
 
+Status: superseded by ADR 0010 (2026-11-22). The window, the bar mark and the sync no longer talk to Suwayomi; miharchy-core takes a fixed secret from `core.json` on every request. Only core's one-time move from Suwayomi still logs in with the username and password from `server.json` (`core/server/.../Suwayomi.kt`).
+
 Suwayomi-Server runs in `ui_login` mode, not `basic_auth`. Each process (the window, the plugin, the sync helper) logs in once with the username and password from `server.json` and then sends a short-lived access token, refreshed with a longer-lived refresh token. QML's WebSocket cannot send an `Authorization` header, so under Basic auth the views polled; a token can travel in the socket's `connection_init` payload, so views can subscribe instead. The password also travels only at login, not on every request.
 
 ## Considered Options

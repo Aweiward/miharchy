@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Seed the scratch server: Keiyoushi repo, extensions, library manga, updates, a held queue.
+# Seed the scratch Suwayomi (server.sh), kept only to give Setup's move from Suwayomi a library to read and for
+# site/tools' showcase run; seed the scratch core with core.sh. Keiyoushi repo, extensions, library manga,
+# updates, a held queue.
 #   seed.sh [pkg ...]              install extensions (default: MangaDex)
 #   seed.sh --library N [pkg ...]  also add the first N popular manga of the first English source to the library
 #   seed.sh --updates N [pkg ...]  also add N latest manga not yet in the library, so their chapters count as
