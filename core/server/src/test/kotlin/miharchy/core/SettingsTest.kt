@@ -60,12 +60,12 @@ class SettingsTest {
         Database(work.resolve("core.db")).use { db ->
             val reply = Settings(db, work.resolve("covers")).routes.call("settings.get")
             val s = reply.getValue("settings").jsonObject
-            assertEquals(23, s.size)
+            assertEquals(22, s.size)
             assertEquals(listOf("12", "true", "00:00", "14", ""), listOf("globalUpdateInterval", "excludeUnreadChapters", "backupTime", "backupTTL", "backupPath").map { s.getValue(it).jsonPrimitive.content })
             assertTrue(s.getValue("backupTime").jsonPrimitive.isString)
             assertFalse(s.getValue("backupTTL").jsonPrimitive.isString)
             assertEquals(
-                listOf("kcefEnabled", "updateMangas", "downloadsPath", "downloadAsCbz"),
+                listOf("kcefEnabled", "updateMangas", "downloadsPath"),
                 reply.getValue("unapplied").jsonArray.map { it.jsonPrimitive.content },
             )
         }

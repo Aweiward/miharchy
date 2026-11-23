@@ -68,10 +68,6 @@ Recipe that ran on 2026-11-22: `core.sh api extension.install '{"pkgName":"eu.ka
 
 Drive: `root.run("downloads.open")`, wait 4 s, log `Downloads.statusText(i, downloadsView.reasons[i.chapterId], downloadsView.flareOn)` per item and grab.
 
-## Settings
-
-- "Save downloads as CBZ" is the setting `downloadAsCbz` (Mihon's "Save as CBZ archive"). Core stores it and does not act on it: it always writes a chapter as a `.cbz` under `$RUN/core/data/downloads`. Proof of the row: Enter on it, then `core.sh api settings.get '{}' | jq -c '{downloadAsCbz: .settings.downloadAsCbz, unapplied}'` reads `true` with `downloadAsCbz` in `unapplied`.
-
 ## Auto-download
 
 Mihon's "Auto-download" group: "Auto-download new chapters" (`autoDownloadNewChapters`), "only for manga with no unread chapters" (`excludeEntryWithUnreadChapters`, default on), "skips re-uploaded chapters" (`autoDownloadIgnoreReUploads`). Core stores all three and has no auto-download yet, so `settings.get` lists them in `unapplied` and only the rows can be proven. `d` on Categories cycles a category's `includeInDownload` through unset, included and excluded (Mihon's include and exclude lists); read it back with `core.sh api category.list '{}' | jq -c '[.categories[] | {id, name, includeInDownload}]'`. Neither `d` nor deleting a category touches the setting. Not offered: `autoDownloadNewChaptersLimit`.

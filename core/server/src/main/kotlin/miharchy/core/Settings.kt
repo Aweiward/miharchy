@@ -72,8 +72,6 @@ val SETTINGS: List<Setting> = listOf(
     // ponytail: stored only; the download queue writes to <core data>/downloads. A live folder first needs the queue's
     // start-up sweep of *.part files kept to core's own files, and a plan for download_path marks under the old root.
     path("downloadsPath", applied = false),
-    // Core always writes .cbz files.
-    bool("downloadAsCbz", false, applied = false),
     // Local.kt reads it on each call; blank is <core data>/local.
     path("localSourcePath", applied = true),
     // AutoDownload.kt reads these on each refresh.
