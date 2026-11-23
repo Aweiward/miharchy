@@ -316,7 +316,10 @@ fun inside(root: Path, rel: String): Path {
 /** The page entries of a .cbz, in natural order (core's own are zero-padded, so it is their name order): images only, so `ComicInfo.xml` is no page. */
 fun cbzPages(file: Path): List<String> = ZipFile(file.toFile()).use { z -> pageEntries(z) }
 
-private fun pageEntries(z: ZipFile) = z.entries().asSequence().filter { !it.isDirectory && isPageName(it.name) }.map { it.name }.sortedWith(NATURAL).toList()
+// A Mac's zip adds `__MACOSX/._<name>` files, which carry image names but no image.
+private fun pageEntries(z: ZipFile) = z.entries().asSequence()
+    .filter { !it.isDirectory && isPageName(it.name) && !it.name.startsWith("__MACOSX/") && !it.name.substringAfterLast('/').startsWith(".") }
+    .map { it.name }.sortedWith(NATURAL).toList()
 
 /** An image by its extension, as Mihon's `ImageUtil.isImage` reads a file name. */
 fun isPageName(name: String) = name.substringAfterLast('.', "").lowercase() in setOf("jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "heif", "jxl", "bmp")

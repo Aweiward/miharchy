@@ -148,7 +148,7 @@ class Local(val folder: suspend () -> Path) {
     }
 
     private fun pageNames(chapter: Path): List<String> =
-        if (chapter.isDirectory()) chapter.listDirectoryEntries().filter { it.isRegularFile() && isPageName(it.name) }.map { it.name }.sortedWith(NATURAL)
+        if (chapter.isDirectory()) chapter.listDirectoryEntries().filter { it.isRegularFile() && isPageName(it.name) && !it.name.startsWith(".") }.map { it.name }.sortedWith(NATURAL)
         else cbzPages(chapter)
 
     private fun pages(root: Path, chapterUrl: String): JsonArray = JsonArray(pageNames(chapterPath(root, chapterUrl)).mapIndexed { i, name ->

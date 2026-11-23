@@ -330,4 +330,13 @@ class LocalTest {
         val date = java.time.Instant.ofEpochMilli(bee["uploadDate"]!!.jsonPrimitive.long).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
         assertEquals(java.time.LocalDate.of(2021, 3, 1), date)
     }
+
+    @Test
+    fun aMacZipsMetadataFilesAreNoPages() = withCore { _, browse ->
+        zip(root.resolve("Echo/Vol 1.cbz"), "__MACOSX/pages/._1.png" to byteArrayOf(0, 5, 22), "pages/1.png" to png(1), "pages/.2.png" to png(9), "pages/2.png" to png(2))
+        root.resolve("Echo/Ch 2").createDirectories().also { it.resolve("._1.png").writeBytes(byteArrayOf(0)); it.resolve("1.png").writeBytes(png(3)) }
+        val id = browse.routes.call("source.popular", body("page" to 1)).ids().single()
+        val chapters = browse.routes.call("manga.refresh", buildJsonObject { put("id", id) })["chapters"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.long }
+        assertEquals(listOf(2, 1), chapters.map { browse.routes.call("chapter.pages", buildJsonObject { put("id", it) })["pages"]!!.jsonArray.size })
+    }
 }
