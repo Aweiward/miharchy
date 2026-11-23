@@ -44,7 +44,7 @@ var STEPS = [
   { id: "coreService", title: "miharchy-core service", kind: "run", required: true, prompt: "Install and start the miharchy-core user service?" },
   { id: "move", title: "Move from Suwayomi (optional)", kind: "run", prompt: "Copy the library, extensions and downloads from Suwayomi into miharchy-core, and replace core's settings and preferences with Suwayomi's? Suwayomi stays as it is." },
   { id: "suwayomiOff", title: "Stop Suwayomi (optional)", kind: "run", prompt: "Stop and disable Suwayomi's miharchy-server service? Its package and data stay." },
-  { id: "flaresolverr", title: "FlareSolverr (optional)", kind: "run" },
+  { id: "flaresolverr", title: "FlareSolverr (optional)", kind: "run", prompt: "Start the FlareSolverr container and turn it on in miharchy-core?" },
   { id: "syncFolder", title: "Sync folder", kind: "folder" },
   { id: "phoneBackups", title: "Phone backups", kind: "check" },
   { id: "launcher", title: "App launcher entry", kind: "run", prompt: "Add Miharchy to the app launcher?" },
@@ -410,9 +410,13 @@ function parseServer(data) {
 // setup.phones: parsePhones() of the sync folder, null before the phone check.
 // setup.syncthing: parseSyncthing(), null before its check.
 // setup.move: core's move.status, null before its first reply.
+// setup.flare: core's settings (settings.get), null until it answers.
 function initial() {
-  return { probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {}, phones: null, syncthing: null, move: null }
+  return { probe: null, server: null, serverMessage: "", job: null, confirm: null, results: {}, phones: null, syncthing: null, move: null, flare: null }
 }
+
+// The read behind the FlareSolverr step: whether core has FlareSolverr on.
+var FLARE_SETTINGS = { route: "settings.get", body: {} }
 
 // The server reply Setup reads: the two global metas it needs.
 function serverPayload() {
@@ -458,6 +462,8 @@ function reduce(s, event) {
       var r = event.reply
       if (r.state !== "ok") return copy(s, { server: null, serverMessage: r.message || r.state })
       return copy(s, { server: parseServer(r.data), serverMessage: "" })
+    case "flare":
+      return copy(s, { flare: event.reply.state === "ok" ? event.reply.data.settings : null })
     case "confirm":
       return copy(s, { confirm: event.id })
     case "cancel":
@@ -559,7 +565,10 @@ function status(s, id) {
       if (p.config && status(s, "move").state !== "done") return is("waiting", "Needs the move first.")
       return is("todo", "Press Enter to stop and disable Suwayomi's miharchy-server service. miharchy-core replaces it; the package and the data stay, so you can start it again by hand.")
     case "flaresolverr":
-      return { state: "unavailable", label: "not on core", detail: "miharchy-core does not use FlareSolverr yet (#361)." }
+      if (!p.docker) return is("unavailable", "Docker is not installed. Cloudflare sources say \"This source sits behind Cloudflare\".")
+      if (status(s, "coreService").state !== "done" || !s.flare) return is("waiting", "Needs miharchy-core running first.")
+      if (p.container && s.flare.flareSolverrEnabled === true) return is("done", "The " + CONTAINER + " container runs on 127.0.0.1:8191 and miharchy-core uses it.")
+      return is("todo", "Press Enter to start the " + CONTAINER + " container on 127.0.0.1:8191 and turn FlareSolverr on in miharchy-core. Cloudflare sources need it.")
     case "syncFolder":
       if (status(s, serverStep(s)).state !== "done" || !s.server) return is("waiting", "Needs the server running first.")
       if (s.server.syncFolder) return is("done", s.server.syncFolder)
@@ -692,15 +701,22 @@ function next(s) {
   return 0
 }
 
-// The server write a successful run calls for, or null.
+// The server write a successful run calls for, or null. FlareSolverr goes
+// through the Settings row, so its whenOn fallback rides along.
 function savePayload(id, result, folder) {
   if (result.code !== 0) return null
+  if (id === "flaresolverr") {
+    var p = Settings.savePayload(Settings.ROWS.filter(function(r) { return r.key === "flareSolverrEnabled" })[0], true)
+    p.body.settings.flareSolverrUrl = FLARE_URL
+    return p
+  }
   return id === "syncFolder" ? Settings.savePayload({ key: "syncFolder", store: "meta" }, folder) : null
 }
 
 if (typeof module !== "undefined") {
   module.exports = {
     FLARE_URL: FLARE_URL,
+    FLARE_SETTINGS: FLARE_SETTINGS,
     CONTAINER: CONTAINER,
     STEPS: STEPS,
     CORE_DIR: CORE_DIR,

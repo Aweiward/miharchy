@@ -121,13 +121,11 @@ test("without a core.json path the probe asks nothing about core", () => {
   assert.ok(!t.calls().some((c) => c.includes("miharchy-core")), t.calls().join("; "));
 });
 
-test("the core steps wait in order, and FlareSolverr is unavailable on core", () => {
+test("the core steps wait in order", () => {
   let s = finish(S.initial(), "probe", READY);
   assert.equal(S.status(s, "coreBuild").state, "todo");
   assert.equal(S.status(s, "coreService").state, "waiting");
   assert.equal(S.status(s, "move").state, "waiting");
-  assert.equal(S.status(s, "flaresolverr").state, "unavailable");
-  assert.equal(S.status(s, "flaresolverr").label, "not on core");
   assert.ok(S.incomplete(s));
   s = finish(S.initial(), "probe", READY + CORE_UP);
   assert.equal(S.status(s, "coreService").state, "done");
@@ -181,7 +179,9 @@ test("on core the reads and writes are core routes, with the real paths for the 
     route: "move.start", body: { serverConfig: "/h/.config/miharchy/server.json", serverRoot: "/h/.local/share/miharchy/suwayomi", helperSync: "/h/.local/share/miharchy/sync" }
   });
   assert.deepEqual(S.savePayload("syncFolder", { code: 0 }, "/s"), { route: "meta.set", body: { metas: [{ scope: "global", key: "miharchy.syncFolder", value: "/s" }] } });
-  assert.equal(S.savePayload("flaresolverr", { code: 0 }, ""), null);
+  assert.deepEqual(S.savePayload("flaresolverr", { code: 0 }, ""), { route: "settings.set", body: { settings: {
+    flareSolverrEnabled: true, flareSolverrAsResponseFallback: true, flareSolverrUrl: "http://127.0.0.1:8191" } } }, "one y turns the fallback on too");
+  assert.equal(S.savePayload("flaresolverr", { code: 1 }, ""), null);
   let s = S.reduce(finish(S.initial(), "probe", READY + CORE_UP), { type: "move", reply: IDLE });
   s = S.reduce(s, { type: "server", reply: core(200, { metas: [] }) });
   assert.deepEqual(S.offers(s), ["move:todo", "syncFolder:todo", "launcher:todo", "peekKey:todo"]);
@@ -215,4 +215,22 @@ test("a fresh Omarchy on core installs a JDK and Qt WebSockets through Omarchy, 
     assert.equal(st.command, "omarchy-pkg-add jdk-openjdk qt6-websockets", JSON.stringify(probe) + ": a JRE without javac still needs the JDK");
     assert.doesNotMatch(st.command + st.prompt + st.detail, /suwayomi|aur|yay/i);
   }
+});
+
+// #361: FlareSolverr's step starts the container and turns it on in core.
+test("FlareSolverr is done once its container runs and core uses it", () => {
+  const up = READY + CORE_UP;
+  const flare = (s, on) => S.reduce(s, { type: "flare", reply: core(200, { settings: { flareSolverrEnabled: on }, unapplied: [] }) });
+  assert.equal(S.status(finish(S.initial(), "probe", up), "flaresolverr").state, "unavailable", "no Docker");
+  let s = finish(S.initial(), "probe", up + "docker false\n");
+  assert.equal(S.status(s, "flaresolverr").state, "waiting", "core's settings not read yet");
+  s = flare(s, false);
+  assert.equal(S.status(s, "flaresolverr").state, "todo");
+  assert.match(S.STEPS.find(st => st.id === "flaresolverr").prompt, /turn it on in miharchy-core/);
+  assert.equal(S.status(flare(s, true), "flaresolverr").state, "todo", "on, but the container is not running");
+  s = flare(finish(S.initial(), "probe", up + "docker true\n"), false);
+  assert.equal(S.status(s, "flaresolverr").state, "todo", "running, but core does not use it");
+  assert.equal(S.status(flare(s, true), "flaresolverr").state, "done");
+  assert.equal(S.status(S.reduce(flare(s, true), { type: "flare", reply: core(500, { error: { kind: "other", message: "x" } }) }), "flaresolverr").state, "waiting");
+  assert.deepEqual(S.FLARE_SETTINGS, { route: "settings.get", body: {} });
 });
