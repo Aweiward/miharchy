@@ -39,9 +39,10 @@ fun main() {
     // The default folder only: a folder the user set is never created.
     val localDefault = Files.createDirectories(data.resolve("local"))
     val local = Local { db.run { c -> localFolder(c, localDefault) } }
-    val browse = Browse(db, host, extensions, data.resolve("covers"), data.resolve("downloads"), local)
+    val folder = DownloadsFolder(data.resolve("downloads"), runBlocking { db.run { c -> setting(c, "downloadsPath").content } })
+    val browse = Browse(db, host, extensions, data.resolve("covers"), folder, local)
     val library = Library(db, extensions)
-    val downloads = Downloads(db, browse, extensions, data.resolve("downloads"))
+    val downloads = Downloads(db, browse, extensions, folder)
     browse.autoDownload = downloads::auto
     val updates = Updates(db, { id, details -> browse.refresh(id, details) }, local = local)
     val trackerStore = TrackerStore(db)
@@ -55,7 +56,7 @@ fun main() {
     val sync = Sync(db, data.resolve("sync"), config.url, clients.map { it.id.toInt() }.toSet(), installedSources = {
         extensions.sources().associate { it.getValue("id").jsonPrimitive.content.toLong() to it.getValue("name").jsonPrimitive.content }
     }, trackerLogins = { clients.associate { it.id.toInt() to (it.name to it.isLoggedIn) } })
-    val settings = Settings(db, data.resolve("covers"), data.resolve("downloads"), localDefault)
+    val settings = Settings(db, data.resolve("covers"), folder, localDefault, downloads::moveTo)
     Backups(db, sync, data.resolve("backups"))
     val slices = listOf(extensions.routes, browse.routes, library.routes, downloads.routes, updates.routes, trackers.routes, sync.routes, settings.routes)
     val others = slices.reduce { a, b -> a + b }

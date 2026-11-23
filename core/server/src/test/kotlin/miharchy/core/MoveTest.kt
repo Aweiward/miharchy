@@ -134,8 +134,8 @@ class MoveTest {
                     Database(data.resolve("core.db")).use { db ->
                         runBlocking { db.run { c -> c.update("INSERT INTO metas VALUES ('global', 0, 'miharchy.lastAutoBackup', '99')") } }
                         val extensions = Extensions(db, TestHost.host, data.resolve("extensions"))
-                        val browse = Browse(db, TestHost.host, extensions, data.resolve("covers"), data.resolve("downloads"))
-                        val downloadsSlice = Downloads(db, browse, extensions, data.resolve("downloads"))
+                        val browse = Browse(db, TestHost.host, extensions, data.resolve("covers"), DownloadsFolder(data.resolve("downloads")))
+                        val downloadsSlice = Downloads(db, browse, extensions, DownloadsFolder(data.resolve("downloads")))
                         val sync = Sync(db, data.resolve("sync"), "http://127.0.0.1:4591", setOf(1, 2))
                         val others = extensions.routes + sync.routes + Settings(db, data.resolve("covers")).routes + browse.routes + Library(db, extensions).routes
                         Move(db, downloadsSlice, data, data.resolve("sync")) { r, b -> others.getValue(r)(b) }.use { move ->
@@ -229,8 +229,8 @@ class MoveTest {
     fun aMoveNeedsExplicitPathsAndReportsAnUnreachableSuwayomi() = runBlocking {
         Database(work.resolve("core.db")).use { db ->
             val extensions = Extensions(db, TestHost.host, work.resolve("extensions"))
-            val browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), work.resolve("downloads"))
-            Move(db, Downloads(db, browse, extensions, work.resolve("downloads")), work, work.resolve("sync")) { _, _ -> error("no call") }.use { move ->
+            val browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), DownloadsFolder(work.resolve("downloads")))
+            Move(db, Downloads(db, browse, extensions, DownloadsFolder(work.resolve("downloads"))), work, work.resolve("sync")) { _, _ -> error("no call") }.use { move ->
                 val refused = runCatching { move.routes.call("move.start", buildJsonObject { put("serverRoot", "/x") }) }.exceptionOrNull()
                 assertTrue(refused is ApiError && refused.kind == Kind.invalid)
                 // A port nothing listens on.

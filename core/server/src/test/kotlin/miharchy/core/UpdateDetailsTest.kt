@@ -60,7 +60,7 @@ class UpdateDetailsTest {
                 val extensions = Extensions(db, TestHost.host, work.resolve("extensions"))
                 extensions.routes.call("extensionRepo.add", buildJsonObject { put("url", repo.base) })
                 extensions.routes.call("extension.install", buildJsonObject { put("pkgName", repo.pkg) })
-                val browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), work.resolve("downloads"))
+                val browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), DownloadsFolder(work.resolve("downloads")))
                 val sid = browse.routes.call("source.list")["sources"]!!.jsonArray.last().jsonObject["id"]!!.jsonPrimitive.content
                 val id = browse.routes.call("source.popular", buildJsonObject { put("source", sid); put("page", 1) })["mangas"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.long
                 Library(db, extensions).routes.call("manga.update", buildJsonObject { put("ids", JsonArray(listOf(JsonPrimitive(id)))); put("inLibrary", true) })

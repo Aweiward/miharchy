@@ -230,6 +230,8 @@ class Move(
     /** One by one, so a value core's rules refuse skips that row only. */
     private suspend fun moveSettings(settings: JsonObject, report: Report) {
         for (s in SETTINGS) {
+            // Suwayomi's downloads folder is where its downloads are read from, not where core puts its own: a move of core's downloads into it is never wanted.
+            if (s.key == "downloadsPath") continue
             val value = settings[s.key] as? JsonPrimitive ?: continue
             // Suwayomi keeps the update interval as a float of hours.
             val typed = if (!value.isString && value.booleanOrNull == null && s.default.content.toIntOrNull() != null) value.doubleOrNull?.roundToInt()?.let(::JsonPrimitive) ?: value else value

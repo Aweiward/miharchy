@@ -65,7 +65,7 @@ class SettingsTest {
             assertTrue(s.getValue("backupTime").jsonPrimitive.isString)
             assertFalse(s.getValue("backupTTL").jsonPrimitive.isString)
             assertEquals(
-                listOf("kcefEnabled", "downloadsPath"),
+                listOf("kcefEnabled"),
                 reply.getValue("unapplied").jsonArray.map { it.jsonPrimitive.content },
             )
         }

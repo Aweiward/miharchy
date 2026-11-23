@@ -83,8 +83,8 @@ suspend fun Host.call(req: JsonObject, seconds: Long = 120): JsonElement {
  */
 /** [downloads]: the downloads folder, whose .cbz files the reader reads with no network (#367). */
 class Browse(
-    private val db: Database, private val host: Host, private val extensions: Extensions, private val covers: Path, private val downloads: Path,
-    private val local: Local = Local { downloads.resolveSibling("local") },
+    private val db: Database, private val host: Host, private val extensions: Extensions, private val covers: Path, private val downloads: DownloadsFolder,
+    private val local: Local = Local { downloads.default.resolveSibling("local") },
 ) {
     /** Gets the chapters each refresh queues for auto-download (#424). Main sets it to the download queue. */
     var autoDownload: suspend (List<Long>) -> Unit = {}
@@ -343,7 +343,7 @@ class Browse(
     /** The chapter's .cbz when it is downloaded and on disk, else null. */
     private suspend fun archive(id: Long): Path? {
         val rel = db.run { c -> c.query("SELECT download_path FROM chapter WHERE id = ?", id) { it.getString(1) }.firstOrNull() } ?: return null
-        val file = inside(downloads, rel)
+        val file = inside(downloads.path, rel)
         return file.takeIf { withContext(Dispatchers.IO) { Files.isRegularFile(it) } }
     }
 
