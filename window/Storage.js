@@ -11,13 +11,13 @@ function root(env) {
 }
 
 // Core measures its own folders, which the window cannot know:
-// { downloads, cache, localFolder }: bytes, cache being the covers of manga
-// outside the library that cache.clear deletes, answering { freed }, and the
-// folder the local source reads.
+// { downloads, cache } in bytes, cache being the covers of manga outside
+// the library that cache.clear deletes, answering { freed }.
 var SIZES_PAYLOAD = { route: "storage.get", body: {} }
 var CORE_CLEAR_PAYLOAD = { route: "cache.clear", body: {} }
 
-// The local folder from a storage.get reply, "" until core has answered.
+// The folder core's local source reads, from a settings.get or settings.set
+// reply; "" until core has answered.
 function localFolderOf(reply) {
   return reply && reply.state === "ok" && reply.data && typeof reply.data.localFolder === "string" ? reply.data.localFolder : ""
 }

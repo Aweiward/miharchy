@@ -50,7 +50,7 @@ ShellRoot {
   readonly property var overlay: Overlays.top({ trackAsk: trackAsk, readingCard: readingCard, nextChapters: nextChapters, restoreView: restoreView, syncView: syncView, downloadsView: downloadsView, reader: reader, migrateView: migrateView, trackPanel: trackPanel, mangaDetail: mangaDetail, view: view, browseView: browseView, extensionsView: extensionsView, checkView: checkView, updatesView: updatesView, settingsEditing: settingsEditing, libraryView: libraryView, historyView: historyView, settingsView: settingsView, setupView: setupView, categoriesView: categoriesView })
   readonly property bool downloadedOnly: settingsState.values.downloadedOnly === true
   property var settingsState: Settings.initial()
-  // The folder core's local source reads (storage.get), for Browse's empty-listing notice.
+  // The folder core's local source reads (settings.get and settings.set), for Browse's empty-listing notice.
   property string localFolder: ""
   property int settingsCursor: 0
   property bool settingsEditing: false
@@ -335,7 +335,6 @@ ShellRoot {
       settingsState = Settings.reduce(settingsState, { type: "config-missing" })
       return
     }
-    loadLocalFolder()
     var list = Settings.loadPayloads()
     var seq = ++settingsSeq
     settingsState = Settings.reduce(settingsState, { type: "request" })
@@ -343,16 +342,11 @@ ShellRoot {
       Session.send(cfg, list[i], function(reply) {
         if (seq !== root.settingsSeq) return
         root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
+        if (list[i].route === "settings.get") root.localFolder = Storage.localFolderOf(reply)
         if (reply.state === "ok" && i + 1 < list.length) next(i + 1)
       })
     }
     next(0)
-  }
-
-  function loadLocalFolder() {
-    var cfg = root.config
-    if (!cfg) return
-    Session.send(cfg, Storage.SIZES_PAYLOAD, function(reply) { root.localFolder = Storage.localFolderOf(reply) })
   }
 
   function saveSetting(row, value) {
@@ -367,7 +361,7 @@ ShellRoot {
         reply = { state: "ok", message: "", data: {}, kind: "" }
       }
       root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
-      if (row.key === "localSourcePath") root.loadLocalFolder()
+      if (row.key === "localSourcePath" && Storage.localFolderOf(reply)) root.localFolder = Storage.localFolderOf(reply)
     })
   }
 

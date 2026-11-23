@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const S = require("./load")("Storage.js");
 
 test("the local folder is the one core reads, from its storage reply", () => {
-  assert.equal(S.localFolderOf({ state: "ok", data: { downloads: 0, cache: 0, localFolder: "/mnt/comics" } }), "/mnt/comics");
+  assert.equal(S.localFolderOf({ state: "ok", data: { settings: {}, localFolder: "/mnt/comics" } }), "/mnt/comics");
   assert.equal(S.localFolderOf({ state: "ok", data: { downloads: 0 } }), "");
   assert.equal(S.localFolderOf({ state: "down", message: "x" }), "");
   assert.equal(S.localFolderOf(null), "");

@@ -120,7 +120,7 @@ fun backupFolder(c: Connection, default: Path): Path = setting(c, "backupPath").
  */
 class Settings(
     private val db: Database, private val covers: Path, private val downloads: Path = covers.resolveSibling("downloads"),
-    private val localFolder: suspend () -> Path = { covers.resolveSibling("local") },
+    private val localDefault: Path = covers.resolveSibling("local"),
 ) {
     val routes: Map<String, Route> = mapOf(
         "settings.get" to { _ -> db.run { c -> reply(c) } },
@@ -157,6 +157,8 @@ class Settings(
     private fun reply(c: Connection) = buildJsonObject {
         put("settings", buildJsonObject { SETTINGS.forEach { put(it.key, setting(c, it.key)) } })
         put("unapplied", JsonArray(SETTINGS.filterNot { it.applied }.map { JsonPrimitive(it.key) }))
+        // The folder the local source reads, which the window cannot know (#374).
+        put("localFolder", localFolder(c, localDefault).toAbsolutePath().normalize().toString())
     }
 
     /**
@@ -168,15 +170,13 @@ class Settings(
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { clearOutside(library) }
     }
 
-    /** `{ downloads, cache, localFolder }`: bytes of the downloads folder and of the covers `cache.clear` would delete, and the absolute folder the local source reads. */
+    /** `{ downloads, cache }` in bytes: the downloads folder, and the covers `cache.clear` would delete. */
     private suspend fun storage(): JsonElement {
         val library = db.run { c -> c.query("SELECT id FROM manga WHERE user_favorite_at IS NOT NULL") { it.getLong(1).toString() }.toSet() }
-        val folder = localFolder()
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val downloaded = if (downloads.isDirectory()) Files.walk(downloads).use { s -> s.filter { it.isRegularFile() }.mapToLong { runCatching { Files.size(it) }.getOrDefault(0L) }.sum() } else 0L
             buildJsonObject {
                 put("downloads", downloaded); put("cache", outside(library).sumOf { runCatching { Files.size(it) }.getOrDefault(0L) })
-                put("localFolder", folder.toAbsolutePath().normalize().toString())
             }
         }
     }
