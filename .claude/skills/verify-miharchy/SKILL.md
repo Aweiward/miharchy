@@ -61,7 +61,7 @@ Core never uses 4590 or 4591, and keeps its data under `$RUN/core`: `data/core.d
 
 ## Move from Suwayomi
 
-Setup's move (`move.start`, `core/README.md`) reads a Suwayomi install once. It is the only part of Miharchy that still talks to Suwayomi. The scratch Suwayomi exists only to give the move a source: `server.sh`, `seed.sh` and `gql.sh` start, seed and read it. Only the move's recipes (`migrate.md`, `library-check.md`) and `site/tools`' showcase run use them; `server.sh clean` serves every run.
+Setup's move (`move.start`, `core/README.md`) reads a Suwayomi install once. It is the only part of Miharchy that still talks to Suwayomi. The scratch Suwayomi exists only to give the move a source: `server.sh`, `seed.sh` and `gql.sh` start, seed and read it. Only the move's recipes (`migrate.md`, `library-check.md`) use them; `server.sh clean` serves every run.
 
 ```sh
 .claude/skills/verify-miharchy/scripts/server.sh start     # ~30–60 s; prints "ready: Suwayomi v… on 127.0.0.1:<port> (pid N), run dir <RUN>"

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Seed the scratch Suwayomi (server.sh), kept only to give Setup's move from Suwayomi a library to read and for
-# site/tools' showcase run; seed the scratch core with core.sh. Keiyoushi repo, extensions, library manga,
+# Seed the scratch Suwayomi (server.sh), kept only to give Setup's move from Suwayomi a library to read; seed the scratch core with core.sh. Keiyoushi repo, extensions, library manga,
 # updates, a held queue.
 #   seed.sh [pkg ...]              install extensions (default: MangaDex)
 #   seed.sh --library N [pkg ...]  also add the first N popular manga of the first English source to the library

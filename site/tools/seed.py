@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""seed.py <A|B|C|D|finish>: build the showcase library on the verify run's scratch server.
+"""seed.py <A|B|C|D|finish>: build the showcase library on the verify run's scratch miharchy-core.
 
 Stages A to D add manga from MangaDex. Each manga joins the library before its chapters are
-fetched, so chapters with recent uploads count as updates. Updates group by the day the server
-fetched them, so run each stage on a server whose clock is shifted (start-at): A at -5d, B at -3d,
+fetched, so chapters with recent uploads count as updates. Updates group by the day core
+fetched them, so run each stage on a core whose clock is shifted (start-at): A at -5d, B at -3d,
 C at -1d, D at 0. `finish` runs on the real clock: it leaves each series' two newest updates
 unread and marks its older updates read (with today's lastReadAt, for the reading card), then bookmarks and downloads a few updates."""
-import json, os, sys, time, urllib.request
+import json, os, sys, time, urllib.error, urllib.request
 
 RUN = os.environ.get("MIHARCHY_VERIFY_DIR") or sys.exit("set MIHARCHY_VERIFY_DIR (see README.md)")
 MANGADEX = "2499283573021220255"
@@ -48,26 +48,20 @@ BOOKMARK = ("The Guy She Was Interested in Wasn't a Guy at All", "Welcome to Dem
 DOWNLOAD = "SSS-Class Revival Hunter"
 
 
-def post(cfg, body, headers):
-    req = urllib.request.Request(cfg["url"] + "/api/graphql", json.dumps(body).encode(), {"content-type": "application/json", **headers})
-    return json.load(urllib.request.urlopen(req, timeout=180))
-
-
-def gql(q, v=None):
-    # A fresh ui_login token per call: a stage outlives the server's 5-minute tokens.
-    cfg = json.load(open(RUN + "/server.json"))
-    token = post(cfg, {"query": "mutation($u: String!, $p: String!) { login(input:{username:$u, password:$p}) { accessToken } }",
-                       "variables": {"u": cfg["username"], "p": cfg["password"]}}, {})["data"]["login"]["accessToken"]
-    r = post(cfg, {"query": q, "variables": v or {}}, {"authorization": "Bearer " + token})
-    if r.get("errors"):
-        raise RuntimeError(json.dumps(r["errors"]))
-    return r["data"]
+def api(route, body=None):
+    # The secret goes in a header, never on a command line.
+    cfg = json.load(open(RUN + "/core/core.json"))
+    req = urllib.request.Request(cfg["url"] + "/api/" + route, json.dumps(body or {}).encode(),
+                                 {"content-type": "application/json", "authorization": "Bearer " + cfg["secret"]})
+    try:
+        return json.load(urllib.request.urlopen(req, timeout=180))
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(route + ": " + e.read().decode())
 
 
 def mark(ids, patch):
     if ids:
-        gql('mutation($ids: [Int!]!, $p: UpdateChapterPatchInput!) { updateChapters(input:{ids:$ids, patch:$p}) { chapters { id } } }',
-            {"ids": ids, "p": patch})
+        api("chapter.update", {"ids": ids, **patch})
 
 
 def stage(name):
@@ -75,29 +69,25 @@ def stage(name):
     for query, title, cat, unread in LIBRARY:
         if STAGES.get(title, "A") != name:
             continue
-        ms = gql('mutation($s: LongString!, $q: String) { fetchSourceManga(input:{source:$s, type:SEARCH, page:1, query:$q}) { mangas { id title } } }',
-                 {"s": MANGADEX, "q": query})["fetchSourceManga"]["mangas"]
+        ms = api("source.search", {"source": MANGADEX, "page": 1, "query": query})["mangas"]
         m = next(m for m in ms if m["title"] == title)
-        gql('mutation($id: Int!) { updateManga(input:{id:$id, patch:{inLibrary:true}}) { manga { id } } }', {"id": m["id"]})
+        api("manga.update", {"ids": [m["id"]], "inLibrary": True})
         picked.append((m, cat, unread))
         print("in library", m["id"], title, flush=True)
 
-    time.sleep(2)
-    cats = {c["name"]: c["id"] for c in gql("{ categories { nodes { id name } } }")["categories"]["nodes"]}
+    time.sleep(2)  # a fetch in the same second as the add makes no updates
+    cats = {c["name"]: c["id"] for c in api("category.list")["categories"]}
     for c in ("Reading", "Webtoon", "Plan to read"):
         if c not in cats:
-            cats[c] = gql('mutation($n: String!) { createCategory(input:{name:$n}) { category { id } } }', {"n": c})["createCategory"]["category"]["id"]
+            cats[c] = api("category.create", {"name": c})["category"]["id"]
 
     for m, cat, unread in picked:
         try:
-            chs = gql('mutation($id: Int!) { fetchMangaAndChapters(input:{id:$id, fetchManga:true, fetchChapters:true}) { chapters { id sourceOrder } } }',
-                      {"id": m["id"]})["fetchMangaAndChapters"]["chapters"]
+            chs = api("manga.refresh", {"id": m["id"]})["chapters"]
         except RuntimeError:
             # MangaDex lists no English chapters for licensed series: the manga shows by its cover only.
-            gql('mutation($id: Int!) { fetchManga(input:{id:$id}) { manga { id } } }', {"id": m["id"]})
             chs = []
-        gql('mutation($id: Int!, $c: [Int!]) { updateMangaCategories(input:{id:$id, patch:{addToCategories:$c}}) { manga { id } } }',
-            {"id": m["id"], "c": [cats[cat]]})
+        api("manga.update", {"ids": [m["id"]], "addToCategories": [cats[cat]]})
         if unread is not None and chs:
             chs.sort(key=lambda c: c["sourceOrder"])
             mark([c["id"] for c in chs[:max(0, len(chs) - unread)]], {"isRead": True})
@@ -105,29 +95,29 @@ def stage(name):
 
 
 def finish():
-    since = str(int((time.time() - 90 * 86400) * 1000))
-    ups = gql('query($s: LongString!) { chapters(filter:{inLibrary:{equalTo:true}, uploadDate:{greaterThan:$s}}) { nodes { id name fetchedAt uploadDate manga { title inLibraryAt } } } }',
-              {"s": since})["chapters"]["nodes"]
+    since = int((time.time() - 90 * 86400) * 1000)
+    lib = {m["id"]: m for m in api("library.list")["mangas"]}
+    ups = api("chapter.list", {"mangaIds": list(lib), "since": since})["chapters"]
     by = {}
     for c in sorted(ups, key=lambda c: -int(c["uploadDate"])):
-        if int(c["fetchedAt"]) > int(c["manga"]["inLibraryAt"]):
-            by.setdefault(c["manga"]["title"], []).append(c)
+        m = lib[c["mangaId"]]
+        if int(c["fetchedAt"]) > int(m["inLibraryAt"]):
+            by.setdefault(m["title"], []).append(c)
     read, unread = [], []
     for title, cs in by.items():
         keep = [] if title == "Yotsuba&!" else cs[:2]  # Yotsuba's only recent upload is a re-upload of chapter 1.
         unread += [c["id"] for c in keep]
         read += [c["id"] for c in cs[len(keep):]]
         print(title, "keeps", [c["name"] for c in keep], flush=True)
-    mark(read, {"isRead": True})
-    mark(read, {"lastPageRead": 1})  # isRead alone leaves lastReadAt at 0; a page save sets it, as the reader does.
+    mark(read, {"isRead": True, "lastPageRead": 1})  # the page save sets lastReadAt, as the reader does
     mark(unread, {"isRead": False})
     mark([by[t][0]["id"] for t in BOOKMARK if t in by], {"isBookmarked": True})
     cid = by[DOWNLOAD][0]["id"] if DOWNLOAD in by else None
-    if cid and not gql('query($id: Int!) { chapter(id:$id) { isDownloaded } }', {"id": cid})["chapter"]["isDownloaded"]:
-        gql('mutation($ids: [Int!]!) { enqueueChapterDownloads(input:{ids:$ids}) { downloadStatus { state } } }', {"ids": [cid]})
-        gql('mutation { startDownloader(input:{}) { downloadStatus { state } } }')
+    downloaded = lambda: api("chapter.list", {"ids": [cid]})["chapters"][0]["isDownloaded"]
+    if cid and not downloaded():
+        api("download.enqueue", {"ids": [cid]})  # an enqueue starts the downloader
         for _ in range(60):
-            if gql('query($id: Int!) { chapter(id:$id) { isDownloaded } }', {"id": cid})["chapter"]["isDownloaded"]:
+            if downloaded():
                 break
             time.sleep(2)
     print(len(unread), "unread updates,", len(read), "read")
