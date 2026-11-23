@@ -252,10 +252,10 @@ function notice(connection, configPath, shown, narrowed) {
 }
 
 // What a failure says when core cannot reach the source at all, by core's
-// error kind. ponytail: no FlareSolverr fallback (#361) and no WebView (#98)
+// error kind. FlareSolverr (#361) passes many Cloudflare sites; ponytail: no WebView (#98)
 // in core yet.
 var BLOCKED = {
-  cloudflare: { title: "This source sits behind Cloudflare", detail: "miharchy-core cannot pass Cloudflare yet (#361)." },
+  cloudflare: { title: "This source sits behind Cloudflare", detail: "Turn FlareSolverr on in Setup or Settings. When it is on, it could not pass this site." },
   webview: { title: "This source needs a WebView", detail: "miharchy-core has no WebView yet, so this source cannot load (#98)." }
 }
 

@@ -9,8 +9,7 @@ import uy.kohesive.injekt.api.get
 import java.nio.file.Files
 
 class StartHostTest {
-    // Tests share one JVM, so one folder serves them all.
-    private val dir = Files.createTempDirectory("host-start").toFile()
+    private val dir = TestHostDir.dir
 
     @Test
     fun startsOncePerJvm() {
@@ -19,4 +18,9 @@ class StartHostTest {
         assertNotNull(Injekt.get<NetworkHelper>())
         assertThrows<IllegalArgumentException> { startHost(Files.createTempDirectory("other").toFile()) }
     }
+}
+
+/** Tests share one JVM, and the host one folder, so every test that starts the host uses this one. */
+object TestHostDir {
+    val dir: java.io.File by lazy { Files.createTempDirectory("host-start").toFile() }
 }

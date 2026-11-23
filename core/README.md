@@ -30,7 +30,11 @@ miharchy-core is the only server since #373, and `stable` ships `core/` and `syn
 
 - A listing writes each manga into Mihon's `manga` table, so every manga has a core id before the user opens it. A listing never overwrites details a refresh loaded.
 - `manga.refresh` matches chapters by URL, so read state survives. A source that returns no chapters is an error and changes nothing.
-- A source that opens a WebView fails with the kind `webview`, because `Protocol.out` is never set in core. A Cloudflare challenge fails with `cloudflare` until #361.
+- A source that opens a WebView fails with the kind `webview`, because `Protocol.out` is never set in core. A Cloudflare challenge fails with `cloudflare`, unless FlareSolverr passes it.
+- FlareSolverr (#361, `FlareSolverr` in the host's `Network.kt`): with `flareSolverrEnabled` on, a challenged GET goes to the solver at `flareSolverrUrl` (`request.get`, 60 s). Core reads the three keys on each challenge, so a change works at once.
+  - The solver's cookies go into the host's cookie jar and its user agent becomes the site's override, both kept on disk. Core then sends the request again. On a site that accepts them, the reply is the site's own, with its status and content type, and later requests skip the solver.
+  - When the site still challenges, the solver's page stands in, if `flareSolverrAsResponseFallback` is on: its status, and its content type or `text/html` (FlareSolverr 3.5.2 sends no headers). Manganato is such a site: Cloudflare there also checks the TLS fingerprint, so every challenged request costs a solve, about 12 s.
+  - One solve runs at a time. A request that waited first tries the stored cookie. GET only; another method, a solver that fails or one that is off reports `cloudflare`, and the reason goes to core's log.
 
 ## Library (#366)
 
@@ -92,7 +96,7 @@ miharchy-core is the only server since #373, and `stable` ships `core/` and `syn
 
 - The server settings are `window/Settings.js`'s server rows. Core keeps each one as global meta `miharchy.<key>`, a string such as `"true"` or `"12"`, beside the window's own Settings rows. `Settings.kt`'s `SETTINGS` table lists each key with its default, its rule and whether core acts on it. A missing value, or one the rule refuses (`meta.set` writes anything), reads as the default.
 - `settings.get` gives `{ settings: { key: value }, unapplied: [key] }`, values typed as `Settings.js` holds them. `settings.set { settings: { key: value } }` checks every key and value first, stores none on a refusal (`invalid`), and gives the same reply. A backup folder must exist and must not be the sync folder.
-- `unapplied` names the keys core stores but does not act on yet: FlareSolverr (#361), KCEF (the host has no WebView), `updateMangas`, `downloadsPath` (downloads stay in `<core data>/downloads`), `downloadAsCbz` (core always writes `.cbz`) and `localSourcePath` (#374).
+- `unapplied` names the keys core stores but does not act on yet: KCEF (the host has no WebView), `updateMangas`, `downloadsPath` (downloads stay in `<core data>/downloads`), `downloadAsCbz` (core always writes `.cbz`) and `localSourcePath` (#374).
 - `cache.clear` deletes the cached covers of manga outside the library, core's only cache, and gives `{ freed }` in bytes. Library covers stay, as Suwayomi keeps its downloaded thumbnails, and so does a cover being written.
 - `storage.get` gives `{ downloads, cache }` in bytes for Settings' storage rows: the files under `<data>/downloads`, and the covers `cache.clear` would delete. The window cannot know core's data folder, so core measures it.
 - Automatic backups (`Backups.kt`) run in core, so they run while the window is closed. They follow `backupInterval` (days, 0 off) at `backupTime`, local time, as Suwayomi's schedule. A slot missed while core was off runs on the next minute's tick and counts as that slot. The time the timer first saw backups on is kept in meta `miharchy.autoBackupSince`, so a machine that is off at every slot still gets its first backup. The last run is meta `miharchy.lastAutoBackup`, written only once the file exists.

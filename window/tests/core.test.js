@@ -387,7 +387,7 @@ test("a WebView or Cloudflare failure names its cause in every view, and only on
 
 test("on core, a Cloudflare page says core cannot pass it yet", () => {
   const n = B.notice({ state: "error", message: "x", kind: "cloudflare" }, "core.json");
-  assert.match(n.detail, /#361/);
+  assert.match(n.detail, /FlareSolverr/);
   const w = B.notice({ state: "error", message: "x", kind: "webview" }, "core.json");
   assert.equal(w.title, "This source needs a WebView");
   assert.match(w.detail, /#98/);

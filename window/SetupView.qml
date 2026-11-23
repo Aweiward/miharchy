@@ -82,6 +82,10 @@ Item {
       view.checkPhones()
       view.offer()
     })
+    post(Setup.FLARE_SETTINGS, function(reply) {
+      view.setup = Setup.reduce(view.setup, { type: "flare", reply: reply })
+      view.offer()
+    })
     // A move core runs goes on while the window is closed: read where it stands.
     readMove()
   }

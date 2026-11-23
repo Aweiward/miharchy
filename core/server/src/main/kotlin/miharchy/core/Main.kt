@@ -31,6 +31,8 @@ fun main() {
     val db = Database(data.resolve("core.db"))
     // One host per JVM: every slice gets this one, because each Host has its own source map.
     val host = startHost(data.resolve("host").toFile())
+    // Read on each challenge, from an OkHttp thread, so a Settings change works at once.
+    eu.kanade.tachiyomi.network.FlareSolverr.settings = { runBlocking { db.run(::solver) } }
     val extensions = Extensions(db, host, data.resolve("extensions"))
     runBlocking { extensions.start() }
     val browse = Browse(db, host, extensions, data.resolve("covers"), data.resolve("downloads"))

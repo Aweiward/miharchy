@@ -53,12 +53,13 @@ private fun choice(key: String, default: Int, options: List<Int>, applied: Boole
 
 /** In `window/Settings.js`'s order, with its defaults. */
 val SETTINGS: List<Setting> = listOf(
-    // #361 brings the host's FlareSolverr fallback; Settings turns the fallback on with FlareSolverr.
-    bool("flareSolverrEnabled", false, applied = false),
-    Setting("flareSolverrUrl", JsonPrimitive("http://127.0.0.1:8191"), false, "a URL that starts with http:// or https://") {
+    // The host's FlareSolverr fallback (#361) reads these on each challenge, see [solver]. Settings turns the
+    // fallback on with FlareSolverr.
+    bool("flareSolverrEnabled", false, applied = true),
+    Setting("flareSolverrUrl", JsonPrimitive("http://127.0.0.1:8191"), true, "a URL that starts with http:// or https://") {
         Regex("^https?://\\S+$").matches(it.content)
     },
-    bool("flareSolverrAsResponseFallback", false, applied = false),
+    bool("flareSolverrAsResponseFallback", false, applied = true),
     // The host has no WebView.
     bool("kcefEnabled", true, applied = false),
     // Suwayomi's rule: off, or at least 6 hours.
@@ -92,6 +93,11 @@ val SETTINGS: List<Setting> = listOf(
 private val BY_KEY = SETTINGS.associateBy { it.key }
 
 const val SETTINGS_PREFIX = "miharchy."
+
+/** The FlareSolverr-format solver the settings name, null when it is off (#361). */
+fun solver(c: Connection): eu.kanade.tachiyomi.network.Solver? =
+    if (setting(c, "flareSolverrEnabled").content != "true") null
+    else eu.kanade.tachiyomi.network.Solver(setting(c, "flareSolverrUrl").content, setting(c, "flareSolverrAsResponseFallback").content == "true")
 
 /** A setting's value now, its default when unset or unreadable. */
 fun setting(c: Connection, key: String): JsonPrimitive {
