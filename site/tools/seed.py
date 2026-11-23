@@ -84,8 +84,12 @@ def stage(name):
     for m, cat, unread in picked:
         try:
             chs = api("manga.refresh", {"id": m["id"]})["chapters"]
-        except RuntimeError:
+        except RuntimeError as e:
             # MangaDex lists no English chapters for licensed series: the manga shows by its cover only.
+            # Any other failure (core down, the network) stops the stage.
+            if "returned no chapters" not in str(e):
+                raise
+            print("no chapters:", e, flush=True)
             chs = []
         api("manga.update", {"ids": [m["id"]], "addToCategories": [cats[cat]]})
         if unread is not None and chs:
