@@ -38,7 +38,11 @@ import kotlinx.serialization.json.put
  * The choices are core's settings (#375, `Settings.kt`): the three skip filters and `globalUpdateInterval` in hours, 0 for off. [hour] and [tick] are
  * there for tests. ponytail: no `updateMangas` (a refresh always fetches details).
  */
-class Updates(private val db: Database, private val refresh: suspend (Long) -> Unit, private val hour: Long = 3_600_000, tick: Long = 60_000) : AutoCloseable {
+class Updates(
+    private val db: Database, private val refresh: suspend (Long) -> Unit, private val hour: Long = 3_600_000, tick: Long = 60_000,
+    /** Local manga whose folder is gone are skipped, not failed (#374). */
+    private val local: Local? = null,
+) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // Starts and stops one at a time; the counts change under [lock], from several sources at once.
     private val ops = Mutex()
@@ -150,7 +154,7 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
         val skipUnread = flag("excludeUnreadChapters")
         val skipNotStarted = flag("excludeNotStarted")
         val skipCompleted = flag("excludeCompleted")
-        return db.run { c ->
+        val (todo, candidates) = db.run { c ->
             val cats = c.query("SELECT id, include_in_update FROM category") { it.getLong(1) to it.getString(2) }.toMap()
             categories?.firstOrNull { it !in cats }?.let { throw ApiError(Kind.notFound, "There is no category $it.") }
             val (included, excludedAll) = includeRule(cats)
@@ -161,10 +165,10 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
             val candidates = c.query(
                 """SELECT m.id, m.source_id, m.remote_update_strategy, m.remote_status, m.state_initialized,
                           count(ch.id), coalesce(sum(ch.user_read = 0), 0),
-                          coalesce((SELECT max(h.read_at) FROM history h WHERE h.manga_id = m.id), 0)
+                          coalesce((SELECT max(h.read_at) FROM history h WHERE h.manga_id = m.id), 0), m.remote_url
                    FROM manga m LEFT JOIN chapter ch ON ch.manga_id = m.id
                    WHERE m.user_favorite_at IS NOT NULL GROUP BY m.id ORDER BY m.remote_title COLLATE NOCASE""",
-            ) { r -> Candidate(r.getLong(1), r.getLong(2), r.getInt(3), r.getInt(4), r.getInt(5) == 1, r.getInt(6), r.getInt(7), r.getLong(8)) }
+            ) { r -> Candidate(r.getLong(1), r.getLong(2), r.getInt(3), r.getInt(4), r.getInt(5) == 1, r.getInt(6), r.getInt(7), r.getLong(8), r.getString(9)) }
                 .filter { m -> categoriesOf(inCats, m.id).any { it in chosen } }
             val todo = candidates.filter { m ->
                 m.strategy == 0 &&
@@ -174,13 +178,16 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
                     (!skipCompleted || m.status != COMPLETED) &&
                     categoriesOf(inCats, m.id).none { it in excluded }
             }
-            todo.map { it.id to it.source } to candidates.size - todo.size
+            todo to candidates.size
         }
+        // Outside the database's thread, as Local reads a setting through it.
+        val kept = todo.filter { it.source.toString() != LOCAL_SOURCE || local == null || local.exists(it.url) }
+        return kept.map { it.id to it.source } to candidates - kept.size
     }
 
     private class Candidate(
         val id: Long, val source: Long, val strategy: Int, val status: Int, val initialized: Boolean,
-        val chapters: Int, val unread: Int, val lastReadAt: Long,
+        val chapters: Int, val unread: Int, val lastReadAt: Long, val url: String,
     )
 
     private suspend fun flag(key: String) = db.run { c -> setting(c, key).content == "true" }

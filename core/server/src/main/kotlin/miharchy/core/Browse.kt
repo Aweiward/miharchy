@@ -82,7 +82,10 @@ suspend fun Host.call(req: JsonObject, seconds: Long = 120): JsonElement {
  * in Mihon's tables, chapter pages, and covers and page images fetched through the source's client.
  */
 /** [downloads]: the downloads folder, whose .cbz files the reader reads with no network (#367). */
-class Browse(private val db: Database, private val host: Host, private val extensions: Extensions, private val covers: Path, private val downloads: Path) {
+class Browse(
+    private val db: Database, private val host: Host, private val extensions: Extensions, private val covers: Path, private val downloads: Path,
+    private val local: Local = Local { downloads.resolveSibling("local") },
+) {
     /** Gets the chapters each refresh queues for auto-download (#424). Main sets it to the download queue. */
     var autoDownload: suspend (List<Long>) -> Unit = {}
 
@@ -97,11 +100,11 @@ class Browse(private val db: Database, private val host: Host, private val exten
         "source.popular" to { input -> listing(input, "popular") },
         "source.latest" to { input -> listing(input, "latest") },
         "source.search" to { input -> listing(input, "search") },
-        "source.filters" to { input -> buildJsonObject { put("filters", host.call(op("filters", input.source()))) } },
-        "source.settings" to { input -> buildJsonObject { put("settings", host.call(op("settings", input.source()))) } },
+        "source.filters" to { input -> buildJsonObject { put("filters", call(op("filters", input.source()))) } },
+        "source.settings" to { input -> buildJsonObject { put("settings", call(op("settings", input.source()))) } },
         "source.setSetting" to { input ->
-            val accepted = host.call(buildJsonObject { put("op", "setSetting"); put("source", input.source()); put("key", input.text("key")); put("value", input["value"] ?: JsonNull) })
-            buildJsonObject { put("accepted", accepted); put("settings", host.call(op("settings", input.source()))) }
+            val accepted = call(buildJsonObject { put("op", "setSetting"); put("source", input.source()); put("key", input.text("key")); put("value", input["value"] ?: JsonNull) })
+            buildJsonObject { put("accepted", accepted); put("settings", call(op("settings", input.source()))) }
         },
         "manga.get" to { input -> buildJsonObject { put("manga", detail(input.id("id"))) } },
         "manga.refresh" to { input -> refresh(input.id("id")) },
@@ -130,10 +133,14 @@ class Browse(private val db: Database, private val host: Host, private val exten
         },
     )
 
+    /** Source 0 is the local folder (#374); the host has no such source. Its images never go through `download`, which deletes the file it returns. */
+    private suspend fun call(req: JsonObject, seconds: Long = 120): JsonElement =
+        if (req["source"]?.jsonPrimitive?.content == LOCAL_SOURCE) local.handle(req) else host.call(req, seconds)
+
     private suspend fun listing(input: JsonObject, op: String): JsonObject {
         val source = input.source()
         val page = (input["page"] as? JsonPrimitive)?.intOrNull ?: 1
-        val reply = host.call(buildJsonObject {
+        val reply = call(buildJsonObject {
             put("op", op); put("source", source); put("page", page)
             if (op == "search") {
                 put("query", (input["query"] as? JsonPrimitive)?.contentOrNull ?: "")
@@ -198,7 +205,7 @@ class Browse(private val db: Database, private val host: Host, private val exten
         val source = extensions.sources().firstOrNull { it["id"]!!.jsonPrimitive.content == row.source.toString() }
         val urls = source?.let {
             runCatching {
-                host.call(buildJsonObject {
+                call(buildJsonObject {
                     put("op", "urls"); put("source", row.source.toString()); put("manga", hostManga(row))
                     put("chapters", JsonArray(chapters.map { ch -> buildJsonObject { put("url", ch["url"]!!); put("name", ch["name"]!!) } }))
                 }, seconds = 10).jsonObject
@@ -233,7 +240,7 @@ class Browse(private val db: Database, private val host: Host, private val exten
     /** Fetches details and chapters, as `fetchMangaAndChapters` does. Read state survives: chapters match by URL. */
     internal suspend fun refresh(id: Long): JsonObject {
         val (row, known) = db.run { c -> row(c, id) to hostChapters(c, id) }
-        val reply = host.call(buildJsonObject {
+        val reply = call(buildJsonObject {
             put("op", "update"); put("source", row.source.toString()); put("manga", hostManga(row))
             put("chapters", JsonArray(known))
             put("needsDetails", true); put("needsChapters", true)
@@ -362,7 +369,7 @@ class Browse(private val db: Database, private val host: Host, private val exten
             }
         }
         if (!fresh) synchronized(pages) { pages[id] }?.let { return state to it }
-        val list = host.call(buildJsonObject { put("op", "pages"); put("source", source); put("chapter", chapter) }).jsonArray.map { it.jsonObject }
+        val list = call(buildJsonObject { put("op", "pages"); put("source", source); put("chapter", chapter) }).jsonArray.map { it.jsonObject }
         synchronized(pages) { pages[id] = list }
         // Suwayomi's pageCount, which History and Up next show.
         db.run { c -> c.prepareStatement("UPDATE chapter SET page_count = ? WHERE id = ?").use { it.setInt(1, list.size); it.setLong(2, id); it.executeUpdate() } }
@@ -383,6 +390,10 @@ class Browse(private val db: Database, private val host: Host, private val exten
         val (_, list) = pageList(chapter, fresh = false)
         val page = list.getOrNull(index) ?: throw ApiError(Kind.notFound, "Chapter $chapter has no page $index.")
         val source = db.run { c -> c.prepareStatement("SELECT m.source_id FROM chapter ch JOIN manga m ON m.id = ch.manga_id WHERE ch.id = ?").use { p -> p.setLong(1, chapter); p.executeQuery().use { r -> r.next(); r.getLong(1).toString() } } }
+        if (source == LOCAL_SOURCE) {
+            val bytes = local.page(page.s("url").orEmpty(), page.s("imageUrl").orEmpty())
+            return Image(bytes, sniff(bytes))
+        }
         return download(buildJsonObject { put("op", "download"); put("source", source); put("page", page) })
     }
 
@@ -392,7 +403,8 @@ class Browse(private val db: Database, private val host: Host, private val exten
         val url = row.fields.s("thumbnailUrl") ?: throw ApiError(Kind.notFound, "Manga $id has no cover.")
         val file = covers.resolve("$id-${sha1(url).take(16)}")
         withContext(Dispatchers.IO) { if (Files.exists(file)) Files.readAllBytes(file) else null }?.let { return Image(it, sniff(it)) }
-        val image = download(buildJsonObject { put("op", "download"); put("source", row.source.toString()); put("url", url) })
+        val image = if (row.source.toString() == LOCAL_SOURCE) local.image(url).let { Image(it, sniff(it)) }
+            else download(buildJsonObject { put("op", "download"); put("source", row.source.toString()); put("url", url) })
         // An error page must not stay cached under this cover's URL.
         if (!image.contentType.startsWith("image/")) throw ApiError(Kind.source, "The cover of manga $id is not an image.")
         withContext(Dispatchers.IO) {

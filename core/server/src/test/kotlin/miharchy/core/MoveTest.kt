@@ -91,7 +91,7 @@ class MoveTest {
                     val ext = Extensions(probe, TestHost.host, work.resolve("probe-ext"))
                     ext.routes.call("extensionRepo.add", buildJsonObject { put("url", repo.base) })
                     ext.routes.call("extension.install", buildJsonObject { put("pkgName", PKG) })
-                    ext.sources().single()["id"]!!.jsonPrimitive.content.toLong().also { probe.close() }
+                    ext.sources().last()["id"]!!.jsonPrimitive.content.toLong().also { probe.close() }
                 }
                 // Suwayomi's ids differ from core's: its "Action" is 7, core gives it 1.
                 val backup = encodeBackup(Backup(
@@ -106,6 +106,8 @@ class MoveTest {
                     backupCategories = listOf(BackupCategory("Action", order = 0)),
                 ))
                 val root = work.resolve("suwayomi")
+                // Suwayomi's local source folder, with a manga in it.
+                root.resolve("local/Some manga").createDirectories()
                 val mangaDir = root.resolve("downloads/mangas/Fixture Downloads (EN)/Manga_ 1_2")
                 // Chapter 1 as a folder of pages, Chapter 2 as a .cbz, both with Suwayomi's ComicInfo.xml; Chapter 3 a folder core cannot read.
                 mangaDir.resolve("Chapter 1").createDirectories().also { d ->
@@ -153,6 +155,8 @@ class MoveTest {
                             val report = first["report"]!!.jsonObject
                             assertEquals(1, report["manga"]!!.jsonPrimitive.content.toInt())
                             assertEquals(2, report["downloads"]!!.jsonPrimitive.content.toInt())
+                            // Core reads Suwayomi's local folder now.
+                            assertEquals(root.resolve("local").toString(), runBlocking { others.call("settings.get") }["settings"]!!.jsonObject["localSourcePath"]!!.jsonPrimitive.content)
                             val skipped = report["skipped"]!!.jsonArray.map { it.jsonPrimitive.content }
                             assertEquals(4, skipped.size, skipped.toString())
                             assertTrue(skipped.any { it.startsWith("Category Gone:") })

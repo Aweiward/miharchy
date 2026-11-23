@@ -82,7 +82,7 @@ class BrowseTest {
                     var browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), work.resolve("downloads"))
                     val r = browse.routes
 
-                    val source = r.call("source.list")["sources"]!!.jsonArray.single().jsonObject
+                    val source = r.call("source.list")["sources"]!!.jsonArray.last().jsonObject
                     assertEquals("\"Fixture HTTP (EN)\"", source["displayName"].toString())
                     assertEquals("\"NSFW\"", source["contentWarning"].toString())
                     val sid = source["id"]!!.jsonPrimitive.content

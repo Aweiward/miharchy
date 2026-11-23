@@ -74,8 +74,8 @@ val SETTINGS: List<Setting> = listOf(
     path("downloadsPath", applied = false),
     // Core always writes .cbz files.
     bool("downloadAsCbz", false, applied = false),
-    // #374 brings local manga.
-    path("localSourcePath", applied = false),
+    // Local.kt reads it on each call; blank is <core data>/local.
+    path("localSourcePath", applied = true),
     // AutoDownload.kt reads these on each refresh.
     bool("autoDownloadNewChapters", false, applied = true),
     bool("excludeEntryWithUnreadChapters", true, applied = true),
@@ -118,7 +118,10 @@ fun backupFolder(c: Connection, default: Path): Path = setting(c, "backupPath").
  * `settings.get`, `settings.set` and `cache.clear` (#375, ADR 0010). [covers] is the cover cache, core's only cache:
  * chapter pages are read from the source or from a download, never kept.
  */
-class Settings(private val db: Database, private val covers: Path, private val downloads: Path = covers.resolveSibling("downloads")) {
+class Settings(
+    private val db: Database, private val covers: Path, private val downloads: Path = covers.resolveSibling("downloads"),
+    private val localFolder: suspend () -> Path = { covers.resolveSibling("local") },
+) {
     val routes: Map<String, Route> = mapOf(
         "settings.get" to { _ -> db.run { c -> reply(c) } },
         "settings.set" to { input -> set(input) },
@@ -165,12 +168,16 @@ class Settings(private val db: Database, private val covers: Path, private val d
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { clearOutside(library) }
     }
 
-    /** `{ downloads, cache }` in bytes: the downloads folder, and the covers `cache.clear` would delete. */
+    /** `{ downloads, cache, localFolder }`: bytes of the downloads folder and of the covers `cache.clear` would delete, and the absolute folder the local source reads. */
     private suspend fun storage(): JsonElement {
         val library = db.run { c -> c.query("SELECT id FROM manga WHERE user_favorite_at IS NOT NULL") { it.getLong(1).toString() }.toSet() }
+        val folder = localFolder()
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val downloaded = if (downloads.isDirectory()) Files.walk(downloads).use { s -> s.filter { it.isRegularFile() }.mapToLong { runCatching { Files.size(it) }.getOrDefault(0L) }.sum() } else 0L
-            buildJsonObject { put("downloads", downloaded); put("cache", outside(library).sumOf { runCatching { Files.size(it) }.getOrDefault(0L) }) }
+            buildJsonObject {
+                put("downloads", downloaded); put("cache", outside(library).sumOf { runCatching { Files.size(it) }.getOrDefault(0L) })
+                put("localFolder", folder.toAbsolutePath().normalize().toString())
+            }
         }
     }
 

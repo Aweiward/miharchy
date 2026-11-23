@@ -65,8 +65,7 @@ class SettingsTest {
             assertTrue(s.getValue("backupTime").jsonPrimitive.isString)
             assertFalse(s.getValue("backupTTL").jsonPrimitive.isString)
             assertEquals(
-                listOf("kcefEnabled", "updateMangas", "downloadsPath", "downloadAsCbz",
-                    "localSourcePath"),
+                listOf("kcefEnabled", "updateMangas", "downloadsPath", "downloadAsCbz"),
                 reply.getValue("unapplied").jsonArray.map { it.jsonPrimitive.content },
             )
         }
@@ -144,6 +143,10 @@ class SettingsTest {
             downloads.resolve("c.cbz").writeBytes(ByteArray(1000))
             val sizes = Settings(db, covers).routes.call("storage.get")
             assertEquals(1000, sizes.getValue("downloads").jsonPrimitive.int)
+            // The folder the local source reads: its default, then the setting's.
+            val local = work.resolve("local").toAbsolutePath().toString()
+            assertEquals(local, sizes.getValue("localFolder").jsonPrimitive.content)
+            assertEquals("/mnt/comics", Settings(db, covers) { Path.of("/mnt/comics") }.routes.call("storage.get").getValue("localFolder").jsonPrimitive.content)
             assertEquals(300, sizes.getValue("cache").jsonPrimitive.int, "the covers a clear would free")
             assertEquals(300, Settings(db, covers).routes.call("cache.clear").getValue("freed").jsonPrimitive.int)
             assertEquals(0, Settings(db, covers).routes.call("storage.get").getValue("cache").jsonPrimitive.int)
