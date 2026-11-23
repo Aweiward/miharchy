@@ -113,9 +113,9 @@ var ROWS = [
   // FlareSolverr solves the challenge (docs/spikes/extension-spike.md).
   { key: "flareSolverrEnabled", label: "FlareSolverr", type: "bool", default: false, store: "server", whenOn: { flareSolverrAsResponseFallback: true } },
   { key: "flareSolverrUrl", label: "FlareSolverr URL", type: "text", default: "http://127.0.0.1:8191", store: "server", pattern: /^https?:\/\/\S+$/, hint: "Enter a URL that starts with http:// or https://." },
-  // The server's built-in Chromium, which some sources run part of their
-  // site in. The server applies it without a restart.
-  { key: "kcefEnabled", label: "Server WebView (KCEF)", type: "bool", default: true, store: "server", note: "Some sources need it. The first use downloads Chromium, about 250 MB." },
+  // Suwayomi's built-in Chromium. Core stores the value (the move copies
+  // it) but has no WebView yet (#98), so the row says only that.
+  { key: "kcefEnabled", label: "Server WebView (KCEF)", type: "bool", default: true, store: "server" },
   // The server runs the library update on this schedule, in hours, so it
   // runs with the window closed. It takes 0 (off) or at least 6.
   {

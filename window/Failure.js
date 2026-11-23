@@ -11,6 +11,7 @@
 var KINDS = [
   { kind: "sourceMissing", test: /source not installed/i, text: "Source not installed" },
   { kind: "cloudflare", test: /cloudflare|just a moment/i, text: "Cloudflare blocked the source" },
+  { kind: "webview", test: /needs a webview/i, text: "Source needs a WebView" },
   { kind: "notFound", test: /\b404\b|not found/i, text: "Not found on the source" },
   { kind: "network", test: /timeout|timed out|failed to connect|connection (refused|reset)|unable to resolve host|name or service not known|no address associated|network is unreachable/i, text: "No connection to the source" }
 ]
@@ -36,7 +37,7 @@ function reason(message) {
 function coreReason(error) {
   var r = reason(error && error.message)
   var kind = error && error.kind
-  if (r.kind !== "other" || (kind !== "cloudflare" && kind !== "network")) return r
+  if (r.kind !== "other" || (kind !== "cloudflare" && kind !== "webview" && kind !== "network")) return r
   return KINDS.filter(function(k) { return k.kind === kind }).map(function(k) { return { kind: k.kind, text: k.text } })[0]
 }
 

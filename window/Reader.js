@@ -64,7 +64,7 @@ function delta(readingMode, side) {
 // transition: the transition page shown past either end, or null (see
 // transition()). retried, failedAt: see Model.failure().
 function at(r, index, toEnd) {
-  return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", pages: [], page: 0, half: 0, read: false, wasRead: false, saved: null, edge: "", transition: null, retried: "", failedAt: 0 })
+  return copy(r, { index: index, toEnd: toEnd, state: "loading", message: "", kind: "", pages: [], page: 0, half: 0, read: false, wasRead: false, saved: null, edge: "", transition: null, retried: "", failedAt: 0 })
 }
 
 // Mihon's calculateChapterGap: how many whole chapter numbers lie between
@@ -378,8 +378,8 @@ function reduce(r, event) {
       var f = event.reply.state === "ok" ? event.reply.data : null
       var pages = f ? (f.pages || []).map(function(p) { return Model.coverUrl(event.config, p) }) : []
       if (!pages.length) {
-        var why = f ? { state: "error", message: "This chapter has no pages." } : { state: event.reply.state, message: event.reply.message }
-        return copy(r, { state: why.state, message: why.message, retried: "", failedAt: Model.failedAt(r.retried, why, event.now) })
+        var why = f ? { state: "error", message: "This chapter has no pages.", kind: "" } : { state: event.reply.state, message: event.reply.message, kind: event.reply.kind || "" }
+        return copy(r, { state: why.state, message: why.message, kind: why.kind, retried: "", failedAt: Model.failedAt(r.retried, why, event.now) })
       }
       var c = f.chapter
       var page = r.toEnd ? pages.length - 1 : c.isRead ? 0 : Math.max(0, Math.min(pages.length - 1, c.lastPageRead || 0))
@@ -427,7 +427,7 @@ function reduce(r, event) {
     case "bookmarked":
       return copy(r, { chapters: r.chapters.map(function(c) { return c.id === event.chapterId ? copy(c, { bookmarked: event.bookmarked }) : c }) })
     case "retry":
-      return r.state === "loading" || r.state === "ok" ? r : copy(r, { state: "loading", message: "", retried: Model.failure(r), failedAt: 0 })
+      return r.state === "loading" || r.state === "ok" ? r : copy(r, { state: "loading", message: "", kind: "", retried: Model.failure(r), failedAt: 0 })
   }
   return r
 }
