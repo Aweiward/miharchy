@@ -91,6 +91,9 @@ private val BY_KEY = SETTINGS.associateBy { it.key }
 
 const val SETTINGS_PREFIX = "miharchy."
 
+/** A core setting's meta key: only `settings.set` writes it, so its rules (and a `downloadsPath` move) always run. */
+fun isCoreSetting(key: String) = key.startsWith(SETTINGS_PREFIX) && key.removePrefix(SETTINGS_PREFIX) in BY_KEY
+
 /** The FlareSolverr-format solver the settings name, null when it is off (#361). */
 fun solver(c: Connection): eu.kanade.tachiyomi.network.Solver? =
     if (setting(c, "flareSolverrEnabled").content != "true") null

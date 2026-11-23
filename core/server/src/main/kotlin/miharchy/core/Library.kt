@@ -248,7 +248,9 @@ class Library(private val db: Database, private val extensions: Extensions) {
             val m = e as? JsonObject ?: throw ApiError(Kind.invalid, "Each meta is an object.")
             val scope = m.scope()
             val owner = if (scope == "global") 0L else m.long("owner")
-            metaJson(scope, owner, m.string("key"), m.string("value"))
+            val key = m.string("key")
+            if (scope == "global" && isCoreSetting(key)) throw ApiError(Kind.invalid, "$key is a core setting: settings.set stores it.")
+            metaJson(scope, owner, key, m.string("value"))
         } ?: throw ApiError(Kind.invalid, "The request needs metas, a list of { scope, owner, key, value }.")
         return db.run { c ->
             c.transaction {

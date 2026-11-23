@@ -161,6 +161,19 @@ class DownloadsMoveTest {
                     Files.delete(target.resolve("notes.txt"))
                     assertEquals("", stored())
                     assertTrue(page(ok).contentEquals(png))
+
+                    // A folder the user set that is gone at start (an unplugged disk): core starts and never creates it,
+                    // and a download fails with the reason.
+                    val gone = work.resolve("unplugged/disk")
+                    val later = Downloads(db, browse, extensions, DownloadsFolder(root, gone.toString()))
+                    assertTrue(!Files.exists(gone))
+                    later.routes.call("download.delete", ids(twin))
+                    later.routes.call("download.enqueue", ids(twin))
+                    val failed = withTimeout(30_000) {
+                        later.status.first { s -> s is JsonObject && s["queue"]!!.jsonArray.any { it.jsonObject["state"]!!.jsonPrimitive.content == "ERROR" } }
+                    }.jsonObject["queue"]!!.jsonArray.single().jsonObject["error"]!!.jsonObject["message"]!!.jsonPrimitive.content
+                    assertTrue("is missing" in failed, failed)
+                    assertTrue(!Files.exists(gone), "a failed download makes no folder either")
                 }
             }
         }

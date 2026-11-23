@@ -202,7 +202,7 @@ class Move(
                 }
                 for (meta in data.nodes("metas")) {
                     val key = meta.text("key")!!
-                    if (key in CORE_OWN_METAS) continue
+                    if (key in CORE_OWN_METAS || isCoreSetting(key)) continue
                     // A category id, or "ask". An id core cannot map becomes "ask", never a Suwayomi id that is another category on core.
                     val value = if (key == DEFAULT_CATEGORY_KEY) meta.text("value")?.let { v ->
                         if (v.toLongOrNull() == null) v else coreCategory(v)?.toString() ?: "ask".also { report.skipped += "Default category $v: core has no such category, so the window asks." }

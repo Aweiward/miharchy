@@ -67,9 +67,11 @@ class Downloads(private val db: Database, private val browse: Browse, private va
     val status: StateFlow<JsonElement> get() = state
 
     init {
-        Files.createDirectories(root)
+        // Only the default folder is created: a folder the user set may be on a disk that is not plugged in, and a new
+        // folder there would fill the disk under it.
+        if (root == folder.of("")) Files.createDirectories(root)
         // A .part is a download a crash or restart cut short; its chapter is still QUEUED. Only ours: the folder is the user's to choose.
-        Files.walk(root).use { s -> s.filter { it.name.endsWith(".cbz.part") }.toList() }.forEach(Files::deleteIfExists)
+        if (Files.isDirectory(root)) Files.walk(root).use { s -> s.filter { it.name.endsWith(".cbz.part") }.toList() }.forEach(Files::deleteIfExists)
         runBlocking { publish() }
     }
 
@@ -153,9 +155,9 @@ class Downloads(private val db: Database, private val browse: Browse, private va
             withContext(Dispatchers.IO) {
                 made.addAll(generateSequence(to) { it.parent }.takeWhile { !Files.exists(it) }.toList().reversed())
                 Files.createDirectories(to)
-                val files = if (!Files.isDirectory(from)) emptyList() else
-                    // Core writes only .cbz here; any other file is the user's, and stays where it is.
-                    Files.walk(from).use { s -> s.filter { Files.isRegularFile(it) && it.name.endsWith(".cbz") }.sorted().toList() }
+                // The chapters core downloaded, by their stored paths: any other file in the folder is the user's, and stays.
+                val files = db.run { c -> c.query("SELECT download_path FROM chapter WHERE download_path IS NOT NULL ORDER BY download_path") { it.getString(1) } }
+                    .mapNotNull { rel -> runCatching { inside(from, rel) }.getOrNull()?.takeIf { Files.isRegularFile(it) } }
                 total = files.size
                 var shown = 0L
                 for (file in files) {
@@ -191,7 +193,7 @@ class Downloads(private val db: Database, private val browse: Browse, private va
                     .sortedByDescending { it.nameCount }.forEach { runCatching { Files.deleteIfExists(it) } }
                 made.reversed().forEach { runCatching { Files.deleteIfExists(it) } }
             }
-            move = moveStatus("failed", done, total, from, to, e.message ?: e.javaClass.simpleName)
+            move = moveStatus("failed", done, total, from, to, reason(e))
             if (e is CancellationException) throw e
         } finally {
             withContext(NonCancellable) {
@@ -250,6 +252,8 @@ class Downloads(private val db: Database, private val browse: Browse, private va
     }
 
     private suspend fun delete(ids: List<Long>) {
+        // A copy already made in the new folder would stay behind.
+        if (moving) throw ApiError(Kind.invalid, "The downloads are moving. Delete them when it ends.")
         val files = db.run { c ->
             c.transaction {
                 val rels = c.query("SELECT download_path FROM chapter WHERE ${among("id")} AND download_path IS NOT NULL", idList(ids)) { it.getString(1) }
@@ -295,9 +299,16 @@ class Downloads(private val db: Database, private val browse: Browse, private va
         publish()
     }
 
+    /** The folder to write in; a folder the user set must be there already. */
+    private fun writable(): Path {
+        val dir = root
+        if (dir != folder.of("") && !Files.isDirectory(dir)) throw ApiError(Kind.notFound, "The download folder $dir is missing. Plug in its disk, or pick another folder in Settings.")
+        return dir
+    }
+
     private suspend fun download(id: Long) {
         val (source, rel) = target(id)
-        val file = inside(root, rel)
+        val file = inside(writable(), rel)
         val part = file.resolveSibling(file.name + ".part")
         val (_, list) = browse.pageList(id)
         if (list.isEmpty()) throw ApiError(Kind.source, "Chapter does not have any pages to download")
@@ -347,7 +358,7 @@ class Downloads(private val db: Database, private val browse: Browse, private va
         if (moving) throw ApiError(Kind.invalid, "The downloads are moving. Try again when it ends.")
         if (db.run { c -> c.query("SELECT 1 FROM chapter WHERE id = ? AND download_path IS NOT NULL", id) { 1 }.isNotEmpty() }) return@withLock false
         val (_, rel) = target(id)
-        val file = inside(root, rel)
+        val file = inside(writable(), rel)
         val part = file.resolveSibling(file.name + ".part")
         withContext(NonCancellable + Dispatchers.IO) {
             try {
@@ -424,6 +435,15 @@ class DownloadsFolder(val default: Path, text: String = "") {
     } catch (e: InvalidPathException) {
         throw ApiError(Kind.invalid, "$text is not a path.")
     }
+}
+
+/** A file error as a sentence: Java's own message is often only the path. */
+internal fun reason(e: Exception): String = when (e) {
+    is java.nio.file.AccessDeniedException -> "Core may not write to ${e.file}."
+    is java.nio.file.NoSuchFileException -> "${e.file} is missing."
+    is java.nio.file.FileAlreadyExistsException -> "${e.file} exists already."
+    is java.nio.file.FileSystemException -> listOfNotNull(e.reason, e.file).joinToString(": ").ifEmpty { e.javaClass.simpleName }
+    else -> e.message ?: e.javaClass.simpleName
 }
 
 /** [rel] under [root], refused when it would leave it: the downloads and the local manga folder take paths from backups and the sync. */
