@@ -313,7 +313,18 @@ Rectangle {
     }
   }
 
+  // A panel under the hints: the scrim alone lets the Library's covers show through (#339).
+  Rectangle {
+    anchors.centerIn: hints
+    width: hints.width + view.theme.fontSize * 2
+    height: hints.height + view.theme.fontSize
+    color: view.theme.panel
+    border.width: 1
+    border.color: view.theme.panelBorder
+  }
+
   Column {
+    id: hints
     anchors.top: face.verticalCenter
     anchors.topMargin: face.height * face.scale / 2 + view.theme.fontSize
     anchors.horizontalCenter: parent.horizontalCenter
