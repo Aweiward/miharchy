@@ -20,6 +20,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.name
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -151,11 +152,13 @@ class DownloadsMoveTest {
                     assertEquals(target.toString(), stored())
                     assertEquals(Files.walk(target).use { s -> s.filter { Files.isRegularFile(it) }.mapToLong { Files.size(it) }.sum() }, r.call("storage.get")["downloads"]!!.jsonPrimitive.long)
 
-                    // Blank goes back to the default folder, and the folder the user had set goes with its files.
+                    // Blank goes back to the default folder. Only core's .cbz files move: a file of the user's stays, with its folder.
+                    target.resolve("notes.txt").writeText("mine")
                     r.call("settings.set", set("downloadsPath" to ""))
                     assertEquals("done", ended(root)["state"]!!.jsonPrimitive.content)
                     assertEquals(listOf("Chapter 1.cbz", twinName), files(root).sorted())
-                    assertTrue(!Files.exists(target), "the empty folder the user had set is gone")
+                    assertEquals(listOf("notes.txt"), files(target), "the user's file stays where it was")
+                    Files.delete(target.resolve("notes.txt"))
                     assertEquals("", stored())
                     assertTrue(page(ok).contentEquals(png))
                 }

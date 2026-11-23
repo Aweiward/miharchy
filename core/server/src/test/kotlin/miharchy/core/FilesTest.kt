@@ -56,6 +56,17 @@ class FilesTest {
     }
 
     @Test
+    fun aDownloadsPathStoredBeforeItWasAppliedIsCleared() = runBlocking {
+        val file = dir.resolve("old.db")
+        Database(file, Database.MIGRATIONS.take(6)).use { db ->
+            db.run { it.createStatement().execute("INSERT INTO metas VALUES ('global', 0, 'miharchy.downloadsPath', '/home/u/suwayomi/downloads')") }
+        }
+        Database(file).use { db ->
+            assertEquals(0, db.run { c -> c.createStatement().executeQuery("SELECT count(*) FROM metas WHERE key = 'miharchy.downloadsPath'").use { it.getInt(1) } })
+        }
+    }
+
+    @Test
     fun aMissingMigrationStopsAfterTheLastGoodOne() {
         val file = dir.resolve("broken.db")
         val thrown = runCatching { Database(file, listOf("0001-metas.sql", "missing.sql")) }

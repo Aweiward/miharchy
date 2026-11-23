@@ -154,7 +154,8 @@ class Downloads(private val db: Database, private val browse: Browse, private va
                 made.addAll(generateSequence(to) { it.parent }.takeWhile { !Files.exists(it) }.toList().reversed())
                 Files.createDirectories(to)
                 val files = if (!Files.isDirectory(from)) emptyList() else
-                    Files.walk(from).use { s -> s.filter { Files.isRegularFile(it) && !it.name.endsWith(".part") }.sorted().toList() }
+                    // Core writes only .cbz here; any other file is the user's, and stays where it is.
+                    Files.walk(from).use { s -> s.filter { Files.isRegularFile(it) && it.name.endsWith(".cbz") }.sorted().toList() }
                 total = files.size
                 var shown = 0L
                 for (file in files) {
