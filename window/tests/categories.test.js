@@ -21,19 +21,9 @@ test("a rename may keep the category's own name or change its case, but not take
   assert.match(K.checkName("Romance", cats, 4).error, /already/);
 });
 
-test("create, rename and delete send the category mutations", () => {
-  assert.deepEqual(K.createPayload("Drama").variables, { name: "Drama" });
-  assert.match(K.createPayload("Drama").query, /createCategory/);
-  assert.deepEqual(K.renamePayload(4, "Fights").variables, { id: 4, name: "Fights" });
-  assert.match(K.renamePayload(4, "Fights").query, /updateCategory\(/);
-  assert.equal(K.deletePayload(2).variables.id, 2);
-  assert.match(K.deletePayload(2).query, /deleteCategory/);
-});
-
 test("a move goes one place up or down, as a 1-based position after Default; none past either end", () => {
-  assert.deepEqual(K.movePayload(cats, 1, -1).variables, { id: 2, position: 1 });
-  assert.deepEqual(K.movePayload(cats, 1, 1).variables, { id: 2, position: 3 });
-  assert.match(K.movePayload(cats, 1, 1).query, /updateCategoryOrder/);
+  assert.deepEqual(K.movePayload(cats, 1, -1), { route: "category.reorder", body: { id: 2, position: 1 } });
+  assert.deepEqual(K.movePayload(cats, 1, 1), { route: "category.reorder", body: { id: 2, position: 3 } });
   assert.equal(K.movePayload(cats, 0, -1), null);
   assert.equal(K.movePayload(cats, 2, 1), null);
   assert.equal(K.movePayload([], 0, 1), null);
@@ -49,38 +39,20 @@ test("rows count the library manga in each category", () => {
 });
 
 test("p flags a category to keep its read downloads in its meta, and again lets them go", () => {
-  const p = K.keepPayload([{ id: 4, keep: false }], 4);
-  assert.match(p.query, /setCategoryMeta/);
-  assert.deepEqual(p.variables, { meta: { categoryId: 4, key: "miharchy.keepDownloads", value: "true" } });
-  assert.equal(K.keepPayload([{ id: 4, keep: true }], 4).variables.meta.value, "false");
+  const meta = (value) => ({ route: "meta.set", body: { metas: [{ scope: "category", owner: 4, key: "miharchy.keepDownloads", value }] } });
+  assert.deepEqual(K.keepPayload([{ id: 4, keep: false }], 4), meta("true"));
+  assert.deepEqual(K.keepPayload([{ id: 4, keep: true }], 4), meta("false"));
 });
 
 for (const [key, kind, field] of [["u", "update", "includeInUpdate"], ["d", "download", "includeInDownload"]]) {
   test(key + " cycles a category through unset, included in and excluded from " + kind + "s", () => {
     const states = ["UNSET", "INCLUDE", "EXCLUDE"].map((state) => [{ id: 4, name: "Action", [kind]: state }]);
-    assert.deepEqual(states.map((c) => K.includePayload(c, 4, kind).variables), [
-      { id: 4, include: "INCLUDE" },
-      { id: 4, include: "EXCLUDE" },
-      { id: 4, include: "UNSET" }
-    ]);
-    assert.ok(K.includePayload(states[0], 4, kind).query.includes("updateCategory(input: { id: $id, patch: { " + field + ": $include } })"));
+    assert.deepEqual(states.map((c) => K.includePayload(c, 4, kind)), ["INCLUDE", "EXCLUDE", "UNSET"].map((include) => (
+      { route: "category.update", body: { id: 4, [field]: include } }
+    )));
   });
 }
 
-test("a category flag or delete leaves the server's auto-download setting to its Settings row", () => {
-  const cats = [{ id: 4, download: "INCLUDE", update: "UNSET" }];
-  for (const p of [K.includePayload(cats, 4, "download"), K.includePayload(cats, 4, "update"), K.deletePayload(4)]) assert.doesNotMatch(p.query, /setSettings/);
-  assert.deepEqual(K.deletePayload(4).variables, { id: 4 });
-});
-
-test("u and d cycle a category through unset, included and excluded, for updates and for auto-download", () => {
-  for (const [kind, field] of [["update", "includeInUpdate"], ["download", "includeInDownload"]]) {
-    const states = ["UNSET", "INCLUDE", "EXCLUDE"].map((s) => [{ id: 4, name: "Action", [kind]: s }]);
-    assert.deepEqual(states.map((c) => K.includePayload(c, 4, kind).variables), [
-      { id: 4, include: "INCLUDE" },
-      { id: 4, include: "EXCLUDE" },
-      { id: 4, include: "UNSET" }
-    ]);
-    assert.match(K.includePayload(states[0], 4, kind).query, new RegExp("patch: \\{ " + field + ": \\$include \\}"));
-  }
+test("a category's id comes back from the create reply", () => {
+  assert.equal(K.createdId({ category: { id: 9 } }), 9);
 });

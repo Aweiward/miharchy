@@ -4,30 +4,9 @@
 // tracking panel on its detail). Pure, so tests/trackers.test.js pins it;
 // SettingsView.qml and TrackPanel.qml send the payloads built here.
 //
-// Suwayomi keeps every tracker token; Miharchy stores no credential. Every
-// read of a logged-out tracker builds a fresh authUrl, and MyAnimeList's
-// carries a new PKCE verifier that replaces the last one. So the login asks
-// for its link at Enter and nothing reads the trackers again until the
-// login ends.
-
-var TRACKER_FIELDS = "id name isLoggedIn authUrl"
-var LIST_QUERY = "{ trackers { nodes { " + TRACKER_FIELDS + " } } }"
-var LINK_QUERY = "query($id: Int!) { tracker(id: $id) { " + TRACKER_FIELDS + " } }"
-var OAUTH_MUTATION = "mutation($id: Int!, $url: String!) { loginTrackerOAuth(input: { trackerId: $id, callbackUrl: $url }) { isLoggedIn tracker { " + TRACKER_FIELDS + " } } }"
-var CREDENTIALS_MUTATION = "mutation($id: Int!, $username: String!, $password: String!) {"
-  + " loginTrackerCredentials(input: { trackerId: $id, username: $username, password: $password }) { isLoggedIn tracker { " + TRACKER_FIELDS + " } } }"
-var LOGOUT_MUTATION = "mutation($id: Int!) { logoutTracker(input: { trackerId: $id }) { isLoggedIn tracker { " + TRACKER_FIELDS + " } } }"
-
-var RECORD_FIELDS = "id trackerId remoteId title status displayScore lastChapterRead totalChapters remoteUrl startDate finishDate private"
-var PANEL_QUERY = "query($id: Int!) { trackers { nodes { id name isLoggedIn scores statuses { value name } supportsReadingDates supportsPrivateTracking } }"
-  + " manga(id: $id) { trackRecords { nodes { " + RECORD_FIELDS + " } } } }"
-var SEARCH_QUERY = "query($id: Int!, $query: String!) { searchTracker(input: { trackerId: $id, query: $query }) {"
-  + " trackSearches { remoteId title publishingType startDate totalChapters } } }"
-var BIND_MUTATION = "mutation($mangaId: Int!, $trackerId: Int!, $remoteId: LongString!) {"
-  + " bindTrack(input: { mangaId: $mangaId, trackerId: $trackerId, remoteId: $remoteId }) { trackRecord { " + RECORD_FIELDS + " } } }"
-var UPDATE_MUTATION = "mutation($input: UpdateTrackInput!) { updateTrack(input: $input) { trackRecord { " + RECORD_FIELDS + " } } }"
-// Only Miharchy's record goes; the entry stays on the tracker's list.
-var UNBIND_MUTATION = "mutation($id: Int!) { unbindTrack(input: { recordId: $id }) { trackRecord { id } } }"
+// The server keeps every tracker token; Miharchy stores no credential. The
+// login asks for its link at Enter and nothing reads the trackers again
+// until the login ends: miharchy-core keeps one link until then (ADR 0010).
 
 function copy(o, changes) {
   var c = {}
@@ -49,7 +28,7 @@ function toTracker(n) {
 }
 
 function listPayload() {
-  return { query: LIST_QUERY }
+  return { route: "tracker.list" }
 }
 
 function withTracker(s, tracker) {
@@ -67,7 +46,7 @@ function callbackKey(authUrl) {
 function callbackError(text, authUrl) {
   var key = callbackKey(authUrl)
   if (new RegExp("[?#&]" + key + "=[^&\\s]+").test(String(text))) return ""
-  return "That address has no " + key + "=. Copy the whole address the browser shows after you allow access."
+  return "That address has no " + key + "=. Copy the whole address from the browser's address bar after you allow access."
 }
 
 // Enter on tracker row i: a logged-in tracker logs out, a logged-out one
@@ -88,11 +67,11 @@ function begin(s, i) {
 function loginPayload(s) {
   var l = s.login
   if (!l) return null
-  if (l.step === "link") return { query: LINK_QUERY, variables: { id: l.trackerId } }
-  if (l.step === "logout") return { query: LOGOUT_MUTATION, variables: { id: l.trackerId } }
+  if (l.step === "link") return { route: "tracker.list" }
+  if (l.step === "logout") return { route: "tracker.logout", body: { trackerId: l.trackerId } }
   if (l.step !== "send") return null
-  if (l.oauth) return { query: OAUTH_MUTATION, variables: { id: l.trackerId, url: l.callback } }
-  return { query: CREDENTIALS_MUTATION, variables: { id: l.trackerId, username: l.username, password: l.password } }
+  if (l.oauth) return { route: "tracker.login", body: { trackerId: l.trackerId, callbackUrl: l.callback } }
+  return { route: "tracker.login", body: { trackerId: l.trackerId, username: l.username, password: l.password } }
 }
 
 // Whether the login shows its text field.
@@ -108,22 +87,28 @@ function retry(l, error) {
 //   "request"  the list went out          "list"   { reply } for it
 //   "sent"     loginPayload() went out    "link"   { reply } for the link
 //   "commit"   { text } from the field    "cancel" Esc in the field
-//   "reply"    { reply } for a login or logout mutation
+//   "reply"    { reply } for a login or logout
+//   "no-config" the trackers' server has no config file
 function reduce(s, event) {
   var l = s.login
   switch (event.type) {
+    case "no-config":
+      return copy(s, { state: "no-config", message: "", list: [], login: null })
     case "request":
       return copy(s, { state: "loading", message: "" })
     case "list":
       if (event.reply.state !== "ok") return copy(s, { state: event.reply.state, message: event.reply.message })
-      return copy(s, { state: "ok", message: "", list: ((event.reply.data.trackers && event.reply.data.trackers.nodes) || []).map(toTracker) })
+      return copy(s, { state: "ok", message: "", list: (event.reply.data.trackers || []).map(toTracker) })
     case "sent":
       if (!l) return s
       return copy(s, { login: copy(l, { step: l.step === "link" ? "linking" : "sending" }) })
     case "link":
       if (!l) return s
       if (event.reply.state !== "ok") return copy(s, { login: null, error: "Could not get the " + l.name + " login link: " + (event.reply.message || event.reply.state) })
-      var t = toTracker(event.reply.data.tracker)
+      // The link is in core's tracker list.
+      var found = (event.reply.data.trackers || []).filter(function(n) { return n.id === l.trackerId })[0]
+      if (!found) return copy(s, { login: null, error: "Could not get the " + l.name + " login link: the server has no such tracker." })
+      var t = toTracker(found)
       if (t.loggedIn || !t.authUrl) return copy(s, { login: null, list: withTracker(s, t) })
       return copy(s, { login: copy(l, { step: "paste", url: t.authUrl }) })
     case "commit":
@@ -143,12 +128,13 @@ function reduce(s, event) {
       if (event.reply.state !== "ok") {
         var why = event.reply.message || event.reply.state
         if (l.logout) return copy(s, { login: null, error: "Could not log out of " + l.name + ": " + why })
-        return copy(s, { login: retry(l, l.name + " did not accept the login: " + why + (l.oauth ? ". Press Esc, then Enter for a fresh link." : "")) })
+        // Core's refusal already names the tracker and ends in a full stop.
+        var refused = String(why).indexOf(l.name) === 0 ? String(why).replace(/\.$/, "") : l.name + " did not accept the login: " + why
+        return copy(s, { login: retry(l, refused + (l.oauth ? ". Press Esc, then Enter for a fresh link." : "")) })
       }
-      var d = event.reply.data
-      var p = d.loginTrackerOAuth || d.loginTrackerCredentials || d.logoutTracker
-      var next = copy(s, { list: withTracker(s, toTracker(p.tracker)) })
-      if (!l.logout && !p.isLoggedIn) return copy(next, { login: retry(l, l.name + " did not accept the login.") })
+      var done = toTracker(event.reply.data.tracker)
+      var next = copy(s, { list: withTracker(s, done) })
+      if (!l.logout && !done.loggedIn) return copy(next, { login: retry(l, l.name + " did not accept the login.") })
       return copy(next, { login: null, error: "" })
   }
   return s
@@ -174,7 +160,7 @@ function note(s) {
   var l = s.login
   if (!l) return s.error
   if (l.error) return l.error
-  if (l.step === "paste") return "Allow access in the browser. It ends on a suwayomi.org page: copy that page's whole address and paste it here. No browser? Open " + l.url
+  if (l.step === "paste") return "Allow access in the browser. It ends on a suwayomi.org page that says it opens your client: copy the whole address from the browser's address bar and paste it here. No browser? Open " + l.url
   if (l.step === "username") return "The server sends your " + l.name + " login once and keeps only its token."
   return ""
 }
@@ -191,8 +177,16 @@ function panel(mangaId, title) {
   return { mangaId: mangaId, title: String(title || ""), state: "loading", message: "", rows: [], cursor: 0, mode: "list", pick: null, busy: false, error: "" }
 }
 
-function panelPayload(p) {
-  return { query: PANEL_QUERY, variables: { id: p.mangaId } }
+// The panel's data: done(reply), whose data { trackers: { nodes }, manga: {
+// trackRecords: { nodes } } } toRows() reads. Core answers in two routes.
+function panelLoad(send, p, done) {
+  send({ route: "tracker.list" }, function(list) {
+    if (list.state !== "ok") return done(list)
+    send({ route: "track.list", body: { mangaIds: [p.mangaId] } }, function(tracks) {
+      if (tracks.state !== "ok") return done(tracks)
+      done({ state: "ok", data: { trackers: { nodes: list.data.trackers }, manga: { trackRecords: { nodes: tracks.data.tracks } } } })
+    })
+  })
 }
 
 function toRecord(n) {
@@ -283,8 +277,8 @@ function write(p, payload) {
   return { panel: copy(p, { mode: "list", pick: null, busy: true, error: "" }), payload: payload }
 }
 
-function update(record, changes) {
-  return { query: UPDATE_MUTATION, variables: { input: copy({ recordId: record.id }, changes) } }
+function update(p, record, changes) {
+  return { route: "track.update", body: copy({ recordId: record.id }, changes) }
 }
 
 function stay(p) {
@@ -318,8 +312,8 @@ function act(p, event) {
     case "written":
       if (event.reply.state !== "ok") return stay(fail(p, event.reply))
       var d = event.reply.data
-      var w = (d.bindTrack || d.updateTrack || {}).trackRecord
-      var record = d.unbindTrack ? null : w ? toRecord(w) : undefined
+      // Core answers a bind or update with { track }, an unbind with { deleted }.
+      var record = d.deleted !== undefined ? null : d.track ? toRecord(d.track) : undefined
       return stay(copy(p, {
         busy: false,
         rows: p.rows.map(function(x) { return x.tracker.id === event.trackerId && record !== undefined ? copy(x, { record: record }) : x })
@@ -334,11 +328,12 @@ function act(p, event) {
     case "query":
       var q = String(event.text).trim()
       if (!q) return stay(copy(p, { error: "Enter a title to search for." }))
-      return { panel: copy(p, { mode: "searching", error: "" }), payload: { query: SEARCH_QUERY, variables: { id: row.tracker.id, query: q } } }
+      return { panel: copy(p, { mode: "searching", error: "" }), payload: { route: "track.search", body: { trackerId: row.tracker.id, query: q } } }
     case "results":
       if (p.mode !== "searching") return stay(p)
       if (event.reply.state !== "ok") return stay(copy(fail(p, event.reply), { mode: "list" }))
-      var found = (event.reply.data.searchTracker.trackSearches || []).map(function(m) {
+      var data = event.reply.data
+      var found = (data.results || []).map(function(m) {
         var year = /^\d{4}/.exec(String(m.startDate || ""))
         return { label: String(m.title), detail: [m.publishingType, year ? year[0] : "", m.totalChapters ? m.totalChapters + " chapters" : ""].filter(function(x) { return x }).join("   "), value: String(m.remoteId) }
       })
@@ -360,17 +355,19 @@ function act(p, event) {
       var n = Number(t)
       if (!r || p.mode !== "progress") return stay(p)
       if (!/^\d+(\.\d+)?$/.test(t)) return stay(copy(p, { error: "Enter the number of the last chapter read, such as 12." }))
-      return write(p, update(r, { lastChapterRead: n }))
+      return write(p, update(p, r, { lastChapterRead: n }))
     case "choose":
       if (p.mode !== "pick") return stay(p)
       var item = p.pick.items[p.pick.cursor]
       if (!item) return stay(p)
-      if (p.pick.kind === "results") return write(p, { query: BIND_MUTATION, variables: { mangaId: p.mangaId, trackerId: row.tracker.id, remoteId: item.value } })
-      if (p.pick.kind === "status") return write(p, update(r, { status: item.value }))
-      return write(p, update(r, { scoreString: item.value }))
+      if (p.pick.kind === "results") {
+        return write(p, { route: "track.bind", body: { mangaId: p.mangaId, trackerId: row.tracker.id, remoteId: item.value } })
+      }
+      if (p.pick.kind === "status") return write(p, update(p, r, { status: item.value }))
+      return write(p, update(p, r, { scoreString: item.value }))
     case "unbind":
       if (!r) return stay(p)
-      return write(p, { query: UNBIND_MUTATION, variables: { id: r.id } })
+      return write(p, { route: "track.unbind", body: { recordId: r.id } })
     case "start":
     case "finish":
       if (!r) return stay(copy(p, { error: "Find the manga on " + row.tracker.name + " first: Enter." }))
@@ -380,11 +377,11 @@ function act(p, event) {
       if (!r || (p.mode !== "start" && p.mode !== "finish")) return stay(p)
       var d = parseDate(event.text)
       if (d.error) return stay(copy(p, { error: d.error }))
-      return write(p, update(r, p.mode === "start" ? { startDate: String(d.ms) } : { finishDate: String(d.ms) }))
+      return write(p, update(p, r, p.mode === "start" ? { startDate: String(d.ms) } : { finishDate: String(d.ms) }))
     case "private":
       if (!r) return stay(copy(p, { error: "Find the manga on " + row.tracker.name + " first: Enter." }))
       if (!row.tracker.privacy) return stay(copy(p, { error: row.tracker.name + " has no private tracking." }))
-      return write(p, update(r, { private: !r.private }))
+      return write(p, update(p, r, { private: !r.private }))
   }
   return stay(p)
 }
@@ -417,7 +414,7 @@ if (typeof module !== "undefined") {
     prompt: prompt,
     note: note,
     panel: panel,
-    panelPayload: panelPayload,
+    panelLoad: panelLoad,
     summary: summary,
     act: act,
     fieldStart: fieldStart,

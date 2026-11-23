@@ -3,14 +3,14 @@ const assert = require("node:assert/strict");
 const U = require("./load")("Updates.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
-const ok = (data) => M.reply(200, JSON.stringify({ data }));
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
+const ok = (data) => M.coreReply(200, JSON.stringify(data));
 const at = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi || 0).getTime();
 const now = at(2026, 10, 4, 15);
 const sec = (ms) => String(Math.floor(ms / 1000));
 
-const manga = { id: 7, title: "Maid to Skate", thumbnailUrl: "/api/v1/manga/7/thumbnail", inLibraryAt: sec(at(2026, 9, 1, 12)) };
-const other = { id: 8, title: "Normal Girl", thumbnailUrl: "/api/v1/manga/8/thumbnail", inLibraryAt: sec(at(2026, 10, 4, 9)) };
+const manga = { id: 7, title: "Maid to Skate", thumbnailUrl: "/api/cover/7", inLibraryAt: sec(at(2026, 9, 1, 12)) };
+const other = { id: 8, title: "Normal Girl", thumbnailUrl: "/api/cover/8", inLibraryAt: sec(at(2026, 10, 4, 9)) };
 const chapter = (id, m, fetched, o) => Object.assign({ id, name: "Ch." + id, uploadDate: String(at(2026, 9, 30, 8)), fetchedAt: sec(fetched), sourceOrder: id, isRead: false, manga: m }, o);
 const status = (o) => ({ jobsInfo: Object.assign({ isRunning: false, finishedJobs: 0, totalJobs: 0, skippedMangasCount: 0 }, o) });
 const list = (nodes, s, checked) => ok({ chapters: { nodes }, libraryUpdateStatus: s || status(), lastUpdateTimestamp: { timestamp: String(checked || 0) } });
@@ -69,7 +69,7 @@ test("rows group by fetch day: Today, Yesterday, then the date", () => {
   assert.deepEqual(u.rows.map((r) => r.header), ["Today", "", "Yesterday", "2026-09-28"]);
   assert.deepEqual(u.rows[0], {
     id: 1, mangaId: 7, title: "Maid to Skate", chapter: "Ch.1", date: "2026-09-30", header: "Today",
-    cover: "http://127.0.0.1:4590/api/v1/manga/7/thumbnail",
+    cover: "http://127.0.0.1:4591/api/cover/7",
     read: false, lastPage: 0, bookmarked: false, downloaded: false
   });
 });
@@ -79,36 +79,30 @@ test("a reload keeps the rows shown; a failure says why and keeps them", () => {
   const r = U.reduce(u, { type: "request" });
   assert.equal(r.state, "loading");
   assert.equal(r.rows.length, 1);
-  const down = U.reduce(r, { type: "list", reply: M.reply(0, ""), config, now });
+  const down = U.reduce(r, { type: "list", reply: M.coreReply(0, ""), config, now });
   assert.equal(down.state, "down");
   assert.equal(down.rows.length, 1);
 });
 
 test("the notice: loading, a failed connection, or no updates", () => {
   assert.equal(U.notice(U.initial(), "/s.json").title, "Loading updates");
-  assert.equal(U.notice(U.reduce(U.initial(), { type: "list", reply: M.reply(401, ""), config, now }), "/s.json").title, "The server rejected the credentials");
+  assert.equal(U.notice(U.reduce(U.initial(), { type: "list", reply: M.coreReply(401, JSON.stringify({ error: { kind: "unauthorized", message: "secret" } })), config, now }), "/s.json").title, "miharchy-core rejected the secret");
   assert.equal(U.notice(loaded([]), "/s.json").title, "No new chapters");
   assert.equal(U.notice(loaded([chapter(1, manga, at(2026, 10, 4, 14))]), "/s.json"), null);
 });
 
-// A libraryUpdateStatusChanged result, as measured on Suwayomi v2.3.
-const live = (o) => ({ type: "live", data: { libraryUpdateStatusChanged: status(o) } });
+// The updates topic's status, as core sends it: flat, with stopped when a stop ended the run.
+const live = (o) => ({ type: "live", data: Object.assign({ isRunning: false, finishedJobs: 0, totalJobs: 0, skippedMangasCount: 0 }, o) });
 const reload = (u, s, checked) => U.reduce(u, { type: "list", reply: list([], s || status(), checked), config, now });
 
 test("a check runs live until the server finishes it, then the list reloads with its time", () => {
   const idle = loaded([], status({ finishedJobs: 2, totalJobs: 2 }), at(2026, 10, 4, 3));
   assert.equal(idle.running, false);
-  assert.match(U.checkPayload().query, /updateLibrary\(input: \{ categories: \$categories \}\)/);
-  assert.deepEqual(U.checkPayload().variables, { categories: null }, "no categories: the whole library, without the excluded ones");
-  assert.deepEqual(U.checkPayload([4]).variables, { categories: [4] });
-  assert.match(U.LIVE_QUERY, /^subscription \{ libraryUpdateStatusChanged\(input: \{\}\) \{ jobsInfo \{ isRunning finishedJobs totalJobs skippedMangasCount \} \} \}$/);
   const asked = U.reduce(idle, { type: "checking" });
   assert.equal(U.progress(asked, now), "Checking for new chapters");
-  const reset = U.reduce(asked, live({}));
-  assert.equal(reset.checking, true, "the run opens with all zeros, before it counts the library");
-  assert.equal(U.finished(asked, reset), false);
-  const running = U.reduce(reset, live({ isRunning: true, finishedJobs: 1, totalJobs: 4 }));
-  assert.equal(U.finished(reset, running), false);
+  const running = U.reduce(asked, live({ isRunning: true, finishedJobs: 1, totalJobs: 4 }));
+  assert.equal(running.checking, false, "the first status shows the run");
+  assert.equal(U.finished(asked, running), false);
   assert.equal(U.progress(running, now), "Checking for new chapters 1 / 4");
   const done = U.reduce(running, live({ finishedJobs: 4, totalJobs: 4 }));
   assert.equal(U.finished(running, done), true, "the list reloads once the run ends");
@@ -117,33 +111,32 @@ test("a check runs live until the server finishes it, then the list reloads with
 
 test("a run the server starts on its own shows live too", () => {
   const idle = loaded([], status(), at(2026, 10, 4, 3));
-  const scheduled = U.reduce(U.reduce(idle, live({})), live({ isRunning: true, totalJobs: 6 }));
+  const scheduled = U.reduce(idle, live({ isRunning: true, totalJobs: 6 }));
   assert.equal(U.progress(scheduled, now), "Checking for new chapters 0 / 6");
   assert.equal(U.finished(scheduled, U.reduce(scheduled, live({ finishedJobs: 6, totalJobs: 6 }))), true);
   assert.equal(U.reduce(idle, { type: "live", data: {} }), idle, "a result without the field changes nothing");
 });
 
 test("a stopped run says where it stopped until the next run starts", () => {
-  assert.match(U.stopPayload().query, /updateStop\(input: \{\}\)/);
   const running = U.reduce(U.reduce(loaded([]), { type: "checking" }), live({ isRunning: true, finishedJobs: 3, totalJobs: 10 }));
   const stopped = U.reduce(running, { type: "stopped" });
   assert.equal(U.finished(running, stopped), true, "the list reloads with what the run found");
   assert.equal(U.progress(stopped, now), "Stopped checking for new chapters at 3 / 10");
-  const after = U.reduce(stopped, live({}));
-  assert.equal(U.progress(after, now), "Stopped checking for new chapters at 3 / 10", "the server forgets the counts; the line keeps them");
+  const after = U.reduce(running, live({ stopped: true, finishedJobs: 3, totalJobs: 10 }));
+  assert.equal(U.progress(after, now), "Stopped checking for new chapters at 3 / 10", "core's status says the run was stopped");
   assert.equal(U.reduce(U.initial(), { type: "stopped" }).stopped, null, "nothing running, nothing stopped");
   assert.equal(U.progress(U.reduce(U.reduce(loaded([]), { type: "checking" }), { type: "stopped" }), now), "Stopped checking for new chapters", "stopped before the run showed");
   assert.equal(U.progress(U.reduce(after, { type: "checking" }), now), "Checking for new chapters", "u starts over");
   assert.equal(U.progress(U.reduce(after, live({ isRunning: true, finishedJobs: 0, totalJobs: 5 })), now), "Checking for new chapters 0 / 5", "so does a scheduled run");
 });
 
-test("a stop keeps its line whether the zeroed live result or the stop reply comes first", () => {
+test("a stop keeps its line whether core's stopped status or the stop reply comes first", () => {
   const running = U.reduce(U.reduce(loaded([]), { type: "checking" }), live({ isRunning: true, finishedJobs: 8, totalJobs: 20 }));
-  const liveFirst = U.reduce(running, live({}));
+  const liveFirst = U.reduce(running, live({ stopped: true, finishedJobs: 8, totalJobs: 20 }));
   assert.equal(U.finished(running, liveFirst), true, "the list reloads");
   const reloaded = reload(liveFirst, status(), at(2026, 10, 4, 3));
   assert.equal(U.progress(U.reduce(reloaded, { type: "stopped" }), now), "Stopped checking for new chapters at 8 / 20");
-  const replyFirst = U.reduce(U.reduce(running, { type: "stopped" }), live({}));
+  const replyFirst = U.reduce(U.reduce(running, { type: "stopped" }), live({ stopped: true, finishedJobs: 8, totalJobs: 20 }));
   assert.equal(U.progress(reload(replyFirst, status(), at(2026, 10, 4, 3)), now), "Stopped checking for new chapters at 8 / 20");
   const done = U.reduce(running, live({ finishedJobs: 20, totalJobs: 20 }));
   assert.equal(U.progress(reload(done, status({ finishedJobs: 20, totalJobs: 20 }), at(2026, 10, 4, 14, 59)), now), "Last checked Today 14:59", "a run that ends on its own is no stop");
@@ -151,7 +144,7 @@ test("a stop keeps its line whether the zeroed live result or the stop reply com
 
 test("a check the server skips entirely still ends, and says what it skipped", () => {
   const asked = U.reduce(loaded([]), { type: "checking" });
-  const skipped = U.reduce(U.reduce(asked, live({})), live({ skippedMangasCount: 3 }));
+  const skipped = U.reduce(asked, live({ skippedMangasCount: 3 }));
   assert.equal(U.finished(asked, skipped), true);
   const reloaded = reload(skipped, status({ skippedMangasCount: 3 }), at(2026, 10, 3, 9, 5));
   assert.equal(U.progress(reloaded, now), "Last checked Yesterday 09:05, 3 manga skipped");
@@ -160,7 +153,6 @@ test("a check the server skips entirely still ends, and says what it skipped", (
 
 test("skipped manga name the skip filters that are on", () => {
   const listed = (settings) => U.reduce(U.initial(), { type: "list", reply: ok({ chapters: { nodes: [] }, libraryUpdateStatus: status({ skippedMangasCount: 4 }), lastUpdateTimestamp: { timestamp: String(at(2026, 10, 4, 9, 5)) }, settings }), config, now });
-  assert.match(U.viewPayload(now).query, /settings \{ excludeUnreadChapters excludeNotStarted excludeCompleted \}/);
   assert.equal(U.progress(listed({ excludeUnreadChapters: true, excludeNotStarted: false, excludeCompleted: true }), now),
     "Last checked Today 09:05, 4 skipped: unread chapters, completed (change in Settings)");
   assert.equal(U.progress(listed({ excludeUnreadChapters: false, excludeNotStarted: true, excludeCompleted: false }), now),
@@ -190,6 +182,7 @@ test("only chapters uploaded in the last 3 months are updates, as in Mihon", () 
   assert.deepEqual(U.updates(data, now).map((c) => c.id), [1]);
   assert.equal(U.count(data, now), 1);
   assert.deepEqual(U.rows(data, config, now).map((r) => r.id), [1], "the list and the bar mark use the same rule");
+  assert.equal(U.since(now), new Date(2026, 6, 4, 15).getTime(), "the cut is 3 months before now");
 });
 
 const Ch = require("./load")("Chapters.js");
@@ -218,13 +211,12 @@ test("rows carry what the shared chapter actions need, across manga", () => {
     chapter(2, other, at(2026, 10, 4, 13), { isBookmarked: true }),
     chapter(3, manga, at(2026, 10, 4, 12))
   ]).rows;
-  assert.match(U.UPDATES_QUERY, /lastPageRead isBookmarked isDownloaded/);
-  assert.deepEqual(Ch.markPayload(rows, true).variables, { ids: [1, 2, 3], started: [], read: true });
-  assert.deepEqual(Ch.markPayload(rows, false).variables, { ids: [], started: [1], read: false }, "unread only sends a started update back to page 1");
-  assert.deepEqual(Ch.bookmarkPayload(rows).variables, { ids: [1, 3], bookmarked: true });
-  assert.deepEqual(Ch.bookmarkPayload([rows[1]]).variables, { ids: [2], bookmarked: false });
-  assert.deepEqual(D.enqueuePayload(rows).variables, { ids: [2, 3] });
-  assert.deepEqual(D.removePayload(rows, []).variables, { ids: [1] });
+  assert.deepEqual(Ch.markPayload(rows, true).body, { ids: [1, 2, 3], isRead: true });
+  assert.deepEqual(Ch.markPayload(rows, false).body, { ids: [1], isRead: false, lastPageRead: 0 }, "unread only sends a started update back to page 1");
+  assert.deepEqual(Ch.bookmarkPayload(rows).body, { ids: [1, 3], isBookmarked: true });
+  assert.deepEqual(Ch.bookmarkPayload([rows[1]]).body, { ids: [2], isBookmarked: false });
+  assert.deepEqual(D.enqueuePayload(rows).body, { ids: [2, 3] });
+  assert.deepEqual(D.removePayload(rows, []).body, { ids: [1] });
   assert.equal(D.removePayload([rows[1]], []), null, "nothing on disk, nothing to confirm");
 });
 
@@ -316,12 +308,4 @@ test("the filter panel cycles a filter and a category, and a change filters the 
   assert.deepEqual(ids(again), [1, 2]);
   const none = U.reduce(u, { type: "filter", config, now, prefs: prefs({ updatesFilterBookmarked: "include" }) });
   assert.deepEqual(U.notice(none, ""), { title: "No updates match the filters", detail: "Press F to change the filters." });
-});
-
-test("the view's query cuts at 3 months on the server and asks for what the filters test", () => {
-  const p = U.viewPayload(now);
-  assert.equal(p.variables.since, String(new Date(2026, 6, 4, 15).getTime()));
-  assert.match(U.VIEW_QUERY, /uploadDate: \{ greaterThan: \$since \}/);
-  assert.match(U.VIEW_QUERY, /scanlator manga \{ id title thumbnailUrl inLibraryAt categories \{ nodes \{ id \} \} meta \{ key value \} \}/);
-  assert.doesNotMatch(U.VIEW_QUERY, /isRead: \{/, "read updates come too");
 });

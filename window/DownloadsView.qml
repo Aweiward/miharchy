@@ -8,9 +8,8 @@ import "Downloads.js" as Downloads
 import "Failure.js" as Failure
 import "NextChapters.js" as NextChapters
 
-// The download queue over the whole window, kept live by Suwayomi's
-// downloadStatusChanged subscription while the overlay shows or anything
-// waits in the queue. Downloads.js decides; shell.qml forwards every
+// The download queue over the whole window, kept live by miharchy-core's
+// "downloads" topic while the overlay shows or anything waits in the queue. Downloads.js decides; shell.qml forwards every
 // "downloads." command to run(). The last next-chapters run (NextChapters.js)
 // shows as a summary line above the queue, at cursor -1.
 Rectangle {
@@ -19,6 +18,7 @@ Rectangle {
   required property Theme theme
   property var config: null
   property string configPath: ""
+  // Set by shell.qml: the queue is miharchy-core's.
   property bool open: false
   property var queue: Downloads.initial()
   property int cursor: 0
@@ -26,8 +26,8 @@ Rectangle {
   property int seq: 0
   // Why each failed download failed (Downloads.failed).
   property var reasons: ({})
-  // The server's flareSolverrEnabled: a Cloudflare row hints at Setup
-  // while it is off.
+  // The server's flareSolverrEnabled. Unused: core's failure reasons carry
+  // no hint. shell.qml still sets it.
   property bool flareOn: false
   // nextChapters.lastRun; what the queue has shown of it (NextChapters.track),
   // and whether its end has notified.
@@ -59,15 +59,18 @@ Rectangle {
     seq++
     queue = Downloads.initial()
     reasons = {}
-    send({ query: Downloads.STATUS_QUERY })
+    if (!config) queue = { state: "no-config", message: "", running: false, items: [] }
+    send(Downloads.statusPayload())
   }
+  // A missing core.json leaves config null from the start, so onConfigChanged never fires.
+  Component.onCompleted: if (!config) queue = { state: "no-config", message: "", running: false, items: [] }
 
   onLastRunChanged: {
     if (lastRun && lastRun.state === "refreshing") {
       marks = {}
       notified = false
     }
-    follow([])
+    follow()
   }
 
   function update(event) {
@@ -75,17 +78,24 @@ Rectangle {
     var gone = Downloads.left(queue.items, next.items)
     queue = next
     cursor = Math.max(summaryShown ? -1 : 0, Math.min(cursor, queue.items.length - 1))
-    var f = Downloads.failed(queue.items, reasons)
-    reasons = f.reasons
-    f.probe.forEach(probe)
-    var live = event.type === "live" && event.data.downloadStatusChanged
-    follow(live && !live.initial ? live.updates || [] : [])
+    reasons = Downloads.failed(queue.items, reasons).reasons
+    follow()
+    settleGone(NextChapters.goneIds(lastRun, gone))
     if (gone.length) leftQueue(gone)
   }
 
-  function follow(updates) {
+  // A run chapter that left the queue is on disk or taken out.
+  function settleGone(ids) {
+    if (!ids.length || !config) return
+    var run = lastRun
+    Session.send(config, { route: "chapter.list", body: { ids: ids } }, function(reply) {
+      if (reply.state === "ok" && run === view.lastRun) view.marks = NextChapters.goneMarks(view.marks, reply.data.chapters)
+    })
+  }
+
+  function follow() {
     if (!lastRun) return
-    marks = NextChapters.track(marks, lastRun, queue.items, updates)
+    marks = NextChapters.track(marks, lastRun, queue.items, [])
     if (!notified && NextChapters.looksOver(lastRun, queue.items)) settle()
   }
 
@@ -95,7 +105,8 @@ Rectangle {
     if (settling || !config) return
     settling = true
     var run = lastRun
-    Session.send(config, NextChapters.settlePayload(run), function(reply) {
+    var cfg = config
+    NextChapters.settleLoad(function(payload, done) { Session.send(cfg, payload, done) }, run, function(reply) {
       view.settling = false
       if (reply.state !== "ok" || run !== view.lastRun || view.notified) return
       view.marks = NextChapters.settle(view.marks, run, view.queue.items, reply.data)
@@ -106,7 +117,7 @@ Rectangle {
     })
   }
 
-  // A retried chapter loses its reason, so its next failure is probed again.
+  // A retried chapter loses its reason, so its next failure is labelled again.
   function retry(chapterIds) {
     var payload = Downloads.retryPayload(chapterIds)
     if (!payload) return
@@ -116,16 +127,9 @@ Rectangle {
     send(payload)
   }
 
-  // Outside seq: a probe never touches the queue.
-  function probe(chapterId) {
-    Session.send(config, Downloads.probePayload(chapterId), function(reply) {
-      view.reasons = Downloads.probed(view.reasons, chapterId, reply)
-    })
-  }
-
   // Any reply that carries the download status: the first look's, or a
-  // mutation's sent from here or from the manga detail. While the
-  // subscription runs it carries every change, and a reply's status can be
+  // route's reply, sent from here or from the manga detail. While the
+  // topic runs it carries every change, and a reply's status can be
   // older than its last result, so the reply is left out.
   function apply(reply) {
     if (!live.subscribed) update({ type: "reply", reply: reply })
@@ -175,7 +179,7 @@ Rectangle {
         reorder(Downloads.sorted(queue, id === "downloads.sortNumber" ? "chapterNumber" : "uploadDate"))
         break
       case "downloads.clear":
-        if (armed) send(Downloads.CLEAR_PAYLOAD)
+        if (armed) send(Downloads.clearPayload())
         armed = !armed && queue.items.length > 0
         break
       case "downloads.dequeue":
@@ -187,17 +191,13 @@ Rectangle {
     }
   }
 
-  // A result that left changes out restarts the subscription, whose first
-  // result holds the whole queue.
+  // Every result of the topic holds the whole queue.
   LiveSocket {
     id: live
     config: view.config
-    query: Downloads.LIVE_QUERY
+    topic: "downloads"
     running: view.config !== null && Downloads.live(view.queue, view.open)
-    onResult: function(data) {
-      view.update({ type: "live", data: data })
-      if (Downloads.omitted(data)) Qt.callLater(live.restart)
-    }
+    onResult: function(data) { view.update({ type: "live", data: data }) }
   }
 
   // Over the whole window: a click never reaches the view below.

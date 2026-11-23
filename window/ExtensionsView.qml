@@ -33,7 +33,6 @@ Item {
   // An installed extension's details (Extensions.details) over the list,
   // or null.
   property var details: null
-  property int detailsSeq: 0
 
   readonly property var rows: Extensions.rows(ext, { query: query, allLanguages: allLanguages, showNsfw: showNsfw })
   readonly property int cursor: Math.max(0, rows.findIndex(function(r) { return r.key === view.cursorKey }))
@@ -75,7 +74,11 @@ Item {
   }
 
   function load() {
-    if (!config) return
+    // Without core.json nothing else says so.
+    if (!config) {
+      ext = Extensions.reduce(Extensions.initial(), { type: "config-missing" })
+      return
+    }
     ext = Extensions.reduce(ext, { type: "load" })
     advance()
   }
@@ -93,15 +96,10 @@ Item {
   }
 
   function showDetails(pkgName) {
-    details = Extensions.details(pkgName)
-    var seq = ++detailsSeq
-    send(Extensions.detailsPayload(details), function(reply) {
-      if (seq === view.detailsSeq && view.details) view.details = Extensions.reduceDetails(view.details, { type: "reply", reply: reply })
-    })
+    details = Extensions.details(pkgName, ext)
   }
 
   function closeDetails() {
-    detailsSeq++
     details = null
   }
 

@@ -113,11 +113,15 @@ Item {
 
   // then: runs once the sources have loaded.
   function loadSources(then) {
-    if (!config) return
+    // Without core.json nothing else says so.
+    if (!config) {
+      src = { state: "no-config", message: "", sources: [] }
+      return
+    }
     var seq = ++sourcesSeq
     var cfg = config
     src = { state: "loading", message: "", sources: src.sources }
-    send({ query: Browse.SOURCES_QUERY }, function(reply) {
+    send(Browse.sourcesPayload(), function(reply) {
       if (seq !== view.sourcesSeq) return
       view.src = Browse.sources(reply, cfg, view.showNsfw, true)
       view.sourceCursor = Math.min(view.sourceCursor, Math.max(0, view.sourceRows.length - 1))
@@ -141,10 +145,10 @@ Item {
     else loadSources(function() { if (view.screen === "global") view.startGlobal(query) })
   }
 
-  function openListing(mode, query, filters) {
+  function openListing(mode, query, filters, filterCount) {
     // Drops a page still due for the old listing.
     listingSeq++
-    listing = Browse.listing(listing.source, mode, query, filters)
+    listing = Browse.listing(listing.source, mode, query, filters, filterCount)
     gridCursor = 0
     moreManga()
   }
@@ -250,7 +254,7 @@ Item {
     var stale = panel.kind === "preferences" && panel.saved && screen === "source"
     panelSeq++
     panel = null
-    if (stale) openListing(listing.mode, listing.query, listing.filters)
+    if (stale) openListing(listing.mode, listing.query, listing.filters, listing.filterCount)
   }
 
   function run(id) {
@@ -338,7 +342,7 @@ Item {
         closeSearch()
         // As Mihon: a search from a search keeps its filters; from
         // popular or latest it starts without them.
-        if (q) openListing("search", q, listing.mode === "search" ? listing.filters : [])
+        if (q) openListing("search", q, listing.mode === "search" ? listing.filters : [], listing.mode === "search" ? listing.filterCount : 0)
         break
       case "source.filters":
         openPanel("filters", listing.source)
@@ -383,8 +387,9 @@ Item {
         // Filters reach a source only in a search, so applying searches,
         // with the query of a search already showing.
         var applied = Widgets.filterChanges(panel.widgets)
+        var count = Widgets.changedCount(panel.widgets)
         closePanel()
-        openListing("search", listing.mode === "search" ? listing.query : "", applied)
+        openListing("search", listing.mode === "search" ? listing.query : "", applied, count)
         break
       case "panel.closeFilters":
       case "panel.closeSettings":

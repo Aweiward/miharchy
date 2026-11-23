@@ -8,26 +8,17 @@
 // so tests/chapters.test.js pins it; shell.qml's markChapters() sends the
 // action payloads, for every view.
 
-// Setting lastPageRead also stamps lastReadAt, which puts the chapter in the
-// history, so only chapters with a page read get the reset; Suwayomi skips an
-// empty id list.
-var MARK_MUTATION = "mutation($ids: [Int!]!, $started: [Int!]!, $read: Boolean!) {"
-  + " marked: updateChapters(input: { ids: $ids, patch: { isRead: $read } }) { chapters { id } }"
-  + " reset: updateChapters(input: { ids: $started, patch: { isRead: false, lastPageRead: 0 } }) { chapters { id } } }"
-
-var BOOKMARK_MUTATION = "mutation($ids: [Int!]!, $bookmarked: Boolean!) {"
-  + " marked: updateChapters(input: { ids: $ids, patch: { isBookmarked: $bookmarked } }) { chapters { id } } }"
-
 // chapters: [{ id, read, lastPage }]. Mihon's SetReadStatus: marking read
 // touches the unread chapters and keeps their page; marking unread touches
 // the read or started ones and sends them back to page 1. null when nothing
 // changes.
+// One chapter.update; page 0 on the ones already there is no change, and
+// core stamps no History for an unread reset.
 function markPayload(chapters, read) {
   var todo = chapters.filter(function(c) { return read ? !c.read : c.read || c.lastPage > 0 })
   if (!todo.length) return null
-  var started = read ? [] : todo.filter(function(c) { return c.lastPage > 0 })
-  var ids = todo.filter(function(c) { return started.indexOf(c) === -1 }).map(function(c) { return c.id })
-  return { query: MARK_MUTATION, variables: { ids: ids, started: started.map(function(c) { return c.id }), read: read } }
+  var ids = todo.map(function(c) { return c.id })
+  return { route: "chapter.update", body: read ? { ids: ids, isRead: true } : { ids: ids, isRead: false, lastPageRead: 0 } }
 }
 
 // One key toggles: Mihon's menu offers bookmark while any chapter lacks
@@ -35,19 +26,15 @@ function markPayload(chapters, read) {
 function bookmarkPayload(chapters) {
   var bookmarked = chapters.some(function(c) { return !c.bookmarked })
   var todo = chapters.filter(function(c) { return c.bookmarked !== bookmarked })
-  return todo.length ? { query: BOOKMARK_MUTATION, variables: { ids: todo.map(function(c) { return c.id }), bookmarked: bookmarked } } : null
+  return todo.length ? { route: "chapter.update", body: { ids: todo.map(function(c) { return c.id }), isBookmarked: bookmarked } } : null
 }
 
-// The GraphQL updateChapters leaves the trackers alone (only Suwayomi's REST
-// call pushes), so a mark read asks for the push. The server sends each
+// A mark read asks for the tracker push: core's track.progress sends each
 // tracker the highest read chapter number, when it is above the tracker's.
-// null for no manga: an empty mutation is a GraphQL error.
+// null for no manga.
 function trackPayload(mangaIds) {
   if (!mangaIds.length) return null
-  var fields = unique(mangaIds).map(function(id) {
-    return "m" + id + ": trackProgress(input: { mangaId: " + Number(id) + " }) { trackRecords { id lastChapterRead } }"
-  })
-  return { query: "mutation { " + fields.join(" ") + " }" }
+  return { route: "track.progress", body: { mangaIds: unique(mangaIds) } }
 }
 
 function unique(ids) {
@@ -61,19 +48,36 @@ function afterMarkRead(setting) {
   return { always: "push", ask: "check" }[setting] || null
 }
 
-// For "check": each marked manga's tracks and its highest read chapter, read
-// after the mark, which is the number trackProgress would send.
-function trackCheckPayload(mangaIds) {
-  if (!mangaIds.length) return null
-  var fields = unique(mangaIds).map(function(id) {
-    var n = Number(id)
-    return "m" + n + ": manga(id: " + n + ") { id trackRecords { nodes { lastChapterRead tracker { isLoggedIn } } } }"
-      + " r" + n + ": chapters(condition: { mangaId: " + n + ", isRead: true }, order: [{ by: CHAPTER_NUMBER, byType: DESC }], first: 1) { nodes { chapterNumber } }"
+// The data trackAsk reads, as done(reply). Core answers in three routes,
+// put together here in the shape trackAsk reads.
+function trackCheckLoad(send, mangaIds, done) {
+  if (!mangaIds.length) return done({ state: "ok", data: {} })
+  var ids = unique(mangaIds)
+  send({ route: "tracker.list" }, function(list) {
+    if (list.state !== "ok") return done(list)
+    send({ route: "track.list", body: { mangaIds: ids } }, function(tracks) {
+      if (tracks.state !== "ok") return done(tracks)
+      send({ route: "chapter.list", body: { mangaIds: ids } }, function(ch) {
+        if (ch.state !== "ok") return done(ch)
+        var loggedIn = {}
+        list.data.trackers.forEach(function(t) { loggedIn[t.id] = t.isLoggedIn === true })
+        var data = {}
+        ids.forEach(function(id) {
+          var n = Number(id)
+          var top = ch.data.chapters.filter(function(c) { return c.mangaId === n && c.isRead })
+            .reduce(function(a, c) { return !a || c.chapterNumber > a.chapterNumber ? c : a }, null)
+          data["m" + n] = { id: n, trackRecords: { nodes: tracks.data.tracks.filter(function(t) { return t.mangaId === n }).map(function(t) {
+            return { lastChapterRead: t.lastChapterRead, tracker: { isLoggedIn: loggedIn[t.trackerId] === true } }
+          }) } }
+          data["r" + n] = { nodes: top ? [{ chapterNumber: top.chapterNumber }] : [] }
+        })
+        done({ state: "ok", data: data })
+      })
+    })
   })
-  return { query: "query { " + fields.join(" ") + " }" }
 }
 
-// trackCheckPayload's data -> { mangaIds, chapter } to ask about, or null.
+// trackCheckLoad's data -> { mangaIds, chapter } to ask about, or null.
 // As Mihon: ask only when a logged-in tracker sits below the chapter the
 // push would send. chapter: that number when one manga is asked about.
 function trackAsk(data) {
@@ -303,7 +307,7 @@ if (typeof module !== "undefined") {
     bookmarkPayload: bookmarkPayload,
     trackPayload: trackPayload,
     afterMarkRead: afterMarkRead,
-    trackCheckPayload: trackCheckPayload,
+    trackCheckLoad: trackCheckLoad,
     trackAsk: trackAsk,
     trackAskText: trackAskText,
     apply: apply,

@@ -20,6 +20,7 @@ Item {
   required property Theme theme
   property var config: null
   property string configPath: ""
+  // Set by shell.qml; config is miharchy-core's.
   // The view shows, so it loads and follows the library update live.
   property bool active: false
   property var updates: Updates.initial()
@@ -56,10 +57,14 @@ Item {
   signal read(var manga, var chapters, int chapterId, bool peek)
   // action: "read", "unread" or "bookmark".
   signal mark(var chapters, string action, var mangaIds)
-  // A download mutation's reply, which carries the queue.
+  // A download request's reply, which carries the queue.
   signal downloads(var reply)
   // A double click sends Enter, as typed.
   signal key(var event)
+
+  function problem(reply) {
+    return reply.message || Model.problem(reply, configPath).title
+  }
 
   onCursorChanged: list.positionViewAtIndex(cursor, ListView.Contain)
   onActiveChanged: load()
@@ -78,11 +83,16 @@ Item {
   }
 
   function load() {
-    if (!config || !active) return
+    if (!active) return
+    // No core.json: core's no-config problem, not "Loading" for ever.
+    if (!config) {
+      updates = Updates.reduce(Updates.initial(), { type: "list", reply: { state: "no-config", message: "" } })
+      return
+    }
     var seq = ++listSeq
     var cfg = config
     updates = Updates.reduce(updates, { type: "request" })
-    send(Updates.viewPayload(Date.now()), function(reply) {
+    Updates.load(send, Date.now(), function(reply) {
       if (seq !== view.listSeq) return
       view.updates = Updates.reduce(view.updates, { type: "list", reply: reply, config: cfg, now: Date.now(), prefs: view.prefs })
     })
@@ -102,9 +112,13 @@ Item {
     updates = Updates.reduce(updates, { type: "checking" })
     error = ""
     send(Updates.checkPayload(categories), function(reply) {
-      if (reply.state === "ok") return
+      // Core's reply is the run's status.
+      if (reply.state === "ok") {
+        if (reply.data && reply.data.isRunning !== undefined) view.follow(reply.data)
+        return
+      }
       view.updates = Updates.reduce(view.updates, { type: "failed" })
-      view.error = reply.message || Model.problem(reply, view.configPath).title
+      view.error = view.problem(reply)
     })
     return true
   }
@@ -113,7 +127,7 @@ Item {
     if (!config || !(updates.running || updates.checking)) return
     send(Updates.stopPayload(), function(reply) {
       if (reply.state !== "ok") {
-        view.error = reply.message || Model.problem(reply, view.configPath).title
+        view.error = view.problem(reply)
         return
       }
       var before = view.updates
@@ -233,12 +247,12 @@ Item {
     config: view.config
     table: Updates.PREFS
     onConfigChanged: load()
-    onFailed: function(reply) { view.error = reply.message || Model.problem(reply, view.configPath).title }
+    onFailed: function(reply) { view.error = view.problem(reply) }
   }
 
   LiveSocket {
     config: view.config
-    query: Updates.LIVE_QUERY
+    topic: "updates"
     running: view.active && view.config !== null
     onResult: function(data) { view.follow(data) }
   }

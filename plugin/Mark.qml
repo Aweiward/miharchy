@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Mark.js" as Mark
 import "../window/Model.js" as Model
@@ -10,17 +11,17 @@ import "../window/Sync.js" as Sync
 
 // The mark in the Omarchy bar and its popup of recent updates. It stays thin
 // (ADR 0003): it polls the server and starts the window, which runs as its
-// own process through window/miharchy. Mark.js decides what shows; Sync now
-// runs the same sync helper the window runs.
+// own process through window/miharchy. Mark.js decides what shows; Sync
+// runs the same sync the window runs: miharchy-core's sync.run.
 Panel {
   id: root
   moduleName: "miharchy"
 
-  readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
+  readonly property string configPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
+  readonly property string phoneBaseline: Mark.phoneBaseline({ HOME: Quickshell.env("HOME"), MIHARCHY_CORE_DATA: Quickshell.env("MIHARCHY_CORE_DATA") })
   readonly property string launcher: decodeURIComponent(Qt.resolvedUrl("../window/miharchy").toString().replace(/^file:\/\//, ""))
   property var config: null
   property var mark: Mark.initial()
-  readonly property string devHelper: decodeURIComponent(Qt.resolvedUrl(Sync.DEV_HELPER).toString().replace(/^file:\/\//, ""))
   readonly property string notifyIcon: decodeURIComponent(Qt.resolvedUrl("../icons/miharchy.svg").toString().replace(/^file:\/\//, ""))
   property var sync: Sync.initial()
   property int cursor: 0
@@ -64,8 +65,9 @@ Panel {
   function loadUpNext() {
     var seq = ++upNextSeq
     upNextReply = null
-    if (!config) return
-    Session.send(config, Mark.upNextPayload(), function(reply) {
+    var cfg = config
+    if (!cfg) return
+    Mark.loadUpNext(function(payload, done) { Session.send(cfg, payload, done) }, function(reply) {
       if (seq === root.upNextSeq) root.upNextReply = reply
     })
   }
@@ -88,7 +90,7 @@ Panel {
   }
 
   function applyConfig(text) {
-    config = Model.parseConfig(text)
+    config = Model.parseCoreConfig(text)
     if (config) return poll()
     pollSeq++
     mark = Mark.reduce(mark, { type: "config-missing" })
@@ -98,7 +100,7 @@ Panel {
     if (!config) return
     var seq = ++pollSeq
     var cfg = config
-    Session.send(cfg, Mark.listPayload(), function(reply) {
+    Mark.load(function(payload, done) { Session.send(cfg, payload, done) }, Date.now(), function(reply) {
       if (seq !== root.pollSeq) return
       root.mark = Mark.reduce(root.mark, { type: "reply", reply: reply, config: cfg, now: Date.now() })
       var n = Mark.notification(root.mark)
@@ -109,7 +111,7 @@ Panel {
         newestPhone.running = true
       }
       if (root.mark.autoSync && root.mark.syncFolder && root.sync.state !== "running" && !phoneCheck.running) {
-        phoneCheck.command = Mark.phoneCheckCommand(root.mark.syncFolder)
+        phoneCheck.command = Mark.phoneCheckCommand(root.mark.syncFolder, root.phoneBaseline)
         phoneCheck.running = true
       }
     })
@@ -140,20 +142,26 @@ Panel {
     }
   }
 
+  // Core's requests have no deadline of their own, so these timers give
+  // one; a reply after one is dropped.
+  property bool healthBusy: false
+  property int healthSeq: 0
+  property int syncSeq: 0
+
   function refreshHealth() {
-    if (healthJob.running) return
-    healthJob.command = Sync.healthCommand(devHelper)
-    healthJob.running = true
+    if (healthBusy || !config) return
+    healthBusy = true
+    var seq = ++healthSeq
+    healthDeadline.restart()
+    Session.send(config, Sync.HEALTH_PAYLOAD, function(reply) {
+      if (seq !== root.healthSeq) return
+      healthDeadline.stop()
+      root.healthBusy = false
+      root.health = Sync.healthReply(reply)
+    })
   }
 
-  Process {
-    id: healthJob
-    stdout: StdioCollector {
-      onStreamFinished: root.health = Sync.parseHealth(text)
-    }
-  }
-
-  // One GraphQL query to localhost a minute; opening the popup polls too.
+  // One poll of core a minute; opening the popup polls too.
   // ponytail: each monitor's bar polls on its own; a service-kind entry
   // point could share one poll if that ever costs anything.
   Timer {
@@ -178,24 +186,45 @@ Panel {
   function startSync() {
     if (sync.state === "running") return
     sync = Sync.reduce(sync, { type: "start" })
-    syncJob.command = Sync.command(devHelper)
-    syncJob.running = true
+    if (!config) return finishSync({ type: "reply", reply: { state: "no-config", message: "" } })
+    var seq = ++syncSeq
+    syncDeadline.restart()
+    Session.send(config, Sync.corePayload(false), function(reply) {
+      if (seq !== root.syncSeq) return
+      syncDeadline.stop()
+      root.finishSync({ type: "reply", reply: reply })
+    })
   }
 
-  Process {
-    id: syncJob
-    stdout: StdioCollector {
-      onStreamFinished: {
-        root.sync = Sync.reduce(root.sync, { type: "finish", text: text })
-        if (root.autoRun) {
-          // The backup's mtime: the same on every bar, so one marker.
-          var n = Mark.syncNotification(root.sync, "sync-" + root.lastTried.split(" ")[0].replace(/[^0-9]/g, ""))
-          if (n) Quickshell.execDetached(Mark.notifyCommand(n, root.launcher, root.notifyIcon))
-          root.autoRun = false
-        }
-        root.refreshHealth()
-        root.poll()
-      }
+  // event: Sync.reduce's "reply".
+  function finishSync(event) {
+    sync = Sync.reduce(sync, event)
+    if (autoRun) {
+      // The backup's mtime: the same on every bar, so one marker.
+      var n = Mark.syncNotification(sync, "sync-" + lastTried.split(" ")[0].replace(/[^0-9]/g, ""))
+      if (n) Quickshell.execDetached(Mark.notifyCommand(n, launcher, notifyIcon))
+      autoRun = false
+    }
+    refreshHealth()
+    poll()
+  }
+
+  Timer {
+    id: syncDeadline
+    interval: 1800 * 1000
+    onTriggered: {
+      root.syncSeq++
+      root.finishSync({ type: "reply", reply: { state: "error", message: "miharchy-core did not finish the sync in 30 minutes." } })
+    }
+  }
+
+  Timer {
+    id: healthDeadline
+    interval: 120 * 1000
+    onTriggered: {
+      root.healthSeq++
+      root.healthBusy = false
+      root.health = Sync.healthReply({ state: "error", message: "miharchy-core did not answer the health check in 2 minutes." })
     }
   }
 
@@ -218,7 +247,7 @@ Panel {
         iconSize: icon.opticalSize
         color: icon.foreground
         rayColor: root.sync.state === "running" ? "#9ece6a" : color
-        badgeColor: root.bar ? root.bar.urgent : Color.urgent
+        badgeColor: root.bar ? root.bar.urgent : Commons.Color.urgent
         warning: Mark.down(root.mark)
       }
     }
@@ -272,7 +301,7 @@ Panel {
         Text {
           textFormat: Text.PlainText
           text: "Miharchy"
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.title
         }
@@ -283,7 +312,7 @@ Panel {
           visible: root.sync.state !== "idle"
           wrapMode: Text.Wrap
           text: Sync.oneLine(root.sync)
-          color: root.sync.state === "failed" ? Color.urgent : Color.muted
+          color: root.sync.state === "failed" ? Commons.Color.urgent : Commons.Color.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -294,18 +323,7 @@ Panel {
           visible: text !== ""
           wrapMode: Text.Wrap
           text: root.health.state === "ready" ? Sync.healthPopupLine(root.health.health, root.now) : ""
-          color: Color.urgent
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-        }
-
-        Text {
-          textFormat: Text.PlainText
-          width: parent.width
-          visible: text !== ""
-          wrapMode: Text.Wrap
-          text: Mark.warning(root.mark)
-          color: Color.urgent
+          color: Commons.Color.urgent
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -326,7 +344,7 @@ Panel {
               textFormat: Text.PlainText
               visible: entry.modelData.section !== ""
               text: entry.modelData.section
-              color: Color.muted
+              color: Commons.Color.muted
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
             }
@@ -350,7 +368,7 @@ Panel {
                   width: parent.width
                   elide: Text.ElideRight
                   text: entry.modelData.title
-                  color: Color.popups.text
+                  color: Commons.Color.popups.text
                   font.family: Style.font.family
                   font.pixelSize: Style.font.body
                 }
@@ -367,7 +385,7 @@ Panel {
                     anchors.rightMargin: Style.spacing.md
                     elide: Text.ElideRight
                     text: entry.modelData.chapter
-                    color: Color.muted
+                    color: Commons.Color.muted
                     font.family: Style.font.family
                     font.pixelSize: Style.font.bodySmall
                   }
@@ -377,7 +395,7 @@ Panel {
                     textFormat: Text.PlainText
                     anchors.right: parent.right
                     text: entry.modelData.side
-                    color: Color.muted
+                    color: Commons.Color.muted
                     font.family: Style.font.family
                     font.pixelSize: Style.font.bodySmall
                   }
@@ -401,7 +419,7 @@ Panel {
           visible: root.notice !== null
           wrapMode: Text.Wrap
           text: root.notice ? root.notice.title : ""
-          color: Mark.down(root.mark) ? Color.urgent : Color.popups.text
+          color: Mark.down(root.mark) ? Commons.Color.urgent : Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.body
         }
@@ -412,7 +430,7 @@ Panel {
           visible: root.notice !== null && root.notice.detail !== ""
           wrapMode: Text.Wrap
           text: root.notice ? root.notice.detail : ""
-          color: Color.muted
+          color: Commons.Color.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -421,7 +439,7 @@ Panel {
           textFormat: Text.PlainText
           visible: root.notice === null && root.more > 0
           text: root.more + " more in the window"
-          color: Color.muted
+          color: Commons.Color.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -429,7 +447,7 @@ Panel {
         Text {
           textFormat: Text.PlainText
           text: "enter read   w window   s sync   r refresh"
-          color: Color.muted
+          color: Commons.Color.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
         }

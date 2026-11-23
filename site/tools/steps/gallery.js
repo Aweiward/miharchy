@@ -23,7 +23,7 @@
     [3000, function() { log("checking", upd()); grab("g5-updates-checking") }]
   ]
   for (var i = 0; i < 20; i++) steps.push([3000, function() { log("poll", upd()) }])
-  steps.push([2000, function() { log("after-u", upd()); log("groups", updatesView.rows.map(function(r) { return r.day + " | " + (r.title || r.mangaTitle) })); grab("g5-updates") }])
+  steps.push([2000, function() { log("after-u", upd()); log("groups", updatesView.rows.map(function(r) { return r.header + " | " + r.title })); grab("g5-updates") }])
   steps.push([1500, function() { root.run("window.quit") }])
   return steps
 })()

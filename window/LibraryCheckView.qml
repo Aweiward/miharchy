@@ -64,7 +64,7 @@ Item {
     if (!config) return
     var s = ++seq
     check = { state: "loading", message: "", problems: check.problems }
-    send({ query: LibraryCheck.QUERY }, function(reply) {
+    LibraryCheck.load(send, function(reply) {
       if (s !== view.seq) return
       view.check = reply.state === "ok"
         ? { state: "ok", message: "", problems: LibraryCheck.problems(reply.data, Date.now()) }
@@ -134,7 +134,7 @@ Item {
   function openMerge(problem) {
     error = ""
     var s = seq
-    send({ query: LibraryCheck.MERGE_QUERY, variables: LibraryCheck.mergeVariables(problem) }, function(reply) {
+    LibraryCheck.mergeLoad(send, problem, function(reply) {
       if (s !== view.seq || !view.active) return
       if (reply.state !== "ok") view.error = reply.message || Model.problem(reply, view.configPath).title
       else {

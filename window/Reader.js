@@ -8,11 +8,6 @@
 // save. Pure, so tests/reader.test.js pins it; ReaderView.qml fetches pages,
 // sends saves and feeds replies back through reduce().
 
-var PAGES_MUTATION = "mutation($id: Int!) { fetchChapterPages(input: { chapterId: $id }) { pages chapter { id isRead lastPageRead } } }"
-// Setting lastPageRead also stamps lastReadAt, which is what puts the
-// chapter in the history; isRead alone does not.
-var SAVE_MUTATION = "mutation($id: Int!, $patch: UpdateChapterPatchInput!) { updateChapter(input: { id: $id, patch: $patch }) { chapter { id isRead lastPageRead } } }"
-
 // The page shown, the next three and the previous two.
 var SLOTS = 6
 
@@ -23,7 +18,6 @@ function copy(o, changes) {
   return c
 }
 
-var MODE_MUTATION = "mutation($meta: MangaMetaTypeInput!) { setMangaMeta(input: { meta: $meta }) { meta { key value } } }"
 var MODE_KEY = "miharchy.readingMode"
 // The order m cycles through: Mihon's reading modes.
 var MODES = ["paged-rtl", "paged-ltr", "paged-vertical", "webtoon", "continuous-vertical"]
@@ -219,7 +213,7 @@ function chapterName(r) {
 }
 
 function pagesPayload(r) {
-  return r.state === "loading" ? { query: PAGES_MUTATION, variables: { id: chapterId(r) } } : null
+  return r.state === "loading" ? { route: "chapter.pages", body: { id: chapterId(r) } } : null
 }
 
 function last(r) {
@@ -381,7 +375,7 @@ function spread(r, layout, fitMode, view, zoom) {
 function reduce(r, event) {
   switch (event.type) {
     case "pages":
-      var f = event.reply.state === "ok" ? event.reply.data.fetchChapterPages : null
+      var f = event.reply.state === "ok" ? event.reply.data : null
       var pages = f ? (f.pages || []).map(function(p) { return Model.coverUrl(event.config, p) }) : []
       if (!pages.length) {
         var why = f ? { state: "error", message: "This chapter has no pages." } : { state: event.reply.state, message: event.reply.message }
@@ -446,7 +440,9 @@ function savePayload(r) {
   if (r.saved && r.saved.page === r.page && r.saved.read === r.read) return null
   var patch = { lastPageRead: r.page }
   if (r.read) patch.isRead = true
-  return { query: SAVE_MUTATION, variables: { id: chapterId(r), patch: patch } }
+  // Setting lastPageRead also stamps lastReadAt, which is what puts the
+  // chapter in the history; isRead alone does not.
+  return { route: "chapter.update", body: copy(patch, { ids: [chapterId(r)] }) }
 }
 
 // The tracker push due after savePayload()'s reply: only for the save that
@@ -483,7 +479,7 @@ function bookmarkPayload(r) {
 }
 
 function modePayload(r) {
-  return { query: MODE_MUTATION, variables: { meta: { mangaId: r.mangaId, key: MODE_KEY, value: r.mode } } }
+  return { route: "meta.set", body: { metas: [{ scope: "manga", owner: r.mangaId, key: MODE_KEY, value: r.mode }] } }
 }
 
 // What a reader key does: { turn: delta } | { scroll: part of the view } |

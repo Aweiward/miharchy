@@ -1,6 +1,6 @@
 .pragma library
 
-// View choices (sort, filter, display) kept in Suwayomi global meta under
+// View choices (sort, filter, display) kept in global meta under
 // PREFIX + key, so they survive a restart and every window reads one
 // place. A view lists its choices as a table, each { key, default,
 // options: [string] }; a stored value outside options reads as unset. A
@@ -16,10 +16,6 @@ var PREFIX = "miharchy."
 // drop them (exclude). Choosing one again moves to the next state.
 var TRI_STATE = ["off", "include", "exclude"]
 
-var SAVE_MUTATION = "mutation($key: String!, $value: String!) { setGlobalMeta(input: { meta: { key: $key, value: $value } }) { meta { key value } } }"
-var MANGA_SAVE_MUTATION = "mutation($id: Int!, $key: String!, $value: String!) { setMangaMeta(input: { meta: { mangaId: $id, key: $key, value: $value } }) { meta { key value } } }"
-var RESET_MUTATION = "mutation($ids: [Int!]!, $keys: [String!]!) { deleteMangaMetas(input: { items: [{ mangaIds: $ids, keys: $keys }] }) { metas { key } } }"
-
 function defaults(table) {
   var v = {}
   table.forEach(function(c) { v[c.key] = c.default })
@@ -30,34 +26,34 @@ function keys(table) {
   return table.map(function(c) { return PREFIX + c.key })
 }
 
+// The payloads are miharchy-core's meta routes (ADR 0010); core is kept
+// for the callers' sake.
 function loadPayload(table, mangaId) {
-  if (mangaId === undefined) {
-    return {
-      query: "query($keys: [String!]) { metas(filter: { key: { in: $keys } }) { nodes { key value } } }",
-      variables: { keys: keys(table) }
-    }
-  }
-  return {
-    query: "query($keys: [String!], $id: Int!) { metas(filter: { key: { in: $keys } }) { nodes { key value } } manga(id: $id) { meta { key value } } }",
-    variables: { keys: keys(table), id: mangaId }
-  }
+  var global = { scope: "global", keys: keys(table) }
+  if (mangaId === undefined) return { route: "meta.get", body: global }
+  return { route: "meta.get", body: { queries: [global, { scope: "manga", owners: [mangaId], keys: keys(table) }] } }
 }
 
 function savePayload(key, value, mangaId) {
-  if (mangaId === undefined) return { query: SAVE_MUTATION, variables: { key: PREFIX + key, value: String(value) } }
-  return { query: MANGA_SAVE_MUTATION, variables: { id: mangaId, key: PREFIX + key, value: String(value) } }
+  var meta = mangaId === undefined ? { scope: "global" } : { scope: "manga", owner: mangaId }
+  meta.key = PREFIX + key
+  meta.value = String(value)
+  return { route: "meta.set", body: { metas: [meta] } }
 }
 
 // Drops the table's choices from each manga, or null for no manga.
 function resetPayload(table, mangaIds) {
-  return mangaIds.length ? { query: RESET_MUTATION, variables: { ids: mangaIds, keys: keys(table) } } : null
+  return mangaIds.length ? { route: "meta.delete", body: { scope: "manga", owners: mangaIds, keys: keys(table) } } : null
 }
 
-// Reply data from loadPayload() or savePayload() -> a copy of values with
-// each valid choice the reply carries; a manga's own meta wins.
+// Reply data from loadPayload() -> a copy of values with each valid choice
+// the reply carries; a manga's own meta wins. Core answers with the metas
+// themselves; the loads in UpNext.js and NextChapters.js wrap them as
+// { metas: { nodes }, manga: { meta } }. A manga's own value wins by its
+// scope, whatever the order.
 function read(table, data, values) {
   var stored = {}
-  var nodes = (data.metas && data.metas.nodes) || (data.setGlobalMeta ? [data.setGlobalMeta.meta] : [])
+  var nodes = Array.isArray(data.metas) ? data.metas.filter(function(m) { return m.scope !== "manga" }).concat(data.metas.filter(function(m) { return m.scope === "manga" })) : (data.metas && data.metas.nodes) || []
   nodes.concat((data.manga && data.manga.meta) || []).forEach(function(m) { if (m) stored[m.key] = m.value })
   var next = {}
   for (var k in values) next[k] = values[k]

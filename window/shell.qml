@@ -18,7 +18,6 @@ import "Restart.js" as Restart
 import "Images.js" as Images
 import "Runtime.js" as Runtime
 import "UpNext.js" as UpNext
-import "Sync.js" as Sync
 import "Overlays.js" as Overlays
 
 // The Miharchy window, run as its own Quickshell process (ADR 0003):
@@ -32,12 +31,18 @@ ShellRoot {
   // it drops the reader without the quit path's save. Q restarts instead.
   settings.watchFiles: false
 
-  readonly property string configPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
+  // Suwayomi's server.json: Setup's move reads a Suwayomi install from it.
+  readonly property string suwayomiConfigPath: Quickshell.env("MIHARCHY_SERVER_JSON") || Quickshell.env("HOME") + "/.config/miharchy/server.json"
+  // miharchy-core is the only server (ADR 0010, #373).
+  readonly property string configPath: Quickshell.env("MIHARCHY_CORE_CONFIG") || Quickshell.env("HOME") + "/.config/miharchy/core.json"
+  property var config: null
+  // The library and categories on miharchy-core.
+  property var connection: Model.initial()
+  property int requestSeq: 0
+  property int openSeq: 0
 
   // The launcher's open-updates starts a window on Updates.
   property string view: Quickshell.env("MIHARCHY_OPEN_VIEW") === "updates" ? "updates" : "library"
-  property var config: null
-  property var connection: Model.initial()
   property bool paletteOpen: false
   // A mark read's question to the trackers (Chapters.trackAsk), or null.
   property var trackAsk: null
@@ -48,8 +53,9 @@ ShellRoot {
   property int settingsCursor: 0
   property bool settingsEditing: false
   property string settingsError: ""
-  // Only the latest library request may update the connection.
-  property int requestSeq: 0
+  // A save core refused: { key, message }, shown under that row until the next save.
+  property var settingsRefusal: ({ key: "", message: "" })
+  property int settingsSeq: 0
   // { mangaId, chapterId } to read once the config loads, or null.
   property var pendingChapter: Model.chapterTarget(Quickshell.env("MIHARCHY_OPEN_CHAPTER"))
   // The launcher's peek starts a window with MIHARCHY_PEEK=1, its
@@ -94,7 +100,7 @@ ShellRoot {
           imageSweep.running = true
         }
         root.runtimeChecked = true
-        if (root.heldConfig !== null) root.applyConfig(root.heldConfig)
+        if (root.heldConfig !== null) root.applyCoreConfig(root.heldConfig)
       }
     }
   }
@@ -126,43 +132,53 @@ ShellRoot {
     path: root.configPath
     watchChanges: true
     printErrors: false
-    onLoaded: root.applyConfig(text())
-    onLoadFailed: root.applyConfig("")
-    // An editor's save can truncate before it writes; reading at once would
-    // see an empty file, drop the config and reset every view.
-    onFileChanged: configReload.restart()
+    onLoaded: root.applyCoreConfig(text())
+    onLoadFailed: root.applyCoreConfig("")
+    onFileChanged: coreConfigReload.restart()
   }
 
   Timer {
-    id: configReload
+    id: coreConfigReload
     interval: 300
     onTriggered: configFile.reload()
   }
 
-  function applyConfig(text) {
+  function applyCoreConfig(text) {
     if (!runtimeChecked) {
       heldConfig = text
       return
     }
-    var next = Model.parseConfig(text)
-    if (next && config && JSON.stringify(next) === JSON.stringify(config)) return
-    config = next
-    if (!config) {
-      requestSeq++
-      connection = Model.reduce(connection, { type: "config-missing" })
-      settingsState = Settings.reduce(settingsState, { type: "config-missing" })
+    var next = Model.parseCoreConfig(text)
+    if (next && root.config && JSON.stringify(next) === JSON.stringify(root.config)) return
+    root.config = next
+    if (root.config) {
+      fetchLibrary()
+      libraryView.reload()
+      loadSettings()
+      applyPending()
       return
     }
-    fetchLibrary()
-    sendSettings(Settings.loadPayload())
-    libraryView.reload()
+    requestSeq++
+    root.connection = Model.reduce(root.connection, { type: "config-missing" })
+    settingsSeq++
+    settingsState = Settings.reduce(settingsState, { type: "config-missing" })
+  }
+
+  // A launcher target that came before core's config: it tries again when
+  // the config loads.
+  function applyPending() {
     var peekTarget = Model.chapterTarget(pendingPeek)
     if (pendingChapter) openChapter(pendingChapter)
     else if (peekTarget) {
+      if (!targetReady(peekTarget)) return
       pendingPeek = ""
       peekOpen(peekTarget)
     }
     else if (pendingPeek) peek(pendingPeek === "next")
+  }
+
+  function targetReady(target) {
+    return !!root.config
   }
 
   // Every path that opens a view or a chapter closes these first. A running
@@ -181,13 +197,14 @@ ShellRoot {
   // The mark's update rows land here, through the launcher's open-chapter.
   // peek: a peek opens it, so Catch-up counts from 0 in the new reader;
   // every peek that opens a manga comes through here.
+  // A target with or without the mark's trailing "core" holds core's ids.
   function openChapter(target, peek) {
     pendingChapter = target
-    if (!config) return
+    if (!targetReady(target)) return
     pendingChapter = null
     closeOverlays()
     view = "updates"
-    updatesView.openChapter(target.mangaId, target.chapterId, peek === true)
+    openOn(target, peek)
   }
 
   // The mark's new-chapter notification lands here, through the
@@ -202,7 +219,7 @@ ShellRoot {
   // manga after the reader's in Up next (UpNext.after).
   function peek(next) {
     pendingPeek = next ? "next" : "1"
-    if (!config) return
+    if (!root.config) return
     pendingPeek = ""
     var library = function(reply) {
       root.closeOverlays()
@@ -210,13 +227,35 @@ ShellRoot {
       if (reply && reply.state !== "ok") libraryView.report(reply)
       else libraryView.openSearch()
     }
-    send(UpNext.payload(), function(reply) {
+    loadUpNext(function(reply) {
       if (reply.state !== "ok") return library(reply)
       var list = UpNext.list(reply.data, root.downloadedOnly, Date.now())
       if (!next) root.upNextOrder = list.map(function(e) { return e.mangaId })
       var target = next ? root.nextInOrder(list, reader.open ? reader.reader.mangaId : null) : list[0]
-      if (target) root.openChapter(target, true)
-      else library()
+      if (!target) library()
+      else root.openOn(target, true)
+    })
+  }
+
+  function loadUpNext(done) {
+    var cfg = root.config
+    UpNext.load(function(payload, d) { Session.send(cfg, payload, d) }, done)
+  }
+
+  // A chapter in the reader, as Updates opens one.
+  function openOn(target, peek) {
+    var cfg = root.config
+    var seq = ++openSeq
+    var d = Browse.detail(target.mangaId, false)
+    Session.send(cfg, Browse.detailPayload(d), function(reply) {
+      if (seq !== root.openSeq) return
+      d = Browse.reduceDetail(d, { type: "reply", reply: reply, config: cfg })
+      root.closeOverlays()
+      if (!d.manga) {
+        root.view = "library"
+        return libraryView.fail(Browse.notice(d, root.configPath).title)
+      }
+      reader.start(d.manga, d.chapters, target.chapterId, root.settingsState.values.defaultReadingMode, peek === true)
     })
   }
 
@@ -238,7 +277,8 @@ ShellRoot {
   // A Catch-up stop names the manga the next key would open; n then runs
   // the next key (peek(true)). Itself again, or none, is nothing to offer.
   function lookUpNext(mangaId) {
-    send(UpNext.payload(), function(reply) {
+    if (!root.config) return
+    loadUpNext(function(reply) {
       if (!reader.open || reader.reader.mangaId !== mangaId) return
       var next = reply.state === "ok" ? root.nextInOrder(UpNext.list(reply.data, root.downloadedOnly, Date.now()), mangaId) : null
       if (next && next.mangaId === mangaId) next = null
@@ -266,21 +306,59 @@ ShellRoot {
       root.openChapter({ mangaId: mangaId, chapterId: chapterId })
     }
 
+    // The launcher's open-chapter and peek-open with a trailing server name.
+    function openChapterOn(mangaId: int, chapterId: int, backend: string): void {
+      root.openChapter(Model.chapterTarget(mangaId + " " + chapterId + (backend === "core" ? " core" : "")))
+    }
+
+    function peekOpenOn(mangaId: int, chapterId: int, backend: string): void {
+      root.peekOpen(Model.chapterTarget(mangaId + " " + chapterId + (backend === "core" ? " core" : "")))
+    }
+
     function openUpdates(): void {
       root.openUpdates()
     }
   }
 
   // Loads and saves alike: every reply carries the values it touched.
-  function sendSettings(payload) {
+  function settingsConfig() {
+    return root.config
+  }
+
+  // The load: two requests, each after the last succeeded, so a later
+  // success never hides an earlier failure.
+  function loadSettings() {
+    var cfg = settingsConfig()
+    if (!cfg) {
+      settingsState = Settings.reduce(settingsState, { type: "config-missing" })
+      return
+    }
+    var list = Settings.loadPayloads()
+    var seq = ++settingsSeq
     settingsState = Settings.reduce(settingsState, { type: "request" })
-    Session.send(config, payload, function(reply) {
-      root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
-    })
+    var next = function(i) {
+      Session.send(cfg, list[i], function(reply) {
+        if (seq !== root.settingsSeq) return
+        root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
+        if (reply.state === "ok" && i + 1 < list.length) next(i + 1)
+      })
+    }
+    next(0)
   }
 
   function saveSetting(row, value) {
-    if (config) sendSettings(Settings.savePayload(row, value))
+    var cfg = settingsConfig()
+    if (!cfg) return
+    settingsRefusal = { key: "", message: "" }
+    settingsState = Settings.reduce(settingsState, { type: "request" })
+    Session.send(cfg, Settings.savePayload(row, value), function(reply) {
+      // Core refuses a value its rules do not take: the row says why, and the view stays.
+      if (Settings.refused(reply)) {
+        root.settingsRefusal = { key: row.key, message: reply.message }
+        reply = { state: "ok", message: "", data: {}, kind: "" }
+      }
+      root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
+    })
   }
 
   // A folder row saves once the folder exists, checked as Setup checks it.
@@ -316,7 +394,7 @@ ShellRoot {
   }
 
   function send(payload, done) {
-    return Session.send(config, payload, done)
+    return Session.send(root.config, payload, done)
   }
 
   // The one path that marks chapters, from any view. action: "read",
@@ -324,38 +402,48 @@ ShellRoot {
   // every view showing read state or bookmarks reloads.
   function markChapters(chapters, action, mangaIds) {
     var payload = action === "bookmark" ? Chapters.bookmarkPayload(chapters) : Chapters.markPayload(chapters, action === "read")
-    if (!payload || !config) return
-    // Mihon's delete after marked read takes the chapters this mark reads.
+    if (!payload || !root.config) return
     var marked = chapters.filter(function(c) { return !c.read }).map(function(c) { return c.id })
-    send(payload, function(reply) {
-      // The push waits for the mark: the server reads the chapters it marked.
+    Session.send(root.config, payload, function(reply) {
       var read = reply.state === "ok" && action === "read"
       var after = read ? Chapters.afterMarkRead(root.settingsState.values.trackOnMarkRead) : null
-      var check = after === "check" ? Chapters.trackCheckPayload(mangaIds) : null
       if (after === "push") root.pushTrackers(mangaIds)
-      if (check) root.send(check, function(r) { root.trackAsk = r.state === "ok" ? Chapters.trackAsk(r.data) : null })
+      if (after === "check") root.askTrackers(mangaIds)
       if (read && root.settingsState.values.deleteAfterMarkRead) root.deleteRead(marked, refresh)
       else refresh()
       function refresh() {
-        // Updates marks chapters of many manga; the detail hears only of its own.
         if (mangaDetail.open && mangaIds.indexOf(mangaDetail.detail.mangaId) !== -1) mangaDetail.markReply(reply)
-        updatesView.load()
         root.fetchLibrary()
+        updatesView.load()
       }
     })
   }
 
   function pushTrackers(mangaIds) {
     var track = Chapters.trackPayload(mangaIds)
-    if (track) send(track, function() {})
+    var cfg = root.config
+    if (track && cfg) Session.send(cfg, track, function() {})
+  }
+
+  // Mihon's question before a push: asked only when a logged-in tracker
+  // sits below the chapter the push would send.
+  function askTrackers(mangaIds) {
+    var cfg = root.config
+    if (!cfg) return
+    Chapters.trackCheckLoad(function(payload, d) { Session.send(cfg, payload, d) }, mangaIds, function(r) {
+      var ask = r.state === "ok" ? Chapters.trackAsk(r.data) : null
+      root.trackAsk = ask ? ask : null
+    })
   }
 
   // Deletes the downloads of the read chapters that Downloads.autoDeletePayload
   // lets go, then calls done, whatever happened.
   function deleteRead(chapterIds, done) {
-    send(Downloads.autoDeleteQuery(chapterIds), function(reply) {
+    var cfg = root.config
+    var on = function(payload, d) { Session.send(cfg, payload, d) }
+    Downloads.autoDeleteLoad(on, chapterIds, function(reply) {
       var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, root.settingsState.values.deleteBookmarked, []) : null
-      if (payload) root.send(payload, done)
+      if (payload) on(payload, done)
       else done()
     })
   }
@@ -363,22 +451,25 @@ ShellRoot {
   // Mihon's default category: a manga the detail adds goes to the chosen
   // category, or the detail's categories picker opens to ask.
   function addedToLibrary(mangaId) {
-    var to = Library.defaultCategory(settingsState.values.defaultCategory, connection.categories)
+    var cats = root.connection.categories
+    var to = Library.defaultCategory(settingsState.values.defaultCategory, cats)
     if (to === -1 && mangaDetail.open && mangaDetail.detail.mangaId === mangaId) mangaDetail.run("manga.categories")
-    if (to === -1 || !connection.categories.length) return fetchLibrary()
-    send(Library.moveToPayload(mangaId, to, connection.categories), function(reply) {
+    if (to === -1 || !cats.length) return fetchLibrary()
+    Session.send(root.config, Library.moveToPayload(mangaId, to, cats), function(reply) {
       libraryView.report(reply)
       mangaDetail.reload()
       root.fetchLibrary()
     })
   }
 
+  // Only the latest library request may update root.connection.
   function fetchLibrary() {
-    var cfg = config
-    var seq = ++requestSeq
-    connection = Model.reduce(connection, { type: "request" })
-    Session.send(cfg, { query: Model.LIBRARY_QUERY }, function(reply) {
-      if (seq === root.requestSeq) root.connection = Model.reduce(root.connection, { type: "response", reply: reply, config: cfg })
+    var ccfg = root.config
+    if (!ccfg) return
+    var cseq = ++requestSeq
+    root.connection = Model.reduce(root.connection, { type: "request" })
+    Session.send(ccfg, Model.libraryPayload(), function(reply) {
+      if (cseq === root.requestSeq) root.connection = Model.reduce(root.connection, { type: "response", reply: reply, config: ccfg })
     })
   }
 
@@ -397,10 +488,10 @@ ShellRoot {
 
   // A sync or a restore changed the library, and the source names in meta.
   function reloadAfterImport() {
-    if (!config) return
     fetchLibrary()
-    sendSettings(Settings.loadPayload())
+    libraryView.reload()
     updatesView.load()
+    loadSettings()
   }
 
   function closePalette() {
@@ -522,7 +613,8 @@ ShellRoot {
       return
     }
     if (id === "sync.undo") {
-      restoreView.openFile(Quickshell.env("HOME") + "/" + Sync.PRE_SYNC)
+      // Core keeps the file in its own data folder and names it.
+      restoreView.openPreSync()
       return
     }
     if (id.indexOf("sync.") === 0) {
@@ -576,7 +668,7 @@ ShellRoot {
           break
         }
         var srow = Settings.ROWS[settingsCursor]
-        var act = Settings.activate(srow, settingsState.values[srow.key], connection.categories)
+        var act = Settings.activate(srow, settingsState.values[srow.key], root.connection.categories)
         if ("run" in act) {
           run(act.run)
         } else if ("save" in act) {
@@ -602,14 +694,12 @@ ShellRoot {
         endEdit()
         break
       case "library.reload":
-        if (config) {
-          fetchLibrary()
-          sendSettings(Settings.loadPayload())
-          libraryView.reload()
-          settingsView.loadTrackers()
-          updatesView.load()
-          if (view === "check") checkView.load()
-        }
+        fetchLibrary()
+        libraryView.reload()
+        updatesView.load()
+        loadSettings()
+        settingsView.reload()
+        if (view === "check") checkView.load()
         configFile.reload()
         break
       case "window.fullscreen":
@@ -726,7 +816,7 @@ ShellRoot {
           onMark: function(chapters, action, mangaIds) { root.markChapters(chapters, action, mangaIds) }
           onDownloads: function(reply) { downloadsView.apply(reply) }
           onEdited: root.fetchLibrary()
-          onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+          onRead: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false) }
           onOpenManga: function(mangaId) { mangaDetail.openManga(mangaId, false) }
           onDownloadMenu: function(set) { nextChapters.openFor(set) }
           onCheck: function(categories, done) { done(updatesView.check(categories)) }
@@ -744,7 +834,7 @@ ShellRoot {
           loading: root.connection.state === "loading"
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
-          onEdited: if (root.config) root.fetchLibrary()
+          onEdited: if (config) root.fetchLibrary()
         }
 
         SettingsView {
@@ -752,7 +842,10 @@ ShellRoot {
           anchors.fill: parent
           visible: root.view === "settings"
           theme: theme
-          config: root.config
+          config: root.settingsConfig()
+          configPath: root.configPath
+          unapplied: root.settingsState.unapplied || []
+          refusal: root.settingsRefusal
           values: root.settingsState.values
           categories: root.connection.categories
           cursor: root.settingsCursor
@@ -807,7 +900,7 @@ ShellRoot {
           configPath: root.configPath
           // Off while the reader shows, so closing it reloads what it read.
           active: root.view === "history" && !reader.open
-          onResume: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+          onResume: function(manga, chapters, chapterId) { reader.start(manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
         }
@@ -835,12 +928,20 @@ ShellRoot {
           visible: root.view === "setup"
           theme: theme
           config: root.config
-          configPath: root.configPath
+          suwayomiConfigPath: root.suwayomiConfigPath
+          coreConfigPath: root.configPath
           home: Quickshell.env("HOME")
           onKey: function(event) { event.accepted = root.handleKey(event) }
           offers: Setup.offersOnStart({ MIHARCHY_PEEK: Quickshell.env("MIHARCHY_PEEK"), MIHARCHY_OPEN_CHAPTER: Quickshell.env("MIHARCHY_OPEN_CHAPTER"), MIHARCHY_OPEN_VIEW: Quickshell.env("MIHARCHY_OPEN_VIEW") })
           onNeeded: if (root.view === "library") root.view = "setup"
-          onWrote: configFile.reload()
+          onWrote: {
+            configFile.reload()
+          }
+          onMoved: {
+            root.fetchLibrary()
+            libraryView.reload()
+            root.loadSettings()
+          }
           onEditEnded: keyRoot.forceActiveFocus()
         }
 
@@ -874,16 +975,16 @@ ShellRoot {
           downloadedOnly: root.downloadedOnly
           configPath: root.configPath
           categories: root.connection.categories
-          onCategorized: if (root.config) root.fetchLibrary()
+          onCategorized: if (config) root.fetchLibrary()
           onLibraryChanged: function(mangaId, inLibrary) {
             browseView.markInLibrary(mangaId, inLibrary)
             if (inLibrary) root.addedToLibrary(mangaId)
-            else if (root.config) root.fetchLibrary()
+            else root.fetchLibrary()
           }
           queue: downloadsView.queue.items
           onDownloads: function(reply) { downloadsView.apply(reply) }
           libraryManga: root.connection.manga
-          onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode) }
+          onRead: function(chapters, chapterId) { reader.start(mangaDetail.manga, chapters, chapterId, root.settingsState.values.defaultReadingMode, false) }
           onMark: function(chapters, action, mangaId) { root.markChapters(chapters, action, [mangaId]) }
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
@@ -922,7 +1023,7 @@ ShellRoot {
           onKey: function(event) { event.accepted = root.handleKey(event) }
           onEditEnded: keyRoot.forceActiveFocus()
           onLibraryChanged: {
-            if (root.config) root.fetchLibrary()
+            root.fetchLibrary()
             if (checkView.active) checkView.load()
           }
           onMigrated: function(mangaId) { mangaDetail.openManga(mangaId, false) }
@@ -948,7 +1049,8 @@ ShellRoot {
           // Styled for that color; the states and Settings.modes are constant text.
           textFormat: Text.StyledText
           text: [({ loading: "connecting", ok: "connected", "no-config": "no server config", down: "server down", unauthorized: "unauthorized", error: "server error" })[root.connection.state]].concat(Settings.modes(root.settingsState.values).map(function(m) { return "<font color='" + theme.accent + "'>" + m + "</font>" })).join("&nbsp;&nbsp;&nbsp;")
-          color: root.connection.state === "ok" || root.connection.state === "loading" ? theme.muted : theme.urgent
+          readonly property string barState: root.connection.state
+          color: barState === "ok" || barState === "loading" ? theme.muted : theme.urgent
           font.family: theme.fontFamily
           font.pixelSize: theme.fontSmall
         }
@@ -982,6 +1084,7 @@ ShellRoot {
         theme: theme
         config: root.config
         configPath: root.configPath
+        downloadsOff: false
         values: root.settingsState.values
         onKey: function(event) { event.accepted = root.handleKey(event) }
         onEditEnded: keyRoot.forceActiveFocus()
@@ -989,7 +1092,7 @@ ShellRoot {
         onClosed: function(chapterId) {
           mangaDetail.reread(chapterId)
           updatesView.load()
-          if (root.config) root.fetchLibrary()
+          root.fetchLibrary()
         }
         onDeleted: mangaDetail.reload()
         onCaughtUpOn: function(mangaId) { root.lookUpNext(mangaId) }
@@ -1030,6 +1133,7 @@ ShellRoot {
         id: syncView
         anchors.fill: parent
         theme: theme
+        config: root.config
         onSynced: root.reloadAfterImport()
         onKey: function(event) { root.handleKey(event) }
       }
@@ -1039,6 +1143,7 @@ ShellRoot {
         anchors.fill: parent
         theme: theme
         folder: root.settingsState.values.syncFolder
+        config: root.config
         onKey: function(event) { event.accepted = root.handleKey(event) }
         onEditEnded: keyRoot.forceActiveFocus()
         onRestored: root.reloadAfterImport()

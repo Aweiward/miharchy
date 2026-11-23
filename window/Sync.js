@@ -1,40 +1,9 @@
 .pragma library
-.import "Setup.js" as Setup
-.import "Capped.js" as Capped
+// Sync now: miharchy-core's sync.run and what its Summary says. Pure, so
+// tests/sync.test.js pins it; SyncView.qml and the mark's popup send the
+// payload built here and feed the reply back.
 
-// Sync now: the job that runs the sync helper and what its result says.
-// Pure, so tests/sync.test.js pins it; SyncView.qml and the mark's popup
-// run the command built here and feed the output back.
-
-// A checkout's own build, from window/ and plugin/ alike: both sit beside
-// sync/. The helper Setup installs under $HOME comes first.
-var DEV_HELPER = "../sync/build/install/miharchy-sync/bin/miharchy-sync"
-var HELPER_DIR = Setup.HELPER_DIR
-// The helper's exit status when it is not built: the shell's "not found".
-var NOT_BUILT = 127
-
-// The helper takes the sync folder from meta miharchy.syncFolder and holds
-// a lock, so the window and the popup start it the same way. apply runs a
-// sync the helper held.
-function command(devHelper, apply) {
-  return Capped.command(helperCommand(devHelper, ["sync", "--json"].concat(apply ? ["--apply"] : [])), SYNC_CAP, 1800)
-}
-
-// The sync's one JSON line lists every change: a first sync of a large
-// library makes thousands. Health lists manga, not changes.
-var SYNC_CAP = 8388608
-var HEALTH_CAP = 1048576
-
-// The desktop baseline before the last sync, under $HOME; restoring it
-// undoes that sync.
-var PRE_SYNC = ".local/share/miharchy/sync/pre-sync.tachibk"
-
-// The helper run with args, which reach it as arguments, never as shell text.
-function helperCommand(devHelper, args) {
-  return Setup.command("for h in \"$HOME/" + HELPER_DIR + "/bin/miharchy-sync\" \"$1\"; do test -x \"$h\" && shift && exec \"$h\" \"$@\"; done\nexit " + NOT_BUILT, [devHelper].concat(args))
-}
-
-// The helper's "type" for each change, as Main.kt counts them.
+// The Summary's "type" for each change.
 var COUNTS = [
   ["importManga", "imported %d manga"],
   ["addToLibrary", "added %d manga to the library"],
@@ -76,7 +45,7 @@ function basename(path) {
 }
 
 // sync.state: "idle" | "running" | "held" | "done" | "failed"
-// held: backup and changes, as for done. The helper stopped before it
+// held: backup and changes, as for done. Core stopped before it
 // changed anything, because the changes look like a lost phone backup.
 // done: changes (count lines), backup (the phone backup's file name, or ""),
 // export (the file name written for the phone) and unreachable (rows of
@@ -88,8 +57,8 @@ function initial() {
 }
 
 // event.type:
-//   "start"   the job started
-//   "finish"  { text } the job's collected output
+//   "start"   the sync started
+//   "reply"   { reply }: core's answer to corePayload, as Session.send gives it
 //   "apply"   the user applies a held sync
 function reduce(s, event) {
   switch (event.type) {
@@ -97,26 +66,38 @@ function reduce(s, event) {
       return { state: "running" }
     case "apply":
       return s.state === "held" ? { state: "running", apply: true } : s
-    case "finish":
-      return result(Setup.parseJob(event.text, SYNC_CAP))
+    case "reply":
+      return event.reply.state === "ok" ? summaryResult(event.reply.data) : { state: "failed", message: coreMessage(event.reply) }
   }
   return s
 }
 
-// The helper's one JSON line, or the failure to show instead.
-function reply(job) {
-  if (job.code === NOT_BUILT) return { message: "The sync helper is not built. Build it in the window: press : and choose Setup." }
-  var lines = job.output.split("\n")
-  var value = null
-  // JVM warnings may come before the one JSON line.
-  if (job.code === 0) try { value = JSON.parse(lines[lines.length - 1]) } catch (e) { value = null }
-  return value ? { value: value } : { message: job.output || "The sync helper stopped with status " + job.code + "." }
+// --- miharchy-core (#384): the sync, health, restore and backup through
+// core's routes. Core reads its own sync folder meta, so no payload names a folder.
+
+function corePayload(apply) {
+  return { route: "sync.run", body: apply ? { apply: true } : {} }
 }
 
-function result(job) {
-  var r = reply(job)
-  if (!r.value) return { state: "failed", message: r.message }
-  var summary = r.value
+var HEALTH_PAYLOAD = { route: "sync.health", body: {} }
+
+function healthReply(reply) {
+  return reply.state === "ok" ? { state: "ready", health: reply.data } : { state: "failed", message: coreMessage(reply) }
+}
+
+// What a failed core reply says in a panel or a row: core's own message, or
+// why core could not answer. A view with no core.json passes { state: "no-config" }.
+function coreMessage(reply) {
+  switch (reply.state) {
+    case "error": return reply.message
+    case "down": return "miharchy-core is not running. Start it with: systemctl --user start miharchy-core."
+    case "unauthorized": return "miharchy-core rejected the secret in core.json."
+  }
+  return "No miharchy-core config. Start miharchy-core once to create core.json."
+}
+
+// Core's Summary.
+function summaryResult(summary) {
   var changes = COUNTS.map(function(c) {
     var n = summary.changes.filter(function(ch) { return ch.type === c[0] }).length
     return n ? c[1].replace("%d", n) : ""
@@ -145,16 +126,8 @@ function report(s) {
   return lines
 }
 
-// Sync health (`miharchy-sync health`): { state: "idle" | "ready" | "failed" },
-// with health, the helper's object, when ready, and message when failed.
-function healthCommand(devHelper) {
-  return Capped.command(helperCommand(devHelper, ["health"]), HEALTH_CAP, 120)
-}
-
-function parseHealth(text) {
-  var r = reply(Setup.parseJob(text, HEALTH_CAP))
-  return r.value ? { state: "ready", health: r.value } : { state: "failed", message: r.message }
-}
+// Sync health (healthReply): { state: "idle" | "ready" | "failed" }, with
+// health, core's sync.health object, when ready, and message when failed.
 
 var MINUTE = 60000
 var HOUR = 60 * MINUTE
@@ -221,17 +194,13 @@ function oneLine(s) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    DEV_HELPER: DEV_HELPER,
-    HELPER_DIR: HELPER_DIR,
-    NOT_BUILT: NOT_BUILT,
-    PRE_SYNC: PRE_SYNC,
-    command: command,
-    healthCommand: healthCommand,
-    parseHealth: parseHealth,
+    corePayload: corePayload,
+    HEALTH_PAYLOAD: HEALTH_PAYLOAD,
+    healthReply: healthReply,
+    coreMessage: coreMessage,
     healthSummary: healthSummary,
     healthPopupLine: healthPopupLine,
     healthLines: healthLines,
-    helperCommand: helperCommand,
     initial: initial,
     reduce: reduce,
     report: report,

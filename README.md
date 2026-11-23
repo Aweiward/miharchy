@@ -4,11 +4,11 @@
 
 See it in action on [aweiward.github.io/miharchy](https://aweiward.github.io/miharchy/).
 
-A manga reader that feels native on [Omarchy](https://omarchy.org). It runs [Mihon](https://github.com/mihonapp/mihon)-compatible extensions from the extension repos you add, through [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server), and it syncs your library with Mihon on your phone.
+A manga reader that feels native on [Omarchy](https://omarchy.org). It runs [Mihon](https://github.com/mihonapp/mihon)-compatible extensions from the extension repos you add, through its own server, miharchy-core, and it syncs your library with Mihon on your phone.
 
 Miharchy is not affiliated with Mihon, Suwayomi or Omarchy. It provides no extensions or extension repos and hosts no content. Extension repos are third-party: add only ones you trust.
 
-Status: [v1.1.1](https://github.com/Aweiward/miharchy/releases/tag/v1.1.1), at Mihon parity. See `GLOSSARY.md` and `docs/adr/`.
+Status: [v1.2.0](https://github.com/Aweiward/miharchy/releases/tag/v1.2.0), on its own server, miharchy-core. See `GLOSSARY.md` and `docs/adr/`.
 
 ## Install
 
@@ -31,14 +31,16 @@ Run `omarchy-restart-shell` after every update. The shell reloads the plugin whe
 
 Setup lists the steps below. Move with `j` and `k`, press Enter on a step. A step that changes your system asks first: press `y` to run it, `n` to cancel. Setup never runs `sudo` out of sight: the one step that installs packages opens Omarchy's terminal on the exact command, and you type your password there. Every step checks its own state, so you can run Setup again at any time (`:` then Setup).
 
-1. Packages: installs what a stock Omarchy lacks (a JDK 21+, `qt6-websockets`, `suwayomi-server-bin`) through `omarchy-pkg-add` and `omarchy-pkg-aur-add`, after `y`, in Omarchy's floating terminal. If the AUR's Suwayomi-Server is newer than the version Miharchy is checked with, it says so first.
-2. Server: runs `server/miharchy-server`. It creates `~/.config/miharchy/server.json` with a random password and enables the `miharchy-server` user service on `127.0.0.1:4590`.
-3. FlareSolverr (optional, needs Docker): starts the `miharchy-flaresolverr` container on `127.0.0.1:8191` for Cloudflare sources.
-4. Sync folder: the folder Mihon and Miharchy exchange backups through.
-5. Phone backups: done once a phone backup has landed in the sync folder. Until then it says what to do in Mihon, and checks again on its own while Setup is open. Without Syncthing, `y` installs and starts it in Omarchy's terminal. With Syncthing running, it pairs the phone: it shows this desktop's Syncthing ID as a QR code to scan in Syncthing-Fork, then `y` accepts the phone and the folder it shares, into the sync folder. Several offered folders, none named `autobackup`: accept the right one in Syncthing's page (http://127.0.0.1:8384). A sync folder that holds only a folder named `autobackup` is Mihon's storage folder: set the sync folder to that `autobackup` folder instead.
-6. Sync helper: builds the sync helper into `~/.local/share/miharchy/helper`. The first build downloads Gradle and libraries and takes a few minutes. After `omarchy plugin update` the step shows "out of date" when the helper changed; build it again.
-7. App launcher entry: writes `~/.local/share/applications/miharchy.desktop`, so Miharchy shows in the app launcher (Super + Space).
-8. Peek key: adds `SUPER + M` (the peek key) and `SUPER + CTRL + M` (the next key) to `~/.config/hypr/bindings.lua`, once each. It adds only the one that is missing. If a key is taken, or the file is missing, Setup shows the line to add yourself with another key. A bind you moved to another key stays as it is.
+1. Packages: installs what a stock Omarchy lacks (a JDK 21+ with `javac`, `qt6-websockets`) through `omarchy-pkg-add`, after `y`, in Omarchy's floating terminal.
+2. miharchy-core: builds Miharchy's server into `~/.local/share/miharchy/core-app`. The first build downloads Gradle and libraries and takes a few minutes. After `omarchy plugin update` the step shows "outdated" when the server changed; build it again.
+3. miharchy-core service: enables the `miharchy-core` user service on `127.0.0.1:4591`. On its first start it creates `~/.config/miharchy/core.json` with a random secret.
+4. Move from Suwayomi (optional): if you used Miharchy 1.1 or older with Suwayomi-Server, copies its library, extensions, downloads, settings and sync state into miharchy-core, once. It only reads Suwayomi.
+5. Stop Suwayomi (optional): stops and disables the old `miharchy-server` user service. The `suwayomi-server-bin` package and its data stay; remove them yourself (see Uninstall).
+6. FlareSolverr (optional, needs Docker): starts the `miharchy-flaresolverr` container on `127.0.0.1:8191`. miharchy-core does not use it yet (#361), so Cloudflare sources still fail.
+7. Sync folder: the folder Mihon and Miharchy exchange backups through.
+8. Phone backups: done once a phone backup has landed in the sync folder. Until then it says what to do in Mihon, and checks again on its own while Setup is open. Without Syncthing, `y` installs and starts it in Omarchy's terminal. With Syncthing running, it pairs the phone: it shows this desktop's Syncthing ID as a QR code to scan in Syncthing-Fork, then `y` accepts the phone and the folder it shares, into the sync folder. Several offered folders, none named `autobackup`: accept the right one in Syncthing's page (http://127.0.0.1:8384). A sync folder that holds only a folder named `autobackup` is Mihon's storage folder: set the sync folder to that `autobackup` folder instead.
+9. App launcher entry: writes `~/.local/share/applications/miharchy.desktop`, so Miharchy shows in the app launcher (Super + Space).
+10. Peek key: adds `SUPER + M` (the peek key) and `SUPER + CTRL + M` (the next key) to `~/.config/hypr/bindings.lua`, once each. It adds only the one that is missing. If a key is taken, or the file is missing, Setup shows the line to add yourself with another key. A bind you moved to another key stays as it is.
 
 ## Peek
 
@@ -131,13 +133,13 @@ Remove Miharchy in this order. Each command names one file or one thing; none de
 1. Stop the server and disable it:
 
    ```sh
-   systemctl --user disable --now miharchy-server
+   systemctl --user disable --now miharchy-core
    ```
 
-2. Remove the server unit and the app launcher entry:
+2. Remove the server unit and the app launcher entry. If you came from Suwayomi, also remove `~/.config/systemd/user/miharchy-server.service`:
 
    ```sh
-   rm ~/.config/systemd/user/miharchy-server.service ~/.local/share/applications/miharchy.desktop
+   rm ~/.config/systemd/user/miharchy-core.service ~/.local/share/applications/miharchy.desktop
    systemctl --user daemon-reload
    ```
 
@@ -166,15 +168,15 @@ Remove Miharchy in this order. Each command names one file or one thing; none de
 
 These folders stay. Delete them yourself when you no longer want what they hold:
 
-- `~/.config/miharchy`: the server credentials (`server.json`).
-- `~/.local/share/miharchy`: the server's library, downloads, backups and settings (`suwayomi/server.conf`, which also holds the password), the sync helper and the sync baselines.
+- `~/.config/miharchy`: the server's address and secret (`core.json`), and `server.json` from a Suwayomi install.
+- `~/.local/share/miharchy`: the server's library, downloads, backups, settings and sync baselines (`core/`) and its build (`core-app/`, `core-src/`). A Suwayomi install also left `suwayomi/` (with its password in `server.conf`), `helper/`, `sync-src/` and `sync/` there.
 - Your sync folder: the phone backups and the backups Miharchy wrote for the phone.
 - `~/Pictures/Miharchy`, or your "Save pages to" folder: the pages and reading cards you saved.
-- `~/.gradle`: Gradle and the libraries the sync helper build downloaded. Other projects may use it too.
+- `~/.gradle`: Gradle and the libraries the server build downloaded. Other projects may use it too.
 
 Files under `$XDG_RUNTIME_DIR/miharchy` go at logout.
 
-The packages Setup installed stay: `jdk-openjdk`, `qt6-websockets`, `suwayomi-server-bin`, and `syncthing` with its user service. Other programs may need them. Syncthing keeps the phone and the folder you paired. If you use Syncthing for nothing else, you can stop its service:
+The packages Setup installed stay: `jdk-openjdk`, `qt6-websockets`, and `syncthing` with its user service, plus `suwayomi-server-bin` if an older Miharchy installed it. Other programs may need them. Syncthing keeps the phone and the folder you paired. If you use Syncthing for nothing else, you can stop its service:
 
 ```sh
 systemctl --user disable --now syncthing
@@ -182,7 +184,7 @@ systemctl --user disable --now syncthing
 
 ## Develop
 
-Run the window from a checkout with `window/miharchy`. Set `MIHARCHY_SERVER_JSON` to use another credentials file. Tests: `cd window && npm test`, `cd sync && ./gradlew test`.
+Run the window from a checkout with `window/miharchy`. Its Setup builds miharchy-core from that checkout's `core/` and `sync/`. Set `MIHARCHY_CORE_CONFIG` and `MIHARCHY_CORE_DATA` to use another core. Tests: `cd window && npm test`, `cd sync && ./gradlew test`, `cd core && ./gradlew installDist test`.
 
 ## License
 

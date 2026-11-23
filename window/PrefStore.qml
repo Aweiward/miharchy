@@ -2,7 +2,7 @@ import QtQuick
 import "Session.js" as Session
 import "Prefs.js" as Prefs
 
-// One view's choices (a Prefs.js table) as the server keeps them, global or
+// One view's choices (a Prefs.js table) as core keeps them, global or
 // for one manga. A choice shows at once and saves in the background, one
 // save at a time; a choice not yet saved wins over a load.
 QtObject {
@@ -65,7 +65,7 @@ QtObject {
   // The current choices become the global default; with mangaIds, those
   // manga drop their own choices to follow it.
   function saveDefault(mangaIds) {
-    table.forEach(function(c) { store.save("global", c.key, Prefs.savePayload(c.key, store.values[c.key])) })
+    table.forEach(function(c) { store.save("global", c.key, Prefs.savePayload(c.key, store.values[c.key], undefined)) })
     var reset = Prefs.resetPayload(table, mangaIds || [])
     if (reset) save("global", "reset", reset)
     pump()

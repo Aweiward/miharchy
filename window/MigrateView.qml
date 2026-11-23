@@ -136,7 +136,7 @@ Rectangle {
     var cfg = config
     busyText = "Loading sources"
     step = "busy"
-    send({ query: Browse.SOURCES_QUERY }, function(reply) {
+    send(Browse.sourcesPayload(), function(reply) {
       if (s !== view.seq) return
       var src = Browse.sources(reply, cfg, view.showNsfw, false)
       if (src.state !== "ok") view.fail(src)
@@ -192,7 +192,7 @@ Rectangle {
     busyText = "Loading the library"
     step = "busy"
     var s = seq
-    send({ query: Migrate.LIBRARY_QUERY }, function(reply) {
+    Migrate.libraryLoad(send, function(reply) {
       if (s !== view.seq) return
       if (reply.state !== "ok") return view.fail(reply)
       view.froms = Migrate.librarySources(reply.data)
@@ -214,7 +214,7 @@ Rectangle {
     if (!list.some(function(m) { return m.stalled })) return go(list)
     busyText = "Reading the manga"
     step = "busy"
-    send({ query: Migrate.HIGHEST_QUERY, variables: { ids: list.map(function(m) { return m.id }) } }, function(reply) {
+    Migrate.highestLoad(send, list.map(function(m) { return m.id }), function(reply) {
       if (s !== view.seq) return
       if (reply.state !== "ok") return view.fail(reply)
       go(Migrate.withHighest(list, reply.data))
@@ -304,13 +304,11 @@ Rectangle {
   // fetches the target with its chapters. done(failedReply or null).
   function prepare(i, done) {
     var j = jobs[i]
-    send({ query: Migrate.OLD_QUERY, variables: { id: j.old.id } }, function(r1) {
-      if (r1.state !== "ok") return done(r1)
-      view.send({ query: Migrate.TARGET_MUTATION, variables: { id: j.target.id } }, function(r2) {
-        if (r2.state !== "ok") return done(r2)
-        var oldNode = r1.data.manga
-        var chapters = r2.data.fetchMangaAndChapters.chapters
-        view.setJob(i, { oldNode: oldNode, chapters: chapters, plan: Migrate.plan(oldNode.chapters.nodes, chapters), merge: Migrate.mergeInto(r2.data.fetchMangaAndChapters.manga) })
+    Migrate.oldLoad(send, j.old.id, function(f1, oldNode) {
+      if (f1) return done(f1)
+      Migrate.targetLoad(view.send, j.target.id, function(f2, target) {
+        if (f2) return done(f2)
+        view.setJob(i, { oldNode: oldNode, chapters: target.chapters, plan: Migrate.plan(oldNode.chapters.nodes, target.chapters), merge: Migrate.mergeInto(target.manga) })
         done(null)
       })
     })
@@ -340,13 +338,11 @@ Rectangle {
     var write = function() {
       var p = view.jobs[i]
       var tracks = view.withTracks ? Migrate.movingTracks(p.oldNode, p.merge).length : 0
-      view.send(Migrate.targetPayload(p.oldNode, p.target.id, p.plan, view.withTracks, p.merge), function(reply) {
+      Migrate.writeTarget(view.send, p.oldNode, p.target.id, p.plan, view.withTracks, p.merge, function(reply) {
         if (reply.state !== "ok") return next("Failed: " + view.errorText(reply))
         var done = (p.merge ? "Merged. " : replace ? "Migrated. " : "Copied. ") + Migrate.planText(p.plan, p.chapters.length) + (tracks ? " " + tracks + (tracks === 1 ? " track" : " tracks") + " along." : "")
-        var after = Migrate.oldPayload(p.oldNode, replace, view.deleteDownloads)
-        if (!after) return next(done, true)
-        view.send(after, function(r) {
-          if (r.state === "ok") next(done, true)
+        Migrate.writeOld(view.send, p.oldNode, replace, view.deleteDownloads, function(r) {
+          if (!r || r.state === "ok") next(done, true)
           else next(done + " Failed on the old manga: " + view.errorText(r))
         })
       })

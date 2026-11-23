@@ -22,14 +22,4 @@ class BackupFolderTest {
             assertEquals(expected, backupRefusal(backup, sync), "$backup against $sync")
         }
     }
-
-    @Test fun `a manual backup never holds client data or server settings, whatever the server settings say`() {
-        val settings = buildJsonObject {
-            listOf("Categories", "Chapters", "Tracking", "History", "ClientData", "ServerSettings").forEach { put("autoBackupInclude$it", true) }
-        }
-        val flags = backupFlags(settings)
-        assertEquals("false", flags.getValue("includeClientData").jsonPrimitive.content)
-        assertEquals("false", flags.getValue("includeServerSettings").jsonPrimitive.content)
-        assertEquals("true", flags.getValue("includeHistory").jsonPrimitive.content)
-    }
 }

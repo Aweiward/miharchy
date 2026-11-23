@@ -3,33 +3,34 @@ const assert = require("node:assert/strict");
 const B = require("./load")("Browse.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
-const ok = (data) => M.reply(200, JSON.stringify({ data }));
-const fail = (message) => M.reply(200, JSON.stringify({ errors: [{ message }] }));
+const config = { url: "http://127.0.0.1:4591", secret: "c0ffee" };
+const ok = (data) => M.coreReply(200, JSON.stringify(data));
+const fail = (message) => M.coreReply(502, JSON.stringify({ error: { kind: "upstream", message } }));
+const cloudflare = M.coreReply(502, '{"error":{"kind":"cloudflare","message":"https://x shows a Cloudflare challenge."}}');
 
 const src = (o) => Object.assign({ id: "1", name: "S", displayName: "S (EN)", lang: "en", iconUrl: "/api/v1/extension/icon/s", contentWarning: "SAFE", supportsLatest: true }, o);
 
 test("sources hide NSFW unless asked, and sort by name", () => {
-  const data = { sources: { nodes: [
+  const data = { sources: [
     src({ id: "2", displayName: "Weeb Central", contentWarning: "MIXED" }),
     src({ id: "3", displayName: "Adult", contentWarning: "NSFW" }),
     src({ id: "4", displayName: "Asura Scans" })
-  ] } };
+  ] };
   const s = B.sources(ok(data), config, false);
   assert.equal(s.state, "ok");
   assert.deepEqual(s.sources.map((x) => x.name), ["Asura Scans", "Weeb Central"]);
-  assert.equal(s.sources[0].icon, "http://127.0.0.1:4590/api/v1/extension/icon/s");
+  assert.equal(s.sources[0].icon, "http://127.0.0.1:4591/api/v1/extension/icon/s");
   assert.deepEqual(B.sources(ok(data), config, true).sources.map((x) => x.id), ["3", "4", "2"]);
 });
 
 test("the Sources list puts the last used source, then the pinned ones, then each language, as Mihon", () => {
   const P = require("./load")("Prefs.js");
-  const list = B.sources(ok({ sources: { nodes: [
+  const list = B.sources(ok({ sources: [
     src({ id: "1", displayName: "MangaDex", lang: "all" }),
     src({ id: "2", displayName: "Weeb Central" }),
     src({ id: "3", displayName: "Asura Scans" }),
     src({ id: "4", displayName: "Rawkuma", lang: "ja" })
-  ] } }), config, false, true).sources;
+  ] }), config, false, true).sources;
   const show = (rows) => rows.map((r) => [r.header, r.id, r.pinned, r.lastUsed]);
   let prefs = P.defaults(B.PREFS);
   assert.deepEqual(show(B.sourceRows(list, prefs)), [
@@ -52,12 +53,12 @@ test("the Sources list puts the last used source, then the pinned ones, then eac
 
 test("languages and hidden sources narrow Sources and global search, as Mihon's GetEnabledSources", () => {
   const P = require("./load")("Prefs.js");
-  const list = B.sources(ok({ sources: { nodes: [
+  const list = B.sources(ok({ sources: [
     src({ id: "1", displayName: "MangaDex", lang: "all" }),
     src({ id: "2", displayName: "Weeb Central" }),
     src({ id: "3", displayName: "Asura Scans" }),
     src({ id: "4", displayName: "Rawkuma", lang: "ja" })
-  ] } }), config, false, true).sources;
+  ] }), config, false, true).sources;
   let prefs = P.defaults(B.PREFS);
   const apply = (c) => { prefs = { ...prefs, [c.key]: c.value }; };
   assert.deepEqual(B.enabled(list, prefs).map((s) => s.id), ["3", "1", "2"], "English and Multi until the user picks, as before");
@@ -84,40 +85,40 @@ test("languages and hidden sources narrow Sources and global search, as Mihon's 
 });
 
 test("a failed sources reply keeps the connection state for Model.problem", () => {
-  assert.equal(B.sources(M.reply(0, ""), config, false).state, "down");
+  assert.equal(B.sources(M.coreReply(0, ""), config, false).state, "down");
 });
 
-const page = (ids, hasNextPage) => ok({ fetchSourceManga: { hasNextPage, mangas: ids.map((id) => ({ id, title: "M" + id, thumbnailUrl: "/api/v1/manga/" + id + "/thumbnail", inLibrary: id === 2 })) } });
+const page = (ids, hasNextPage) => ok({ hasNextPage, mangas: ids.map((id) => ({ id, title: "M" + id, thumbnailUrl: "/api/v1/manga/" + id + "/thumbnail", inLibrary: id === 2 })) });
 
 test("a listing asks for page 1, then the next page, and appends without duplicates", () => {
   let l = B.listing({ id: "99", name: "S", supportsLatest: true }, "popular", "");
   const p1 = B.listingPayload(l);
-  assert.deepEqual(p1.variables, { source: "99", type: "POPULAR", page: 1, query: null, filters: null });
+  assert.deepEqual(p1, { route: "source.popular", body: { source: "99", page: 1 } });
   l = B.reduceListing(l, { type: "request" });
   assert.equal(B.listingPayload(l), null, "no second request while one is in flight");
   l = B.reduceListing(l, { type: "reply", reply: page([1, 2], true), config });
   assert.deepEqual(l.items.map((m) => m.id), [1, 2]);
   assert.equal(l.items[1].inLibrary, true);
-  assert.equal(l.items[0].cover, "http://127.0.0.1:4590/api/v1/manga/1/thumbnail");
-  assert.equal(B.listingPayload(l).variables.page, 2);
+  assert.equal(l.items[0].cover, "http://127.0.0.1:4591/api/v1/manga/1/thumbnail");
+  assert.equal(B.listingPayload(l).body.page, 2);
   l = B.reduceListing(B.reduceListing(l, { type: "request" }), { type: "reply", reply: page([2, 3], false), config });
   assert.deepEqual(l.items.map((m) => m.id), [1, 2, 3]);
   assert.equal(B.listingPayload(l), null, "the last page ends the scroll");
 });
 
-test("latest and search map to their fetch types; search sends the query", () => {
+test("latest and search take their own routes; search sends the query", () => {
   const s = { id: "9", name: "S", supportsLatest: true };
-  assert.equal(B.listingPayload(B.listing(s, "latest", "")).variables.type, "LATEST");
-  assert.deepEqual(B.listingPayload(B.listing(s, "search", "one piece")).variables, { source: "9", type: "SEARCH", page: 1, query: "one piece", filters: [] });
+  assert.equal(B.listingPayload(B.listing(s, "latest", "")).route, "source.latest");
+  assert.deepEqual(B.listingPayload(B.listing(s, "search", "one piece")), { route: "source.search", body: { source: "9", page: 1, query: "one piece" } });
 });
 
 test("the local source shows in Sources under Other whatever the languages, as Mihon, but not in global search, the languages panel or Migrate", () => {
   const P = require("./load")("Prefs.js");
-  const data = { sources: { nodes: [
+  const data = { sources: [
     src({ id: "0", displayName: "Local source", lang: "localsourcelang" }),
     src({ id: "1", displayName: "MangaDex", lang: "all" }),
     src({ id: "2", displayName: "Weeb Central" })
-  ] } };
+  ] };
   const list = B.sources(ok(data), config, false, true).sources;
   let prefs = P.defaults(B.PREFS);
   assert.deepEqual(B.sourceRows(B.enabled(list, prefs, true), prefs).map((r) => [r.header, r.name]), [["Multi", "MangaDex"], ["en", "Weeb Central"], ["Other", "Local source"]]);
@@ -138,11 +139,11 @@ test("an empty local source says where to put manga; a search on it does not", (
   assert.equal(B.notice(empty("search", "zzz"), "/c", "/srv/local").title, "No manga found");
 });
 
-test("filters reach the source only in a search, as Suwayomi applies them only there", () => {
+test("filters reach the source only in a search", () => {
   const s = { id: "9", name: "S", supportsLatest: true };
   const filters = [{ position: 0, selectState: 3 }];
-  assert.deepEqual(B.listingPayload(B.listing(s, "search", "", filters)).variables, { source: "9", type: "SEARCH", page: 1, query: "", filters });
-  assert.equal(B.listingPayload(B.listing(s, "popular", "", filters)).variables.filters, null);
+  assert.deepEqual(B.listingPayload(B.listing(s, "search", "", filters)).body, { source: "9", page: 1, query: "", filters });
+  assert.equal("filters" in B.listingPayload(B.listing(s, "popular", "", filters)).body, false);
   assert.equal(B.listing(s, "popular", "", filters).filters.length, 0, "popular and latest drop them");
 });
 
@@ -152,7 +153,7 @@ test("an empty filtered search points at the filters", () => {
 });
 
 test("a source says whether it has settings", () => {
-  const s = B.sources(ok({ sources: { nodes: [src({ id: "2", isConfigurable: true }), src({ id: "3", displayName: "T" })] } }), config, false).sources;
+  const s = B.sources(ok({ sources: [src({ id: "2", isConfigurable: true }), src({ id: "3", displayName: "T" })] }), config, false).sources;
   assert.deepEqual(s.map((x) => x.configurable), [true, false]);
 });
 
@@ -160,20 +161,12 @@ test("a source without latest falls back to popular", () => {
   assert.equal(B.listing({ id: "9", name: "S", supportsLatest: false }, "latest", "").mode, "popular");
 });
 
-test("Cloudflare without FlareSolverr is a 'needs FlareSolverr' notice, not the raw error", () => {
-  let l = B.reduceListing(B.listing({ id: "9", name: "S" }, "popular", ""), { type: "request" });
-  l = B.reduceListing(l, { type: "reply", reply: fail("Exception while fetching data (/fetchSourceManga) : Cloudflare bypass currently disabled\n\tat x"), config });
-  const n = B.notice(l, "/c");
-  assert.equal(n.title, "This source needs FlareSolverr");
-  assert.doesNotMatch(n.detail, /Exception|bypass/);
-  assert.equal(B.listingPayload(l), null, "a failed page does not retry by itself");
-});
-
-test("another listing error uses the shared problem text and r retries the same page", () => {
+test("a failed listing page does not retry by itself; another listing error uses the shared problem text and r retries the same page", () => {
   let l = B.reduceListing(B.reduceListing(B.listing({ id: "9", name: "S" }, "popular", ""), { type: "request" }), { type: "reply", reply: fail("HTTP error 500"), config });
-  assert.equal(B.notice(l, "/c").title, "The server sent an error");
+  assert.equal(B.notice(l, "/c").title, "miharchy-core sent an error");
+  assert.equal(B.listingPayload(l), null, "a failed page does not retry by itself");
   l = B.reduceListing(l, { type: "retry" });
-  assert.equal(B.listingPayload(l).variables.page, 1);
+  assert.equal(B.listingPayload(l).body.page, 1);
 });
 
 test("an empty first page says so", () => {
@@ -185,15 +178,15 @@ const mangaNode = (o) => Object.assign({
   id: 5, title: "Berserk", realUrl: "https://example.org/berserk", author: "Miura", artist: "Miura", description: "Dark.", genre: ["Action", "Seinen"],
   status: "ONGOING", thumbnailUrl: "/api/v1/manga/5/thumbnail", inLibrary: false, initialized: true,
   source: { displayName: "MangaDex (EN)" },
-  chapters: { nodes: [
+  chapters: [
     { id: 11, name: "Ch. 1", realUrl: "https://example.org/berserk/1", chapterNumber: 1, uploadDate: "1700000000000", isRead: true, isDownloaded: true, scanlator: "G", sourceOrder: 0 },
     { id: 12, name: "Ch. 2", chapterNumber: 2, uploadDate: "1700049600000", isRead: false, isBookmarked: true, lastPageRead: 4, scanlator: null, sourceOrder: 1 }
-  ] }
+  ]
 }, o);
 
 test("a detail reads the cached manga and shows chapters newest first", () => {
   let d = B.detail(5);
-  assert.match(B.detailPayload(d).query, /manga\(id: \$id\)/);
+  assert.deepEqual(B.detailPayload(d), { route: "manga.get", body: { id: 5 } });
   d = B.reduceDetail(d, { type: "reply", reply: ok({ manga: mangaNode() }), config });
   assert.equal(d.state, "ok");
   assert.equal(d.manga.title, "Berserk");
@@ -220,12 +213,11 @@ test("a manga's meta gives its reading mode and its notes; without them both are
 });
 
 test("an uninitialized manga or one without chapters is fetched from the source once", () => {
-  for (const node of [mangaNode({ initialized: false }), mangaNode({ chapters: { nodes: [] } })]) {
+  for (const node of [mangaNode({ initialized: false }), mangaNode({ chapters: [] })]) {
     let d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: node }), config });
     const p = B.detailPayload(d);
-    assert.match(p.query, /fetchMangaAndChapters/);
-    assert.deepEqual(p.variables, { id: 5 });
-    d = B.reduceDetail(d, { type: "reply", reply: ok({ fetchMangaAndChapters: { manga: mangaNode({ chapters: undefined }), chapters: mangaNode().chapters.nodes } }), config });
+    assert.deepEqual(p, { route: "manga.refresh", body: { id: 5 } });
+    d = B.reduceDetail(d, { type: "reply", reply: ok({ manga: mangaNode({ chapters: undefined }), chapters: mangaNode().chapters }), config });
     assert.equal(d.chapters.length, 2);
     assert.equal(B.detailPayload(d), null, "fetched once, never again by itself");
   }
@@ -234,14 +226,14 @@ test("an uninitialized manga or one without chapters is fetched from the source 
 test("refresh fetches from the source again", () => {
   let d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode() }), config });
   d = B.reduceDetail(d, { type: "refresh" });
-  assert.match(B.detailPayload(d).query, /fetchMangaAndChapters/);
+  assert.deepEqual(B.detailPayload(d), { route: "manga.refresh", body: { id: 5 } });
 });
 
 test("a source fetch that fails keeps the cached manga and says why", () => {
   let d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode({ initialized: false }) }), config });
-  d = B.reduceDetail(d, { type: "reply", reply: fail("Cloudflare bypass currently disabled"), config });
+  d = B.reduceDetail(d, { type: "reply", reply: cloudflare, config });
   assert.equal(d.manga.title, "Berserk");
-  assert.equal(B.notice(d, "/c").title, "This source needs FlareSolverr");
+  assert.equal(B.notice(d, "/c").title, "This source sits behind Cloudflare");
   assert.equal(B.detailPayload(d), null);
 });
 
@@ -249,39 +241,26 @@ const at = (h, m, s) => new Date(2026, 9, 6, h, m, s).getTime();
 
 test("a refresh that ends in the same failure says when it failed again", () => {
   let d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode({ initialized: false }) }), config });
-  d = B.reduceDetail(d, { type: "reply", reply: fail("CEF is disabled"), config, now: at(15, 0, 50) });
-  assert.equal(B.notice(d, "/c").detail, "Turn it on in Settings.", "the first failure is not 'again'");
-  d = B.reduceDetail(B.reduceDetail(d, { type: "refresh" }), { type: "reply", reply: fail("CEF is disabled"), config, now: at(15, 0, 57) });
-  assert.equal(B.notice(d, "/c").detail, "Turn it on in Settings. Failed again at 15:00:57.");
-  d = B.reduceDetail(B.reduceDetail(d, { type: "refresh" }), { type: "reply", reply: fail("Cloudflare bypass currently disabled"), config, now: at(15, 1, 3) });
+  d = B.reduceDetail(d, { type: "reply", reply: fail("boom"), config, now: at(15, 0, 50) });
+  assert.equal(B.notice(d, "/c").detail, "boom Press r to retry.", "the first failure is not 'again'");
+  d = B.reduceDetail(B.reduceDetail(d, { type: "refresh" }), { type: "reply", reply: fail("boom"), config, now: at(15, 0, 57) });
+  assert.equal(B.notice(d, "/c").detail, "boom Press r to retry. Failed again at 15:00:57.");
+  d = B.reduceDetail(B.reduceDetail(d, { type: "refresh" }), { type: "reply", reply: cloudflare, config, now: at(15, 1, 3) });
   assert.doesNotMatch(B.notice(d, "/c").detail, /again/, "another failure is news of its own");
-  d = B.reduceDetail(B.reduceDetail(d, { type: "refresh" }), { type: "reply", reply: ok({ fetchMangaAndChapters: { manga: mangaNode({ chapters: undefined }), chapters: [] } }), config, now: at(15, 2, 0) });
-  d = B.reduceDetail(B.reduceDetail(d, { type: "reread" }), { type: "reply", reply: fail("Cloudflare bypass currently disabled"), config, now: at(15, 3, 0) });
+  d = B.reduceDetail(B.reduceDetail(d, { type: "refresh" }), { type: "reply", reply: ok({ manga: mangaNode({ chapters: undefined }), chapters: [] }), config, now: at(15, 2, 0) });
+  d = B.reduceDetail(B.reduceDetail(d, { type: "reread" }), { type: "reply", reply: cloudflare, config, now: at(15, 3, 0) });
   assert.doesNotMatch(B.notice(d, "/c").detail, /again/, "a success in between starts over");
 });
 
 const ASURA = "6247824327199706550";
 const missing = (o) => mangaNode(Object.assign({ sourceId: ASURA, source: null, initialized: false }, o));
-const names = (map) => ({ metas: { nodes: [{ value: JSON.stringify(map) }] } });
 
-test("a manga with a missing source shows its stored name, no cover and never fetches", () => {
-  let d = B.reduceDetail(B.detail(5, true), { type: "reply", reply: ok(Object.assign({ manga: missing() }, names({ [ASURA]: "Asura Scans" }))), config });
-  assert.equal(d.manga.source, "Asura Scans (not installed)");
-  assert.equal(d.manga.cover, "", "the server fetches covers through the source, so it would only fail");
-  const p = B.detailPayload(d);
-  assert.doesNotMatch(p.query, /fetchMangaAndChapters/);
-  assert.deepEqual(p.variables, { name: "Asura Scans" });
-  d = B.reduceDetail(d, { type: "reply", reply: ok({ extensions: { nodes: [{ name: "Asura Scans", isInstalled: false }] } }), config });
-  assert.equal(d.state, "ok");
-  assert.deepEqual(d.extension, { installed: false });
-  assert.equal(B.detailPayload(d), null);
-});
-
-test("an unknown missing source skips the extension lookup", () => {
-  const d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: missing(), metas: { nodes: [] } }), config });
+test("a manga with a missing source shows by its id, no cover, and never fetches or looks up an extension", () => {
+  const d = B.reduceDetail(B.detail(5, true), { type: "reply", reply: ok({ manga: missing() }), config });
   assert.equal(d.manga.source, "Unknown source " + ASURA);
-  assert.equal(B.detailPayload(d), null);
+  assert.equal(d.manga.cover, "", "the server fetches covers through the source, so it would only fail");
   assert.equal(d.state, "ok");
+  assert.equal(B.detailPayload(d), null);
 });
 
 test("sourceHelp says what to do about a missing source", () => {
@@ -298,14 +277,14 @@ test("sourceHelp says what to do about a missing source", () => {
 test("add to library flips inLibrary from the server's answer", () => {
   let d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode() }), config });
   const p = B.libraryPayload(d);
-  assert.deepEqual(p.variables, { id: 5, inLibrary: true });
+  assert.deepEqual(p, { route: "manga.update", body: { ids: [5], inLibrary: true } });
   d = B.reduceDetail(d, { type: "library-request" });
   assert.equal(d.busy, true);
   assert.equal(B.libraryPayload(d), null, "no double toggle while one is in flight");
-  d = B.reduceDetail(d, { type: "library-reply", reply: ok({ updateManga: { manga: { id: 5, inLibrary: true } } }) });
+  d = B.reduceDetail(d, { type: "library-reply", reply: ok({ mangas: [{ id: 5, inLibrary: true }] }) });
   assert.equal(d.manga.inLibrary, true);
   assert.equal(d.busy, false);
-  assert.deepEqual(B.libraryPayload(d).variables, { id: 5, inLibrary: false });
+  assert.deepEqual(B.libraryPayload(d).body, { ids: [5], inLibrary: false });
 });
 
 test("a failed library toggle keeps the old flag and shows the error", () => {
@@ -315,8 +294,8 @@ test("a failed library toggle keeps the old flag and shows the error", () => {
   assert.equal(d.libraryError, "boom");
 });
 
-const inLibrary = (categories) => B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode({ inLibrary: true, categories: { nodes: categories.map((id) => ({ id })) } }) }), config });
-const categoriesReply = (ids) => ok({ updateMangaCategories: { manga: { id: 5, categories: { nodes: ids.map((id) => ({ id })) } } } });
+const inLibrary = (categories) => B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode({ inLibrary: true, categories }) }), config });
+const categoriesReply = (ids) => ok({ mangas: [{ id: 5, categories: ids }] });
 
 test("the detail knows the manga's categories", () => {
   assert.deepEqual(inLibrary([4, 2]).manga.categories, [4, 2]);
@@ -325,9 +304,8 @@ test("the detail knows the manga's categories", () => {
 
 test("a category toggle adds the manga to a category it is not in and removes it from one it is in", () => {
   const d = inLibrary([4]);
-  assert.deepEqual(B.categoryPayload(d, 2).variables, { id: 5, add: [2], remove: [] });
-  assert.deepEqual(B.categoryPayload(d, 4).variables, { id: 5, add: [], remove: [4] });
-  assert.match(B.categoryPayload(d, 2).query, /updateMangaCategories/);
+  assert.deepEqual(B.categoryPayload(d, 2), { route: "manga.update", body: { ids: [5], addToCategories: [2] } });
+  assert.deepEqual(B.categoryPayload(d, 4), { route: "manga.update", body: { ids: [5], removeFromCategories: [4] } });
 });
 
 test("the server's answer sets the categories; one toggle at a time; a failure says why", () => {
@@ -378,7 +356,7 @@ test("a page reply loads the next one when the cursor is near the end or a dupli
 });
 
 test("sources show English and multi-language ones unless every language is asked for", () => {
-  const data = { sources: { nodes: [src({ id: "5", displayName: "MangaDex (EN)", lang: "en" }), src({ id: "6", displayName: "MangaDex (JA)", lang: "ja" }), src({ id: "7", displayName: "Comick", lang: "all" })] } };
+  const data = { sources: [src({ id: "5", displayName: "MangaDex (EN)", lang: "en" }), src({ id: "6", displayName: "MangaDex (JA)", lang: "ja" }), src({ id: "7", displayName: "Comick", lang: "all" })] };
   assert.deepEqual(B.sources(ok(data), config, false).sources.map((x) => x.id), ["7", "5"]);
   assert.deepEqual(B.sources(ok(data), config, false, true).sources.map((x) => x.id), ["7", "5", "6"]);
 });
@@ -386,8 +364,8 @@ test("sources show English and multi-language ones unless every language is aske
 test("a manga opened from a source shows the cache, then refreshes from the source once", () => {
   let d = B.reduceDetail(B.detail(5, true), { type: "reply", reply: ok({ manga: mangaNode() }), config });
   assert.equal(d.manga.title, "Berserk", "the cached manga shows while the fetch runs");
-  assert.match(B.detailPayload(d).query, /fetchMangaAndChapters/);
-  d = B.reduceDetail(d, { type: "reply", reply: ok({ fetchMangaAndChapters: { manga: mangaNode({ status: "COMPLETED", chapters: undefined }), chapters: mangaNode().chapters.nodes } }), config });
+  assert.deepEqual(B.detailPayload(d), { route: "manga.refresh", body: { id: 5 } });
+  d = B.reduceDetail(d, { type: "reply", reply: ok({ manga: mangaNode({ status: "COMPLETED", chapters: undefined }), chapters: mangaNode().chapters }), config });
   assert.equal(d.manga.status, "Completed");
   assert.equal(B.detailPayload(d), null);
 });
@@ -401,11 +379,11 @@ test("retry only restarts a failed list, so r during a load cannot skip a page",
 
 test("a reread after reading shows the read flags from the cache, never refetching the source", () => {
   let d = B.reduceDetail(B.detail(5, true), { type: "reply", reply: ok({ manga: mangaNode() }), config });
-  d = B.reduceDetail(d, { type: "reply", reply: ok({ fetchMangaAndChapters: { manga: mangaNode({ chapters: undefined }), chapters: mangaNode().chapters.nodes } }), config });
+  d = B.reduceDetail(d, { type: "reply", reply: ok({ manga: mangaNode({ chapters: undefined }), chapters: mangaNode().chapters }), config });
   d = B.reduceDetail(d, { type: "reread" });
-  assert.match(B.detailPayload(d).query, /manga\(id: \$id\)/);
-  const read = mangaNode().chapters.nodes.map((c) => Object.assign({}, c, { isRead: true }));
-  d = B.reduceDetail(d, { type: "reply", reply: ok({ manga: mangaNode({ chapters: { nodes: read } }) }), config });
+  assert.deepEqual(B.detailPayload(d), { route: "manga.get", body: { id: 5 } });
+  const read = mangaNode().chapters.map((c) => Object.assign({}, c, { isRead: true }));
+  d = B.reduceDetail(d, { type: "reply", reply: ok({ manga: mangaNode({ chapters: read }) }), config });
   assert.deepEqual(d.chapters.map((c) => c.read), [true, true]);
   assert.equal(d.state, "ok");
   assert.equal(B.detailPayload(d), null);
@@ -423,19 +401,17 @@ test("a manga's own reading mode comes from its miharchy.readingMode meta", () =
   const mode = (meta) => B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode({ meta }) }), config }).manga.readingMode;
   assert.equal(mode(undefined), "");
   assert.equal(mode([{ key: "other", value: "x" }, { key: "miharchy.readingMode", value: "webtoon" }]), "webtoon");
-  assert.match(B.detailPayload(B.detail(5)).query, /meta \{ key value \}/);
 });
 
 test("a chapter knows whether it is downloaded, and a delete reply updates it", () => {
-  assert.match(B.detailPayload(B.detail(5)).query, /isDownloaded/);
   let d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode() }), config });
   assert.deepEqual(d.chapters.map((c) => c.downloaded), [false, true]);
-  d = B.reduceDetail(d, { type: "downloads-reply", reply: ok({ deleteDownloadedChapters: { chapters: [{ id: 11, isDownloaded: false }] } }) });
+  d = B.reduceDetail(d, { type: "downloads-reply", reply: ok({ state: "STOPPED", queue: [], chapters: [{ id: 11, isDownloaded: false }] }) });
   assert.deepEqual(d.chapters.map((c) => c.downloaded), [false, false]);
   const failed = B.reduceDetail(d, { type: "downloads-reply", reply: fail("Timed out") });
   assert.equal(failed.libraryError, "Timed out");
   assert.deepEqual(failed.chapters, d.chapters);
-  const queued = B.reduceDetail(d, { type: "downloads-reply", reply: ok({ enqueueChapterDownloads: { downloadStatus: { state: "STARTED", queue: [] } } }) });
+  const queued = B.reduceDetail(d, { type: "downloads-reply", reply: ok({ state: "STARTED", queue: [] }) });
   assert.deepEqual(queued.chapters, d.chapters, "a reply without deletes changes no chapter");
 });
 
@@ -443,7 +419,7 @@ test("a failed mark read shows its error, and the next one clears it", () => {
   const d = B.reduceDetail(B.detail(5), { type: "reply", reply: ok({ manga: mangaNode() }), config });
   const failed = B.reduceDetail(d, { type: "mark-reply", reply: fail("Timed out") });
   assert.equal(failed.libraryError, "Timed out");
-  assert.equal(B.reduceDetail(failed, { type: "mark-reply", reply: ok({ marked: { chapters: [] }, reset: { chapters: [] } }) }).libraryError, "");
+  assert.equal(B.reduceDetail(failed, { type: "mark-reply", reply: ok({}) }).libraryError, "");
 });
 
 test("a manga whose title is inside a library manga's title, ignoring case, is a possible duplicate, as Mihon's", () => {

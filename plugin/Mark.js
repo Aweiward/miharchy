@@ -1,13 +1,12 @@
 .pragma library
 .import "../window/Model.js" as Model
-.import "../window/Session.js" as Session
 .import "../window/Updates.js" as Updates
 .import "../window/UpNext.js" as UpNext
 .import "../window/Capped.js" as Capped
 
 // The mark and its popup: the unread update count, a dot when the updates
 // cannot be reached, and the newest updates. Pure, so tests/mark.test.js pins
-// it; Mark.qml polls the window's UPDATES_QUERY and feeds replies here.
+// it; Mark.qml polls core through load() and feeds replies here.
 
 // The popup lists this many; the window shows the rest.
 var LIMIT = 10
@@ -23,18 +22,36 @@ var SYNC_FOLDER_KEY = "miharchy.syncFolder"
 // Updates.rows. A failure clears both, so a dead server shows no stale count.
 // top: the highest update chapter id seen, null before the first answer;
 // fresh: the updates above the top before this answer, which the
-// notification names; notify, autoSync, syncFolder: the Settings rows;
-// version: aboutServer's.
+// notification names; notify, autoSync, syncFolder: the Settings rows.
 function initial() {
-  return { state: "loading", message: "", count: 0, rows: [], top: null, fresh: [], notify: true, version: "", autoSync: false, syncFolder: "" }
+  return { state: "loading", message: "", count: 0, rows: [], top: null, fresh: [], notify: true, autoSync: false, syncFolder: "" }
 }
 
-// One poll: the window's updates, the notification and sync settings and
-// the server's version.
-function listPayload() {
-  return { query: Updates.listPayload().query.replace(/\}\s*$/, "notify: metas(condition: { key: \"" + NOTIFY_KEY + "\" }) { nodes { value } } "
-    + "autoSync: metas(condition: { key: \"" + AUTO_SYNC_KEY + "\" }) { nodes { value } } "
-    + "syncFolder: metas(condition: { key: \"" + SYNC_FOLDER_KEY + "\" }) { nodes { value } } aboutServer { version } }") }
+// One poll's reply: the window's updates and the notification and sync
+// settings, from library.list, the library's recent unread chapters
+// (chapter.list's unread and since, so no read chapter crosses the wire
+// each minute) and one meta.get.
+function load(send, now, done) {
+  send({ route: "library.list" }, function(lib) {
+    if (lib.state !== "ok") return done(lib)
+    var ids = lib.data.mangas.map(function(m) { return m.id })
+    var chapters = function(next) {
+      if (!ids.length) return next({ state: "ok", data: { chapters: [] } })
+      send({ route: "chapter.list", body: { mangaIds: ids, unread: true, since: Updates.since(now) } }, next)
+    }
+    chapters(function(ch) {
+      if (ch.state !== "ok") return done(ch)
+      send({ route: "meta.get", body: { scope: "global", keys: [NOTIFY_KEY, AUTO_SYNC_KEY, SYNC_FOLDER_KEY] } }, function(meta) {
+        if (meta.state !== "ok") return done(meta)
+        var data = Updates.fromCore(lib.data, ch.data, {}, { metas: [] }, now)
+        var value = function(key) { return meta.data.metas.filter(function(m) { return m.key === key }).map(function(m) { return { value: m.value } }) }
+        data.notify = { nodes: value(NOTIFY_KEY) }
+        data.autoSync = { nodes: value(AUTO_SYNC_KEY) }
+        data.syncFolder = { nodes: value(SYNC_FOLDER_KEY) }
+        done({ state: "ok", message: "", data: data, kind: "" })
+      })
+    })
+  })
 }
 
 function metaValue(data, alias) {
@@ -43,23 +60,22 @@ function metaValue(data, alias) {
 }
 
 // A chapter is new when its id is above every update seen before:
-// Suwayomi numbers chapters as it fetches them, so a chapter marked unread
+// core numbers chapters as it fetches them, so a chapter marked unread
 // again, or one that left Updates when read, never counts twice. The first
 // answer only sets the top, so a start never floods.
 function reduce(mark, event) {
   switch (event.type) {
     case "config-missing":
-      return { state: "no-config", message: "", count: 0, rows: [], top: null, fresh: [], notify: mark.notify, version: "", autoSync: mark.autoSync, syncFolder: mark.syncFolder }
+      return { state: "no-config", message: "", count: 0, rows: [], top: null, fresh: [], notify: mark.notify, autoSync: mark.autoSync, syncFolder: mark.syncFolder }
     case "reply":
       var r = event.reply
-      if (r.state !== "ok") return { state: r.state, message: r.message, count: 0, rows: [], top: mark.top, fresh: [], notify: mark.notify, version: "", autoSync: mark.autoSync, syncFolder: mark.syncFolder }
+      if (r.state !== "ok") return { state: r.state, message: r.message, count: 0, rows: [], top: mark.top, fresh: [], notify: mark.notify, autoSync: mark.autoSync, syncFolder: mark.syncFolder }
       var rows = Updates.rows(r.data, event.config, event.now)
       var top = rows.reduce(function(t, row) { return Math.max(t, row.id) }, mark.top || 0)
       var fresh = mark.top === null ? [] : rows.filter(function(row) { return row.id > mark.top })
-      var version = (r.data.aboutServer && r.data.aboutServer.version) || ""
       return {
         state: "ok", message: "", count: rows.length, rows: rows.slice(0, LIMIT), top: top, fresh: fresh,
-        notify: metaValue(r.data, "notify") !== "false", version: version,
+        notify: metaValue(r.data, "notify") !== "false",
         autoSync: metaValue(r.data, "autoSync") === "true", syncFolder: metaValue(r.data, "syncFolder") || ""
       }
   }
@@ -101,23 +117,29 @@ function notifyCommand(n, launcher, icon) {
   return ["sh", "-c", NOTIFY_SCRIPT, "sh", n.key, n.title, n.body, launcher, icon]
 }
 
-// The newest phone backup in the sync folder newer than the helper's phone
+// The newest phone backup in the sync folder newer than core's phone
 // baseline, as "<mtime> <path>", or nothing. The miharchy-* files are the
 // desktop's exports; a file younger than 30 s may still be arriving. With
 // no baseline yet, any phone backup counts: the first sync.
-var PHONE_CHECK_SCRIPT = "base=\"$HOME/.local/share/miharchy/sync/phone-baseline.tachibk\"\n"
+var PHONE_CHECK_SCRIPT = "base=${2:-$HOME/.local/share/miharchy/sync/phone-baseline.tachibk}\n"
   + "dir=$1\n"
   + "set --\n"
   + "[ -e \"$base\" ] && set -- -newer \"$base\"\n"
   + "find \"$dir\" -maxdepth 1 -type f -name '*.tachibk' ! -name 'miharchy-*' -mmin +0.5 \"$@\" -printf '%T@ %p\\n' 2>/dev/null | sort -n | tail -n 1\n"
   + "exit 0"
 
-function phoneCheckCommand(folder) {
-  return Capped.command(["sh", "-c", PHONE_CHECK_SCRIPT, "sh", folder], FOUND_CAP, 30)
+// baseline: phoneBaseline()'s path.
+function phoneCheckCommand(folder, baseline) {
+  return Capped.command(["sh", "-c", PHONE_CHECK_SCRIPT, "sh", folder].concat(baseline ? [baseline] : []), FOUND_CAP, 30)
+}
+
+// Core's phone baseline, in its data folder. env: { HOME, MIHARCHY_CORE_DATA }.
+function phoneBaseline(env) {
+  return (env.MIHARCHY_CORE_DATA || env.HOME + "/.local/share/miharchy/core") + "/sync/phone-baseline.tachibk"
 }
 
 // The newest phone backup in the folder ("<mtime> <path>"), merged or not:
-// when the answer changes, the mark asks the helper for sync health again.
+// when the answer changes, the mark asks core for sync health again.
 function newestPhoneCommand(folder) {
   return Capped.command(["sh", "-c", "find \"$1\" -maxdepth 1 -type f -name '*.tachibk' ! -name 'miharchy-*' -printf '%T@ %p\\n' 2>/dev/null | sort -n | tail -n 1", "sh", folder], FOUND_CAP, 30)
 }
@@ -156,17 +178,10 @@ function down(mark) {
   return mark.state !== "ok" && mark.state !== "loading"
 }
 
-// The newer-server warning (Session.versionWarning), or "". It sits beside
-// the count and the list; it never makes the mark look down.
-function warning(mark) {
-  return mark.state === "ok" ? Session.versionWarning(mark.version) : ""
-}
-
 function tooltip(mark) {
   if (down(mark)) return "Miharchy: " + Model.problem(mark, "").title
   if (mark.state === "loading") return "Miharchy"
-  var text = "Miharchy: " + (mark.count ? mark.count + " new chapter" + (mark.count === 1 ? "" : "s") : "no new chapters")
-  return warning(mark) ? text + "\n" + warning(mark) : text
+  return "Miharchy: " + (mark.count ? mark.count + " new chapter" + (mark.count === 1 ? "" : "s") : "no new chapters")
 }
 
 // The popup's Up next section: this many manga, loaded only when it opens
@@ -175,10 +190,16 @@ var UP_NEXT_LIMIT = 3
 // The Settings row "Downloaded only", which Up next follows.
 var DOWNLOADED_ONLY_KEY = "miharchy.downloadedOnly"
 
-function upNextPayload() {
-  var p = UpNext.payload()
-  p.variables.keys.push(DOWNLOADED_ONLY_KEY)
-  return p
+// Up next's reply: UpNext.load's plus the Downloaded only meta.
+function loadUpNext(send, done) {
+  UpNext.load(send, function(r) {
+    if (r.state !== "ok") return done(r)
+    send({ route: "meta.get", body: { scope: "global", keys: [DOWNLOADED_ONLY_KEY] } }, function(meta) {
+      if (meta.state !== "ok") return done(meta)
+      r.data.metas.nodes = r.data.metas.nodes.concat(meta.data.metas)
+      done(r)
+    })
+  })
 }
 
 // The reason beside an Up next row, by tier: the page reached, the unread
@@ -190,14 +211,14 @@ function reason(e, now) {
   return "new " + (hours < 24 ? hours + "h" : Math.floor(hours / 24) + "d")
 }
 
-// reply: upNextPayload()'s, null while it loads. -> the section's rows;
+// reply: loadUpNext()'s, null while it loads. -> the section's rows;
 // none while loading or after a failure, so the section hides.
 function upNext(reply, now) {
   if (!reply || reply.state !== "ok") return []
   var metas = (reply.data.metas && reply.data.metas.nodes) || []
   var downloadedOnly = metas.some(function(m) { return m.key === DOWNLOADED_ONLY_KEY && m.value === "true" })
   return UpNext.list(reply.data, downloadedOnly, now).slice(0, UP_NEXT_LIMIT).map(function(e) {
-    return { title: e.title, chapter: e.chapter, side: reason(e, now), open: ["peek-open", String(e.mangaId), String(e.chapterId)] }
+    return { title: e.title, chapter: e.chapter, side: reason(e, now), open: target("peek-open", e.mangaId, e.chapterId) }
   })
 }
 
@@ -206,12 +227,18 @@ function upNext(reply, now) {
 // looks as it did before Up next. open: the launcher's arguments.
 function entries(upNext, rows) {
   var updates = rows.map(function(row) {
-    return { section: "", title: row.title, chapter: row.chapter, side: row.date, open: ["open-chapter", String(row.mangaId), String(row.id)] }
+    return { section: "", title: row.title, chapter: row.chapter, side: row.date, open: target("open-chapter", row.mangaId, row.id) }
   })
   if (!upNext.length) return updates
   var up = upNext.map(function(e, i) { return Object.assign({ section: i === 0 ? "Up next" : "" }, e) })
   if (updates.length) updates[0].section = "Updates"
   return up.concat(updates)
+}
+
+// The launcher's arguments for a row, with a trailing "core": a window
+// started before #373 still reads it.
+function target(command, mangaId, chapterId) {
+  return [command, String(mangaId), String(chapterId), "core"]
 }
 
 function move(list, cursor, dy) {
@@ -240,7 +267,9 @@ if (typeof module !== "undefined") {
     AUTO_SYNC_KEY: AUTO_SYNC_KEY,
     SYNC_FOLDER_KEY: SYNC_FOLDER_KEY,
     initial: initial,
-    listPayload: listPayload,
+    load: load,
+    loadUpNext: loadUpNext,
+    phoneBaseline: phoneBaseline,
     reduce: reduce,
     notification: notification,
     notifyCommand: notifyCommand,
@@ -250,9 +279,7 @@ if (typeof module !== "undefined") {
     syncNotification: syncNotification,
     label: label,
     down: down,
-    warning: warning,
     tooltip: tooltip,
-    upNextPayload: upNextPayload,
     upNext: upNext,
     entries: entries,
     move: move,

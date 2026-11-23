@@ -142,9 +142,9 @@ test("no Syncthing config, or a Syncthing that does not answer, says so", async 
 // Setup's state: a done machine whose sync folder holds no phone backup yet, then the Syncthing check's facts.
 const M = require("./load")("Model.js");
 const finish = (s, id, text) => S.reduce(S.reduce(s, { type: "start", id }), { type: "finish", id, text });
-const READY = "java openjdk version \"26.0.2.1\" 2026-08-18\nsuwayomi\nwebsockets\nconfig\nunit enabled active\nunitCurrent\ndocker \n";
+const READY = "java openjdk version \"26.0.2.1\" 2026-08-18\nwebsockets\njavac\ncoreSource abc\ncoreInstalled abc\ncoreUnit enabled active\ncoreUnitCurrent\ncoreConfig\n";
 const F = "/home/u/Sync/mihon-backups";
-const waiting = finish(S.reduce(finish(S.initial(), "probe", READY), { type: "server", reply: M.reply(200, JSON.stringify({ data: { settings: {}, metas: { nodes: [{ key: "miharchy.syncFolder", value: F }] } } })) }), "phones", "phones 0\nnewest \n\n0\n");
+const waiting = finish(S.reduce(finish(S.initial(), "probe", READY), { type: "server", reply: M.coreReply(200, JSON.stringify({ metas: [{ scope: "global", owner: 0, key: "miharchy.syncFolder", value: F }] })) }), "phones", "phones 0\nnewest \n\n0\n");
 const facts = (f) => finish(waiting, "syncthing", [
   f.installed === false ? "" : "installed", f.answering === false ? "" : "answering", "myID " + DESKTOP, f.shared ? "shared" : "", f.knows ? "knowsPhone" : "",
   "pendingDevices " + JSON.stringify(f.devices || []), "pendingFolders " + JSON.stringify(f.folders || []), f.noQr ? "" : "qr /run/user/1000/miharchy/syncthing-id.png"

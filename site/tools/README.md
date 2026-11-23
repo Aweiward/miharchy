@@ -11,8 +11,8 @@ Never run them inside an installed clone (`~/.config/omarchy/plugins/miharchy`):
 
 - Every window capture is the real window, driven offscreen by the verify skill's `drive.sh`. Do not paint, edit or fake a capture.
 - The bar picture is the real `plugin/Mark.qml` and its popup. The bar around it (workspaces, clock, tray) is a stand-in, and the page caption says so.
-- The Updates dates come from real server fetches on a shifted clock (`start-at`). Never edit dates in the database.
-- Use a scratch server with its own run dir and port (`MIHARCHY_VERIFY_DIR`, `MIHARCHY_VERIFY_PORT`). Never use port 4590, `~/.config/miharchy` or the user's library.
+- The Updates dates come from real fetches by miharchy-core on a shifted clock (`start-at`). Never edit dates in the database.
+- Use a scratch core in its own run dir (`MIHARCHY_VERIFY_DIR`; core's data and `core.json` live in `$MIHARCHY_VERIFY_DIR/core`). Never use port 4591, `~/.config/miharchy` or the user's library.
 - Pick manga that are popular and safe: content rating safe, no doujinshi. `pick.py` lists candidates by that rule. Never use a personal library.
 - The covers and pages belong to their authors and publishers. The page footer says so. Keep that line.
 
@@ -20,8 +20,8 @@ Never run them inside an installed clone (`~/.config/omarchy/plugins/miharchy`):
 
 | File | What it does |
 | --- | --- |
-| `start-at <offset>` | Starts the run's scratch Suwayomi-Server with its JVM clock shifted by libfaketime (`-5d`, `-3d`, `-1d`), or on the real clock (`0`). It reuses the run's database. |
-| `halt` | Stops the scratch server and keeps its database. (`server.sh stop` deletes it.) |
+| `start-at <offset>` | Starts the run's scratch miharchy-core (the verify skill's `core.sh start`) with its JVM clock shifted by libfaketime (`-5d`, `-3d`, `-1d`), or on the real clock (`0`). It reuses the run's database. |
+| `halt` | Stops the scratch core and keeps its database (`core.sh stop`). `core.sh wipe` deletes it. |
 | `seed.py <A\|B\|C\|D\|finish>` | Builds the showcase library from MangaDex. Stages A to D add manga, each on its own day. `finish` sets the read state, two bookmarks and one download. |
 | `pick.py` | Lists candidate manga from the public MangaDex API: ongoing, safe, no doujinshi, by follows, with an English chapter in the last 90 days. It needs no server. |
 | `steps/gallery.js` | Drive steps: Library, a manga page, the paged reader, then Updates with a real library update (`u`). |
@@ -46,14 +46,14 @@ Never run them inside an installed clone (`~/.config/omarchy/plugins/miharchy`):
 
 ## What you need
 
-- `suwayomi-server-bin` (AUR). `start-at` runs its jar from `/usr/share/java/suwayomi-server` with `/usr/bin/java`.
+- A JDK 21+. The first `start-at` builds core (`core/server/build/install/`), which takes a few minutes.
 - `jq`, `curl`, `openssl`, `python3`, `quickshell`, `imagemagick`, `chromium`, `nodejs` and `npm`.
 - An Omarchy install. `mark.sh` copies the shell's `Commons` and `Ui` from `$OMARCHY_PATH/shell` (default `~/.local/share/omarchy/shell`). The theme home copies `themes/tokyo-night` from the same place.
 - libfaketime. See the next section.
 
 ## libfaketime
 
-`start-at` preloads libfaketime into the server's JVM. It reads the library path from `FAKETIME_LIB`. The default is `/usr/lib/faketime/libfaketime.so.1`.
+`start-at` preloads libfaketime into core's JVM only. It reads the library path from `FAKETIME_LIB`. The default is `/usr/lib/faketime/libfaketime.so.1`.
 
 Option 1 is a local build with no sudo. The current images used this build (libfaketime 0.9.13, the 64-bit `time_t` variant):
 
@@ -63,7 +63,7 @@ make -C "$MIHARCHY_VERIFY_DIR/libfaketime/src" libfaketime-time64.so.1
 export FAKETIME_LIB=$MIHARCHY_VERIFY_DIR/libfaketime/src/libfaketime-time64.so.1
 ```
 
-Option 2 is the Arch package: `sudo pacman -S libfaketime`. It installs `/usr/lib/faketime/libfaketime.so.1`, the default. Nobody has tried that build with the server's JVM yet. Check the fetch dates after stage A.
+Option 2 is the Arch package: `sudo pacman -S libfaketime`. It installs `/usr/lib/faketime/libfaketime.so.1`, the default. Nobody has tried that build with core's JVM yet. Check the fetch dates after stage A.
 
 `start-at` sets `FAKETIME_DONT_FAKE_MONOTONIC=1` and `FAKETIME_DONT_RESET=1`. The JVM needs a real monotonic clock and one fixed start point.
 
@@ -80,26 +80,24 @@ Run every command from the repo root of a dev checkout.
 1. Source `env.sh` once per shell. It keeps any value you already exported. Make the theme home (Tokyo Night) that the window and the mark read through `HOME`.
 
    ```sh
-   . site/tools/env.sh   # run dir, port 4648, the local libfaketime build if present, $T and $S
+   . site/tools/env.sh   # run dir, the local libfaketime build if present, $T and $S
    mkdir -p "$MIHARCHY_VERIFY_DIR/home/.local/state/omarchy/current"
    cp -r "${OMARCHY_PATH:-$HOME/.local/share/omarchy}/themes/tokyo-night" "$MIHARCHY_VERIFY_DIR/home/.local/state/omarchy/current/theme"
    ```
 
-2. Build the library in four stages, each on its own day. Updates groups chapters by the day the server fetched them, so this gives four day groups.
+2. Build the library in four stages, each on its own day. Updates groups chapters by the day core fetched them, so this gives four day groups.
 
    ```sh
-   $T/start-at -5d && $S/seed.sh && $T/seed.py A && $T/halt   # seed.sh adds the Keiyoushi repo and MangaDex
-   $T/start-at -3d && $T/seed.py B && $T/halt
-   $T/start-at -1d && $T/seed.py C && $T/halt
-   $T/start-at 0 && $T/seed.py D
+   bash $T/start-at -5d && $S/core.sh seed && python3 $T/seed.py A && bash $T/halt   # core.sh seed adds the Keiyoushi repo and MangaDex
+   bash $T/start-at -3d && python3 $T/seed.py B && bash $T/halt
+   bash $T/start-at -1d && python3 $T/seed.py C && bash $T/halt
+   bash $T/start-at 0 && python3 $T/seed.py D
    ```
-
-   The first `start-at` on a fresh run dir downloads JCEF (about 250 MB). That is normal.
 
 3. Set the read state, the bookmarks and the download, on the real clock.
 
    ```sh
-   $T/seed.py finish
+   python3 $T/seed.py finish
    ```
 
 4. Drive the window and render the bar mark. `HOME` points at the theme home. `gallery.js` presses `u` in Updates, which runs a real library update.
@@ -109,7 +107,7 @@ Run every command from the repo root of a dev checkout.
    HOME=$MIHARCHY_VERIFY_DIR/home $S/drive.sh $T/steps/webtoon.js 120
    HOME=$MIHARCHY_VERIFY_DIR/home $S/drive.sh $T/steps/browse.js 90
    HOME=$MIHARCHY_VERIFY_DIR/home $S/drive.sh $T/steps/card.js 90
-   $T/mark.sh
+   bash $T/mark.sh
    ```
 
    Read each capture in `$MIHARCHY_VERIFY_DIR/evidence/` before you go on. `drive.log` holds what each step saw.
@@ -117,7 +115,7 @@ Run every command from the repo root of a dev checkout.
 5. Convert the captures to webp.
 
    ```sh
-   $T/images.sh
+   bash $T/images.sh
    ```
 
 6. Render the previews and the banner.
@@ -129,10 +127,10 @@ Run every command from the repo root of a dev checkout.
 
    Check the output: no element past the right edge, and both fonts loaded.
 
-7. Stop the server.
+7. Stop core. `core.sh wipe` also deletes the run's library.
 
    ```sh
-   $S/server.sh stop
+   bash $T/halt
    ```
 
 The library depends on what MangaDex serves on the day. A series with no English chapters shows by its cover only. When a series stops releasing, run `pick.py` and change `LIBRARY` and `STAGES` in `seed.py`.

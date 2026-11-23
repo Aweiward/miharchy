@@ -2,9 +2,8 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import "Restore.js" as Restore
-import "Sync.js" as Sync
+import "Session.js" as Session
 
 // Restore a backup: a panel over the window, the same shape as the sync
 // result. Restore.js decides; shell.qml forwards every "restore." command
@@ -18,8 +17,8 @@ Rectangle {
   property bool open: false
   property var restore: Restore.initial()
   readonly property bool editing: open && restore.step === "path"
-  readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
   readonly property alias pathField: field
+  property var config: null
 
   signal key(var event)
   signal editEnded()
@@ -44,6 +43,27 @@ Rectangle {
     }
   }
 
+  // Core's undo of the last sync: core names the file, which lives in its data folder.
+  function openPreSync() {
+    if (restore.step === "checking" || restore.step === "running") {
+      open = true
+      return
+    }
+    open = true
+    restore = Restore.reduce(restore, { type: "check-presync" })
+    coreSend(Restore.checkPayload(restore), "checked-reply")
+  }
+
+  function coreSend(payload, type) {
+    var done = function(reply) {
+      view.restore = Restore.reduce(view.restore, { type: type, reply: reply })
+      if (view.restore.step === "done") view.restored()
+    }
+    // A missing core.json leaves config null: say so, never "Reading" for ever.
+    if (!config) return done({ state: "no-config" })
+    Session.send(config, payload, done)
+  }
+
   function run(id) {
     switch (id) {
       case "restore.open":
@@ -53,37 +73,17 @@ Rectangle {
         restore = Restore.reduce(restore, { type: "check", text: field.text, home: Quickshell.env("HOME") })
         if (restore.step !== "checking") break
         editEnded()
-        proc.command = Restore.command(devHelper, "check", restore.path)
-        proc.running = true
+        coreSend(Restore.checkPayload(restore), "checked-reply")
         break
       case "restore.confirm":
+        if (restore.step !== "confirm") break
         restore = Restore.reduce(restore, { type: "start" })
-        proc.command = Restore.command(devHelper, "restore", restore.path)
-        proc.running = true
+        coreSend(Restore.importPayload(restore), "finish-reply")
         break
       case "restore.cancel":
       case "restore.close":
         close()
         break
-    }
-  }
-
-  // One process for both jobs: the check ends before the restore starts.
-  Process {
-    id: proc
-    property string output: ""
-    onStarted: output = ""
-    stdout: SplitParser {
-      onRead: function(line) {
-        proc.output += line + "\n"
-        if (view.restore.step === "running") view.restore = Restore.reduce(view.restore, { type: "line", text: line })
-      }
-    }
-    onRunningChanged: {
-      if (running) return
-      var step = view.restore.step
-      view.restore = Restore.reduce(view.restore, { type: step === "checking" ? "checked" : "finish", text: proc.output })
-      if (view.restore.step === "done") view.restored()
     }
   }
 

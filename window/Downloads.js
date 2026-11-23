@@ -1,34 +1,10 @@
 .pragma library
 .import "Failure.js" as Failure
 
-// Downloads: the server's download queue and the chapters a manga detail
-// marks for download or removal. Pure, so tests/downloads.test.js pins it;
-// DownloadsView.qml keeps the queue live, and it and MangaDetail.qml send
-// the payloads built here.
-
-var DOWNLOAD = "state progress tries chapter { id name mangaId chapterNumber uploadDate } manga { id title source { id } }"
-var STATUS = "downloadStatus { state queue { " + DOWNLOAD + " } }"
-var STATUS_QUERY = "{ " + STATUS + " }"
-// Its first result holds the whole queue (initial), each later one only
-// what changed. Past maxUpdates changes in one result the server leaves
-// them out (omittedUpdates), and the queue is due a STATUS_QUERY.
-var LIVE_QUERY = "subscription { downloadStatusChanged(input: { maxUpdates: 50 }) { state omittedUpdates"
-  + " initial { position " + DOWNLOAD + " } updates { type download { position " + DOWNLOAD + " } } } }"
-var ENQUEUE_MUTATION = "mutation($ids: [Int!]!) { enqueueChapterDownloads(input: { ids: $ids }) { " + STATUS + " } }"
-var DEQUEUE_MUTATION = "mutation($ids: [Int!]!) { dequeueChapterDownloads(input: { ids: $ids }) { " + STATUS + " } }"
-var DELETE_MUTATION = "mutation($ids: [Int!]!) { deleteDownloadedChapters(input: { ids: $ids }) { chapters { id isDownloaded } } }"
-// Mutation fields run in order, so a download in flight stops before its
-// folder goes.
-var REMOVE_MUTATION = "mutation($queued: [Int!]!, $ids: [Int!]!) { dequeueChapterDownloads(input: { ids: $queued }) { " + STATUS + " }"
-  + " deleteDownloadedChapters(input: { ids: $ids }) { chapters { id isDownloaded } } }"
-// Suwayomi never retries a failed download on its own, and a new enqueue
-// of one keeps its tries; out and in again starts them over.
-var RETRY_MUTATION = "mutation($ids: [Int!]!) { dequeueChapterDownloads(input: { ids: $ids }) { clientMutationId }"
-  + " enqueueChapterDownloads(input: { ids: $ids }) { " + STATUS + " } }"
-var START_MUTATION = "mutation { startDownloader(input: {}) { " + STATUS + " } }"
-var STOP_MUTATION = "mutation { stopDownloader(input: {}) { " + STATUS + " } }"
-// Mihon's cancel all; the server also stops the downloader.
-var CLEAR_PAYLOAD = { query: "mutation { clearDownloader(input: {}) { " + STATUS + " } }" }
+// Downloads: miharchy-core's download queue (ADR 0010) and the chapters a
+// manga detail marks for download or removal. Pure, so tests/downloads.test.js
+// pins it; DownloadsView.qml keeps the queue live, and it and MangaDetail.qml
+// send the payloads built here.
 
 // queue.state: "loading" | "ok" | a failed connection state.
 // running: the downloader is started. items: in queue order, each
@@ -38,11 +14,9 @@ function initial() {
   return { state: "loading", message: "", running: false, items: [] }
 }
 
-// Every download mutation answers with the status, under its own name.
+// Every download route answers with the plain status, { state, queue }.
 function statusIn(data) {
-  if (data.downloadStatus) return data.downloadStatus
-  for (var k in data) if (data[k] && data[k].downloadStatus) return data[k].downloadStatus
-  return null
+  return data.queue ? data : null
 }
 
 function item(d) {
@@ -56,7 +30,9 @@ function item(d) {
     state: d.state,
     progress: Number(d.progress) || 0,
     tries: d.tries,
-    sourceMissing: d.manga.source === null
+    sourceMissing: d.manga.source === null,
+    // Core keeps why a download failed: { kind, message }.
+    error: d.error || null
   }
 }
 
@@ -64,41 +40,21 @@ function queueOf(running, items) {
   return { state: "ok", message: "", running: running, items: items }
 }
 
-// A finished download leaves the server's queue, as a dequeued one does.
-// The rest change in place, or move to their position when they are new
-// or moved.
-function changed(items, updates) {
-  var next = items.slice()
-  updates.forEach(function(u) {
-    var at = next.findIndex(function(i) { return i.chapterId === u.download.chapter.id })
-    if (at !== -1) next.splice(at, 1)
-    if (u.type === "DEQUEUED" || u.type === "FINISHED") return
-    next.splice(at !== -1 && u.type !== "POSITION" ? at : Math.min(u.download.position, next.length), 0, item(u.download))
-  })
-  return next
-}
-
 // event.type:
-//   "reply" { reply } for STATUS_QUERY or any download mutation
-//   "live"  { data } for a LIVE_QUERY result
+//   "reply" { reply } for download.queue or any download route
+//   "live"  { data } for a result of core's "downloads" topic, which sends
+//           the whole status each time
 // A failed request keeps the queue shown and only changes state.
 function reduce(q, event) {
   if (event.type === "live") {
-    var l = event.data.downloadStatusChanged
-    if (!l) return q
-    return queueOf(l.state === "STARTED", l.initial ? l.initial.map(item) : changed(q.items, l.updates || []))
+    if (!event.data || !event.data.queue) return q
+    return queueOf(event.data.state === "STARTED", event.data.queue.map(item))
   }
   if (event.type !== "reply") return q
   var r = event.reply
   var s = r.state === "ok" ? statusIn(r.data) : null
   if (!s) return { state: r.state === "ok" ? q.state : r.state, message: r.message, running: q.running, items: q.items }
   return queueOf(s.state === "STARTED", (s.queue || []).map(item))
-}
-
-// Whether a LIVE_QUERY result left changes out, so the queue is due a
-// STATUS_QUERY.
-function omitted(data) {
-  return !!(data.downloadStatusChanged && data.downloadStatusChanged.omittedUpdates)
 }
 
 // The items in before that next no longer holds: finished, or taken out.
@@ -126,10 +82,20 @@ function ids(chapters) {
   return chapters.map(function(c) { return c.id })
 }
 
+// miharchy-core's download routes (ADR 0010), each answering with the status.
+function statusPayload() {
+  return { route: "download.queue" }
+}
+
+// Mihon's cancel all; core also stops the downloader.
+function clearPayload() {
+  return { route: "download.clear" }
+}
+
 // Queues the chapters not on disk yet, or null when all are.
 function enqueuePayload(chapters) {
   var todo = chapters.filter(function(c) { return !c.downloaded })
-  return todo.length ? { query: ENQUEUE_MUTATION, variables: { ids: ids(todo) } } : null
+  return todo.length ? { route: "download.enqueue", body: { ids: ids(todo) } } : null
 }
 
 function find(items, chapterId) {
@@ -138,14 +104,10 @@ function find(items, chapterId) {
 }
 
 // Takes the chapters out of the queue and off the disk, or null when none
-// is queued or downloaded. Only queued ids are dequeued: the server waits
-// 30 s for any other id and then fails.
+// is queued or downloaded. Core's delete dequeues first and takes any id.
 function removePayload(chapters, items) {
-  var queued = chapters.filter(function(c) { return find(items, c.id) })
   var held = chapters.filter(function(c) { return c.downloaded || find(items, c.id) })
-  if (!held.length) return null
-  if (!queued.length) return deletePayload(ids(held))
-  return { query: REMOVE_MUTATION, variables: { queued: ids(queued), ids: ids(held) } }
+  return held.length ? deletePayload(ids(held)) : null
 }
 
 // Mihon's delete after reading, from the deleteAfterRead setting: how many
@@ -159,13 +121,25 @@ function deleteSlots(setting) {
 // A category's meta flag that keeps the downloads of its manga.
 var KEEP_KEY = "miharchy.keepDownloads"
 
-// What an automatic delete needs to know of each chapter.
-function autoDeleteQuery(chapterIds) {
-  return {
-    query: "query($ids: [Int!]!) { chapters(filter: { id: { in: $ids } }) { nodes { id isRead isBookmarked isDownloaded"
-      + " manga { categories { nodes { meta { key value } } } } } } }",
-    variables: { ids: chapterIds }
-  }
+// What an automatic delete needs to know of each chapter, as the reply
+// autoDeletePayload reads: send(payload, done) is Session.send on the core
+// config. Core takes the chapters by id and the library's categories with
+// their metas, in two routes.
+function autoDeleteLoad(send, chapterIds, done) {
+  send({ route: "chapter.list", body: { ids: chapterIds } }, function(ch) {
+    if (ch.state !== "ok") return done(ch)
+    send({ route: "library.list" }, function(lib) {
+      if (lib.state !== "ok") return done(lib)
+      var metas = {}
+      lib.data.categories.forEach(function(c) { metas[c.id] = c.meta || [] })
+      var cats = {}
+      lib.data.mangas.forEach(function(m) { cats[m.id] = m.categories })
+      done({ state: "ok", data: { chapters: { nodes: ch.data.chapters.map(function(c) {
+        return { id: c.id, isRead: c.isRead, isBookmarked: c.isBookmarked, isDownloaded: c.isDownloaded,
+          manga: { categories: { nodes: (cats[c.mangaId] || []).map(function(id) { return { meta: metas[id] || [] } }) } } }
+      }) } } })
+    })
+  })
 }
 
 // meta: a category's [{ key, value }].
@@ -177,7 +151,7 @@ function keeps(manga) {
   return manga.categories.nodes.some(function(c) { return keepsDownloads(c.meta) })
 }
 
-// Deletes the chapters of an autoDeleteQuery() reply that Mihon's
+// Deletes the chapters of an autoDeleteLoad() reply that Mihon's
 // getChaptersToDelete lets go: on disk, read, not bookmarked unless
 // deleteBookmarked, and in no category that keeps its downloads. Mihon's
 // check of those categories reads the chapters from before a mark read,
@@ -191,16 +165,17 @@ function autoDeletePayload(data, deleteBookmarked, readIds) {
 }
 
 function deletePayload(chapterIds) {
-  return { query: DELETE_MUTATION, variables: { ids: chapterIds } }
+  return { route: "download.delete", body: { ids: chapterIds } }
 }
 
 function dequeuePayload(chapterId) {
-  return { query: DEQUEUE_MUTATION, variables: { ids: [chapterId] } }
+  return { route: "download.dequeue", body: { ids: [chapterId] } }
 }
 
-// chapterIds: failed downloads, all in the queue (see removePayload).
+// chapterIds: failed downloads, all in the queue.
+// Core requeues a failed chapter in its place, keeping its tries.
 function retryPayload(chapterIds) {
-  return chapterIds.length ? { query: RETRY_MUTATION, variables: { ids: chapterIds } } : null
+  return chapterIds.length ? { route: "download.enqueue", body: { ids: chapterIds } } : null
 }
 
 function chapterIds(items) {
@@ -227,25 +202,15 @@ function sorted(q, key) {
   return String(up) === String(chapterIds(q.items)) ? by(-1) : up
 }
 
-// Puts the queue in order (chapter ids) with one reorderChapterDownload
-// per item out of place, all in one request; null when nothing moves.
-// Only the last move answers with the status, so a long queue does not
-// come back once per move.
+// Puts the queue in order (chapter ids) with one download.reorder, or null
+// when nothing moves.
 function orderPayload(q, order) {
   var now = chapterIds(q.items)
-  var moves = []
-  order.forEach(function(id, to) {
-    if (now[to] === id) return
-    now.splice(now.indexOf(id), 1)
-    now.splice(to, 0, id)
-    moves.push("m" + to + ": reorderChapterDownload(input: { chapterId: " + id + ", to: " + to + " })")
-  })
-  if (!moves.length) return null
-  return { query: "mutation { " + moves.join(" { clientMutationId } ") + " { " + STATUS + " } }" }
+  return order.some(function(id, i) { return now[i] !== id }) ? { route: "download.reorder", body: { order: order } } : null
 }
 
 function togglePayload(q) {
-  return { query: q.running ? STOP_MUTATION : START_MUTATION }
+  return { route: q.running ? "download.stop" : "download.start" }
 }
 
 function progressText(item) {
@@ -257,57 +222,27 @@ function progressText(item) {
   return "queued"
 }
 
-// Suwayomi keeps no reason for a failed download, so the queue asks for
-// the chapter's pages once and labels what goes wrong (Failure.js).
-// reasons: { chapterId: Failure.reason, or null while its probe is out },
-// for failed items only: an item that is retried (no longer ERROR) or
-// leaves the queue loses its reason, so a new failure is probed again.
-// A manga with no source needs no probe. -> { reasons, probe: the chapter
-// ids to probe now }.
+// Core keeps the reason with each failed item, and Failure.coreReason
+// labels it (Failure.js).
+// reasons: { chapterId: Failure.reason } for failed items only: an item that
+// is retried (no longer ERROR) or leaves the queue loses its reason, so a
+// new failure is labelled again. -> { reasons }.
 function failed(items, reasons) {
   var next = {}
-  var probe = []
   items.forEach(function(i) {
     if (i.state !== "ERROR") return
     var id = i.chapterId
-    if (reasons[id] !== undefined) next[id] = reasons[id]
-    else if (i.sourceMissing) next[id] = Failure.reason("Source not installed")
-    else {
-      next[id] = null
-      probe.push(id)
-    }
+    next[id] = reasons[id] !== undefined ? reasons[id] : Failure.coreReason(i.error)
   })
-  return { reasons: next, probe: probe }
+  return { reasons: next }
 }
 
-var PROBE_MUTATION = "mutation($id: Int!) { fetchChapterPages(input: { chapterId: $id }) { pages } }"
-
-function probePayload(chapterId) {
-  return { query: PROBE_MUTATION, variables: { id: chapterId } }
-}
-
-// The reasons once the probe of chapterId answers (reply as Model.reply
-// gives). Only a probe still waited on lands. One the server never
-// answered drops out, so the next queue change probes again. Pages that
-// load leave no error to read; no pages is what the downloader logs.
-function probed(reasons, chapterId, reply) {
-  if (reasons[chapterId] !== null) return reasons
-  var next = Object.assign({}, reasons)
-  if (reply.state === "ok") {
-    var pages = reply.data.fetchChapterPages ? reply.data.fetchChapterPages.pages : []
-    next[chapterId] = Failure.reason(pages.length ? "Its pages load now" : "Chapter does not have any pages to download")
-  } else if (reply.state === "error") next[chapterId] = Failure.reason(reply.message)
-  else delete next[chapterId]
-  return next
-}
-
-// A queue row's status: progressText, and on a failed row its reason and
-// hint once known.
+// A queue row's status: progressText, and on a failed row its reason once
+// known. flareOn is unused: core's reasons carry no hint.
 function statusText(item, reason, flareOn) {
   var text = progressText(item)
   if (item.state !== "ERROR" || !reason) return text
-  var hint = Failure.hint(reason, flareOn)
-  return text + "   " + reason.text + (hint ? "   " + hint : "")
+  return text + "   " + reason.text
 }
 
 // What the chapter list shows beside a chapter: "" when it is neither
@@ -320,12 +255,11 @@ function marker(chapter, items) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    STATUS_QUERY: STATUS_QUERY,
-    LIVE_QUERY: LIVE_QUERY,
-    CLEAR_PAYLOAD: CLEAR_PAYLOAD,
+    statusPayload: statusPayload,
+    clearPayload: clearPayload,
+    autoDeleteLoad: autoDeleteLoad,
     initial: initial,
     reduce: reduce,
-    omitted: omitted,
     left: left,
     live: live,
     marked: marked,
@@ -335,7 +269,6 @@ if (typeof module !== "undefined") {
     KEEP_KEY: KEEP_KEY,
     keepsDownloads: keepsDownloads,
     deleteSlots: deleteSlots,
-    autoDeleteQuery: autoDeleteQuery,
     autoDeletePayload: autoDeletePayload,
     dequeuePayload: dequeuePayload,
     retryPayload: retryPayload,
@@ -345,8 +278,6 @@ if (typeof module !== "undefined") {
     togglePayload: togglePayload,
     progressText: progressText,
     failed: failed,
-    probePayload: probePayload,
-    probed: probed,
     statusText: statusText,
     marker: marker
   }

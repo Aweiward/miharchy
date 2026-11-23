@@ -8,17 +8,21 @@ import "Settings.js" as Settings
 import "Session.js" as Session
 import "Commands.js" as Commands
 import "Runtime.js" as Runtime
+import "Storage.js" as Storage
 
-// The setup screen: one row per Setup.STEPS entry. It owns the one Process
+// The setup screen: one row per Setup.steps() entry. It owns the one Process
 // that runs checks and confirmed steps, and sends its own server reads and
 // writes. The window's dispatcher hands it keys through run().
 Item {
   id: view
 
   required property Theme theme
+  // Setup's server reads and writes: core's config.
   property var config: null
-  property string configPath: ""
+  // Suwayomi's server.json: the probe checks it, and the move reads it.
+  property string suwayomiConfigPath: ""
   property string home: ""
+  property string coreConfigPath: ""
 
   property var setup: Setup.initial()
   property int cursor: 0
@@ -32,9 +36,8 @@ Item {
   // Setup.offersOnStart() for this window.
   property bool offers: true
   // The window runs from the repo's window/, beside server/ and sync/.
-  readonly property string serverScript: Quickshell.shellPath("../server/miharchy-server")
-  readonly property string syncDir: Quickshell.shellPath("../sync")
-  readonly property var current: Setup.STEPS[cursor]
+  readonly property var steps: Setup.steps(setup)
+  readonly property var current: steps[cursor]
   readonly property var currentStatus: Setup.status(setup, current.id)
 
   signal key(var event)
@@ -42,6 +45,8 @@ Item {
   signal needed()
   // A step changed the server's config or settings.
   signal wrote()
+  // The move filled core's library and settings.
+  signal moved()
   signal editEnded()
 
   // A click moves the cursor as j and k do; a double click then sends Enter.
@@ -63,8 +68,7 @@ Item {
   }
 
   function check() {
-    // The AUR is asked once; a recheck while installing skips it.
-    if (!setup.job) start("probe", Setup.probeCommand(configPath, syncDir, Quickshell.shellDir, !!(setup.probe && setup.probe.aurSuwayomi)))
+    if (!setup.job) start("probe", Setup.probeCommand(suwayomiConfigPath, "", Quickshell.shellDir, false, coreConfigPath))
   }
 
   function post(payload, done) {
@@ -72,11 +76,54 @@ Item {
   }
 
   function readServer() {
-    if (config) post({ query: Setup.SERVER_QUERY }, function(reply) {
+    if (!config) return
+    post(Setup.serverPayload(), function(reply) {
       view.setup = Setup.reduce(view.setup, { type: "server", reply: reply })
       view.checkPhones()
       view.offer()
     })
+    // A move core runs goes on while the window is closed: read where it stands.
+    readMove()
+  }
+
+  function readMove() {
+    if (!config) return
+    post(Setup.MOVE_STATUS, function(reply) {
+      var was = view.setup.move && view.setup.move.state
+      view.setup = Setup.reduce(view.setup, { type: "move", reply: reply })
+      if (was !== "running" || view.setup.move.state === "running") return
+      // The move wrote core's metas (the sync folder too) and library.
+      if (view.setup.move.state === "done") view.moved()
+      view.check()
+    })
+  }
+
+  function startMove() {
+    setup = Setup.reduce(setup, { type: "start", id: "move" })
+    if (!config) return setup = Setup.reduce(setup, { type: "move", reply: { state: "no-config", message: "" } })
+    post(Setup.movePayload({
+      serverConfig: suwayomiConfigPath,
+      serverRoot: Storage.root({ HOME: home, MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT") }),
+      home: home
+    }), function(reply) {
+      view.setup = Setup.reduce(view.setup, { type: "move", reply: reply })
+    })
+  }
+
+  // Core runs the move as a job: follow it until it ends.
+  Timer {
+    interval: 1000
+    repeat: true
+    running: !!view.setup.move && view.setup.move.state === "running"
+    onTriggered: view.readMove()
+  }
+
+  // Core does not answer yet, as right after its unit starts: read again.
+  Timer {
+    interval: 3000
+    repeat: true
+    running: view.visible && !!view.setup.move && view.setup.move.state === "unknown"
+    onTriggered: view.readServer()
   }
 
   // The sync folder lives in server meta, so the phone check follows the
@@ -144,7 +191,7 @@ Item {
         view.readServer()
       })
     }
-    if (id === "server") wrote()
+    if (id === "coreService") wrote()
     check()
   }
 
@@ -159,7 +206,7 @@ Item {
     switch (id) {
       case "setup.up":
       case "setup.down":
-        cursor = Commands.moveCursor(cursor, id === "setup.up" ? -1 : 1, Setup.STEPS.length)
+        cursor = Commands.moveCursor(cursor, id === "setup.up" ? -1 : 1, steps.length)
         break
       case "setup.activate":
         var act = Setup.action(setup, current.id)
@@ -172,7 +219,8 @@ Item {
         }
         break
       case "setup.confirm":
-        start(setup.confirm, Setup.runCommand(setup.confirm, { serverScript: serverScript, syncDir: syncDir, windowDir: Quickshell.shellDir, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup), install: Setup.status(setup, setup.confirm).command || "" }))
+        if (setup.confirm === "move") return startMove()
+        start(setup.confirm, Setup.runCommand(setup.confirm, { windowDir: Quickshell.shellDir, coreConfigPath: coreConfigPath, folder: setup.server ? setup.server.syncFolder : "", pair: Setup.pairing(setup), install: Setup.status(setup, setup.confirm).command || "" }))
         break
       case "setup.cancel":
         if (editing) endEdit()
@@ -196,7 +244,7 @@ Item {
     property string job: ""
     stdout: StdioCollector {
       id: output
-      // Live text, so a long step such as the helper build shows progress.
+      // Live text, so a long step such as the core build shows progress.
       waitForEnd: false
       onStreamFinished: view.finished(proc.job, text)
     }
@@ -215,22 +263,11 @@ Item {
       font.pixelSize: view.theme.fontSize
     }
 
-    Text {
-      textFormat: Text.PlainText
-      width: Math.min(parent.width, view.theme.fontSize * 60)
-      visible: text !== ""
-      wrapMode: Text.Wrap
-      text: Setup.warning(view.setup)
-      color: view.theme.urgent
-      font.family: view.theme.fontFamily
-      font.pixelSize: view.theme.fontSize
-    }
-
     Column {
       width: Math.min(parent.width, view.theme.fontSize * 60)
 
       Repeater {
-        model: Setup.STEPS
+        model: view.steps
 
         Rectangle {
           id: row
@@ -265,7 +302,7 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
-            text: ({ todo: "to do", outdated: "out of date", unavailable: "no docker" })[row.status] || row.status
+            text: Setup.status(view.setup, row.modelData.id).label || ({ todo: "to do", outdated: "out of date", unavailable: "no docker" })[row.status] || row.status
             color: row.status === "todo" || row.status === "outdated" ? view.theme.urgent : row.status === "done" ? view.theme.accent : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
@@ -344,7 +381,8 @@ Item {
       Text {
         textFormat: Text.PlainText
         width: parent.width
-        visible: view.currentStatus.state === "running" && text !== ""
+        // The running shell job's output; core runs the move, so it has none here.
+        visible: view.currentStatus.state === "running" && view.current.id === proc.job && proc.running && text !== ""
         text: output.text.replace(/\s+$/, "").split("\n").slice(-12).join("\n")
         color: view.theme.muted
         font.family: view.theme.fontFamily

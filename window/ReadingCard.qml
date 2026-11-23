@@ -106,7 +106,7 @@ Rectangle {
         return
       }
       view.rows = view.rows.concat(ReadingCard.rows(reply.data))
-      var info = reply.data.chapters.pageInfo
+      var info = ReadingCard.pageInfo(reply.data, after)
       if (ReadingCard.more(view.rows, info, view.now)) return view.page(info.endCursor, s)
       view.card = ReadingCard.card(view.rows, view.now, view.config)
       view.phase = "ok"

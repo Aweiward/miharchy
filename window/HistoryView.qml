@@ -16,6 +16,7 @@ Item {
 
   required property Theme theme
   property var config: null
+  // Set by shell.qml; config is miharchy-core's.
   property string configPath: ""
   property bool active: false
 
@@ -48,6 +49,8 @@ Item {
 
   onActiveChanged: if (active) reload()
   onQueryChanged: cursor = 0
+  // A missing core.json leaves config null from the start, so onConfigChanged never fires.
+  Component.onCompleted: if (!config) history = History.reduce(history, { type: "config-missing" })
   onConfigChanged: {
     seq++
     opening = null
@@ -66,7 +69,7 @@ Item {
     var cfg = config
     opening = null
     history = History.reduce(history, { type: "request" })
-    send({ query: History.QUERY }, function(reply) {
+    History.load(function(payload, done) { Session.send(cfg, payload, done) }, function(reply) {
       if (s !== view.seq) return
       view.now = Date.now() / 1000
       view.history = History.reduce(view.history, { type: "reply", reply: reply, config: cfg })

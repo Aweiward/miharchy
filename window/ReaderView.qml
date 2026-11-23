@@ -271,7 +271,11 @@ Rectangle {
   // Once per chapter opened: a retry or a page fetch again queues nothing
   // new. The queue shows any failure; the reader says nothing.
   property int aheadFor: -1
+  // The Downloads view shows the other server's queue (shell.qml): this
+  // chapter's server queues and deletes nothing.
+  property bool downloadsOff: false
   function downloadAhead() {
+    if (downloadsOff) return
     if (reader.state !== "ok" || Reader.chapterId(reader) === aheadFor) return
     aheadFor = Reader.chapterId(reader)
     var payload = Downloads.enqueuePayload(Reader.ahead(reader, values.downloadAhead))
@@ -299,11 +303,12 @@ Rectangle {
 
   // The chapter left counts as read: its save may still be on the way.
   function leave() {
+    if (downloadsOff) return
     var target = Reader.deleteTarget(reader, Downloads.deleteSlots(values.deleteAfterRead))
     if (target === null) return
     var read = [Reader.chapterId(reader)]
     exitStep("write")
-    send(Downloads.autoDeleteQuery([target]), function(reply) {
+    Downloads.autoDeleteLoad(function(payload, done) { view.send(payload, done) }, [target], function(reply) {
       var payload = reply.state === "ok" ? Downloads.autoDeletePayload(reply.data, view.deleteBookmarked, read) : null
       if (!payload) return view.exitStep("wrote")
       view.send(payload, function() {
@@ -501,7 +506,7 @@ Rectangle {
             return
           }
           // The chapter line then says "bookmarked" while it is.
-          if (view.reader) view.reader = Reader.reduce(view.reader, { type: "bookmarked", chapterId: chapter.id, bookmarked: payload.variables.bookmarked })
+          if (view.reader) view.reader = Reader.reduce(view.reader, { type: "bookmarked", chapterId: chapter.id, bookmarked: payload.body ? payload.body.isBookmarked : payload.variables.bookmarked })
         })
         return
       case "reader.openWeb":

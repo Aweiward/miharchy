@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "Commands.js" as Commands
-import Quickshell
 import Quickshell.Io
 import "Backup.js" as Backup
 import "Model.js" as Model
@@ -21,7 +20,14 @@ Item {
   id: view
 
   required property Theme theme
+  // Settings' server is miharchy-core (#385): every row, the trackers,
+  // storage and the backup talk to core.
   property var config: null
+  property string configPath: ""
+  // Rows core stores but does not act on yet (settings.get's unapplied).
+  property var unapplied: []
+  // A save core refused: { key, message }.
+  property var refusal: ({ key: "", message: "" })
   property var trackers: Trackers.initial()
   readonly property bool loginEditing: Trackers.editing(trackers)
   readonly property string loginStep: loginEditing ? trackers.login.step : ""
@@ -37,22 +43,16 @@ Item {
   property string editStart: ""
   property string editValue: ""
 
-  // Bytes from Storage.sizes(), null until du answers; the note is the
+  // Bytes from core's storage.get, null until it answers; the note is the
   // last clear's outcome.
   property var storage: null
   property string storageNote: ""
   property bool clearing: false
-  // Taken when the clear starts, so freed is what it removed.
-  property var storageBefore: null
+  property bool measuring: false
   // A string, so a settings load that keeps the folder measures nothing.
   readonly property string downloadsPath: values.downloadsPath || ""
-  readonly property var storageDirs: Storage.dirs({
-    HOME: Quickshell.env("HOME"),
-    MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT"),
-    MIHARCHY_SERVER_TMPDIR: Quickshell.env("MIHARCHY_SERVER_TMPDIR")
-  }, downloadsPath)
 
-  // Create a backup: the helper job and its outcome, which the action row
+  // Create a backup: the job and its outcome, which the action row
   // shows as its value.
   property var backup: Backup.initial()
   // Sync health, which SyncView reads; healthWanted asks it to read again.
@@ -64,7 +64,6 @@ Item {
     syncHealth: health.state === "ready" ? Sync.healthSummary(health.health, Date.now()) : health.state === "failed" ? health.message : "",
     libraryCheck: checkCount
   })
-  readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
 
   signal key(var event)
   signal editEnded()
@@ -99,7 +98,11 @@ Item {
   // Never during a login: reading the trackers makes a new MyAnimeList
   // link, and the old one the browser holds stops working.
   function loadTrackers() {
-    if (!config || !visible || trackers.login) return
+    if (!visible || trackers.login) return
+    if (!config) {
+      trackers = Trackers.reduce(trackers, { type: "no-config" })
+      return
+    }
     trackers = Trackers.reduce(trackers, { type: "request" })
     send(Trackers.listPayload(), function(reply) {
       view.trackers = Trackers.reduce(view.trackers, { type: "list", reply: reply })
@@ -126,56 +129,45 @@ Item {
     })
   }
 
+  // r: the trackers and the storage rows read their server again.
+  function reload() {
+    loadTrackers()
+    if (!visible) return
+    storageNote = ""
+    measure()
+  }
+
   function measure() {
-    if (du.running) return
-    du.command = Storage.command(storageDirs)
-    du.running = true
+    if (measuring) return
+    if (!config) {
+      storageNote = Model.problem({ state: "no-config" }, configPath).title
+      return
+    }
+    measuring = true
+    send(Storage.SIZES_PAYLOAD, function(reply) {
+      view.measuring = false
+      if (reply.state === "ok") view.storage = reply.data
+      else view.storageNote = reply.message || Model.problem(reply, view.configPath).title
+    })
   }
 
   function clearCache() {
-    if (!config || clearing || du.running || !storage) return
+    if (!config || clearing || measuring || !storage) return
     clearing = true
-    storageBefore = storage
     storageNote = ""
-    send(Storage.clearPayload(), function(reply) {
-      if (reply.state !== "ok" || !Storage.cleared(reply.data)) {
-        view.clearing = false
-        view.storageNote = reply.state !== "ok" ? reply.message || Model.problem(reply, "server.json").title : "The server could not empty the cache."
-        return
-      }
+    send(Storage.CORE_CLEAR_PAYLOAD, function(reply) {
+      view.clearing = false
+      view.storageNote = reply.state === "ok" ? "Freed " + Storage.format(reply.data.freed) : reply.message || Model.problem(reply, view.configPath).title
       view.measure()
     })
   }
 
   function createBackup() {
-    if (backupJob.running) return
+    if (backup.state === "running") return
     backup = Backup.reduce(backup, { type: "start" })
-    backupJob.command = Backup.command(devHelper, Backup.folder(values.backupPath, {
-      HOME: Quickshell.env("HOME"),
-      MIHARCHY_SERVER_ROOT: Quickshell.env("MIHARCHY_SERVER_ROOT")
-    }))
-    backupJob.running = true
-  }
-
-  Process {
-    id: backupJob
-    stdout: StdioCollector {
-      onStreamFinished: view.backup = Backup.reduce(view.backup, { type: "finish", text: text })
-    }
-  }
-
-  // du's exit code is 1 when a folder is missing; sizes() reads what it
-  // listed.
-  Process {
-    id: du
-    stdout: StdioCollector {
-      onStreamFinished: {
-        view.storage = Storage.sizes(view.storageDirs, text)
-        if (!view.clearing) return
-        view.clearing = false
-        if (view.storage) view.storageNote = "Freed " + Storage.format(Math.max(0, (view.storageBefore ? view.storageBefore.cache : 0) - view.storage.cache))
-      }
-    }
+    var done = function(reply) { view.backup = Backup.reduce(view.backup, { type: "reply", reply: reply }) }
+    if (!config) return done({ state: "no-config" })
+    send(Backup.PAYLOAD, done)
   }
 
   function run(id) {
@@ -263,10 +255,13 @@ Item {
               rightPadding: view.theme.fontSize * 0.75
               bottomPadding: view.theme.fontSize * 0.5
               readonly property bool failed: row.editingThis && view.editError !== ""
-              visible: failed || (row.current && !view.editing && !!row.modelData.note)
+              // A save core refused, under its row until the next save.
+              readonly property bool refused: !view.editing && view.refusal.key === row.modelData.key
+              readonly property string note: [row.modelData.note || "", (view.unapplied.indexOf(row.modelData.key) >= 0 ? "miharchy-core keeps this value but does not use it yet." : "")].filter(function(n) { return n }).join(" ")
+              visible: failed || refused || (row.current && !view.editing && !!note)
               wrapMode: Text.Wrap
-              text: failed ? view.editError : row.modelData.note || ""
-              color: failed ? view.theme.urgent : view.theme.selectedText
+              text: failed ? view.editError : refused ? view.refusal.message : note
+              color: failed || refused ? view.theme.urgent : view.theme.selectedText
               font.family: view.theme.fontFamily
               font.pixelSize: view.theme.fontSmall
             }
@@ -340,7 +335,7 @@ Item {
           textFormat: Text.PlainText
           leftPadding: view.theme.fontSize * 0.75
           bottomPadding: view.theme.fontSize * 0.5
-          text: "Storage   downloads " + (view.storage ? Storage.format(view.storage.downloads) : "measuring")
+          text: "Storage   downloads " + (view.storage ? Storage.format(view.storage.downloads) : view.storageNote ? "not measured" : "measuring")
           color: view.theme.accent
           font.family: view.theme.fontFamily
           font.pixelSize: view.theme.fontSmall
@@ -376,7 +371,7 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: view.theme.fontSize * 0.75
             anchors.verticalCenter: parent.verticalCenter
-            text: view.clearing ? "clearing" : (view.storageNote ? view.storageNote + "   " : "") + (view.storage ? Storage.format(view.storage.cache) : "measuring")
+            text: view.clearing ? "clearing" : (view.storageNote ? view.storageNote + "   " : "") + (view.storage ? Storage.format(view.storage.cache) : view.storageNote ? "not measured" : "measuring")
             color: parent.current ? view.theme.selectedText : view.theme.muted
             font.family: view.theme.fontFamily
             font.pixelSize: view.theme.fontSize
@@ -488,7 +483,7 @@ Item {
           readOnly: true
           selectByMouse: true
           wrapMode: TextEdit.WrapAnywhere
-          text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, "server.json") || { title: "" }).title : Trackers.note(view.trackers)
+          text: view.trackers.state !== "ok" && view.trackers.state !== "loading" ? (Model.problem(view.trackers, view.configPath) || { title: "" }).title : Trackers.note(view.trackers)
           color: view.trackers.error || (view.trackers.login && view.trackers.login.error) ? view.theme.urgent : view.theme.muted
           selectionColor: view.theme.accent
           font.family: view.theme.fontFamily

@@ -9,8 +9,8 @@ const secs = (ms) => String(Math.floor(ms / 1000));
 
 const MANGADEX = { id: "2499283573021220255", displayName: "MangaDex (EN)", extension: { pkgName: "eu.kanade.tachiyomi.extension.all.mangadex", name: "MangaDex", hasUpdate: false } };
 
-// A healthy library manga as QUERY returns it: timestamps in the server's
-// units, seconds for fetch times and ms for upload dates.
+// A healthy library manga in the shape load() builds: timestamps in the
+// server's units, seconds for fetch times and ms for upload dates.
 function node(id, over) {
   return {
     id, title: "Manga " + id, status: "ONGOING", updateStrategy: "ALWAYS_UPDATE",
@@ -37,10 +37,6 @@ const kinds = (d) => L.problems(d, NOW).map((p) => p.kind + ":" + p.mangaId);
 
 test("a healthy library has no problems", () => {
   assert.deepEqual(kinds(data([node(1), node(2, { title: "Other" })])), []);
-});
-
-test("the query asks for what each kind needs, the skip settings and the update run", () => {
-  for (const f of ["chaptersLastFetchedAt", "updateStrategy", "unreadCount", "lastReadChapter", "extension { pkgName name hasUpdate }", "meta { key value }", "excludeNotStarted", "mangaUpdates { status manga { id } }", "lastUpdateTimestamp { timestamp }", "miharchy.sourceNames"]) assert.ok(L.QUERY.includes(f), f);
 });
 
 test("source missing: the source is null, named from the phone's source names", () => {
@@ -148,14 +144,13 @@ test("dismissPayload writes each manga's kinds with the time, keeping the others
     node(2, { source: null })
   ]), NOW);
   const p = L.dismissPayload(ps, NOW, false);
-  assert.match(p.query, /setMangaMeta/);
-  const metas = Object.values(p.variables);
-  assert.deepEqual(metas.map((m) => [m.mangaId, m.key, JSON.parse(m.value)]), [
-    [1, "miharchy.checkDismissed", { stalled: 5, missing: NOW, empty: NOW }],
-    [2, "miharchy.checkDismissed", { missing: NOW }]
+  assert.equal(p.route, "meta.set");
+  assert.deepEqual(p.body.metas.map((m) => [m.scope, m.owner, m.key, JSON.parse(m.value)]), [
+    ["manga", 1, "miharchy.checkDismissed", { stalled: 5, missing: NOW, empty: NOW }],
+    ["manga", 2, "miharchy.checkDismissed", { missing: NOW }]
   ]);
   const undo = L.dismissPayload(ps.filter((x) => x.mangaId === 1 && x.kind === "missing"), NOW, true);
-  assert.deepEqual(JSON.parse(Object.values(undo.variables)[0].value), { stalled: 5 });
+  assert.deepEqual(JSON.parse(undo.body.metas[0].value), { stalled: 5 });
   assert.equal(L.dismissPayload([], NOW, false), null);
 });
 
@@ -196,7 +191,7 @@ test("space selects a row, or a whole group on its header; the selection names i
   assert.deepEqual(L.targets(rows, {}, 4).map((p) => p.key), ["empty:3"], "or on the row");
 });
 
-// A MERGE_QUERY copy: the manga with its categories, chapters and tracks.
+// A copy in the shape mergeLoad builds: the manga with its categories, chapters and tracks.
 function copyNode(id, over) {
   return {
     id, title: "Eleceed", sourceId: MANGADEX.id, source: { displayName: "MangaDex (EN)" },
@@ -209,8 +204,6 @@ test("Enter on a duplicate asks about the row's manga and the first manga it dup
   const d = data([node(1, { title: "Eleceed" }), node(2, { title: "Eleceed", sourceId: "9", source: { id: "9", displayName: "Weeb Central", extension: null } })]);
   const p = L.problems(d, NOW)[0];
   assert.deepEqual(L.mergeVariables(p), { a: 1, b: 2 });
-  assert.match(L.MERGE_QUERY, /a: manga\(id: \$a\)/);
-  assert.match(L.MERGE_QUERY, /b: manga\(id: \$b\)/);
 });
 
 test("the merge prompt shows each copy's source, chapters read, categories and tracks", () => {

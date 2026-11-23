@@ -59,8 +59,8 @@ function due(s, limit) {
 }
 
 // QML's XHR ignores its timeout, so the view gives up on a source itself.
-// 30 s is the connect and read timeout of Suwayomi's and Mihon's HTTP
-// clients; only their 2-minute call timeout would free the slot otherwise.
+// 30 s is the connect and read timeout of Mihon's HTTP clients; only their
+// 2-minute call timeout would free the slot otherwise.
 var TIMEOUT = 30000
 
 // event: a Browse.reduceListing event for the group at index.

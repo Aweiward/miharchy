@@ -30,7 +30,7 @@ Item {
   readonly property bool editing: counting
   readonly property string hint: "j k move   enter download   esc close   "
 
-  // A download mutation's reply, which carries the queue.
+  // A download request's reply, which carries the queue.
   signal downloads(var reply)
   // The run queued chapters; the window shows the queue.
   signal queued()
@@ -55,7 +55,7 @@ Item {
   function openUpNext() {
     var cfg = config
     if (!cfg) return
-    Session.send(cfg, UpNext.payload(), function(reply) {
+    UpNext.load(function(payload, done) { Session.send(cfg, payload, done) }, function(reply) {
       if (reply.state !== "ok") return
       view.openFor(NextChapters.upNextSet(UpNext.list(reply.data, false, Date.now())))
     })
@@ -95,7 +95,7 @@ Item {
       view.lastRun = NextChapters.queued(view.lastRun, [])
       view.note = text
     }
-    Session.send(cfg, NextChapters.readPayload(lastRun.mangaIds), function(reply) {
+    NextChapters.readLoad(function(payload, done) { Session.send(cfg, payload, done) }, lastRun.mangaIds, function(reply) {
       if (reply.state !== "ok") return end(reply.message || reply.state)
       var list = NextChapters.pick(reply.data, row, count, view.queueItems)
       var payload = Downloads.enqueuePayload(list)

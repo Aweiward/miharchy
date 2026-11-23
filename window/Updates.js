@@ -16,26 +16,6 @@ var SKIP_FILTERS = [
   ["excludeNotStarted", "not started"],
   ["excludeCompleted", "completed"]
 ]
-var STATUS_FIELDS = "libraryUpdateStatus { jobsInfo { isRunning finishedJobs totalJobs skippedMangasCount } } lastUpdateTimestamp { timestamp }"
-  + " settings { " + SKIP_FILTERS.map(function(f) { return f[0] }).join(" ") + " }"
-// ponytail: no page limit; the client-side fetchedAt cut must see every
-// unread chapter, so a limit waits for a library big enough to need one.
-var UPDATES_QUERY = "{ chapters(filter: { inLibrary: { equalTo: true }, isRead: { equalTo: false } }) {"
-  + " nodes { id name uploadDate fetchedAt sourceOrder isRead lastPageRead isBookmarked isDownloaded manga { id title thumbnailUrl inLibraryAt } } } " + STATUS_FIELDS + " }"
-// Each result holds the run's counts, the first one too; the last-checked
-// time and the skip filters come with the list, which reloads after a run.
-var LIVE_QUERY = "subscription { libraryUpdateStatusChanged(input: {}) { jobsInfo { isRunning finishedJobs totalJobs skippedMangasCount } } }"
-// The view's list: read updates too, and what the filters test. The
-// 3-month cut runs on the server here, since read chapters are most of a
-// library.
-var VIEW_QUERY = "query($since: LongString!) { chapters(filter: { inLibrary: { equalTo: true }, uploadDate: { greaterThan: $since } }) {"
-  + " nodes { id name uploadDate fetchedAt sourceOrder isRead lastPageRead isBookmarked isDownloaded scanlator"
-  + " manga { id title thumbnailUrl inLibraryAt categories { nodes { id } } meta { key value } } } } " + STATUS_FIELDS + " }"
-// The run's progress comes through LIVE_QUERY. With no categories the server skips the excluded ones (Categories.js);
-// with categories it updates every manga in them, as Mihon's per-category
-// update does.
-var CHECK_MUTATION = "mutation($categories: [Int!]) { updateLibrary(input: { categories: $categories }) { clientMutationId } }"
-
 function copy(o, changes) {
   var c = {}
   for (var k in o) c[k] = o[k]
@@ -96,7 +76,7 @@ function recent(data, now) {
     .sort(function(a, b) { return Number(b.fetchedAt) - Number(a.fetchedAt) || b.sourceOrder - a.sourceOrder })
 }
 
-// The unread updates: the bar mark's list, from UPDATES_QUERY.
+// The unread updates: the bar mark's list.
 function updates(data, now) {
   return recent(data, now).filter(function(c) { return !c.isRead })
 }
@@ -184,23 +164,60 @@ function initial() {
   return { state: "loading", message: "", rows: [], data: null, found: 0, running: false, checking: false, finished: 0, total: 0, skipped: 0, skipReasons: [], checkedAt: 0, stopped: null }
 }
 
-// The bar mark's list: unread updates only.
-function listPayload() {
-  return { query: UPDATES_QUERY }
+
+// The view's list, from library.list, chapter.list, update.status and the
+// skip filters' metas.
+function load(send, now, done) {
+  send({ route: "library.list" }, function(lib) {
+    if (lib.state !== "ok") return done(lib)
+    var ids = lib.data.mangas.map(function(m) { return m.id })
+    var chapters = function(next) {
+      if (!ids.length) return next({ state: "ok", data: { chapters: [] } })
+      send({ route: "chapter.list", body: { mangaIds: ids } }, next)
+    }
+    chapters(function(ch) {
+      if (ch.state !== "ok") return done(ch)
+      send({ route: "update.status" }, function(st) {
+        if (st.state !== "ok") return done(st)
+        var keys = SKIP_FILTERS.map(function(f) { return Prefs.PREFIX + f[0] })
+        send({ route: "meta.get", body: { scope: "global", keys: keys } }, function(meta) {
+          if (meta.state !== "ok") return done(meta)
+          done({ state: "ok", data: fromCore(lib.data, ch.data, st.data, meta.data, now) })
+        })
+      })
+    })
+  })
 }
 
-function viewPayload(now) {
-  return { query: VIEW_QUERY, variables: { since: String(since(now)) } }
+// Core's replies -> the reply data the filters and rows read. The skip filters are on unless
+// a meta turns them off, as core reads them.
+function fromCore(lib, ch, st, meta, now) {
+  var manga = {}
+  lib.mangas.forEach(function(m) {
+    manga[m.id] = { id: m.id, title: m.title, thumbnailUrl: m.thumbnailUrl, inLibraryAt: m.inLibraryAt,
+      categories: { nodes: (m.categories || []).map(function(id) { return { id: id } }) }, meta: m.meta || [] }
+  })
+  var cut = since(now)
+  var settings = {}
+  SKIP_FILTERS.forEach(function(f) { settings[f[0]] = true })
+  meta.metas.forEach(function(m) { settings[m.key.slice(Prefs.PREFIX.length)] = m.value === "true" })
+  return {
+    chapters: { nodes: ch.chapters.filter(function(c) { return Number(c.uploadDate) > cut && manga[c.mangaId] }).map(function(c) { return copy(c, { manga: manga[c.mangaId] }) }) },
+    libraryUpdateStatus: { jobsInfo: st },
+    lastUpdateTimestamp: { timestamp: st.lastUpdateTimestamp },
+    settings: settings
+  }
 }
 
-// categories: ids to update, or none for the whole library.
+// categories: ids to update, or none for the whole library. The reply's
+// started says whether this call began the run.
 function checkPayload(categories) {
-  return { query: CHECK_MUTATION, variables: { categories: categories || null } }
+  return { route: "update.start", body: categories ? { categories: categories } : {} }
 }
 
 // Mihon's cancel on the update notification.
 function stopPayload() {
-  return { query: "mutation { updateStop(input: {}) { clientMutationId } }" }
+  return { route: "update.stop" }
 }
 
 function dayLabel(ms, now) {
@@ -255,12 +272,12 @@ function status(data) {
 
 // event.type:
 //   "request"   a list load went out
-//   "list"      { reply, config, now, prefs } for viewPayload()
+//   "list"      { reply, config, now, prefs } for load()
 //   "filter"    { config, now, prefs }: the filters changed
 //   "checking"  checkPayload() went out
 //   "failed"    checkPayload() failed
 //   "stopped"   stopPayload() succeeded
-//   "live"      { data } for a LIVE_QUERY result
+//   "live"      { data } for the updates topic's status
 function reduce(u, event) {
   switch (event.type) {
     case "request":
@@ -280,13 +297,11 @@ function reduce(u, event) {
     case "failed":
       return copy(u, { running: false, checking: false })
     case "live":
-      var l = event.data.libraryUpdateStatusChanged
-      if (!l) return u
-      var s = jobs(l.jobsInfo || {})
-      // A run opens with a result of all zeros, before it counts the
-      // library; u's check waits past it. ponytail: a library with no
-      // manga sends nothing more, so its check shows until C stops it.
-      return copy(withStatus(u, s), { checking: u.checking && !(s.running || s.total || s.skipped) })
+      // Core sends its status flat, never an all-zero opening result, and
+      // says whether a stop ended the run, so it may come before the stop's reply.
+      if (event.data.isRunning === undefined) return u
+      var s = jobs(event.data)
+      return copy(copy(u, s), { checking: false, stopped: event.data.stopped === true ? stoppedAt(s) : null })
   }
   return u
 }
@@ -297,8 +312,7 @@ function stoppedAt(u) {
 
 // The server forgets a stopped run's counts, so the stop stays in u until
 // a run starts. A run that ends on its own keeps its counts; one that ends
-// with all zeros was stopped, and its result can come before the stop's
-// reply.
+// with all zeros was stopped.
 function withStatus(u, s) {
   var stopped = u.running && !s.running && !s.total ? stoppedAt(u) : u.stopped
   return copy(copy(u, s), { stopped: s.running ? null : stopped })
@@ -365,18 +379,16 @@ function notice(u, configPath) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    UPDATES_QUERY: UPDATES_QUERY,
-    VIEW_QUERY: VIEW_QUERY,
+    since: since,
+    fromCore: fromCore,
     PREFS: PREFS,
     updates: updates,
-    viewPayload: viewPayload,
+    load: load,
     filterRows: filterRows,
     choose: choose,
     count: count,
     initial: initial,
     rows: rows,
-    listPayload: listPayload,
-    LIVE_QUERY: LIVE_QUERY,
     checkPayload: checkPayload,
     stopPayload: stopPayload,
     reduce: reduce,

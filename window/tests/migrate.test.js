@@ -4,8 +4,9 @@ const Mi = require("./load")("Migrate.js");
 const G = require("./load")("GlobalSearch.js");
 const M = require("./load")("Model.js");
 
-const config = { url: "http://127.0.0.1:4590", username: "u", password: "p" };
-const ok = (data) => M.reply(200, JSON.stringify({ data }));
+const config = {};
+const ok = (data) => M.coreReply(200, JSON.stringify(data));
+const boom = () => M.coreReply(500, JSON.stringify({ error: { kind: "source", message: "boom" } }));
 let nextId = 1;
 const ch = (chapterNumber, o) => Object.assign({ id: nextId++, chapterNumber, isRead: false, isBookmarked: false, isDownloaded: false }, o);
 const ids = (list) => list.map((c) => c.id);
@@ -50,91 +51,33 @@ test("nothing read on the old manga reads nothing; what the target already has i
   assert.deepEqual(Mi.plan([ch(1, { isRead: true, isBookmarked: true }), ch(2, { isRead: true })], target), { read: [target[1].id], bookmark: [] });
 });
 
-test("the target write puts it in the library, replaces its categories with the old ones, marks chapters and keeps the reading mode", () => {
-  const old = { id: 7, categories: { nodes: [{ id: 2 }, { id: 5 }] }, meta: [{ key: "miharchy.readingMode", value: "webtoon" }, { key: "other", value: "x" }] };
-  const p = Mi.targetPayload(old, 40, { read: [1, 2], bookmark: [2] });
-  assert.deepEqual(p.variables, { target: 40, categories: [2, 5], read: [1, 2], bookmark: [2], mode: { mangaId: 40, key: "miharchy.readingMode", value: "webtoon" } });
-  assert.ok(p.query.indexOf("inLibrary: true") < p.query.indexOf("clearCategories: true"), "in the library before categories, so Suwayomi's default categories are cleared too");
-  const plain = Mi.targetPayload({ id: 7, categories: { nodes: [] }, meta: [] }, 40, { read: [], bookmark: [] });
-  assert.equal(plain.variables.mode, undefined);
-  assert.doesNotMatch(plain.query, /setMangaMeta/);
-});
-
 test("a merge keeps the higher read state on both sides: the kept copy's own read chapters never go down", () => {
   const other = [ch(1, { isRead: true }), ch(2, { isRead: true }), ch(3, { isRead: true }), ch(4), ch(5)];
   const ahead = [ch(1), ch(2), ch(3), ch(4), ch(5, { isRead: true })];
-  const p = Mi.plan(other, ahead);
-  assert.deepEqual(p.read, ids(ahead.slice(0, 3)), "the other copy's 1 to 3 are added; the kept copy's 5 is not touched");
-  assert.doesNotMatch(Mi.targetPayload({ id: 7, categories: { nodes: [] }, meta: [] }, 40, p, false, { meta: [] }).query, /isRead: false/, "nothing is ever marked unread");
+  assert.deepEqual(Mi.plan(other, ahead).read, ids(ahead.slice(0, 3)), "the other copy's 1 to 3 are added; the kept copy's 5 is not touched");
   const behind = [ch(1, { isRead: true }), ch(2), ch(3), ch(4), ch(5)];
   assert.deepEqual(Mi.plan(other, behind).read, ids(behind.slice(1, 3)), "a kept copy behind the other catches up to 3");
 });
 
-test("a merge adds the other copy's categories to the kept copy's own: no clear, so the result is the union", () => {
-  const old = { id: 7, categories: { nodes: [{ id: 2 }] }, meta: [] };
-  const merge = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, false, { meta: [], trackRecords: { nodes: [] } });
-  assert.doesNotMatch(merge.query, /clearCategories/);
-  assert.match(merge.query, /addToCategories: \$categories/);
-  assert.deepEqual(merge.variables.categories, [2]);
-  assert.match(Mi.targetPayload(old, 40, { read: [], bookmark: [] }, false).query, /clearCategories: true/, "plain Migrate still sets exactly the old categories");
+test("a target already in the library merges whatever the entry path; a new target does not", () => {
+  const manga = (inLibrary) => ({ id: 40, title: "E", inLibrary, meta: [{ key: "miharchy.readingMode", value: "pager" }], trackRecords: { nodes: [] } });
+  assert.deepEqual(Mi.mergeInto(manga(true)), { meta: manga(true).meta, trackRecords: { nodes: [] } });
+  assert.equal(Mi.mergeInto(manga(false)), null);
 });
 
-test("a target already in the library merges whatever the entry path: it keeps its categories, mode and tracks; a new target takes exactly the old ones", () => {
-  const old = { id: 7, categories: { nodes: [{ id: 3 }] }, meta: [{ key: "miharchy.readingMode", value: "webtoon" }], trackRecords: { nodes: [] } };
-  const fetched = (inLibrary) => ok({ fetchMangaAndChapters: { manga: { id: 40, title: "E", inLibrary, meta: [{ key: "miharchy.readingMode", value: "pager" }], trackRecords: { nodes: [] } }, chapters: [] } });
-  assert.match(Mi.TARGET_MUTATION, /manga \{ id title inLibrary meta \{ key value \} trackRecords/);
-  const inLib = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true, Mi.mergeInto(fetched(true).data.fetchMangaAndChapters.manga));
-  assert.doesNotMatch(inLib.query, /clearCategories/, "its own categories stay, the old ones are added");
-  assert.deepEqual(inLib.variables.categories, [3]);
-  assert.doesNotMatch(inLib.query, /setMangaMeta/, "its own reading mode stays");
-  assert.equal(Mi.mergeInto(fetched(false).data.fetchMangaAndChapters.manga), null);
-  const fresh = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true, null);
-  assert.match(fresh.query, /clearCategories: true/);
-  assert.equal(fresh.variables.mode.value, "webtoon");
-});
-
-test("a merge keeps the kept copy's reading mode and tracks; the other's fill only what it lacks", () => {
-  const mode = (value) => [{ key: "miharchy.readingMode", value }];
+test("a merge's tracks: the other copy's fill only the trackers the kept copy lacks; plain Migrate takes every track", () => {
   const track = (id, name) => ({ id, trackerId: id, tracker: { name } });
-  const old = { id: 7, categories: { nodes: [] }, meta: mode("webtoon"), trackRecords: { nodes: [track(11, "AniList"), track(12, "MyAnimeList")] } };
-  const kept = { meta: mode("pager"), trackRecords: { nodes: [{ tracker: { name: "AniList" } }] } };
-  assert.deepEqual(Mi.movingTracks(old, kept), [{ id: 12, tracker: "MyAnimeList" }]);
-  const p = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true, kept);
-  assert.doesNotMatch(p.query, /setMangaMeta/, "the kept copy's own mode stays");
-  assert.equal(p.variables.track0, 12);
-  assert.equal(p.variables.track1, undefined, "AniList is already tracked on the kept copy");
-  const bare = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true, { meta: [], trackRecords: { nodes: [] } });
-  assert.equal(bare.variables.mode.value, "webtoon", "a kept copy with no mode takes the other's");
-  assert.deepEqual([bare.variables.track0, bare.variables.track1], [11, 12]);
-  assert.deepEqual(Mi.movingTracks(old, null).map((t) => t.id), [11, 12], "plain Migrate takes every track");
-});
-
-test("the old manga's tracks go to the target in the same write, unless left out", () => {
-  const old = { id: 7, categories: { nodes: [] }, meta: [], trackRecords: { nodes: [{ id: 11, trackerId: 2, tracker: { name: "AniList" } }, { id: 12, trackerId: 1, tracker: { name: "MyAnimeList" } }] } };
+  const old = { id: 7, trackRecords: { nodes: [track(11, "AniList"), track(12, "MyAnimeList")] } };
+  const kept = { meta: [], trackRecords: { nodes: [{ tracker: { name: "AniList" } }] } };
   assert.deepEqual(Mi.trackRecords(old), [{ id: 11, tracker: "AniList" }, { id: 12, tracker: "MyAnimeList" }]);
-  const p = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, true);
-  assert.equal(p.variables.track0, 11);
-  assert.equal(p.variables.track1, 12);
-  assert.match(p.query, /track0: bindTrackRecord\(input: \{ mangaId: \$target, trackRecordId: \$track0 \}\)/);
-  assert.match(p.query, /\$track1: Int!/);
-  assert.ok(p.query.indexOf("inLibrary: true") < p.query.indexOf("bindTrackRecord"), "one write: the old manga leaves only after it all succeeds");
-  assert.doesNotMatch(p.query, /bindTrack\(/, "never bindTrack, which calls the tracker");
-  const without = Mi.targetPayload(old, 40, { read: [], bookmark: [] }, false);
-  assert.doesNotMatch(without.query, /bindTrackRecord/);
-  assert.equal(without.variables.track0, undefined);
+  assert.deepEqual(Mi.movingTracks(old, kept), [{ id: 12, tracker: "MyAnimeList" }]);
+  assert.deepEqual(Mi.movingTracks(old, null).map((t) => t.id), [11, 12]);
   assert.deepEqual(Mi.trackRecords({ id: 7 }), [], "a manga read before tracks were asked for has none");
 });
 
-test("Migrate takes the old manga out of the library, Copy keeps it; deleting downloads names the downloaded chapters", () => {
+test("deleting downloads names the downloaded chapters", () => {
   const old = { id: 7, chapters: { nodes: [ch(1, { isDownloaded: true }), ch(2), ch(3, { isDownloaded: true })] } };
-  const both = Mi.oldPayload(old, true, true);
-  assert.equal(both.variables.id, 7);
-  assert.deepEqual(both.variables.downloads, ids(old.chapters.nodes.filter((c) => c.isDownloaded)));
-  assert.match(both.query, /inLibrary: false/);
-  assert.doesNotMatch(Mi.oldPayload(old, false, true).query, /updateManga/);
-  assert.doesNotMatch(Mi.oldPayload(old, true, false).query, /deleteDownloaded/);
-  assert.equal(Mi.oldPayload(old, false, false), null, "a copy that keeps downloads leaves the old manga untouched");
-  assert.equal(Mi.oldPayload({ id: 7, chapters: { nodes: [ch(1)] } }, false, true), null);
+  assert.deepEqual(Mi.downloaded(old), ids(old.chapters.nodes.filter((c) => c.isDownloaded)));
 });
 
 test("similarity is Mihon's normalized Levenshtein: 1 for equal titles, lower as they differ", () => {
@@ -184,7 +127,7 @@ test("a batch searches each manga's same-named source, then its pinned ones; non
   assert.deepEqual(one.map((m) => m.targets.map((s) => s.id)), [["3"], []], "the picked source, never a manga's own");
 });
 
-const reply = (...titles) => ok({ fetchSourceManga: { hasNextPage: false, mangas: titles.map((title, i) => ({ id: 100 + i, title })) } });
+const reply = (...titles) => ok({ hasNextPage: false, mangas: titles.map((title, i) => ({ id: 100 + i, title })) });
 const answer = (b, i, r) => {
   const sent = Mi.reduceBatch(b, i, { type: "request", now: 0 });
   return Mi.reduceBatch(sent, i, { type: "reply", attempt: sent.search.groups[i].attempt, reply: r, config });
@@ -196,7 +139,7 @@ test("each manga searches its sources one at a time and stops at the first match
   b = answer(b, 0, reply("zzzzzzzzzzzz", "qqqqqqqqqqqqq"));
   assert.equal(Mi.chosen(b, 0), null);
   assert.deepEqual(Mi.due(b), [0], "no match: the same row searches its next source");
-  assert.equal(G.payload(b.search.groups[0]).variables.source, "3");
+  assert.equal(G.payload(b.search.groups[0]).body.source, "3");
   b = answer(b, 0, reply("Eleceed"));
   assert.equal(Mi.chosen(b, 0).id, 100);
   assert.deepEqual(Mi.due(b), [1], "a match stops that manga's search: source 4 is never searched");
@@ -206,9 +149,9 @@ test("each manga searches its sources one at a time and stops at the first match
 
 test("a failed search moves on to the next source; the last one's failure stays for r", () => {
   let b = Mi.batch([{ id: 1, title: "Eleceed", targets: [sources[1], sources[2]] }]);
-  b = answer(b, 0, M.reply(500, "boom"));
-  assert.equal(G.payload(b.search.groups[0]).variables.source, "3");
-  b = answer(b, 0, M.reply(500, "boom"));
+  b = answer(b, 0, boom());
+  assert.equal(G.payload(b.search.groups[0]).body.source, "3");
+  b = answer(b, 0, boom());
   assert.notEqual(b.search.groups[0].state, "ok");
   assert.deepEqual(Mi.due(b), []);
 });
@@ -217,7 +160,7 @@ test("a late reply to a timed-out search never answers the next source's search"
   let b = Mi.batch([{ id: 1, title: "Eleceed", targets: [sources[1], sources[2]] }]);
   b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "request", now: 0 }), 0, { type: "timeout" });
   b = Mi.reduceBatch(b, 0, { type: "request", now: 0 });
-  const after = Mi.reduceBatch(b, 0, { type: "reply", attempt: 1, reply: M.reply(0, ""), config });
+  const after = Mi.reduceBatch(b, 0, { type: "reply", attempt: 1, reply: M.coreReply(0, ""), config });
   assert.equal(after, b, "the first search's attempt is dropped");
   assert.equal(after.search.groups[0].state, "loading");
 });
@@ -227,14 +170,14 @@ test("a stalled manga takes a match only when its newest chapter number is highe
   b = answer(b, 0, reply("Eleceed"));
   assert.equal(Mi.chosen(b, 0), null, "held until its chapters are read");
   assert.deepEqual(Mi.checks(b), [0]);
-  assert.deepEqual(Mi.checkPayload(b, 0).variables, { id: 100 });
+  assert.deepEqual(Mi.checkPayload(b, 0), { route: "manga.refresh", body: { id: 100 } });
   b = Mi.reduceBatch(b, 0, { type: "check" });
   assert.deepEqual(Mi.due(b), [], "one request at a time");
   assert.deepEqual(Mi.checks(b), []);
-  const chapters = (...n) => ok({ fetchMangaAndChapters: { manga: { id: 100 }, chapters: n.map((c) => ch(c)) } });
+  const chapters = (...n) => ok({ manga: { id: 100 }, chapters: n.map((c) => ch(c)) });
   b = Mi.reduceBatch(b, 0, { type: "checked", reply: chapters(1, 300, -1) });
   assert.equal(Mi.chosen(b, 0), null);
-  assert.equal(G.payload(b.search.groups[0]).variables.source, "3", "not more chapters: on to the next source");
+  assert.equal(G.payload(b.search.groups[0]).body.source, "3", "not more chapters: on to the next source");
   b = answer(b, 0, reply("Eleceed"));
   b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check" }), 0, { type: "checked", reply: chapters(300, 301.5) });
   assert.equal(Mi.chosen(b, 0).id, 100);
@@ -249,7 +192,7 @@ test("a stalled manga's highest chapter number comes from the server; one with n
 test("a stalled manga no source has more chapters for says so", () => {
   let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [sources[1]] }]);
   b = answer(b, 0, reply("Eleceed"));
-  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check" }), 0, { type: "checked", reply: ok({ fetchMangaAndChapters: { manga: { id: 100 }, chapters: [ch(300)] } }) });
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check" }), 0, { type: "checked", reply: ok({ manga: { id: 100 }, chapters: [ch(300)] }) });
   assert.equal(Mi.chosen(b, 0), null);
   assert.equal(Mi.matchStatus(b, 0, "/c"), "No source has more chapters.");
   assert.deepEqual(Mi.jobs(b), []);
@@ -258,7 +201,7 @@ test("a stalled manga no source has more chapters for says so", () => {
 test("a failed chapter check on the last source waits for r, not a verdict", () => {
   let b = Mi.batch([{ id: 1, title: "Eleceed", stalled: true, highest: 300, targets: [sources[1]] }]);
   b = answer(b, 0, reply("Eleceed"));
-  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check" }), 0, { type: "checked", reply: M.reply(500, "boom") });
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check" }), 0, { type: "checked", reply: boom() });
   assert.equal(Mi.matchStatus(b, 0, "/c"), "chapter check failed. Press r to retry.   Mangago (EN)");
   assert.deepEqual(Mi.checks(b), []);
   assert.deepEqual(Mi.checks(Mi.retry(b)), [0]);
@@ -271,12 +214,12 @@ test("a chapter check times out as a search does: on to the next source, or on t
   assert.deepEqual(Mi.expired(b, 1000 + G.TIMEOUT - 1), []);
   assert.deepEqual(Mi.expired(b, 1000 + G.TIMEOUT), [0]);
   b = Mi.reduceBatch(b, 0, { type: "timeout" });
-  assert.equal(G.payload(b.search.groups[0]).variables.source, "3", "on to the next source");
+  assert.equal(G.payload(b.search.groups[0]).body.source, "3", "on to the next source");
   assert.deepEqual(Mi.due(b), [0]);
   b = answer(b, 0, reply("Eleceed"));
   b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "check", now: 0 }), 0, { type: "timeout" });
   assert.match(Mi.matchStatus(b, 0, "/c"), /^chapter check failed\. Press r to retry\./);
-  assert.equal(Mi.reduceBatch(b, 0, { type: "checked", reply: ok({ fetchMangaAndChapters: { chapters: [ch(400)] } }) }), b, "a late reply drops");
+  assert.equal(Mi.reduceBatch(b, 0, { type: "checked", reply: ok({ chapters: [ch(400)] }) }), b, "a late reply drops");
   assert.deepEqual(Mi.checks(Mi.retry(b)), [0]);
 });
 
@@ -309,14 +252,14 @@ test("library sources group the library by source, name missing ones from the sy
 test("a batch searches the target source once per manga, one at a time like Mihon, and proposes each match", () => {
   const target = { id: "8", name: "MangaPill (EN)", supportsLatest: true };
   let b = Mi.batch([{ id: 1, title: "Chainsaw Man", targets: [target] }, { id: 2, title: "Berserk", targets: [target] }]);
-  assert.deepEqual(b.search.groups.map((g) => G.payload(g).variables), [
-    { source: "8", type: "SEARCH", page: 1, query: "Chainsaw Man", filters: [] },
-    { source: "8", type: "SEARCH", page: 1, query: "Berserk", filters: [] }
+  assert.deepEqual(b.search.groups.map((g) => G.payload(g)), [
+    { route: "source.search", body: { source: "8", page: 1, query: "Chainsaw Man" } },
+    { route: "source.search", body: { source: "8", page: 1, query: "Berserk" } }
   ]);
   assert.deepEqual(Mi.due(b), [0]);
   b = Mi.reduceBatch(b, 0, { type: "request", now: 0 });
   assert.deepEqual(Mi.due(b), [], "one search at a time against one source");
-  const reply = ok({ fetchSourceManga: { hasNextPage: false, mangas: [{ id: 11, title: "Chainsaw Man (Color)" }, { id: 12, title: "Chainsaw Man" }] } });
+  const reply = ok({ hasNextPage: false, mangas: [{ id: 11, title: "Chainsaw Man (Color)" }, { id: 12, title: "Chainsaw Man" }] });
   b = Mi.reduceBatch(b, 0, { type: "reply", attempt: 1, reply, config });
   assert.equal(b.picks[0], 1);
   assert.equal(Mi.chosen(b, 0).id, 12);
@@ -326,10 +269,10 @@ test("a batch searches the target source once per manga, one at a time like Miho
 test("in a batch, h/l pick another result or skip, and only picked rows migrate", () => {
   const target = { id: "8", name: "S", supportsLatest: true };
   let b = Mi.batch([{ id: 1, title: "X", targets: [target] }, { id: 2, title: "Y", targets: [target] }]);
-  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "request", now: 0 }), 0, { type: "reply", attempt: 1, reply: ok({ fetchSourceManga: { hasNextPage: false, mangas: [{ id: 11, title: "X" }, { id: 12, title: "X2" }] } }), config });
+  b = Mi.reduceBatch(Mi.reduceBatch(b, 0, { type: "request", now: 0 }), 0, { type: "reply", attempt: 1, reply: ok({ hasNextPage: false, mangas: [{ id: 11, title: "X" }, { id: 12, title: "X2" }] }), config });
   b = Mi.pick(b, 0, 1);
   assert.equal(Mi.chosen(b, 0).id, 12);
-  assert.equal(Mi.reduceBatch(b, 0, { type: "reply", attempt: 1, reply: ok({ fetchSourceManga: { hasNextPage: false, mangas: [] } }), config }), b, "a dropped reply keeps the pick");
+  assert.equal(Mi.reduceBatch(b, 0, { type: "reply", attempt: 1, reply: ok({ hasNextPage: false, mangas: [] }), config }), b, "a dropped reply keeps the pick");
   assert.equal(Mi.matchStatus(b, 0, "/c"), "X2   2 of 2   S");
   b = Mi.pick(b, 0, 1);
   assert.equal(Mi.chosen(b, 0), null, "past the last result is skip");

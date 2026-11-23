@@ -25,6 +25,7 @@ Item {
 
   required property Theme theme
   property var config: null
+  // Set by shell.qml: config and connection are miharchy-core's.
   property string configPath: ""
   // Model.reduce()'s connection: the library manga and categories.
   property var connection: Model.initial()
@@ -88,7 +89,7 @@ Item {
   signal editEnded()
   // R and U: shell.qml's one mark path, which Updates shares.
   signal mark(var chapters, string action, var mangaIds)
-  // A download mutation's reply, which carries the queue.
+  // A download route's reply, which carries the queue.
   signal downloads(var reply)
   // A change reached the server: shell.qml fetches the library again.
   signal edited()
@@ -170,7 +171,7 @@ Item {
     if (action === "remove") return remove()
     send(Library.chaptersPayload(ids), function(reply) {
       if (reply.state !== "ok") return view.report(reply)
-      var chapters = Browse.toChapters(reply.data.chapters.nodes)
+      var chapters = Browse.toChapters(Library.chapterNodes(reply.data))
       if (action === "read" || action === "unread") return view.mark(chapters, action, ids)
       var payload = Downloads.removePayload(chapters, view.queue)
       if (action === "removeDeleting") {

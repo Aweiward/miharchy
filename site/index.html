@@ -249,6 +249,7 @@ code { font-family: var(--mono); color: var(--green); }
 }
 .tape .txt { padding: 10px 14px; font-size: 14px; color: var(--fg-dim); }
 .tape .txt b { color: var(--fg); }
+.tape video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: var(--bg-darker); border-bottom: 1px solid var(--line); }
 
 /* Bar widget. */
 .bar-shot { border: 1px solid var(--line); background: var(--bg-dark); max-width: 900px; }
@@ -372,6 +373,15 @@ footer img { width: 32px; height: 32px; display: inline-block; vertical-align: m
     <div class="box-foot" aria-hidden="true"><span class="rec">REC</span><span>Tokyo Night</span><span>SP · 漫画</span></div>
   </div>
 </header>
+
+<section id="trailer" aria-labelledby="trailer-h">
+  <p class="label">Trailer</p>
+  <h2 id="trailer-h">Thirty seconds of Miharchy</h2>
+  <figure class="tape">
+    <video src="img/trailer.mp4" poster="img/trailer-poster.webp" width="1920" height="1080" controls muted playsinline preload="none" aria-label="The Miharchy launch trailer: the logo, the headline A keyboard-first manga reader, then the Library, the reader, the bar popup and sync with Mihon, and the install command."></video>
+    <figcaption><span class="no">00</span><span class="txt"><b>Launch trailer.</b> Real captures, no sound.</span></figcaption>
+  </figure>
+</section>
 
 <section id="window" aria-labelledby="window-h">
   <p class="label">Side A · the window</p>

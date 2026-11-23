@@ -1,28 +1,19 @@
 .pragma library
-.import "Setup.js" as Setup
 .import "Sync.js" as Sync
 
 // Restore a backup: the steps of Mihon's RestoreBackupScreen, run through
-// the sync helper's check and restore. Pure, so tests/restore.test.js pins
-// it; RestoreView.qml runs the commands built here and feeds output back.
+// miharchy-core's backup.check and backup.import. Pure, so
+// tests/restore.test.js pins it; RestoreView.qml sends the payloads built
+// here and feeds the replies back.
 //
 // restore.step:
 //   "path"      the user types the backup file's path
-//   "checking"  the helper asks the server what the backup needs
+//   "checking"  core reads what the backup needs
 //   "confirm"   missingSources and missingTrackers (names) wait for Enter
-//   "running"   progress: { state, mangaProgress, totalManga } or null
-//   "done"      progress holds the last step the server reported
+//   "running"   core restores in one transaction, so there is no progress
+//   "done"
 //   "failed"    message
 // path is the file being restored, kept so a second restore starts there.
-
-// Suwayomi's BackupRestoreState values, in Mihon's words.
-var STATES = {
-  IDLE: "Starting",
-  RESTORING_CATEGORIES: "Restoring categories",
-  RESTORING_MANGA: "Restoring manga",
-  RESTORING_META: "Restoring manga settings",
-  RESTORING_SETTINGS: "Restoring settings"
-}
 
 function initial() {
   return { step: "path", path: "" }
@@ -41,59 +32,46 @@ function resolvePath(text, home) {
   return t.charAt(0) === "/" ? t : null
 }
 
-// The helper's last JSON line, or null. JVM warnings may come first.
-function lastJson(output) {
-  var lines = output.split("\n")
-  try { return JSON.parse(lines[lines.length - 1]) } catch (e) { return null }
-}
-
-function failed(job) {
-  if (job.code === Sync.NOT_BUILT) return "The sync helper is not built. Build it in the window: press : and choose Setup."
-  // Progress lines came before the failure; the message is what is left.
-  var message = job.output.split("\n").filter(function(l) { return l.charAt(0) !== "{" }).join("\n").trim()
-  return message || "The sync helper stopped with status " + job.code + "."
-}
-
 // event.type:
 //   "open"     { folder, path } the panel opens on path, else on the last
 //              path, else in the sync folder
 //   "check"    { text, home } the user entered a path; one that is not
 //              absolute stays in "path" with error
-//   "checked"  { text } the check job's collected output
-//   "start"    the user confirmed
-//   "line"     { text } one line the restore printed
-//   "finish"   { text } the restore job's collected output
+//   "check-presync"   core's undo: core names the file in its check reply
+//   "checked-reply"   { reply } core's backup.check, as Session.send gives it
+//   "start"           the user confirmed
+//   "finish-reply"    { reply } core's backup.import
 function reduce(s, event) {
   switch (event.type) {
     case "open":
       if (s.step === "checking" || s.step === "running") return s
       return { step: "path", path: event.path || s.path || (event.folder ? event.folder + "/" : "") }
+    case "check-presync":
+      // Core's undo: core names the file before the last sync in its check reply.
+      return { step: "checking", path: "", preSync: true }
     case "check":
       var path = resolvePath(event.text, event.home)
       if (!path) return { step: "path", path: event.text, error: "Enter an absolute path, such as ~/Sync/Mihon/backup.tachibk." }
       return { step: "checking", path: path }
-    case "checked":
-      var job = Setup.parseJob(event.text)
-      var check = job.code === 0 ? lastJson(job.output) : null
-      if (!check) return copy(s, { step: "failed", message: failed(job) })
-      return copy(s, { step: "confirm", missingSources: check.missingSources, missingTrackers: check.missingTrackers })
+    case "checked-reply":
+      if (event.reply.state !== "ok") return copy(s, { step: "failed", message: Sync.coreMessage(event.reply) })
+      var d = event.reply.data
+      return copy(s, { step: "confirm", path: d.file, preSync: false, missingSources: d.missingSources, missingTrackers: d.missingTrackers })
+    case "finish-reply":
+      return event.reply.state === "ok" ? copy(s, { step: "done" }) : copy(s, { step: "failed", message: Sync.coreMessage(event.reply) })
     case "start":
-      return copy(s, { step: "running", progress: null })
-    case "line":
-      var p = null
-      try { p = JSON.parse(event.text) } catch (e) { p = null }
-      return p && p.state ? copy(s, { progress: p }) : s
-    case "finish":
-      var end = Setup.parseJob(event.text)
-      var last = end.code === 0 ? lastJson(end.output) : null
-      if (!last || last.state !== "SUCCESS") return copy(s, { step: "failed", message: failed(end) })
-      return copy(s, { step: "done", progress: last })
+      return copy(s, { step: "running" })
   }
   return s
 }
 
-function command(devHelper, sub, path) {
-  return Sync.helperCommand(devHelper, [sub, path])
+// Core's check of s (the path, or the file before the last sync), then its restore.
+function checkPayload(s) {
+  return { route: "backup.check", body: s.preSync ? { preSync: true } : { file: s.path } }
+}
+
+function importPayload(s) {
+  return { route: "backup.import", body: { file: s.path } }
 }
 
 // The lines the panel shows for the current step.
@@ -102,7 +80,7 @@ function lines(s) {
     case "path":
       return [s.error || "Enter the path of a Mihon or Miharchy backup (.tachibk)."]
     case "checking":
-      return ["Reading " + s.path + "."]
+      return [s.preSync ? "Reading the library from before the last sync." : "Reading " + s.path + "."]
     case "confirm":
       var l = ["Data from " + s.path + " will be restored: manga, chapters, categories, history and tracks."]
       if (s.missingSources.length) l = l.concat(["", "Missing sources:"], s.missingSources.map(function(n) { return "- " + n }))
@@ -110,12 +88,8 @@ function lines(s) {
       if (s.missingSources.length || s.missingTrackers.length) l = l.concat(["", "Install the missing extensions and log in to the trackers afterwards to use them."])
       return l
     case "running":
-      var p = s.progress
-      if (!p) return ["Restoring " + s.path + "."]
-      return [(STATES[p.state] || p.state) + (p.totalManga ? ": " + p.mangaProgress + " of " + p.totalManga + " manga" : "") + "."]
+      return ["Restoring " + s.path + "."]
     case "done":
-      // No count: Suwayomi's final status resets it to 0, and its running
-      // count includes steps that are not manga.
       return ["Restored " + s.path + "."]
     case "failed":
       return [s.message]
@@ -137,7 +111,8 @@ if (typeof module !== "undefined") {
   module.exports = {
     initial: initial,
     reduce: reduce,
-    command: command,
+    checkPayload: checkPayload,
+    importPayload: importPayload,
     lines: lines,
     hint: hint
   }

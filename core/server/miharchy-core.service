@@ -1,0 +1,13 @@
+[Unit]
+Description=Miharchy manga server (miharchy-core, ADR 0009)
+After=graphical-session.target network-online.target
+PartOf=graphical-session.target
+
+[Service]
+# Setup's miharchy-core steps build this into core-app and install this unit (#385, ADR 0010).
+ExecStart=%h/.local/share/miharchy/core-app/bin/miharchy-core
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

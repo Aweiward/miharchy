@@ -52,7 +52,7 @@ Rectangle {
     if (!manga || !config) return
     panel = Trackers.panel(manga.id, manga.title)
     var seq = ++loadSeq
-    send(Trackers.panelPayload(panel), function(reply) {
+    Trackers.panelLoad(send, panel, function(reply) {
       if (seq === view.loadSeq && view.panel) view.panel = Trackers.act(view.panel, { type: "loaded", reply: reply }).panel
     })
   }

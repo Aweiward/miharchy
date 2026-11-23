@@ -1,11 +1,10 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import Quickshell
-import Quickshell.Io
 import "Sync.js" as Sync
+import "Session.js" as Session
 
-// Sync now: runs the sync helper and shows its result in a panel over the
+// Sync now: runs the sync on miharchy-core and shows its result in a panel over the
 // window. Sync.js decides; shell.qml forwards every "sync." command to
 // run(). Closing the panel leaves a running sync to finish.
 Rectangle {
@@ -18,7 +17,8 @@ Rectangle {
   property string mode: "sync"
   property var health: ({ state: "idle" })
   readonly property bool healthMode: mode === "health"
-  readonly property string devHelper: Quickshell.shellPath(Sync.DEV_HELPER)
+  property var config: null
+  property bool coreHealthBusy: false
   readonly property var report: healthMode ? (health.state === "ready" ? [Sync.healthSummary(health.health, Date.now())] : [])
     : sync.state === "done" || sync.state === "held" ? Sync.report(sync) : []
 
@@ -42,15 +42,13 @@ Rectangle {
         open = true
         if (sync.state === "running") return
         sync = Sync.reduce(sync, { type: "start" })
-        proc.command = Sync.command(devHelper)
-        proc.running = true
+        coreSync(false)
         break
       case "sync.apply":
         // Never from the health panel: a held sync the user kept stays held there.
         if (sync.state !== "held" || healthMode) return
         sync = Sync.reduce(sync, { type: "apply" })
-        proc.command = Sync.command(devHelper, true)
-        proc.running = true
+        coreSync(true)
         break
       case "sync.close":
         open = false
@@ -58,29 +56,30 @@ Rectangle {
     }
   }
 
-  Process {
-    id: proc
-    stdout: StdioCollector {
-      onStreamFinished: {
-        view.sync = Sync.reduce(view.sync, { type: "finish", text: text })
-        if (view.sync.state === "done") view.synced()
-        view.refreshHealth()
-      }
-    }
+  function coreSync(apply) {
+    // A missing core.json leaves config null: say so, never "Syncing" for ever.
+    if (!config) return finishSync({ state: "no-config" })
+    Session.send(config, Sync.corePayload(apply), finishSync)
+  }
+
+  function finishSync(reply) {
+    sync = Sync.reduce(sync, { type: "reply", reply: reply })
+    if (sync.state === "done") synced()
+    refreshHealth()
   }
 
   // Reads only, so it may run beside a sync; the Settings row shows the result too.
   function refreshHealth() {
-    if (healthProc.running) return
-    healthProc.command = Sync.healthCommand(devHelper)
-    healthProc.running = true
-  }
-
-  Process {
-    id: healthProc
-    stdout: StdioCollector {
-      onStreamFinished: view.health = Sync.parseHealth(text)
+    if (coreHealthBusy) return
+    if (!config) {
+      health = Sync.healthReply({ state: "no-config" })
+      return
     }
+    coreHealthBusy = true
+    Session.send(config, Sync.HEALTH_PAYLOAD, function(reply) {
+      view.coreHealthBusy = false
+      view.health = Sync.healthReply(reply)
+    })
   }
 
   MouseArea {

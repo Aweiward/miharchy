@@ -65,10 +65,8 @@ Rectangle {
   // The chapters as listed; cursor and anchor index it. detail.chapters
   // stays in source order, newest first, for the reader.
   // The chapter choices and the excluded scanlators, as Chapters.js takes them.
-  // Downloaded only forces the Downloaded filter on, as Mihon's
-  // Manga.downloadedFilter does.
   property bool downloadedOnly: false
-  readonly property var prefs: Prefs.force(Object.assign({}, chapterPrefs.values, scanlatorPrefs.values), "chapterFilterDownloaded", "include", downloadedOnly)
+  readonly property var prefs: Object.assign({}, chapterPrefs.values, scanlatorPrefs.values)
   readonly property var shown: detail ? Chapters.apply(detail.chapters, prefs) : []
   readonly property var next: Chapters.nextUnread(shown, prefs)
   readonly property string resume: detail ? Chapters.resumeLabel(detail.chapters, next) : ""
@@ -87,7 +85,7 @@ Rectangle {
   // action: "read", "unread" or "bookmark".
   signal mark(var chapters, string action, int mangaId)
   signal categorized()
-  // A download mutation's reply, which carries the queue.
+  // A download request's reply, which carries the queue.
   signal downloads(var reply)
   // A double click sends Enter, a click on a key label its key, as typed.
   signal key(var event)
@@ -189,10 +187,11 @@ Rectangle {
       if (dupes.length) return
     }
     var mangaId = detail.mangaId
+    var cfg = config
     detail = Browse.reduceDetail(detail, { type: "library-request" })
     send(payload, function(reply) {
-      if (view.detail && view.detail.mangaId === mangaId) view.detail = Browse.reduceDetail(view.detail, { type: "library-reply", reply: reply })
-      if (reply.state === "ok") view.libraryChanged(mangaId, reply.data.updateManga.manga.inLibrary === true)
+      if (view.detail && view.detail.mangaId === mangaId && view.config === cfg) view.detail = Browse.reduceDetail(view.detail, { type: "library-reply", reply: reply })
+      if (reply.state === "ok") view.libraryChanged(mangaId, Browse.libraryReply(reply))
     })
   }
 
@@ -233,13 +232,14 @@ Rectangle {
     editEnded()
   }
 
-  // Saved as manga meta, which the sync helper maps to Mihon's notes.
+  // Saved as manga meta, which sync maps to Mihon's notes.
   function saveNotes() {
     var mangaId = detail.mangaId
     var text = notesField.text
+    var cfg = config
     notesNote = "Saving"
     send(Prefs.savePayload("notes", text, mangaId), function(reply) {
-      if (!view.detail || view.detail.mangaId !== mangaId) return
+      if (!view.detail || view.detail.mangaId !== mangaId || view.config !== cfg) return
       if (reply.state !== "ok") {
         view.notesNote = reply.message || reply.state
         return

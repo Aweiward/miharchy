@@ -5,16 +5,15 @@
 // it; shell.qml sends the payloads built here and feeds replies back.
 //
 // A row: { key, label, type: "bool" | "choice" | "text" | "folder" | "category", default, store }.
-//   store "server": a Suwayomi server setting named key (settings/setSettings).
-//   store "meta":   a Miharchy preference in Suwayomi global meta under
+//   store "server": a setting of miharchy-core named key (settings.get/settings.set).
+//   store "meta":   a Miharchy preference in core's global meta under
 //                   META_PREFIX + key, stored as a string.
 //   choice rows add options: [{ value, label }]; text rows add pattern and
 //   hint for validation, and may add blank, the text an empty value shows;
 //   a folder row is a text row that takes an absolute path or ~ (see
 //   commitFolder) and saves only once the folder exists;
 //   bool rows may add whenOn, extra server settings sent along when the
-//   row turns on; any server row may add with, extra server settings sent
-//   along with every save; a category row's options are the user's
+//   row turns on; a category row's options are the user's
 //   categories, so activate() and display() take them.
 //   A text or folder row may add notSameAs, the key of a folder row it
 //   must differ from. Any row may add note, a line shown under it while
@@ -114,7 +113,7 @@ var ROWS = [
   // FlareSolverr solves the challenge (docs/spikes/extension-spike.md).
   { key: "flareSolverrEnabled", label: "FlareSolverr", type: "bool", default: false, store: "server", whenOn: { flareSolverrAsResponseFallback: true } },
   { key: "flareSolverrUrl", label: "FlareSolverr URL", type: "text", default: "http://127.0.0.1:8191", store: "server", pattern: /^https?:\/\/\S+$/, hint: "Enter a URL that starts with http:// or https://." },
-  // Suwayomi's built-in Chromium, which some sources run part of their
+  // The server's built-in Chromium, which some sources run part of their
   // site in. The server applies it without a restart.
   { key: "kcefEnabled", label: "Server WebView (KCEF)", type: "bool", default: true, store: "server", note: "Some sources need it. The first use downloads Chromium, about 250 MB." },
   // The server runs the library update on this schedule, in hours, so it
@@ -144,8 +143,8 @@ var ROWS = [
   // The library check, with the count of its problems as the value.
   { key: "libraryCheck", label: "Library check", type: "action", command: "view.check" },
   // Mihon's default category for manga added to the library: "ask", "0"
-  // (Default: no category) or a category id. The server's own default flag
-  // applies only to its REST add, so the window applies this one.
+  // (Default: no category) or a category id. The window applies it when a
+  // manga is added.
   { key: "defaultCategory", label: "Default category", type: "category", default: "ask", store: "meta" },
   // The server refuses a folder that does not exist; empty means its own.
   { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
@@ -157,9 +156,8 @@ var ROWS = [
   { key: "localSourcePath", label: "Local manga folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
   // Mihon's auto-download group, all server settings: the library update
   // queues the new chapters. d in Categories includes or excludes a
-  // category. Skipping manga with unread chapters is Suwayomi's own; Mihon's
-  // "Skip downloading duplicate read chapters" is closest to skipping
-  // re-uploads.
+  // category. Mihon's "Skip downloading duplicate read chapters" is closest
+  // to skipping re-uploads.
   { key: "autoDownloadNewChapters", label: "Auto-download new chapters", type: "bool", default: false, store: "server" },
   { key: "excludeEntryWithUnreadChapters", label: "Auto-download only for manga with no unread chapters", type: "bool", default: true, store: "server" },
   { key: "autoDownloadIgnoreReUploads", label: "Auto-download skips re-uploaded chapters", type: "bool", default: false, store: "server" },
@@ -175,7 +173,7 @@ var ROWS = [
       { value: "10", label: "Next 10 unread chapters" }
     ]
   },
-  // Mihon's delete group. Suwayomi has none, so the window deletes:
+  // Mihon's delete group. The server has none, so the window deletes:
   // Downloads.autoDeletePayload holds the rules, and a category keeps its
   // downloads with p in Categories (Mihon's excluded categories).
   { key: "deleteAfterMarkRead", label: "Delete downloads marked read", type: "bool", default: false, store: "meta" },
@@ -207,20 +205,18 @@ var ROWS = [
   // Where S in the reader saves a page, in a folder per manga; empty is
   // ~/Pictures/Miharchy.
   { key: "pageFolder", label: "Save pages to", type: "folder", default: "", store: "meta", blank: "~/Pictures/Miharchy" },
-  // Setup sets it too; the sync helper reads it from the server.
+  // Setup sets it too; core reads it from its global meta.
   { key: "syncFolder", label: "Sync folder", type: "folder", default: "", store: "meta", blank: "not set", notSameAs: "backupPath" },
   // The bar mark reads it, and syncs when a new phone backup lands there.
   { key: "autoSync", label: "Sync when a phone backup arrives", type: "bool", default: false, store: "meta" },
   // Sync health: the phone's side, from the newest phone backup. Enter lists what to do in Mihon.
   { key: "syncHealth", label: "Phone sync", type: "action", command: "sync.health" },
-  // Mihon's backup options. Manual and automatic backups share Suwayomi's
+  // Mihon's backup options. Manual and automatic backups share the
   // automatic backup settings, so one folder holds both. Never the sync
-  // folder: the sync would read Suwayomi's backups as phone backups. The
-  // server settings hold the server password, so they stay out of a
-  // folder the user picks.
-  { key: "backupPath", label: "Backup folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default", notSameAs: "syncFolder", with: { autoBackupIncludeServerSettings: false } },
-  // Mihon's automatic backups. Suwayomi counts the interval in days and runs
-  // it at backupTime; it deletes its own backups by age, not by count.
+  // folder: the sync would read the server's backups as phone backups.
+  { key: "backupPath", label: "Backup folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default", notSameAs: "syncFolder" },
+  // Mihon's automatic backups. The interval counts in days and runs at
+  // backupTime; old backups go by age, not by count.
   {
     key: "backupInterval", label: "Automatic backups", type: "choice", default: 1, store: "server",
     options: [
@@ -262,23 +258,22 @@ function initial() {
   return { state: "loading", message: "", values: defaults() }
 }
 
-function loadPayload() {
-  var fields = ROWS.filter(function(r) { return r.store === "server" }).map(function(r) { return r.key })
-  return { query: "{ settings { " + fields.join(" ") + " } metas { nodes { key value } } }" }
+// Server rows are core's settings (settings.get/settings.set) and meta rows
+// core's global metas (#385). A load is two requests, sent one after the other.
+function loadPayloads() {
+  var keys = ROWS.filter(function(r) { return r.store === "meta" }).map(function(r) { return META_PREFIX + r.key })
+  return [{ route: "settings.get", body: {} }, { route: "meta.get", body: { scope: "global", keys: keys } }]
 }
 
-// The mutation that stores value for row. Its reply carries the stored
+// The request that stores value for row. Its reply carries the stored
 // value back, so reduce() reads saves and loads alike.
 function savePayload(row, value) {
-  if (row.store === "meta") return Prefs.savePayload(row.key, value)
+  if (row.store === "meta") return Prefs.savePayload(row.key, value, undefined)
   var s = {}
   s[row.key] = value
   if (value === true && row.whenOn) for (var k in row.whenOn) s[k] = row.whenOn[k]
-  for (var w in row.with) s[w] = row.with[w]
-  return {
-    query: "mutation($s: PartialSettingsTypeInput!) { setSettings(input: { settings: $s }) { settings { " + row.key + " } } }",
-    variables: { s: s }
-  }
+  // Core refuses an unknown key.
+  return { route: "settings.set", body: { settings: s } }
 }
 
 function fromMeta(row, text) {
@@ -292,11 +287,12 @@ function option(row, value) {
   return null
 }
 
-// Reply data from loadPayload() or savePayload() -> the row values it holds.
+// Reply data from loadPayloads() or savePayload() -> the row values it holds.
 function valuesIn(data) {
   var found = {}
-  var server = data.settings || (data.setSettings && data.setSettings.settings) || {}
-  var metas = (data.metas && data.metas.nodes) || (data.setGlobalMeta ? [data.setGlobalMeta.meta] : [])
+  var server = data.settings || {}
+  // Core's meta.get and meta.set answer a plain list.
+  var metas = Array.isArray(data.metas) ? data.metas : []
   var meta = {}
   metas.forEach(function(m) { if (m) meta[m.key] = m.value })
   ROWS.forEach(function(r) {
@@ -309,24 +305,39 @@ function valuesIn(data) {
 // event.type:
 //   "config-missing"  server.json is absent or unreadable
 //   "request"         a load or a save went out
-//   "response"        { reply } with reply from Model.reply()
+//   "response"        { reply } with reply from Model.coreReply(), as Session.send gives it
 // A failed request keeps the values shown and only changes state.
 function reduce(settings, event) {
   switch (event.type) {
     case "config-missing":
-      return { state: "no-config", message: "", values: settings.values }
+      return keep(settings, { state: "no-config", message: "", values: settings.values })
     case "request":
-      return { state: "loading", message: "", values: settings.values }
+      return keep(settings, { state: "loading", message: "", values: settings.values })
     case "response":
       var r = event.reply
-      if (r.state !== "ok") return { state: r.state, message: r.message, values: settings.values }
+      if (r.state !== "ok") return keep(settings, { state: r.state, message: r.message, values: settings.values })
       var values = {}
       for (var k in settings.values) values[k] = settings.values[k]
       var found = valuesIn(r.data)
       for (var f in found) values[f] = found[f]
-      return { state: "ok", message: "", values: values }
+      var next = { state: "ok", message: "", values: values }
+      // Core names the rows it stores but does not act on yet (settings.get, settings.set).
+      var unapplied = Array.isArray(r.data.unapplied) ? r.data.unapplied : settings.unapplied
+      if (unapplied) next.unapplied = unapplied
+      return next
   }
   return settings
+}
+
+function keep(settings, next) {
+  if (settings.unapplied) next.unapplied = settings.unapplied
+  return next
+}
+
+// A save core refused for its value (a backup folder that is not a folder):
+// the row shows why, and the view stays as it was.
+function refused(reply) {
+  return reply.state === "error" && reply.kind === "invalid"
 }
 
 // A category row's values, in Mihon's order: always ask, Default, then
@@ -383,7 +394,7 @@ function commit(row, text, home, values) {
   var path = "folder" in done ? done.folder : done.save
   var other = row.notSameAs && values ? values[row.notSameAs] : ""
   if (path && other && path === normalizePath(other)) {
-    // The helper's own refusal, word for word (backupRefusal in sync/).
+    // The sync helper's refusal, word for word (backupRefusal in sync/).
     if (row.key === "backupPath") return { error: t + " is the sync folder. Choose another backup folder in Settings." }
     return { error: "The sync folder and the backup folder must differ: the sync would read the server's backups as phone backups." }
   }
@@ -423,7 +434,8 @@ if (typeof module !== "undefined") {
     META_PREFIX: META_PREFIX,
     ROWS: ROWS,
     initial: initial,
-    loadPayload: loadPayload,
+    loadPayloads: loadPayloads,
+    refused: refused,
     savePayload: savePayload,
     reduce: reduce,
     activate: activate,
