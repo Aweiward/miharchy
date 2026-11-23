@@ -66,7 +66,7 @@ class SettingsTest {
             assertFalse(s.getValue("backupTTL").jsonPrimitive.isString)
             assertEquals(
                 listOf("flareSolverrEnabled", "flareSolverrUrl", "flareSolverrAsResponseFallback", "kcefEnabled", "updateMangas", "downloadsPath", "downloadAsCbz",
-                    "localSourcePath", "autoDownloadNewChapters", "excludeEntryWithUnreadChapters", "autoDownloadIgnoreReUploads"),
+                    "localSourcePath"),
                 reply.getValue("unapplied").jsonArray.map { it.jsonPrimitive.content },
             )
         }

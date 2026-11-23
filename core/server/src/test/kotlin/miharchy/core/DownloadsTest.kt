@@ -31,6 +31,8 @@ import kotlin.test.assertTrue
 
 object DownloadSite {
     @Volatile var base = ""
+    /** Chapters the source lists above its own, newest first: a test's new chapters. */
+    @Volatile var extra = emptyList<Pair<String, String>>()
 }
 
 /** Chapter /c/ok has two pages, /c/empty none, and /c/html an error page where its second page should be. */
@@ -45,7 +47,7 @@ class FixtureDownloads : HttpSource() {
     override suspend fun getSearchManga(page: Int, query: String, filters: FilterList) = getPopularManga(page)
     override suspend fun getMangaUpdate(manga: SManga, chapters: List<SChapter>, needsDetails: Boolean, needsChapters: Boolean): SMangaUpdate {
         val details = SManga.create().apply { url = manga.url; title = manga.title; initialized = true }
-        val list = listOf("/c/ok" to "Chapter 1", "/c/twin" to "Chapter 1", "/c/empty" to "Chapter 2", "/c/html" to "Chapter 3")
+        val list = DownloadSite.extra + listOf("/c/ok" to "Chapter 1", "/c/twin" to "Chapter 1", "/c/empty" to "Chapter 2", "/c/html" to "Chapter 3")
         return SMangaUpdate(details, list.map { (u, n) -> SChapter.create().apply { url = u; name = n; date_upload = 1_700_000_000_000 } })
     }
     override suspend fun getPageList(chapter: SChapter) = when (chapter.url) {
@@ -175,6 +177,46 @@ class DownloadsTest {
                     assertEquals(0, downloads.routes.call("download.clear").queue().size)
                     downloads.routes.expect(Kind.notFound, "download.enqueue", ids(999))
                     downloads.routes.expect(Kind.notFound, "download.reorder", buildJsonObject { put("chapterId", ok); put("to", 0) })
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aRefreshThatFindsANewChapterDownloadsIt() = runBlocking {
+        Site { ex -> if (ex.requestURI.path.endsWith(".png")) png else null }.use { site ->
+            DownloadSite.base = site.url
+            TestRepo(work, "eu.kanade.tachiyomi.extension.en.fixturedownloads").use { repo ->
+                val (ks, key) = repo.keystore("downloads")
+                repo.publish(key, 1, repo.jar(listOf(FixtureDownloads::class.java), ks))
+                Database(work.resolve("core.db")).use { db ->
+                    val extensions = Extensions(db, TestHost.host, work.resolve("extensions"))
+                    extensions.routes.call("extensionRepo.add", buildJsonObject { put("url", repo.base) })
+                    extensions.routes.call("extension.install", buildJsonObject { put("pkgName", repo.pkg) })
+                    val root = work.resolve("downloads")
+                    val browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), root)
+                    val downloads = Downloads(db, browse, extensions, root)
+                    browse.autoDownload = downloads::auto
+                    Settings(db, work.resolve("covers"), root).routes.call("settings.set", buildJsonObject {
+                        put("settings", buildJsonObject { put("autoDownloadNewChapters", true); put("excludeEntryWithUnreadChapters", false) })
+                    })
+                    val sid = browse.routes.call("source.list")["sources"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.content
+                    val mangaId = browse.routes.call("source.popular", buildJsonObject { put("source", sid); put("page", 1) })["mangas"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.long
+                    Library(db, extensions).routes.call("manga.update", buildJsonObject { put("ids", JsonArray(listOf(JsonPrimitive(mangaId)))); put("inLibrary", true) })
+                    val refresh = buildJsonObject { put("id", mangaId) }
+                    browse.routes.call("manga.refresh", refresh)
+                    assertEquals(emptyList(), downloads.routes.call("download.queue").queue(), "a first fetch downloads nothing")
+                    try {
+                        DownloadSite.extra = listOf("/c/new" to "Chapter 4")
+                        val fresh = browse.routes.call("manga.refresh", refresh)["chapters"]!!.jsonArray.map { it.jsonObject }
+                        val new = fresh.single { it["url"]!!.jsonPrimitive.content == "/c/new" }["id"]!!.jsonPrimitive.long
+                        downloads.idle()
+                        val row = browse.routes.call("chapter.list", ids(new))["chapters"]!!.jsonArray.single().jsonObject
+                        assertEquals("true", row["isDownloaded"].toString(), "the new chapter downloaded on its own")
+                        assertEquals(listOf("Chapter 4.cbz"), Files.list(root.resolve("Fixture Downloads (EN)/Manga_ 1_2")).use { s -> s.map { it.fileName.toString() }.toList() })
+                    } finally {
+                        DownloadSite.extra = emptyList()
+                    }
                 }
             }
         }

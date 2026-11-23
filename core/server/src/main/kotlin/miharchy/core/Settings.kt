@@ -75,10 +75,10 @@ val SETTINGS: List<Setting> = listOf(
     bool("downloadAsCbz", false, applied = false),
     // #374 brings local manga.
     path("localSourcePath", applied = false),
-    // Core has no auto-download of new chapters yet.
-    bool("autoDownloadNewChapters", false, applied = false),
-    bool("excludeEntryWithUnreadChapters", true, applied = false),
-    bool("autoDownloadIgnoreReUploads", false, applied = false),
+    // AutoDownload.kt reads these on each refresh.
+    bool("autoDownloadNewChapters", false, applied = true),
+    bool("excludeEntryWithUnreadChapters", true, applied = true),
+    bool("autoDownloadIgnoreReUploads", false, applied = true),
     path("backupPath", applied = true),
     choice("backupInterval", 1, listOf(0, 1, 2, 3, 7), applied = true),
     Setting("backupTime", JsonPrimitive("00:00"), true, "a time as HH:MM, such as 21:30") { Regex("^([01]\\d|2[0-3]):[0-5]\\d$").matches(it.content) },

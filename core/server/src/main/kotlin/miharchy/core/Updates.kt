@@ -36,7 +36,7 @@ import kotlinx.serialization.json.put
  * and the `updates` topic sends it on each change. Unlike Suwayomi, a stop keeps the counts until the next run.
  *
  * The choices are core's settings (#375, `Settings.kt`): the three skip filters and `globalUpdateInterval` in hours, 0 for off. [hour] and [tick] are
- * there for tests. ponytail: no auto-download of new chapters and no `updateMangas` (a refresh always fetches details).
+ * there for tests. ponytail: no `updateMangas` (a refresh always fetches details).
  */
 class Updates(private val db: Database, private val refresh: suspend (Long) -> Unit, private val hour: Long = 3_600_000, tick: Long = 60_000) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -153,8 +153,9 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
         return db.run { c ->
             val cats = c.query("SELECT id, include_in_update FROM category") { it.getLong(1) to it.getString(2) }.toMap()
             categories?.firstOrNull { it !in cats }?.let { throw ApiError(Kind.notFound, "There is no category $it.") }
-            val chosen = categories?.toSet() ?: cats.filterValues { it == "INCLUDE" }.keys.ifEmpty { cats.filterValues { it == "UNSET" }.keys }
-            val excluded = if (categories == null) cats.filterValues { it == "EXCLUDE" }.keys else emptySet()
+            val (included, excludedAll) = includeRule(cats)
+            val chosen = categories?.toSet() ?: included
+            val excluded = if (categories == null) excludedAll else emptySet()
             val inCats = c.query("SELECT manga_id, category_id FROM manga_category") { it.getLong(1) to it.getLong(2) }
                 .groupBy({ it.first }, { it.second })
             val candidates = c.query(
@@ -164,14 +165,14 @@ class Updates(private val db: Database, private val refresh: suspend (Long) -> U
                    FROM manga m LEFT JOIN chapter ch ON ch.manga_id = m.id
                    WHERE m.user_favorite_at IS NOT NULL GROUP BY m.id ORDER BY m.remote_title COLLATE NOCASE""",
             ) { r -> Candidate(r.getLong(1), r.getLong(2), r.getInt(3), r.getInt(4), r.getInt(5) == 1, r.getInt(6), r.getInt(7), r.getLong(8)) }
-                .filter { m -> (inCats[m.id] ?: listOf(0L)).any { it in chosen } }
+                .filter { m -> categoriesOf(inCats, m.id).any { it in chosen } }
             val todo = candidates.filter { m ->
                 m.strategy == 0 &&
                     (!skipUnread || m.unread == 0) &&
                     // Marking chapters read sets no read time, so a read chapter counts as started too.
                     (!skipNotStarted || !m.initialized || m.lastReadAt > 0 || m.chapters > m.unread) &&
                     (!skipCompleted || m.status != COMPLETED) &&
-                    (inCats[m.id] ?: listOf(0L)).none { it in excluded }
+                    categoriesOf(inCats, m.id).none { it in excluded }
             }
             todo.map { it.id to it.source } to candidates.size - todo.size
         }

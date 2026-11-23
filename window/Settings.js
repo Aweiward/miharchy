@@ -154,8 +154,8 @@ var ROWS = [
   // a folder of images or a .cbz per chapter. The server refuses a folder
   // that does not exist; empty means its root's local.
   { key: "localSourcePath", label: "Local manga folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
-  // Mihon's auto-download group, all server settings: the library update
-  // queues the new chapters. d in Categories includes or excludes a
+  // Mihon's auto-download group, all server settings: a library update or
+  // a manga's refresh queues the new chapters (core's AutoDownload.kt). d in Categories includes or excludes a
   // category. Mihon's "Skip downloading duplicate read chapters" is closest
   // to skipping re-uploads.
   { key: "autoDownloadNewChapters", label: "Auto-download new chapters", type: "bool", default: false, store: "server" },
