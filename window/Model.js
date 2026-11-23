@@ -251,9 +251,18 @@ function notice(connection, configPath, shown, narrowed) {
   return null
 }
 
+// What a failure says when core cannot reach the source at all, by core's
+// error kind. ponytail: no FlareSolverr fallback (#361) and no WebView (#98)
+// in core yet.
+var BLOCKED = {
+  cloudflare: { title: "This source sits behind Cloudflare", detail: "miharchy-core cannot pass Cloudflare yet (#361)." },
+  webview: { title: "This source needs a WebView", detail: "miharchy-core has no WebView yet, so this source cannot load (#98)." }
+}
+
 // { title, detail } for a failed connection, null for "loading" and "ok".
-// Any { state, message } works, so other views reuse it.
+// Any { state, message, kind? } works, so other views reuse it.
 function problem(connection, configPath) {
+  if (connection.state === "error" && BLOCKED[connection.kind]) return BLOCKED[connection.kind]
   switch (connection.state) {
     case "no-config":
       return { title: "No miharchy-core config", detail: configPath + " is missing or invalid. Open Miharchy: its Setup builds and starts miharchy-core, which creates it." }

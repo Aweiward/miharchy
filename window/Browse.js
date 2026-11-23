@@ -22,7 +22,7 @@ function copy(o, changes) {
 }
 
 function failed(reply) {
-  return { state: reply.state, message: reply.message, flare: reply.kind === "cloudflare" }
+  return { state: reply.state, message: reply.message, kind: reply.kind || "" }
 }
 
 // A sources reply -> { state, message, sources: [{ id, name, lang, icon,
@@ -177,7 +177,7 @@ function rowIndex(rows, id) {
 }
 
 // listing.state: "idle" | "loading" | "ok" | a failed connection state.
-// page: the last page loaded. flare: the failure is a Cloudflare page.
+// page: the last page loaded. kind: core's error kind of a failure, so Model.problem can name a Cloudflare or WebView source.
 // filters: Widgets.filterChanges of the applied filters;
 // only a search sends them, so only a search keeps them. filterCount: how
 // many filters differ from their defaults, filters.length unless given.
@@ -195,7 +195,7 @@ function listing(source, mode, query, filters, filterCount) {
     hasNext: true,
     state: "idle",
     message: "",
-    flare: false
+    kind: ""
   }
 }
 
@@ -215,10 +215,10 @@ function listingPayload(l) {
 function reduceListing(l, event) {
   switch (event.type) {
     case "request":
-      return copy(l, { state: "loading", message: "", flare: false })
+      return copy(l, { state: "loading", message: "", kind: "" })
     case "retry":
       if (l.state === "idle" || l.state === "loading" || l.state === "ok") return l
-      return copy(l, { state: "idle", message: "", flare: false })
+      return copy(l, { state: "idle", message: "", kind: "" })
     case "reply":
       if (event.reply.state !== "ok") return copy(l, failed(event.reply))
       var r = event.reply.data || {}
@@ -241,7 +241,7 @@ function reduceListing(l, event) {
 // refreshes once after showing the cache. retried, failedAt: see
 // Model.failure().
 function detail(mangaId, fromSource) {
-  return { mangaId: mangaId, fromSource: fromSource === true, step: "read", state: "loading", message: "", flare: false, manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null, retried: "", failedAt: 0 }
+  return { mangaId: mangaId, fromSource: fromSource === true, step: "read", state: "loading", message: "", kind: "", manga: null, chapters: [], fetched: false, busy: false, libraryError: "", sourceNames: {}, extension: null, retried: "", failedAt: 0 }
 }
 
 function detailPayload(d) {
@@ -341,7 +341,7 @@ function toChapters(nodes) {
 function reduceDetail(d, event) {
   switch (event.type) {
     case "refresh":
-      return copy(d, { step: "fetch", state: "loading", message: "", flare: false, retried: Model.failure(d), failedAt: 0 })
+      return copy(d, { step: "fetch", state: "loading", message: "", kind: "", retried: Model.failure(d), failedAt: 0 })
     case "reread":
       return copy(d, { step: "read", fetched: true })
     case "reply":
@@ -454,9 +454,7 @@ function gridChanges(shown, items) {
 // { title, detail } for a listing or detail that failed or came back empty,
 // else null. localFolder: where the local source reads, for its how-to.
 function notice(s, configPath, localFolder) {
-  // ponytail: core has no FlareSolverr fallback until #361.
-  var flare = { title: "This source sits behind Cloudflare", detail: "miharchy-core cannot pass Cloudflare yet (#361)." }
-  var p = Model.again(s.flare ? flare : Model.problem(s, configPath), s)
+  var p = Model.again(Model.problem(s, configPath), s)
   if (p) return p
   if (s.state === "ok" && s.items && s.items.length === 0 && s.mode !== "search" && s.source && s.source.id === LOCAL_SOURCE) {
     return { title: "No local manga", detail: "Put a folder per manga in " + localFolder + ", holding a folder of images or a .cbz per chapter. Then press p. Settings sets the folder." }

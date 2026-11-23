@@ -9,6 +9,10 @@ const samples = {
     "HTTP error 403 (Cloudflare)",
     "HTTP 503: Just a moment..."
   ],
+  webview: [
+    // Core's message for a source that opens a WebView (core/host WebViews.kt).
+    "This source needs a WebView, which Miharchy does not have."
+  ],
   notFound: [
     // Seen: a local-source chapter whose folder is gone.
     "Chapter not found",

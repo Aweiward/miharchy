@@ -84,9 +84,9 @@ test("turning FlareSolverr on also turns on the response fallback; off leaves it
   assert.equal(s.values.flareSolverrEnabled, true);
 });
 
-test("the server's WebView row saves kcefEnabled alone and notes the Chromium download", () => {
+test("the server's WebView row saves kcefEnabled alone and promises no Chromium download", () => {
   assert.deepEqual(S.savePayload(row("kcefEnabled"), false).body.settings, { kcefEnabled: false });
-  assert.match(row("kcefEnabled").note, /Chromium, about 250 MB/);
+  assert.equal(row("kcefEnabled").note, undefined, "core marks it unapplied; SettingsView adds that note");
 });
 
 test("a failed request keeps the shown values and carries the error state", () => {

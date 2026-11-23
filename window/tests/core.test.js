@@ -225,8 +225,14 @@ test("on core, a listing pages through source routes and reads core's reply", ()
   assert.deepEqual(B.listingPayload(B.listing(src[0], "search", "x", [])).body, { source: "2499283573021220255", page: 1, query: "x" }, "no filters changed, none sent");
   // Core's error kind marks a Cloudflare page.
   const cf = B.reduceListing(B.listing(src[0], "popular", ""), { type: "reply", config: core, reply: M.coreReply(502, '{"error":{"kind":"cloudflare","message":"https://x shows a Cloudflare challenge."}}') });
-  assert.equal(cf.flare, true);
+  assert.equal(cf.kind, "cloudflare");
   assert.equal(cf.message, "https://x shows a Cloudflare challenge.");
+  // And a source that needs a WebView, until a new load clears it.
+  const wv = B.reduceListing(B.listing(src[0], "popular", ""), { type: "reply", config: core, reply: M.coreReply(502, '{"error":{"kind":"webview","message":"This source needs a WebView, which Miharchy does not have."}}') });
+  assert.equal(wv.kind, "webview");
+  assert.equal(B.notice(wv, "core.json").title, "This source needs a WebView");
+  const again = B.reduceListing(wv, { type: "request" });
+  assert.equal(again.kind || "", "", "a new load forgets the failure's kind");
 });
 
 const FILTERS = [
@@ -372,9 +378,19 @@ test("on core, the detail reads manga.get, refreshes once from a source, and tog
   assert.equal(gone.manga.missing, true);
 });
 
+test("a WebView or Cloudflare failure names its cause in every view, and only on an error", () => {
+  assert.equal(M.problem({ state: "error", message: "x", kind: "webview" }, "core.json").title, "This source needs a WebView");
+  assert.equal(M.problem(M.coreReply(502, '{"error":{"kind":"cloudflare","message":"x"}}'), "core.json").title, "This source sits behind Cloudflare");
+  assert.equal(M.problem({ state: "error", message: "boom", kind: "source" }, "core.json").title, "miharchy-core sent an error");
+  assert.equal(M.problem({ state: "ok", kind: "webview" }, "core.json"), null);
+});
+
 test("on core, a Cloudflare page says core cannot pass it yet", () => {
-  const n = B.notice({ state: "error", message: "x", flare: true }, "core.json");
+  const n = B.notice({ state: "error", message: "x", kind: "cloudflare" }, "core.json");
   assert.match(n.detail, /#361/);
+  const w = B.notice({ state: "error", message: "x", kind: "webview" }, "core.json");
+  assert.equal(w.title, "This source needs a WebView");
+  assert.match(w.detail, /#98/);
   assert.equal(B.notice({ state: "down" }, "core.json").title, "miharchy-core is not running");
 });
 
@@ -630,9 +646,10 @@ test("on core, the live socket sends the secret, then subscribes to its topic", 
 test("core's error kinds map to the window's failure reasons", () => {
   assert.equal(F.coreReason({ kind: "cloudflare", message: "https://x shows a Cloudflare challenge." }).kind, "cloudflare");
   assert.equal(F.coreReason({ kind: "cloudflare", message: "blocked" }).kind, "cloudflare");
+  assert.deepEqual(F.coreReason({ kind: "webview", message: "This source needs a WebView, which Miharchy does not have." }), { kind: "webview", text: "Source needs a WebView" });
+  assert.equal(F.coreReason({ kind: "webview", message: "x" }).kind, "webview", "the kind decides when the text does not");
   assert.deepEqual(F.coreReason({ kind: "network", message: "The source did not answer within 30 s." }), { kind: "network", text: "No connection to the source" });
   assert.equal(F.coreReason({ kind: "network", message: "The site answered HTTP 404." }).kind, "notFound");
-  assert.equal(F.coreReason({ kind: "webview", message: "This source needs a WebView." }).kind, "other");
   assert.equal(F.coreReason({ kind: "source", message: "java.net.UnknownHostException: Unable to resolve host \"api.mangadex.org\"" }).kind, "network");
   assert.equal(F.coreReason({ kind: "notFound", message: "Source not installed" }).kind, "sourceMissing");
   assert.deepEqual(F.coreReason(null), { kind: "other", text: "Unknown error" });
