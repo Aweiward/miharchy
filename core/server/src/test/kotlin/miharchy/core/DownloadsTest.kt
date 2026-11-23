@@ -95,14 +95,15 @@ class DownloadsTest {
                     extensions.routes.call("extensionRepo.add", buildJsonObject { put("url", repo.base) })
                     extensions.routes.call("extension.install", buildJsonObject { put("pkgName", repo.pkg) })
                     val root = work.resolve("downloads")
-                    val browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), root)
+                    val folder = DownloadsFolder(root)
+                    val browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), folder)
                     val sid = browse.routes.call("source.list")["sources"]!!.jsonArray.last().jsonObject["id"]!!.jsonPrimitive.content
                     val mangaId = browse.routes.call("source.popular", buildJsonObject { put("source", sid); put("page", 1) })["mangas"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.long
                     val chapters = browse.routes.call("manga.refresh", buildJsonObject { put("id", mangaId) })["chapters"]!!.jsonArray.map { it.jsonObject }
                     fun chapter(url: String) = chapters.single { it["url"]!!.jsonPrimitive.content == url }["id"]!!.jsonPrimitive.long
                     val (ok, twin, empty, html) = listOf("/c/ok", "/c/twin", "/c/empty", "/c/html").map(::chapter)
 
-                    var downloads = Downloads(db, browse, extensions, root)
+                    var downloads = Downloads(db, browse, extensions, folder)
                     assertEquals("STOPPED", downloads.routes.call("download.queue")["state"]!!.jsonPrimitive.content)
                     val started = downloads.routes.call("download.enqueue", ids(ok, twin, empty, html))
                     assertEquals("STARTED", started["state"]!!.jsonPrimitive.content)
@@ -135,14 +136,14 @@ class DownloadsTest {
                     val whole = downloads.routes.call("download.reorder", buildJsonObject { put("order", JsonArray(listOf(ok, empty).map(::JsonPrimitive))) })
                     assertEquals(listOf(empty, html), whole.queue().map { it.chapterId() })
                     downloads.routes.call("download.reorder", buildJsonObject { put("order", JsonArray(listOf(JsonPrimitive(html)))) })
-                    downloads = Downloads(db, browse, extensions, root)
+                    downloads = Downloads(db, browse, extensions, folder)
                     val restarted = downloads.routes.call("download.queue")
                     assertEquals("STOPPED", restarted["state"]!!.jsonPrimitive.content)
                     assertEquals(listOf(html, empty), restarted.queue().map { it.chapterId() })
 
                     // The reader reads a downloaded chapter with no network: a new Browse has no page list cached.
                     val before = synchronized(requests) { requests.size }
-                    val offline = Browse(db, TestHost.host, extensions, work.resolve("covers"), root)
+                    val offline = Browse(db, TestHost.host, extensions, work.resolve("covers"), folder)
                     assertEquals(2, offline.routes.call("chapter.pages", buildJsonObject { put("id", ok) })["pages"]!!.jsonArray.size)
                     assertTrue(offline.images.getValue("page")(listOf(ok.toString(), "1")).bytes.contentEquals(png))
                     assertEquals(before, synchronized(requests) { requests.size }, "no request reached the site")
@@ -194,10 +195,11 @@ class DownloadsTest {
                     extensions.routes.call("extensionRepo.add", buildJsonObject { put("url", repo.base) })
                     extensions.routes.call("extension.install", buildJsonObject { put("pkgName", repo.pkg) })
                     val root = work.resolve("downloads")
-                    val browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), root)
-                    val downloads = Downloads(db, browse, extensions, root)
+                    val folder = DownloadsFolder(root)
+                    val browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), folder)
+                    val downloads = Downloads(db, browse, extensions, folder)
                     browse.autoDownload = downloads::auto
-                    Settings(db, work.resolve("covers"), root).routes.call("settings.set", buildJsonObject {
+                    Settings(db, work.resolve("covers"), folder).routes.call("settings.set", buildJsonObject {
                         put("settings", buildJsonObject { put("autoDownloadNewChapters", true); put("excludeEntryWithUnreadChapters", false) })
                     })
                     val sid = browse.routes.call("source.list")["sources"]!!.jsonArray.last().jsonObject["id"]!!.jsonPrimitive.content

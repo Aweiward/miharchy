@@ -27,6 +27,7 @@ import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
+import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
@@ -40,9 +41,13 @@ import kotlin.io.path.name
  * (`DownloadProvider`, `DiskUtil.buildValidFilename` at mihonapp/mihon@1ed58f5e). Every route answers with the
  * status, `{ state: "STARTED" | "STOPPED", queue }`, and the `downloads` topic sends it on each change.
  *
- * ponytail: one chapter at a time, and the folder is `<data>/downloads`: the `downloadsPath` setting is stored only.
+ * A change of the `downloadsPath` setting moves the downloads ([moveTo]); the status then carries `move`.
+ *
+ * ponytail: one chapter at a time. A crash in the middle of a move leaves the copies made so far in the new folder and
+ * the old setting, so the next attempt at that folder is refused as not empty: the user empties it, or picks another.
  */
-class Downloads(private val db: Database, private val browse: Browse, private val extensions: Extensions, private val root: Path) {
+class Downloads(private val db: Database, private val browse: Browse, private val extensions: Extensions, private val folder: DownloadsFolder) {
+    private val root get() = folder.path
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // Route changes one at a time; the worker reads and writes the queue on the database's own thread.
     private val ops = Mutex()
@@ -50,6 +55,10 @@ class Downloads(private val db: Database, private val browse: Browse, private va
     @Volatile private var worker: Job? = null
     @Volatile private var current: Long? = null
     @Volatile private var progress = 0.0
+    // A move holds the worker back (the queue only fills) and says where it stands in the status.
+    @Volatile private var moving = false
+    @Volatile private var move: JsonObject? = null
+    @Volatile private var moveStarted = 0L
     private val state = MutableStateFlow<JsonElement>(JsonNull)
     // One status at a time, so an older one never lands after a newer one. Before init, which publishes.
     private val publishing = Mutex()
@@ -58,9 +67,11 @@ class Downloads(private val db: Database, private val browse: Browse, private va
     val status: StateFlow<JsonElement> get() = state
 
     init {
-        Files.createDirectories(root)
-        // A .part is a download a crash or restart cut short; its chapter is still QUEUED.
-        Files.walk(root).use { s -> s.filter { it.name.endsWith(".part") }.toList() }.forEach(Files::deleteIfExists)
+        // Only the default folder is created: a folder the user set may be on a disk that is not plugged in, and a new
+        // folder there would fill the disk under it.
+        if (root == folder.of("")) Files.createDirectories(root)
+        // A .part is a download a crash or restart cut short; its chapter is still QUEUED. Only ours: the folder is the user's to choose.
+        if (Files.isDirectory(root)) Files.walk(root).use { s -> s.filter { it.name.endsWith(".cbz.part") }.toList() }.forEach(Files::deleteIfExists)
         runBlocking { publish() }
     }
 
@@ -95,10 +106,105 @@ class Downloads(private val db: Database, private val browse: Browse, private va
         ops.withLock {
             if (stop || current in cancel) worker?.cancelAndJoin()
             block()
-            if (running && worker?.isActive != true) worker = scope.launch { loop() }
+            if (running && !moving && worker?.isActive != true) worker = scope.launch { loop() }
         }
         publish()
         return statusJson()
+    }
+
+    /**
+     * The `downloadsPath` setting names [text], a folder other than the current one (#429). It is refused ([Kind.invalid]) unless it
+     * is a new folder or an empty one, outside the current folder and not around it, and no move runs. Otherwise the queue stops
+     * and the files are copied in the background. Copy, then delete, so another disk works and a failure can be undone. Once every
+     * file is there, the setting is stored, the folder swaps and the originals go. A failure deletes the copies and keeps the old
+     * folder and setting. Both end in `move.state`; the queue then runs again if it ran before.
+     */
+    suspend fun moveTo(text: String) {
+        val to = folder.of(text)
+        ops.withLock {
+            if (moving) throw ApiError(Kind.invalid, "The downloads are moving already. Wait until it ends.")
+            val from = folder.path
+            if (to.startsWith(from) || from.startsWith(to)) throw ApiError(Kind.invalid, "$to and the current folder $from sit one inside the other.")
+            if (Files.exists(to) && !(Files.isDirectory(to) && Files.list(to).use { !it.findAny().isPresent })) {
+                throw ApiError(Kind.invalid, "$to is not empty. Pick an empty folder or a new one.")
+            }
+            moving = true
+            val wasRunning = running
+            running = false
+            worker?.cancelAndJoin()
+            moveStarted = System.currentTimeMillis()
+            move = moveStatus("moving", 0, 0, from, to)
+            scope.launch { moveFiles(from, to, text, wasRunning) }
+        }
+        publish()
+    }
+
+    private fun moveStatus(state: String, done: Int, total: Int, from: Path, to: Path, error: String? = null) = buildJsonObject {
+        put("state", state); put("done", done); put("total", total); put("from", from.toString()); put("to", to.toString()); put("error", error)
+        // When it began, so a client can tell this move from the one before it.
+        put("startedAt", moveStarted)
+    }
+
+    private suspend fun moveFiles(from: Path, to: Path, text: String, wasRunning: Boolean) {
+        val copies = mutableListOf<Path>()
+        // The folders this move creates, outermost first, for the undo.
+        val made = mutableListOf<Path>()
+        var done = 0
+        var total = 0
+        try {
+            withContext(Dispatchers.IO) {
+                made.addAll(generateSequence(to) { it.parent }.takeWhile { !Files.exists(it) }.toList().reversed())
+                Files.createDirectories(to)
+                // The chapters core downloaded, by their stored paths: any other file in the folder is the user's, and stays.
+                val files = db.run { c -> c.query("SELECT download_path FROM chapter WHERE download_path IS NOT NULL ORDER BY download_path") { it.getString(1) } }
+                    .mapNotNull { rel -> runCatching { inside(from, rel) }.getOrNull()?.takeIf { Files.isRegularFile(it) } }
+                total = files.size
+                var shown = 0L
+                for (file in files) {
+                    val copy = to.resolve(from.relativize(file).toString())
+                    Files.createDirectories(copy.parent)
+                    copies.add(copy)
+                    Files.copy(file, copy)
+                    done++
+                    // Not every file: a big folder would make the status the work.
+                    if (System.currentTimeMillis() - shown >= 200) {
+                        shown = System.currentTimeMillis()
+                        move = moveStatus("moving", done, total, from, to)
+                        publish()
+                    }
+                }
+                db.run { c -> storeSettings(c, mapOf("downloadsPath" to text)) }
+                folder.path = to
+            }
+            // The move is done now, so nothing here may fail it: an original or a folder that will not go just stays.
+            withContext(Dispatchers.IO) {
+                copies.forEach { copy -> runCatching { Files.deleteIfExists(from.resolve(to.relativize(copy).toString())) } }
+                // Deepest first, so a folder empties before its parent; the default folder stays even empty.
+                runCatching {
+                    Files.walk(from).use { s -> s.filter { Files.isDirectory(it) && it != folder.default }.toList() }
+                        .sortedByDescending { it.nameCount }.forEach { runCatching { Files.deleteIfExists(it) } }
+                }
+            }
+            move = moveStatus("done", done, total, from, to)
+        } catch (e: Exception) {
+            withContext(NonCancellable + Dispatchers.IO) {
+                copies.forEach { runCatching { Files.deleteIfExists(it) } }
+                if (Files.isDirectory(to)) Files.walk(to).use { s -> s.filter { Files.isDirectory(it) && it != to }.toList() }
+                    .sortedByDescending { it.nameCount }.forEach { runCatching { Files.deleteIfExists(it) } }
+                made.reversed().forEach { runCatching { Files.deleteIfExists(it) } }
+            }
+            move = moveStatus("failed", done, total, from, to, reason(e))
+            if (e is CancellationException) throw e
+        } finally {
+            withContext(NonCancellable) {
+                ops.withLock {
+                    moving = false
+                    if (wasRunning || running) running = true
+                    if (running && worker?.isActive != true) worker = scope.launch { loop() }
+                }
+                publish()
+            }
+        }
     }
 
     /** Auto-download (#424): queues [ids] and starts the downloader, as `download.enqueue`. */
@@ -146,6 +252,8 @@ class Downloads(private val db: Database, private val browse: Browse, private va
     }
 
     private suspend fun delete(ids: List<Long>) {
+        // A copy already made in the new folder would stay behind.
+        if (moving) throw ApiError(Kind.invalid, "The downloads are moving. Delete them when it ends.")
         val files = db.run { c ->
             c.transaction {
                 val rels = c.query("SELECT download_path FROM chapter WHERE ${among("id")} AND download_path IS NOT NULL", idList(ids)) { it.getString(1) }
@@ -191,9 +299,16 @@ class Downloads(private val db: Database, private val browse: Browse, private va
         publish()
     }
 
+    /** The folder to write in; a folder the user set must be there already. */
+    private fun writable(): Path {
+        val dir = root
+        if (dir != folder.of("") && !Files.isDirectory(dir)) throw ApiError(Kind.notFound, "The download folder $dir is missing. Plug in its disk, or pick another folder in Settings.")
+        return dir
+    }
+
     private suspend fun download(id: Long) {
         val (source, rel) = target(id)
-        val file = inside(root, rel)
+        val file = inside(writable(), rel)
         val part = file.resolveSibling(file.name + ".part")
         val (_, list) = browse.pageList(id)
         if (list.isEmpty()) throw ApiError(Kind.source, "Chapter does not have any pages to download")
@@ -239,9 +354,11 @@ class Downloads(private val db: Database, private val browse: Browse, private va
      * under Mihon's names as a download does. A chapter core already has downloaded stays as it is, and this is false.
      */
     suspend fun adopt(id: Long, write: (Path) -> Unit): Boolean = ops.withLock {
+        // The old folder is being emptied: a file landing there now would be left behind.
+        if (moving) throw ApiError(Kind.invalid, "The downloads are moving. Try again when it ends.")
         if (db.run { c -> c.query("SELECT 1 FROM chapter WHERE id = ? AND download_path IS NOT NULL", id) { 1 }.isNotEmpty() }) return@withLock false
         val (_, rel) = target(id)
-        val file = inside(root, rel)
+        val file = inside(writable(), rel)
         val part = file.resolveSibling(file.name + ".part")
         withContext(NonCancellable + Dispatchers.IO) {
             try {
@@ -301,8 +418,32 @@ class Downloads(private val db: Database, private val browse: Browse, private va
                 }
             }
         }
-        return buildJsonObject { put("state", if (running) "STARTED" else "STOPPED"); put("queue", JsonArray(queue)) }
+        return buildJsonObject { put("state", if (running) "STARTED" else "STOPPED"); put("queue", JsonArray(queue)); put("move", move ?: JsonNull) }
     }
+}
+
+/**
+ * The folder downloads live in: the `downloadsPath` setting, or [default] when it is blank (#429). Browse, Downloads, Settings and a
+ * move all read [path], and a finished move swaps it. A chapter's `download_path` is relative to it, so the swap changes no row.
+ */
+class DownloadsFolder(val default: Path, text: String = "") {
+    @Volatile var path: Path = runCatching { of(text) }.getOrDefault(default.toAbsolutePath().normalize())
+
+    /** The folder [text] names, [default] when blank. */
+    fun of(text: String): Path = try {
+        (if (text.isEmpty()) default else Path.of(text)).toAbsolutePath().normalize()
+    } catch (e: InvalidPathException) {
+        throw ApiError(Kind.invalid, "$text is not a path.")
+    }
+}
+
+/** A file error as a sentence: Java's own message is often only the path. */
+internal fun reason(e: Exception): String = when (e) {
+    is java.nio.file.AccessDeniedException -> "Core may not write to ${e.file}."
+    is java.nio.file.NoSuchFileException -> "${e.file} is missing."
+    is java.nio.file.FileAlreadyExistsException -> "${e.file} exists already."
+    is java.nio.file.FileSystemException -> listOfNotNull(e.reason, e.file).joinToString(": ").ifEmpty { e.javaClass.simpleName }
+    else -> e.message ?: e.javaClass.simpleName
 }
 
 /** [rel] under [root], refused when it would leave it: the downloads and the local manga folder take paths from backups and the sync. */

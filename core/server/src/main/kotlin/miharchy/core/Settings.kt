@@ -67,13 +67,10 @@ val SETTINGS: List<Setting> = listOf(
     bool("excludeUnreadChapters", true, applied = true),
     bool("excludeNotStarted", true, applied = true),
     bool("excludeCompleted", true, applied = true),
-    // A refresh always fetches the details.
-    bool("updateMangas", false, applied = false),
-    // ponytail: stored only; the download queue writes to <core data>/downloads. A live folder first needs the queue's
-    // start-up sweep of *.part files kept to core's own files, and a plan for download_path marks under the old root.
-    path("downloadsPath", applied = false),
-    // Core always writes .cbz files.
-    bool("downloadAsCbz", false, applied = false),
+    // Updates.kt reads it on each manga.
+    bool("updateMangas", false, applied = true),
+    // A change moves the downloads, see [Settings.set]; blank is <core data>/downloads.
+    path("downloadsPath", applied = true),
     // Local.kt reads it on each call; blank is <core data>/local.
     path("localSourcePath", applied = true),
     // AutoDownload.kt reads these on each refresh.
@@ -94,6 +91,9 @@ private val BY_KEY = SETTINGS.associateBy { it.key }
 
 const val SETTINGS_PREFIX = "miharchy."
 
+/** A core setting's meta key: only `settings.set` writes it, so its rules (and a `downloadsPath` move) always run. */
+fun isCoreSetting(key: String) = key.startsWith(SETTINGS_PREFIX) && key.removePrefix(SETTINGS_PREFIX) in BY_KEY
+
 /** The FlareSolverr-format solver the settings name, null when it is off (#361). */
 fun solver(c: Connection): eu.kanade.tachiyomi.network.Solver? =
     if (setting(c, "flareSolverrEnabled").content != "true") null
@@ -103,6 +103,14 @@ fun solver(c: Connection): eu.kanade.tachiyomi.network.Solver? =
 fun setting(c: Connection, key: String): JsonPrimitive {
     val s = BY_KEY.getValue(key)
     return s.read(c.query("SELECT value FROM metas WHERE scope = 'global' AND owner = 0 AND key = ?", SETTINGS_PREFIX + key) { it.getString(1) }.firstOrNull())
+}
+
+/** Stores [texts] as settings, all or none. */
+fun storeSettings(c: Connection, texts: Map<String, String>) = c.transaction {
+    c.batch(
+        "INSERT INTO metas (scope, owner, key, value) VALUES ('global', 0, ?, ?) ON CONFLICT (scope, owner, key) DO UPDATE SET value = excluded.value",
+        texts.map { (key, text) -> listOf(SETTINGS_PREFIX + key, text) },
+    )
 }
 
 /** What backups carry, by the autoBackupInclude rows. */
@@ -119,8 +127,10 @@ fun backupFolder(c: Connection, default: Path): Path = setting(c, "backupPath").
  * chapter pages are read from the source or from a download, never kept.
  */
 class Settings(
-    private val db: Database, private val covers: Path, private val downloads: Path = covers.resolveSibling("downloads"),
+    private val db: Database, private val covers: Path, private val downloads: DownloadsFolder = DownloadsFolder(covers.resolveSibling("downloads")),
     private val localDefault: Path = covers.resolveSibling("local"),
+    /** Called with a new `downloadsPath`; it refuses or starts the move that stores the key (Main sets `Downloads.moveTo`). Null: a plain store. */
+    private val moveDownloads: (suspend (String) -> Unit)? = null,
 ) {
     val routes: Map<String, Route> = mapOf(
         "settings.get" to { _ -> db.run { c -> reply(c) } },
@@ -130,25 +140,27 @@ class Settings(
         "storage.get" to { _ -> storage() },
     )
 
-    /** `{ settings: { key: value } }`, some or all keys; all are checked before any is stored. */
+    /**
+     * `{ settings: { key: value } }`, some or all keys; all are checked before any is stored. A `downloadsPath` that names another
+     * folder than the current one is not stored here: [moveDownloads] checks it and stores it once the move has copied the files.
+     */
     private suspend fun set(input: JsonObject): JsonElement {
         val changes = input["settings"] as? JsonObject ?: throw ApiError(Kind.invalid, "The request needs settings, an object of keys and values.")
         val texts = changes.mapValues { (key, value) ->
             val s = BY_KEY[key] ?: throw ApiError(Kind.invalid, "Core has no setting $key.")
             (value as? JsonPrimitive)?.let(s::text) ?: throw ApiError(Kind.invalid, "$key takes ${s.rule}.")
         }
-        return db.run { c ->
+        db.run { c ->
             texts["backupPath"]?.takeIf { it.isNotEmpty() }?.let { folder ->
                 if (!Path.of(folder).isDirectory()) throw ApiError(Kind.invalid, "$folder is not a folder.")
                 val sync = c.query("SELECT value FROM metas WHERE scope = 'global' AND owner = 0 AND key = ?", Sync.SYNC_FOLDER_KEY) { it.getString(1) }.firstOrNull()
                 backupRefusal(folder, sync?.takeIf { it.isNotBlank() })?.let { throw ApiError(Kind.invalid, it) }
             }
-            c.transaction {
-                c.batch(
-                    "INSERT INTO metas (scope, owner, key, value) VALUES ('global', 0, ?, ?) ON CONFLICT (scope, owner, key) DO UPDATE SET value = excluded.value",
-                    texts.map { (key, text) -> listOf(SETTINGS_PREFIX + key, text) },
-                )
-            }
+        }
+        val moving = moveDownloads?.let { move -> texts["downloadsPath"]?.takeIf { downloads.of(it) != downloads.path }?.also { move(it) } }
+        // The mover runs outside the database's thread: it uses the database too.
+        return db.run { c ->
+            storeSettings(c, if (moving == null) texts else texts - "downloadsPath")
             reply(c)
         }
     }
@@ -174,7 +186,8 @@ class Settings(
     private suspend fun storage(): JsonElement {
         val library = db.run { c -> c.query("SELECT id FROM manga WHERE user_favorite_at IS NOT NULL") { it.getLong(1).toString() }.toSet() }
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val downloaded = if (downloads.isDirectory()) Files.walk(downloads).use { s -> s.filter { it.isRegularFile() }.mapToLong { runCatching { Files.size(it) }.getOrDefault(0L) }.sum() } else 0L
+            val folder = downloads.path
+            val downloaded = if (folder.isDirectory()) Files.walk(folder).use { s -> s.filter { it.isRegularFile() }.mapToLong { runCatching { Files.size(it) }.getOrDefault(0L) }.sum() } else 0L
             buildJsonObject {
                 put("downloads", downloaded); put("cache", outside(library).sumOf { runCatching { Files.size(it) }.getOrDefault(0L) })
             }

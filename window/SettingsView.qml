@@ -28,6 +28,9 @@ Item {
   property var unapplied: []
   // A save core refused: { key, message }.
   property var refusal: ({ key: "", message: "" })
+  // The Download folder row's move (DownloadsMove.note), and whether it failed.
+  property string moveNote: ""
+  property bool moveFailed: false
   property var trackers: Trackers.initial()
   readonly property bool loginEditing: Trackers.editing(trackers)
   readonly property string loginStep: loginEditing ? trackers.login.step : ""
@@ -257,11 +260,13 @@ Item {
               readonly property bool failed: row.editingThis && view.editError !== ""
               // A save core refused, under its row until the next save.
               readonly property bool refused: !view.editing && view.refusal.key === row.modelData.key
+              // The move of the downloads shows on its row whether or not the cursor is there.
+              readonly property bool moved: !view.editing && !refused && row.modelData.key === "downloadsPath" && view.moveNote !== ""
               readonly property string note: [row.modelData.note || "", (view.unapplied.indexOf(row.modelData.key) >= 0 ? "miharchy-core keeps this value but does not use it yet." : "")].filter(function(n) { return n }).join(" ")
-              visible: failed || refused || (row.current && !view.editing && !!note)
+              visible: failed || refused || moved || (row.current && !view.editing && !!note)
               wrapMode: Text.Wrap
-              text: failed ? view.editError : refused ? view.refusal.message : note
-              color: failed || refused ? view.theme.urgent : view.theme.selectedText
+              text: failed ? view.editError : refused ? view.refusal.message : moved ? view.moveNote : note
+              color: failed || refused || (moved && view.moveFailed) ? view.theme.urgent : view.theme.selectedText
               font.family: view.theme.fontFamily
               font.pixelSize: view.theme.fontSmall
             }

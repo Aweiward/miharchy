@@ -202,7 +202,7 @@ class Move(
                 }
                 for (meta in data.nodes("metas")) {
                     val key = meta.text("key")!!
-                    if (key in CORE_OWN_METAS) continue
+                    if (key in CORE_OWN_METAS || isCoreSetting(key)) continue
                     // A category id, or "ask". An id core cannot map becomes "ask", never a Suwayomi id that is another category on core.
                     val value = if (key == DEFAULT_CATEGORY_KEY) meta.text("value")?.let { v ->
                         if (v.toLongOrNull() == null) v else coreCategory(v)?.toString() ?: "ask".also { report.skipped += "Default category $v: core has no such category, so the window asks." }
@@ -230,6 +230,8 @@ class Move(
     /** One by one, so a value core's rules refuse skips that row only. */
     private suspend fun moveSettings(settings: JsonObject, report: Report) {
         for (s in SETTINGS) {
+            // Suwayomi's downloads folder is where its downloads are read from, not where core puts its own: a move of core's downloads into it is never wanted.
+            if (s.key == "downloadsPath") continue
             val value = settings[s.key] as? JsonPrimitive ?: continue
             // Suwayomi keeps the update interval as a float of hours.
             val typed = if (!value.isString && value.booleanOrNull == null && s.default.content.toIntOrNull() != null) value.doubleOrNull?.roundToInt()?.let(::JsonPrimitive) ?: value else value

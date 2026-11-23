@@ -67,7 +67,7 @@ class UpdatesTest {
             val dropped = manga(db, "Dropped one", categories = listOf(excluded))
             val both = manga(db, "Both", categories = listOf(category(db, "Reading", "UNSET"), excluded))
             val refreshed = Collections.synchronizedList(mutableListOf<Long>())
-            Updates(db, { refreshed += it }, tick = 3_600_000).use { u ->
+            Updates(db, { id, _ -> refreshed += id }, tick = 3_600_000).use { u ->
                 fun counts(s: JsonObject) = listOf(s.n("totalJobs"), s.n("skippedMangasCount"))
                 // Settings.js's defaults: all three skip filters on.
                 assertEquals(listOf(1, 5), counts(u.routes.call("update.start")))
@@ -106,7 +106,7 @@ class UpdatesTest {
             val held = manga(db, "C held", source = 2)
             val gate = CompletableDeferred<Unit>()
             val reached = CompletableDeferred<Unit>()
-            Updates(db, { id ->
+            Updates(db, { id, _ ->
                 when (id) {
                     bad -> throw ApiError(Kind.network, "The site answered HTTP 500.")
                     // As Host.call did once: a stop that comes back as a source error.
@@ -142,7 +142,7 @@ class UpdatesTest {
                 assertEquals(listOf("3", "false"), listOf(ended["finishedJobs"].toString(), ended["stopped"].toString()))
             }
             // The last run's time survives a restart.
-            Updates(db, { }, tick = 3_600_000).use { u -> assertTrue(u.routes.call("update.status")["lastUpdateTimestamp"]!!.jsonPrimitive.long > 0) }
+            Updates(db, { _, _ -> }, tick = 3_600_000).use { u -> assertTrue(u.routes.call("update.status")["lastUpdateTimestamp"]!!.jsonPrimitive.long > 0) }
         }
     }
 
@@ -153,7 +153,7 @@ class UpdatesTest {
             setMeta(db, "miharchy.globalUpdateInterval", "0")
             val runs = Collections.synchronizedList(mutableListOf<Long>())
             // An hour of 1 ms: an interval of 50 is 50 ms.
-            Updates(db, { runs += it }, hour = 1, tick = 10).use { u ->
+            Updates(db, { id, _ -> runs += id }, hour = 1, tick = 10).use { u ->
                 delay(300)
                 assertEquals(0, runs.size, "0 is off")
                 setMeta(db, "miharchy.globalUpdateInterval", "50")

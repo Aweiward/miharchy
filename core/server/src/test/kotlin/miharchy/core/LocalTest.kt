@@ -72,7 +72,7 @@ class LocalTest {
 
     private fun <T> withCore(block: suspend (Database, Browse) -> T): T = runBlocking {
         Database(work.resolve("core.db")).use { db ->
-            block(db, Browse(db, TestHost.host, Extensions(db, TestHost.host, work.resolve("extensions")), work.resolve("covers"), work.resolve("downloads"), Local { root }))
+            block(db, Browse(db, TestHost.host, Extensions(db, TestHost.host, work.resolve("extensions")), work.resolve("covers"), DownloadsFolder(work.resolve("downloads")), Local { root }))
         }
     }
 
@@ -239,7 +239,7 @@ class LocalTest {
         fill()
         val id = browse.routes.call("source.popular", body("page" to 1)).ids()[0]
         val first = browse.routes.call("manga.refresh", buildJsonObject { put("id", id) })["chapters"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.long }
-        val downloads = Downloads(db, browse, Extensions(db, TestHost.host, work.resolve("extensions")), work.resolve("downloads"))
+        val downloads = Downloads(db, browse, Extensions(db, TestHost.host, work.resolve("extensions")), DownloadsFolder(work.resolve("downloads")))
         val status = downloads.routes.call("download.enqueue", buildJsonObject { put("ids", JsonArray(first.map(::JsonPrimitive))) })
         assertEquals(0, status["queue"]!!.jsonArray.size)
 
@@ -273,7 +273,7 @@ class LocalTest {
             }
         }
         val refreshed = java.util.Collections.synchronizedList(mutableListOf<Long>())
-        Updates(db, { refreshed += it }, tick = 3_600_000, local = Local { root }).use { u ->
+        Updates(db, { id, _ -> refreshed += id }, tick = 3_600_000, local = Local { root }).use { u ->
             val started = u.routes.call("update.start")
             assertEquals(1, started["totalJobs"]!!.jsonPrimitive.int)
             assertEquals(1, started["skippedMangasCount"]!!.jsonPrimitive.int)

@@ -36,10 +36,10 @@ import kotlinx.serialization.json.put
  * and the `updates` topic sends it on each change. Unlike Suwayomi, a stop keeps the counts until the next run.
  *
  * The choices are core's settings (#375, `Settings.kt`): the three skip filters and `globalUpdateInterval` in hours, 0 for off. [hour] and [tick] are
- * there for tests. ponytail: no `updateMangas` (a refresh always fetches details).
+ * there for tests.
  */
 class Updates(
-    private val db: Database, private val refresh: suspend (Long) -> Unit, private val hour: Long = 3_600_000, tick: Long = 60_000,
+    private val db: Database, private val refresh: suspend (Long, Boolean) -> Unit, private val hour: Long = 3_600_000, tick: Long = 60_000,
     /** Local manga whose folder is gone are skipped, not failed (#374). */
     private val local: Local? = null,
 ) : AutoCloseable {
@@ -126,10 +126,19 @@ class Updates(
         }
     }
 
+    /**
+     * Mihon's `LibraryUpdateJob` rule: details come with the chapters when `updateMangas` is on, and for a manga that has
+     * never had them (not initialized) or has no cover.
+     */
+    private suspend fun details(id: Long) = db.run { c ->
+        setting(c, "updateMangas").content == "true" ||
+            c.query("SELECT 1 FROM manga WHERE id = ? AND state_initialized = 1 AND coalesce(remote_cover, '') != ''", id) { 1 }.isEmpty()
+    }
+
     /** A failed manga counts as finished, with its reason, and the run goes on. */
     private suspend fun one(id: Long) {
         val error = try {
-            refresh(id)
+            refresh(id, details(id))
             null
         } catch (e: CancellationException) {
             throw e

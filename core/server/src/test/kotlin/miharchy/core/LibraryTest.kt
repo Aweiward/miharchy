@@ -136,6 +136,7 @@ class LibraryTest {
                 obj("scope" to "manga", "owner" to b, "key" to "miharchy.notes", "value" to "bad"),
             )))
             r.expect(Kind.notFound, "meta.set", obj("metas" to listOf(obj("scope" to "manga", "owner" to 999, "key" to "k", "value" to "v"))))
+            r.expect(Kind.invalid, "meta.set", obj("metas" to listOf(obj("scope" to "global", "key" to "miharchy.downloadsPath", "value" to "/elsewhere"))))
             assertEquals("\"1700000000\"", r.call("meta.get", obj("scope" to "global", "keys" to listOf("miharchy.historyClearedAt")))["metas"]!!.jsonArray.single().o()["value"].toString())
             assertEquals(2, r.call("meta.get", obj("scope" to "manga", "keys" to listOf("miharchy.notes")))["metas"]!!.jsonArray.size)
             // A manga's choices load with the global ones in one call, in query order.

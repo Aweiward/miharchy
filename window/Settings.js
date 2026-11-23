@@ -138,7 +138,8 @@ var ROWS = [
   { key: "excludeNotStarted", label: "Skip manga not started", type: "bool", default: true, store: "server" },
   { key: "excludeCompleted", label: "Skip completed manga", type: "bool", default: true, store: "server" },
   // Mihon's "Automatically refresh metadata": the library update also
-  // fetches each manga's title, cover and description.
+  // fetches each manga's title, cover and description. Off, it still does
+  // for a manga with no details or no cover yet.
   { key: "updateMangas", label: "Refresh metadata during library updates", type: "bool", default: false, store: "server" },
   // The library check, with the count of its problems as the value.
   { key: "libraryCheck", label: "Library check", type: "action", command: "view.check" },
@@ -146,10 +147,8 @@ var ROWS = [
   // (Default: no category) or a category id. The window applies it when a
   // manga is added.
   { key: "defaultCategory", label: "Default category", type: "category", default: "ask", store: "meta" },
-  // The server refuses a folder that does not exist; empty means its own.
-  { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
-  // New downloads only; the server reads chapters on disk in either form.
-  { key: "downloadAsCbz", label: "Save downloads as CBZ", type: "bool", default: false, store: "server" },
+  // Core moves the downloads into a new or empty folder, and refuses another (DownloadsMove.js follows the move); empty means its own.
+  { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter the absolute path of a new or empty folder, or nothing for the server's own folder. The downloads move there.", blank: "server default" },
   // The local source's folder (Mihon's local source): a folder per manga,
   // a folder of images or a .cbz per chapter. The server refuses a folder
   // that does not exist; empty means its root's local.

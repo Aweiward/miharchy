@@ -11,6 +11,7 @@ import "Settings.js" as Settings
 import "Setup.js" as Setup
 import "Chapters.js" as Chapters
 import "Downloads.js" as Downloads
+import "DownloadsMove.js" as DownloadsMove
 import "Library.js" as Library
 import "Browse.js" as Browse
 import "Storage.js" as Storage
@@ -57,6 +58,9 @@ ShellRoot {
   property string settingsError: ""
   // A save core refused: { key, message }, shown under that row until the next save.
   property var settingsRefusal: ({ key: "", message: "" })
+  // The move of the downloads a Download folder save started (core's download.queue `move`), null when none.
+  property var downloadsMove: null
+  property real downloadsMoveSentAt: 0
   property int settingsSeq: 0
   // { mangaId, chapterId } to read once the config loads, or null.
   property var pendingChapter: Model.chapterTarget(Quickshell.env("MIHARCHY_OPEN_CHAPTER"))
@@ -353,16 +357,46 @@ ShellRoot {
     var cfg = settingsConfig()
     if (!cfg) return
     settingsRefusal = { key: "", message: "" }
+    if (row.key === "downloadsPath") {
+      downloadsMove = null
+      downloadsMoveSentAt = Date.now()
+    }
     settingsState = Settings.reduce(settingsState, { type: "request" })
     Session.send(cfg, Settings.savePayload(row, value), function(reply) {
       // Core refuses a value its rules do not take: the row says why, and the view stays.
-      if (Settings.refused(reply)) {
+      var refused = Settings.refused(reply)
+      if (refused) {
         root.settingsRefusal = { key: row.key, message: reply.message }
         reply = { state: "ok", message: "", data: {}, kind: "" }
       }
       root.settingsState = Settings.reduce(root.settingsState, { type: "response", reply: reply })
       if (row.key === "localSourcePath" && Storage.localFolderOf(reply)) root.localFolder = Storage.localFolderOf(reply)
+      // A new folder starts a move in core, which the row follows.
+      if (row.key === "downloadsPath" && !refused && reply.state === "ok") root.pollDownloadsMove()
     })
+  }
+
+  // Asks core how the move of the downloads stands, and again every second while it copies.
+  function pollDownloadsMove() {
+    var cfg = settingsConfig()
+    if (!cfg) return
+    var sentAt = downloadsMoveSentAt
+    Session.send(cfg, DownloadsMove.PAYLOAD, function(reply) {
+      // A newer save has taken over.
+      if (sentAt !== root.downloadsMoveSentAt) return
+      var prev = root.downloadsMove
+      var next = DownloadsMove.moveOf(reply, sentAt)
+      root.downloadsMove = next
+      downloadsMoveTimer.running = DownloadsMove.polling(next)
+      if (DownloadsMove.reload(prev, next)) root.loadSettings()
+    })
+  }
+
+  Timer {
+    id: downloadsMoveTimer
+    interval: DownloadsMove.POLL_MS
+    repeat: true
+    onTriggered: root.pollDownloadsMove()
   }
 
   // A folder row saves once the folder exists, checked as Setup checks it.
@@ -850,6 +884,8 @@ ShellRoot {
           configPath: root.configPath
           unapplied: root.settingsState.unapplied || []
           refusal: root.settingsRefusal
+          moveNote: DownloadsMove.note(root.downloadsMove)
+          moveFailed: !!root.downloadsMove && root.downloadsMove.state === "failed"
           values: root.settingsState.values
           categories: root.connection.categories
           cursor: root.settingsCursor
