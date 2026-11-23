@@ -41,12 +41,12 @@ class LocalTest {
         ZipOutputStream(Files.newOutputStream(file)).use { z -> for ((n, b) in entries) { z.putNextEntry(ZipEntry(n)); z.write(b); z.closeEntry() } }
     }
 
-    private fun comicInfo(vararg fields: Pair<String, String>) = "<ComicInfo>${fields.joinToString("") { (k, v) -> "<$k>$v</$k>" }}</ComicInfo>"
+    private fun comicInfo(vararg fields: Pair<String, String>) = "<ComicInfo xmlns:ty=\"http://www.w3.org/2001/XMLSchema\">${fields.joinToString("") { (k, v) -> "<$k>$v</$k>" }}</ComicInfo>"
 
     /** Alpha: ComicInfo, cover.jpg, a folder chapter and a .cbz. Bravo: details.json. charlie: a broken ComicInfo. */
     private fun fill() {
         root.resolve("Alpha").createDirectories().also { a ->
-            a.resolve("ComicInfo.xml").writeText(comicInfo("Series" to "Alpha Title", "Writer" to "W", "Penciller" to "P", "Summary" to "S", "Genre" to "Action, Drama", "PublishingStatusTachiyomi" to "Ongoing"))
+            a.resolve("ComicInfo.xml").writeText(comicInfo("Series" to "Alpha Title", "Writer" to "W", "Penciller" to "P", "Summary" to "S", "Genre" to "Action, Drama", "ty:PublishingStatusTachiyomi" to "Ongoing"))
             a.resolve("cover.jpg").writeBytes(jpg(1))
             a.resolve("Chapter 1").createDirectories().also { c -> listOf(2, 10, 1).forEach { c.resolve("$it.png").writeBytes(png(it)) } }
             zip(a.resolve("Chapter 2.cbz"), "001.png" to png(21), "ComicInfo.xml" to comicInfo("Title" to "Second", "Number" to "2").toByteArray())
@@ -135,6 +135,16 @@ class LocalTest {
         assertEquals(numbered.map { it.second }.sortedDescending(), numbered.map { it.second })
         assertEquals("Ch 12", numbered.first().first)
         assertEquals(5, db.run { c -> c.query("SELECT count(*) FROM chapter WHERE manga_id = ?", ids[1]) { it.getInt(1) }.single() })
+    }
+
+    @Test
+    fun aBrokenArchiveNeverFailsAListing() = withCore { _, browse ->
+        root.resolve("Torn").createDirectories().resolve("Ch 1.cbz").writeText("not a zip")
+        root.resolve("Fine").createDirectories().resolve("Chapter 1").createDirectories().resolve("1.png").writeBytes(png(1))
+        val listed = browse.routes.call("source.popular", body("page" to 1))
+        assertEquals(listOf("Fine", "Torn"), listed.titles())
+        val torn = browse.routes.call("manga.refresh", buildJsonObject { put("id", listed.ids()[1]) })
+        assertEquals("Ch 1", torn["chapters"]!!.jsonArray.single().jsonObject["name"]!!.jsonPrimitive.content)
     }
 
     @Test

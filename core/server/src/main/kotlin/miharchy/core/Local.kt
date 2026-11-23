@@ -134,7 +134,9 @@ class Local(val folder: suspend () -> Path) {
      * `<rel path>?<mtime>` of `cover.*`, else `<chapter url>/<entry>?<mtime>` of the oldest chapter's first page. The mtime
      * makes a changed cover a new url, so Browse fetches it again.
      */
-    private fun cover(dir: Path): String? {
+    private fun cover(dir: Path): String? = try { findCover(dir) } catch (e: IOException) { null } // a half-copied archive has no cover, and never fails a listing
+
+    private fun findCover(dir: Path): String? {
         val file = dir.listDirectoryEntries().firstOrNull { it.isRegularFile() && it.nameWithoutExtension.equals("cover", ignoreCase = true) && isPageName(it.name) }
         if (file != null) return "${dir.name}/${file.name}?${mtime(file)}"
         val chapter = chapterFiles(dir).minWithOrNull { a, b -> NATURAL.compare(a.name, b.name) } ?: return null
@@ -225,7 +227,8 @@ class Local(val folder: suspend () -> Path) {
         val out = mutableMapOf<String, String>()
         for (i in 0 until root.childNodes.length) {
             val n = root.childNodes.item(i)
-            if (n.nodeType == org.w3c.dom.Node.ELEMENT_NODE) n.textContent.trim().takeIf { it.isNotEmpty() }?.let { out.putIfAbsent(n.nodeName, it) }
+            // Mihon writes its own field with a prefix (ty:PublishingStatusTachiyomi): the local name is the key.
+            if (n.nodeType == org.w3c.dom.Node.ELEMENT_NODE) n.textContent.trim().takeIf { it.isNotEmpty() }?.let { out.putIfAbsent(n.nodeName.substringAfter(':'), it) }
         }
         return out
     }
