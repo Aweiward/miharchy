@@ -290,7 +290,9 @@ class Browse(private val db: Database, private val host: Host, private val exten
             }
         }.let { queue ->
             // A failed auto-download never fails the refresh that found the chapters.
-            if (queue.isNotEmpty()) runCatching { autoDownload(queue) }.onFailure { System.err.println("miharchy-core: auto-download of $queue failed: $it") }
+            if (queue.isNotEmpty()) try { autoDownload(queue) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                System.err.println("miharchy-core: auto-download of $queue failed: $e")
+            }
         }
         if (coverChanged) dropCovers(id)
         val fresh = detail(id)
