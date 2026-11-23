@@ -10,17 +10,17 @@ function root(env) {
   return env.MIHARCHY_SERVER_ROOT || env.HOME + "/.local/share/miharchy/suwayomi"
 }
 
-// Where the local source reads its manga: localSourcePath, or the root's
-// local when that is blank.
-function localFolder(env, localSourcePath) {
-  return localSourcePath || root(env) + "/local"
-}
-
 // Core measures its own folders, which the window cannot know:
 // { downloads, cache } in bytes, cache being the covers of manga outside
 // the library that cache.clear deletes, answering { freed }.
 var SIZES_PAYLOAD = { route: "storage.get", body: {} }
 var CORE_CLEAR_PAYLOAD = { route: "cache.clear", body: {} }
+
+// The folder core's local source reads, from a settings.get or settings.set
+// reply; "" until core has answered.
+function localFolderOf(reply) {
+  return reply && reply.state === "ok" && reply.data && typeof reply.data.localFolder === "string" ? reply.data.localFolder : ""
+}
 
 // Decimal units, as Android's file sizes in Mihon.
 function format(bytes) {
@@ -37,7 +37,7 @@ function format(bytes) {
 if (typeof module !== "undefined") {
   module.exports = {
     root: root,
-    localFolder: localFolder,
+    localFolderOf: localFolderOf,
     SIZES_PAYLOAD: SIZES_PAYLOAD,
     CORE_CLEAR_PAYLOAD: CORE_CLEAR_PAYLOAD,
     format: format

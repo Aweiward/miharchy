@@ -40,7 +40,7 @@ Read back `core.sh api download.queue '{}' | jq -c '[.queue[].chapter.id]'`, `co
 
 The queue shows the last run as a line above its rows ("Next 2 chapters of All: 2 on disk, 2 failed, 1 manga could not fetch chapters"), at cursor -1 (the queue opens there after a run), with each refresh failure under it. When none of the run's chapters is queued or downloading, the window runs `notify-send -a Miharchy -- <label> <counts>` once. Put a logging `notify-send` stub first on `PATH` (a literal `PATH=<stubdir>:/usr/local/bin:/usr/bin:... drive.sh ...`): never a real notification.
 
-The recipe for this line used local-source fixtures (a manga whose folder is gone, one with a chapter with no images), and core has no local source yet (#374). Until it lands, a refresh failure comes from an uninstalled extension (above), and a download failure from a chapter whose source is gone (Failed rows). The steps stay:
+The recipe for this line used local-source fixtures (a manga whose folder is gone, one with a chapter with no images). Core's local source skips a missing folder in a library update and never downloads, so a refresh failure comes from an uninstalled extension (above), and a download failure from a chapter whose source is gone (Failed rows). The steps stay:
 
 ```js
 [

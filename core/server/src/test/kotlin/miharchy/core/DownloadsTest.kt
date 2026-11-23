@@ -96,7 +96,7 @@ class DownloadsTest {
                     extensions.routes.call("extension.install", buildJsonObject { put("pkgName", repo.pkg) })
                     val root = work.resolve("downloads")
                     val browse = Browse(db, TestHost.host, extensions, work.resolve("covers"), root)
-                    val sid = browse.routes.call("source.list")["sources"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.content
+                    val sid = browse.routes.call("source.list")["sources"]!!.jsonArray.last().jsonObject["id"]!!.jsonPrimitive.content
                     val mangaId = browse.routes.call("source.popular", buildJsonObject { put("source", sid); put("page", 1) })["mangas"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.long
                     val chapters = browse.routes.call("manga.refresh", buildJsonObject { put("id", mangaId) })["chapters"]!!.jsonArray.map { it.jsonObject }
                     fun chapter(url: String) = chapters.single { it["url"]!!.jsonPrimitive.content == url }["id"]!!.jsonPrimitive.long
@@ -200,7 +200,7 @@ class DownloadsTest {
                     Settings(db, work.resolve("covers"), root).routes.call("settings.set", buildJsonObject {
                         put("settings", buildJsonObject { put("autoDownloadNewChapters", true); put("excludeEntryWithUnreadChapters", false) })
                     })
-                    val sid = browse.routes.call("source.list")["sources"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.content
+                    val sid = browse.routes.call("source.list")["sources"]!!.jsonArray.last().jsonObject["id"]!!.jsonPrimitive.content
                     val mangaId = browse.routes.call("source.popular", buildJsonObject { put("source", sid); put("page", 1) })["mangas"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.long
                     Library(db, extensions).routes.call("manga.update", buildJsonObject { put("ids", JsonArray(listOf(JsonPrimitive(mangaId)))); put("inLibrary", true) })
                     val refresh = buildJsonObject { put("id", mangaId) }

@@ -125,6 +125,7 @@ class Move(
             moveMetas(suwayomi, report)
             step("settings")
             moveSettings(settings, report)
+            moveLocalFolder(root, report)
             step("downloads")
             val folder = settings.text("downloadsPath")?.let(Path::of) ?: root.resolve("downloads")
             moveDownloads(suwayomi, folder.resolve("mangas"), report)
@@ -238,6 +239,22 @@ class Move(
             } catch (e: ApiError) {
                 report.skipped += "Setting ${s.key}: ${e.message}"
             }
+        }
+    }
+
+    /**
+     * Suwayomi's local manga sit in `<root>/local` when its own setting is blank, which the settings step just copied. Core then
+     * reads that folder, when it holds manga; a folder the user set is never changed.
+     */
+    private suspend fun moveLocalFolder(root: Path, report: Report) {
+        val folder = root.resolve("local").toAbsolutePath()
+        val set = call("settings.get", JsonObject(emptyMap())).jsonObject["settings"]!!.jsonObject["localSourcePath"]!!.jsonPrimitive.content
+        if (set.isNotEmpty() || !withContext(Dispatchers.IO) { folder.isDirectory() && folder.listDirectoryEntries().any { it.isDirectory() } }) return
+        try {
+            call("settings.set", buildJsonObject { put("settings", buildJsonObject { put("localSourcePath", folder.toString()) }) })
+            report.settings++
+        } catch (e: ApiError) {
+            report.skipped += "Setting localSourcePath: ${e.message}"
         }
     }
 

@@ -20,7 +20,8 @@ fun categoriesOf(inCats: Map<Long, List<Long>>, manga: Long): List<Long> = inCat
  */
 fun autoDownloads(c: Connection, manga: Long, added: Collection<Long>, prevLatest: Double?): List<Long> {
     if (added.isEmpty() || prevLatest == null || setting(c, "autoDownloadNewChapters").content != "true") return emptyList()
-    if (c.query("SELECT 1 FROM manga WHERE id = ? AND user_favorite_at IS NOT NULL", manga) { 1 }.isEmpty()) return emptyList()
+    // The local source has nothing to download (#374).
+    if (c.query("SELECT 1 FROM manga WHERE id = ? AND user_favorite_at IS NOT NULL AND source_id != ${LOCAL_SOURCE}", manga) { 1 }.isEmpty()) return emptyList()
     val (included, excluded) = includeRule(c.query("SELECT id, include_in_download FROM category") { it.getLong(1) to it.getString(2) }.toMap())
     val cats = c.query("SELECT category_id FROM manga_category WHERE manga_id = ?", manga) { it.getLong(1) }.ifEmpty { listOf(0L) }
     if (cats.any { it in excluded } || cats.none { it in included }) return emptyList()

@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.data.track.shikimori.Shikimori
 import yomi.host.startHost
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.jsonPrimitive
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -35,11 +36,14 @@ fun main() {
     eu.kanade.tachiyomi.network.FlareSolverr.settings = { runBlocking { db.run(::solver) } }
     val extensions = Extensions(db, host, data.resolve("extensions"))
     runBlocking { extensions.start() }
-    val browse = Browse(db, host, extensions, data.resolve("covers"), data.resolve("downloads"))
+    // The default folder only: a folder the user set is never created.
+    val localDefault = Files.createDirectories(data.resolve("local"))
+    val local = Local { db.run { c -> localFolder(c, localDefault) } }
+    val browse = Browse(db, host, extensions, data.resolve("covers"), data.resolve("downloads"), local)
     val library = Library(db, extensions)
     val downloads = Downloads(db, browse, extensions, data.resolve("downloads"))
     browse.autoDownload = downloads::auto
-    val updates = Updates(db, { browse.refresh(it) })
+    val updates = Updates(db, { browse.refresh(it) }, local = local)
     val trackerStore = TrackerStore(db)
     val http = okhttp3.OkHttpClient()
     val clients = listOf(
@@ -51,7 +55,7 @@ fun main() {
     val sync = Sync(db, data.resolve("sync"), config.url, clients.map { it.id.toInt() }.toSet(), installedSources = {
         extensions.sources().associate { it.getValue("id").jsonPrimitive.content.toLong() to it.getValue("name").jsonPrimitive.content }
     }, trackerLogins = { clients.associate { it.id.toInt() to (it.name to it.isLoggedIn) } })
-    val settings = Settings(db, data.resolve("covers"), data.resolve("downloads"))
+    val settings = Settings(db, data.resolve("covers"), data.resolve("downloads"), localDefault)
     Backups(db, sync, data.resolve("backups"))
     val slices = listOf(extensions.routes, browse.routes, library.routes, downloads.routes, updates.routes, trackers.routes, sync.routes, settings.routes)
     val others = slices.reduce { a, b -> a + b }

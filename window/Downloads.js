@@ -14,6 +14,12 @@ function initial() {
   return { state: "loading", message: "", running: false, items: [] }
 }
 
+// Whether a manga's chapters can be downloaded or deleted: those of the local
+// source (id 0) are files already, so its detail offers neither.
+function offered(manga) {
+  return !(manga && manga.sourceId === "0")
+}
+
 // Every download route answers with the plain status, { state, queue }.
 function statusIn(data) {
   return data.queue ? data : null
@@ -262,6 +268,7 @@ if (typeof module !== "undefined") {
     reduce: reduce,
     left: left,
     live: live,
+    offered: offered,
     marked: marked,
     enqueuePayload: enqueuePayload,
     removePayload: removePayload,

@@ -127,8 +127,8 @@ class Extensions(private val db: Database, private val host: Host, private val d
         }
     }
 
-    /** The loaded sources, with their extension's icon and content warning, as the Browse view reads them. */
-    suspend fun sources(): List<JsonObject> = lock.withLock {
+    /** The loaded sources, with their extension's icon and content warning, as the Browse view reads them; the local source (#374) first. */
+    suspend fun sources(): List<JsonObject> = listOf(LOCAL_SOURCE_JSON) + lock.withLock {
         installed().flatMap { m ->
             loaded[m.pkgName].orEmpty().map { s ->
                 val lang = s["lang"]!!.jsonPrimitive.content

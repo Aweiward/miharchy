@@ -563,8 +563,10 @@ Item {
     Text {
       textFormat: Text.PlainText
       anchors.centerIn: sourceList
-      visible: view.sourceRows.length === 0 && Model.problem(view.src, view.configPath) === null
-      text: view.src.state !== "ok" ? "Loading sources" : view.src.sources.length ? "No source in the languages shown. Press l to pick them." : "No source yet. Press tab, then install an extension."
+      // The local source is always listed (#374), so a new install still needs the way to extensions.
+      readonly property bool noExtension: !view.src.sources.some(function(s) { return s.id !== Browse.LOCAL_SOURCE })
+      visible: (view.sourceRows.length === 0 || noExtension) && Model.problem(view.src, view.configPath) === null
+      text: view.src.state !== "ok" ? "Loading sources" : noExtension ? "No source yet. Press tab, then install an extension." : "No source in the languages shown. Press l to pick them."
       color: view.theme.muted
       font.family: view.theme.fontFamily
       font.pixelSize: view.theme.fontSize

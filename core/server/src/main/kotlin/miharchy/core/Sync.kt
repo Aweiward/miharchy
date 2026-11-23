@@ -443,7 +443,8 @@ class Sync(
             r.getLong(1) to BackupManga(
                 source = r.getLong(2), url = r.getString(3), title = r.getString(4), author = r.getString(5), artist = r.getString(6),
                 description = r.getString(7), genre = genres(r.getString(8)).map { (it as JsonPrimitive).content }, status = r.getInt(9),
-                thumbnailUrl = r.getString(10), dateAdded = r.getLong(13), favorite = true, chapterFlags = r.getInt(14), viewer_flags = r.getInt(15),
+                // A local cover string is core's own path, which means nothing on the phone (#374).
+                thumbnailUrl = r.getString(10).takeIf { r.getLong(2).toString() != LOCAL_SOURCE }, dateAdded = r.getLong(13), favorite = true, chapterFlags = r.getInt(14), viewer_flags = r.getInt(15),
                 updateStrategy = UpdateStrategy.entries.getOrElse(r.getInt(11)) { UpdateStrategy.ALWAYS_UPDATE },
                 initialized = r.getInt(16) == 1, memo = r.getString(12).toByteArray(),
             )

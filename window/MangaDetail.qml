@@ -61,6 +61,8 @@ Rectangle {
 
   readonly property bool open: detail !== null
   readonly property var manga: detail ? detail.manga : null
+  // A local manga has nothing to download or delete.
+  readonly property bool offered: Downloads.offered(manga)
   readonly property bool selecting: anchor >= 0
   // The chapters as listed; cursor and anchor index it. detail.chapters
   // stays in source order, newest first, for the reader.
@@ -76,8 +78,8 @@ Rectangle {
     : picking ? "j k move   space in or out   esc close   "
     : optionsOpen ? "j k move   enter change   esc close   "
     : downloadsOpen ? "j k move   enter download   esc close   "
-    : selecting ? "j k extend   R read   u unread   b bookmark   d download   x delete download   esc end   "
-    : (note ? note + "   " : "") + "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   d download   v select   U download menu   x delete   D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   n notes   o browser   y copy link   Y copy title   / search title   r refresh   esc back   "
+    : selecting ? "j k extend   R read   u unread   b bookmark   " + (offered ? "d download   x delete download   " : "") + "esc end   "
+    : (note ? note + "   " : "") + "j k chapters   enter read   R read   u unread   P read before   b bookmark   F filter & sort   " + (offered ? "d download   " : "") + "v select   " + (offered ? "U download menu   x delete   " : "") + "D queue   " + (manga && manga.inLibrary ? "M migrate   " : "") + "c categories   t tracking   n notes   o browser   y copy link   Y copy title   / search title   r refresh   esc back   "
 
   signal libraryChanged(int mangaId, bool inLibrary)
   signal read(var chapters, int chapterId)
@@ -370,9 +372,11 @@ Rectangle {
         anchor = -1
         break
       case "manga.download":
+        if (!offered) break
         sendDownloads(Downloads.enqueuePayload(Downloads.marked(shown, cursor, anchor)))
         break
       case "manga.downloads":
+        if (!offered) break
         downloadsOpen = true
         downloadsCursor = NextChapters.rowIndex(menuPrefs.values.downloadMenuManga)
         downloadsNote = ""
@@ -412,6 +416,7 @@ Rectangle {
         endEdit()
         break
       case "manga.deleteDownload":
+        if (!offered) break
         sendDownloads(Downloads.removePayload(Downloads.marked(shown, cursor, anchor), queue))
         break
       case "manga.markRead":

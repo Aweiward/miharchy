@@ -2,12 +2,16 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const S = require("./load")("Storage.js");
 
-const home = { HOME: "/home/u" };
+test("the local folder is the one core reads, from its storage reply", () => {
+  assert.equal(S.localFolderOf({ state: "ok", data: { settings: {}, localFolder: "/mnt/comics" } }), "/mnt/comics");
+  assert.equal(S.localFolderOf({ state: "ok", data: { downloads: 0 } }), "");
+  assert.equal(S.localFolderOf({ state: "down", message: "x" }), "");
+  assert.equal(S.localFolderOf(null), "");
+});
 
-test("the local folder is the setting, or the server root's local", () => {
-  assert.equal(S.localFolder(home, ""), "/home/u/.local/share/miharchy/suwayomi/local");
-  assert.equal(S.localFolder({ HOME: "/home/u", MIHARCHY_SERVER_ROOT: "/s/server" }, undefined), "/s/server/local");
-  assert.equal(S.localFolder(home, "/mnt/comics"), "/mnt/comics");
+test("the server root is MIHARCHY_SERVER_ROOT, or under HOME", () => {
+  assert.equal(S.root({ HOME: "/home/u" }), "/home/u/.local/share/miharchy/suwayomi");
+  assert.equal(S.root({ HOME: "/home/u", MIHARCHY_SERVER_ROOT: "/s/server" }), "/s/server");
 });
 
 test("sizes read in decimal units", () => {

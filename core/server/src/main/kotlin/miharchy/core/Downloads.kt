@@ -113,7 +113,9 @@ class Downloads(private val db: Database, private val browse: Browse, private va
             c.update("UPDATE download_queue SET state = 'QUEUED', error_kind = NULL, error_message = NULL WHERE ${among("chapter_id")}", idList(ids))
             var next = c.query("SELECT coalesce(max(position), -1) + 1 FROM download_queue") { it.getInt(1) }.single()
             val todo = c.query(
-                "SELECT id FROM chapter WHERE ${among("id")} AND download_path IS NULL AND id NOT IN (SELECT chapter_id FROM download_queue)", idList(ids),
+                // Local chapters are files already (#374): dropped with no error.
+                """SELECT id FROM chapter WHERE ${among("id")} AND download_path IS NULL AND id NOT IN (SELECT chapter_id FROM download_queue)
+                   AND manga_id NOT IN (SELECT id FROM manga WHERE source_id = $LOCAL_SOURCE)""", idList(ids),
             ) { it.getLong(1) }.toSet()
             c.batch("INSERT INTO download_queue (chapter_id, position) VALUES (?, ?)", ids.distinct().filter { it in todo }.map { listOf(it, next++) })
         }
@@ -303,18 +305,21 @@ class Downloads(private val db: Database, private val browse: Browse, private va
     }
 }
 
-/** [rel] under [root], refused when it would leave it. */
+/** [rel] under [root], refused when it would leave it: the downloads and the local manga folder take paths from backups and the sync. */
 fun inside(root: Path, rel: String): Path {
     val base = root.toAbsolutePath().normalize()
-    val p = base.resolve(rel).normalize()
-    if (!p.startsWith(base) || p == base) throw ApiError(Kind.invalid, "$rel is outside the downloads folder.")
+    val p = try { base.resolve(rel).normalize() } catch (e: java.nio.file.InvalidPathException) { throw ApiError(Kind.invalid, "$rel is not a path.") }
+    if (!p.startsWith(base) || p == base) throw ApiError(Kind.invalid, "$rel is outside its folder.")
     return p
 }
 
-/** The page entries of a .cbz, in order: images only, so Mihon's and Suwayomi's `ComicInfo.xml` is no page. */
+/** The page entries of a .cbz, in natural order (core's own are zero-padded, so it is their name order): images only, so `ComicInfo.xml` is no page. */
 fun cbzPages(file: Path): List<String> = ZipFile(file.toFile()).use { z -> pageEntries(z) }
 
-private fun pageEntries(z: ZipFile) = z.entries().asSequence().filter { !it.isDirectory && isPageName(it.name) }.map { it.name }.sorted().toList()
+// A Mac's zip adds `__MACOSX/._<name>` files, which carry image names but no image.
+private fun pageEntries(z: ZipFile) = z.entries().asSequence()
+    .filter { !it.isDirectory && isPageName(it.name) && !it.name.startsWith("__MACOSX/") && !it.name.substringAfterLast('/').startsWith(".") }
+    .map { it.name }.sortedWith(NATURAL).toList()
 
 /** An image by its extension, as Mihon's `ImageUtil.isImage` reads a file name. */
 fun isPageName(name: String) = name.substringAfterLast('.', "").lowercase() in setOf("jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "heif", "jxl", "bmp")

@@ -198,3 +198,9 @@ test("a failed row shows its reason beside failed", () => {
   assert.equal(D.statusText(it, { kind: "cloudflare", text: "Cloudflare blocked the source" }, false), "failed   Cloudflare blocked the source", "no hint on core");
   assert.equal(D.statusText(queueOf(item(14, "DOWNLOADING", 0.5))[0], undefined, false), "50%");
 });
+
+test("a local manga offers no download or delete", () => {
+  assert.equal(D.offered({ sourceId: "0" }), false);
+  assert.equal(D.offered({ sourceId: "2499283573021220255" }), true);
+  assert.equal(D.offered(null), true);
+});
