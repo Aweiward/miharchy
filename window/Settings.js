@@ -138,7 +138,8 @@ var ROWS = [
   { key: "excludeNotStarted", label: "Skip manga not started", type: "bool", default: true, store: "server" },
   { key: "excludeCompleted", label: "Skip completed manga", type: "bool", default: true, store: "server" },
   // Mihon's "Automatically refresh metadata": the library update also
-  // fetches each manga's title, cover and description.
+  // fetches each manga's title, cover and description. Off, it still does
+  // for a manga with no details or no cover yet.
   { key: "updateMangas", label: "Refresh metadata during library updates", type: "bool", default: false, store: "server" },
   // The library check, with the count of its problems as the value.
   { key: "libraryCheck", label: "Library check", type: "action", command: "view.check" },

@@ -65,7 +65,7 @@ class SettingsTest {
             assertTrue(s.getValue("backupTime").jsonPrimitive.isString)
             assertFalse(s.getValue("backupTTL").jsonPrimitive.isString)
             assertEquals(
-                listOf("kcefEnabled", "updateMangas", "downloadsPath"),
+                listOf("kcefEnabled", "downloadsPath"),
                 reply.getValue("unapplied").jsonArray.map { it.jsonPrimitive.content },
             )
         }
@@ -113,7 +113,7 @@ class SettingsTest {
                 c.update("INSERT INTO chapter (manga_id, remote_url, remote_name, remote_chapter_number, remote_order, state_date_fetch) VALUES (1, '/c', 'C', 1, 0, 0)")
             }
             val routes = Settings(db, work.resolve("covers")).routes
-            Updates(db, { }, tick = 3_600_000).use { u ->
+            Updates(db, { _, _ -> }, tick = 3_600_000).use { u ->
                 assertEquals(1, u.routes.call("update.start").getValue("skippedMangasCount").jsonPrimitive.int, "unread chapters skip by default")
                 // The manga is not started either.
                 routes.call("settings.set", settings("excludeUnreadChapters" to false, "excludeNotStarted" to false))
@@ -122,7 +122,7 @@ class SettingsTest {
             }
             routes.call("settings.set", settings("globalUpdateInterval" to 0))
             var runs = 0
-            Updates(db, { runs++ }, hour = 1, tick = 10).use {
+            Updates(db, { _, _ -> runs++ }, hour = 1, tick = 10).use {
                 kotlinx.coroutines.delay(300)
                 assertEquals(0, runs, "0 turns the schedule off")
             }

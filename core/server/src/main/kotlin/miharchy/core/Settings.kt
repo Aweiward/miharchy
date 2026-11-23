@@ -67,8 +67,8 @@ val SETTINGS: List<Setting> = listOf(
     bool("excludeUnreadChapters", true, applied = true),
     bool("excludeNotStarted", true, applied = true),
     bool("excludeCompleted", true, applied = true),
-    // A refresh always fetches the details.
-    bool("updateMangas", false, applied = false),
+    // Updates.kt reads it on each manga.
+    bool("updateMangas", false, applied = true),
     // ponytail: stored only; the download queue writes to <core data>/downloads. A live folder first needs the queue's
     // start-up sweep of *.part files kept to core's own files, and a plan for download_path marks under the old root.
     path("downloadsPath", applied = false),

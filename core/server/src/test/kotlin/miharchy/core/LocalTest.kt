@@ -273,7 +273,7 @@ class LocalTest {
             }
         }
         val refreshed = java.util.Collections.synchronizedList(mutableListOf<Long>())
-        Updates(db, { refreshed += it }, tick = 3_600_000, local = Local { root }).use { u ->
+        Updates(db, { id, _ -> refreshed += id }, tick = 3_600_000, local = Local { root }).use { u ->
             val started = u.routes.call("update.start")
             assertEquals(1, started["totalJobs"]!!.jsonPrimitive.int)
             assertEquals(1, started["skippedMangasCount"]!!.jsonPrimitive.int)

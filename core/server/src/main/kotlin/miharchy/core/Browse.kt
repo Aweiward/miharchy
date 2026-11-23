@@ -237,15 +237,21 @@ class Browse(
 
     private fun chapters(c: Connection, mangaId: Long) = chapterRows(c, "ch.manga_id = ?", mangaId)
 
-    /** Fetches details and chapters, as `fetchMangaAndChapters` does. Read state survives: chapters match by URL. */
-    internal suspend fun refresh(id: Long): JsonObject {
+    /**
+     * Fetches details and chapters, as `fetchMangaAndChapters` does. Read state survives: chapters match by URL. With [details]
+     * false (a library update, Mihon's `updateMangas` rule) the details the source sends back are dropped, whatever they hold.
+     * The local source reads the disk anyway, so it always takes them.
+     */
+    internal suspend fun refresh(id: Long, details: Boolean = true): JsonObject {
         val (row, known) = db.run { c -> row(c, id) to hostChapters(c, id) }
+        val fetched = details || row.source.toString() == LOCAL_SOURCE
         val reply = call(buildJsonObject {
             put("op", "update"); put("source", row.source.toString()); put("manga", hostManga(row))
             put("chapters", JsonArray(known))
-            put("needsDetails", true); put("needsChapters", true)
+            put("needsDetails", fetched); put("needsChapters", true)
         }).jsonObject
-        val m = reply["manga"]!!.jsonObject
+        // An extension may echo the manga it was given, or send back a blank one: either way the stored details stay.
+        val m = if (fetched) reply["manga"]!!.jsonObject else hostManga(row)
         val list = reply["chapters"]!!.jsonArray.map { it.jsonObject }.filter { it.s("url") != null }
         // An empty list is a source failure, never a reason to drop the chapters the user has read.
         if (list.isEmpty()) throw ApiError(Kind.source, "The source returned no chapters for ${row.fields.s("title")}.")
@@ -254,18 +260,19 @@ class Browse(
             m.s("title") ?: row.fields.s("title").orEmpty(),
             list.map { ChapterRecognition.Chapter(it.s("name").orEmpty(), it["chapterNumber"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: -1.0) },
         ).map { n -> n.chapter?.let(ChapterRecognition::toDouble) ?: -1.0 }
-        val coverChanged = m.s("thumbnailUrl") != null && m.s("thumbnailUrl") != row.fields.s("thumbnailUrl")
+        val coverChanged = fetched && m.s("thumbnailUrl") != null && m.s("thumbnailUrl") != row.fields.s("thumbnailUrl")
         db.run { c ->
             c.transaction {
                 c.prepareStatement(
                     """UPDATE manga SET remote_title = ?, remote_author = ?, remote_artist = ?, remote_description = ?, remote_genre = ?,
                          remote_status = ?, remote_cover = coalesce(?, remote_cover), remote_update_strategy = ?, remote_memo = ?,
-                         state_initialized = 1, state_chapter_last_update = ? WHERE id = ?""",
+                         state_initialized = max(state_initialized, ?), state_chapter_last_update = ? WHERE id = ?""",
                 ).use { p ->
                     p.setString(1, m.s("title") ?: row.fields.s("title")); p.setString(2, m.s("author")); p.setString(3, m.s("artist"))
                     p.setString(4, m.s("description")); p.setString(5, m.s("genre")); p.setInt(6, m["status"]?.jsonPrimitive?.intOrNull ?: 0)
                     p.setString(7, m.s("thumbnailUrl")); p.setInt(8, if (m.s("updateStrategy") == "ONLY_FETCH_ONCE") 1 else 0)
-                    p.setString(9, (m["memo"] as? JsonObject ?: JsonObject(emptyMap())).toString()); p.setLong(10, System.currentTimeMillis()); p.setLong(11, id)
+                    p.setString(9, (m["memo"] as? JsonObject ?: JsonObject(emptyMap())).toString())
+                    p.setInt(10, if (fetched) 1 else 0); p.setLong(11, System.currentTimeMillis()); p.setLong(12, id)
                     p.executeUpdate()
                 }
                 val now = System.currentTimeMillis()

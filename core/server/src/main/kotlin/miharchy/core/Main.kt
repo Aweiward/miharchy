@@ -43,7 +43,7 @@ fun main() {
     val library = Library(db, extensions)
     val downloads = Downloads(db, browse, extensions, data.resolve("downloads"))
     browse.autoDownload = downloads::auto
-    val updates = Updates(db, { browse.refresh(it) }, local = local)
+    val updates = Updates(db, { id, details -> browse.refresh(id, details) }, local = local)
     val trackerStore = TrackerStore(db)
     val http = okhttp3.OkHttpClient()
     val clients = listOf(
