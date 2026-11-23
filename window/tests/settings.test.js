@@ -304,17 +304,17 @@ test("a meta row saves with meta.set", () => {
 });
 
 test("core's replies fill the values, and its unapplied rows stay across a failed save", () => {
-  let s = S.reduce(S.initial(), core(200, { settings: { globalUpdateInterval: 24, downloadsPath: "/d" }, unapplied: ["downloadsPath"] }));
+  let s = S.reduce(S.initial(), core(200, { settings: { globalUpdateInterval: 24, kcefEnabled: true }, unapplied: ["kcefEnabled"] }));
   assert.equal(s.state, "ok");
   assert.equal(s.values.globalUpdateInterval, 24);
-  assert.deepEqual(s.unapplied, ["downloadsPath"]);
+  assert.deepEqual(s.unapplied, ["kcefEnabled"]);
   s = S.reduce(s, core(200, { metas: [{ scope: "global", owner: 0, key: "miharchy.syncFolder", value: "/s" }] }));
   assert.equal(s.values.syncFolder, "/s");
-  assert.deepEqual(s.unapplied, ["downloadsPath"], "a meta reply has no unapplied list");
+  assert.deepEqual(s.unapplied, ["kcefEnabled"], "a meta reply has no unapplied list");
   s = S.reduce(s, { type: "request" });
   s = S.reduce(s, { type: "response", reply: M.coreReply(0, "") });
   assert.equal(s.state, "down");
-  assert.deepEqual(s.unapplied, ["downloadsPath"]);
+  assert.deepEqual(s.unapplied, ["kcefEnabled"]);
 });
 
 test("a value core refuses is the row's error, not the view's", () => {

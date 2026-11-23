@@ -147,8 +147,8 @@ var ROWS = [
   // (Default: no category) or a category id. The window applies it when a
   // manga is added.
   { key: "defaultCategory", label: "Default category", type: "category", default: "ask", store: "meta" },
-  // The server refuses a folder that does not exist; empty means its own.
-  { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter an absolute path, or nothing for the server's own folder.", blank: "server default" },
+  // Core moves the downloads into a new or empty folder, and refuses another (DownloadsMove.js follows the move); empty means its own.
+  { key: "downloadsPath", label: "Download folder", type: "text", default: "", store: "server", pattern: /^(\/.*)?$/, hint: "Enter the absolute path of a new or empty folder, or nothing for the server's own folder. The downloads move there.", blank: "server default" },
   // The local source's folder (Mihon's local source): a folder per manga,
   // a folder of images or a .cbz per chapter. The server refuses a folder
   // that does not exist; empty means its root's local.
