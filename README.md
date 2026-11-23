@@ -184,7 +184,7 @@ systemctl --user disable --now syncthing
 
 ## Develop
 
-Run the window from a checkout with `window/miharchy`. Set `MIHARCHY_SERVER_JSON` to use another credentials file. Tests: `cd window && npm test`, `cd sync && ./gradlew test`.
+Run the window from a checkout with `window/miharchy`. Its Setup builds miharchy-core from that checkout's `core/` and `sync/`. Set `MIHARCHY_CORE_CONFIG` and `MIHARCHY_CORE_DATA` to use another core. Tests: `cd window && npm test`, `cd sync && ./gradlew test`, `cd core && ./gradlew installDist test`.
 
 ## License
 
